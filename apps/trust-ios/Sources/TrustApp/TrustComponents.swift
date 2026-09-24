@@ -8,32 +8,43 @@ struct TrustAvatar: View {
     var size: CGFloat = 44
     @Environment(\.trustPalette) private var palette
 
-    private static let fills: [Color] = [
-        Color(hex: 0xE4E9DC), Color(hex: 0xE4E9E9), Color(hex: 0xEFE3D7), Color(hex: 0xE5E3ED),
-        Color(hex: 0xE8E3D5), Color(hex: 0xDFE8E1), Color(hex: 0xE8E0D9), Color(hex: 0xEADFDC), Color(hex: 0xE0E5E9)
-    ]
-
     var body: some View {
         Text(name.trustInitials)
-            .font(TrustTheme.display(size * 0.42))
-            .tracking(-0.7)
-            .foregroundStyle(Color(hex: 0x50554B))
+            // Initials are decorative; full names remain available to VoiceOver nearby.
+            // Keep this glyph inside the fixed avatar even at the largest Dynamic Type size.
+            .font(.system(size: size * 0.40, weight: .semibold, design: .rounded))
+            .tracking(-0.5)
+            .lineLimit(1)
+            .minimumScaleFactor(0.5)
+            .allowsTightening(true)
+            .foregroundStyle(palette.ink)
+            .frame(width: size * 0.78, height: size * 0.78)
             .frame(width: size, height: size)
-            .background(Self.fills[abs(seed) % Self.fills.count])
+            .background(avatarFill)
             .clipShape(Circle())
             .overlay(Circle().stroke(palette.ink.opacity(0.03), lineWidth: 1))
             .accessibilityHidden(true)
     }
+
+    private var avatarFill: Color {
+        switch abs(seed) % 4 {
+        case 0: return palette.accentSoft
+        case 1: return palette.sage
+        case 2: return palette.surface
+        default: return palette.canvas
+        }
+    }
 }
 
-/// `.presence-dot` — green Home, muted Away.
+/// Home status uses the positive accent; other presence stays quiet.
 struct TrustPresenceDot: View {
     let presence: HomePresenceKind
+    @Environment(\.trustPalette) private var palette
 
     var body: some View {
         Circle()
-            .fill(presence == .home ? Color(hex: 0x829071) : Color(hex: 0xB0B3A8))
-            .frame(width: 6, height: 6)
+            .fill(presence == .home ? palette.positive : palette.muted.opacity(0.6))
+            .frame(width: 7, height: 7)
             .accessibilityHidden(true)
     }
 }
@@ -77,14 +88,14 @@ struct TrustBadge: View {
             Text(text)
         }
         .trustFont(11, weight: .medium)
-        .foregroundStyle(Color(hex: 0x73796A))
+        .foregroundStyle(palette.muted)
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
-        .background(Capsule().stroke(Color(hex: 0xDDDCD3), lineWidth: 1))
+        .background(Capsule().fill(palette.accentSoft))
     }
 }
 
-/// `.section-heading` — eyebrow left, optional red text link right.
+/// Section heading with an optional trailing action.
 struct TrustSectionHeading<Trailing: View>: View {
     let text: String
     @ViewBuilder var trailing: Trailing
@@ -121,7 +132,7 @@ struct TrustFootnote: View {
         }
         .trustFont(12)
         .lineSpacing(3)
-        .foregroundStyle(Color(hex: 0x83857A))
+        .foregroundStyle(palette.muted)
     }
 }
 
@@ -147,7 +158,7 @@ struct TrustInfoStrip: View {
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(palette.surface)
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 }
 
@@ -183,25 +194,26 @@ struct TrustModeControl<Option: Hashable>: View {
                         }
                     }
                     .trustFont(13, weight: selected ? .semibold : .medium)
-                    .foregroundStyle(selected ? Color(hex: 0x272C24) : (item.locked ? palette.accent : Color(hex: 0x7B7E71)))
-                    .frame(maxWidth: .infinity, minHeight: 38)
+                    .foregroundStyle(selected ? palette.ink : (item.locked ? palette.accent : palette.muted))
+                    .frame(maxWidth: .infinity, minHeight: 44)
                     .background(
-                        RoundedRectangle(cornerRadius: 7, style: .continuous)
-                            .fill(selected ? palette.paper : .clear)
+                        RoundedRectangle(cornerRadius: 11, style: .continuous)
+                            .fill(selected ? palette.surface : .clear)
                             .shadow(color: selected ? palette.ink.opacity(0.08) : .clear, radius: 2, y: 1)
                     )
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(item.locked ? "\(item.label). \(TrustCopy.plus)" : item.label)
+                .accessibilityIdentifier("mode-option-\(String(describing: item.id))")
                 .accessibilityAddTraits(selected ? [.isSelected] : [])
             }
         }
         .padding(3)
         .background(
-            RoundedRectangle(cornerRadius: 9, style: .continuous)
-                .fill(Color(hex: 0xF0F0E9))
-                .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).stroke(Color(hex: 0xE8E8DF), lineWidth: 1))
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(palette.canvas)
+                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(palette.line, lineWidth: 1))
         )
     }
 }
@@ -210,17 +222,18 @@ struct TrustModeControl<Option: Hashable>: View {
 struct TrustToastView: View {
     let toast: TrustToast
     let dismiss: () -> Void
+    @Environment(\.trustPalette) private var palette
 
     var body: some View {
         Text(toast.message)
             .trustFont(13, weight: .medium)
             .lineSpacing(2)
-            .foregroundStyle(.white)
+            .foregroundStyle(palette.paper)
             .padding(.horizontal, 16)
             .padding(.vertical, 13)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(hex: 0x262D23))
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .background(palette.ink)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             .shadow(color: .black.opacity(0.12), radius: 8, y: 5)
             .onTapGesture(perform: dismiss)
             .accessibilityAddTraits(.isStaticText)
@@ -287,13 +300,12 @@ struct TrustOfflineBanner: View {
             Button(TrustCopy.retry, action: retry)
                 .font(TrustTheme.ui(12, weight: .semibold))
                 .foregroundStyle(palette.accent)
-                .frame(minHeight: 32)
+                .frame(minHeight: 44)
         }
         .foregroundStyle(palette.muted)
         .padding(.horizontal, TrustTheme.gutter)
         .padding(.vertical, 6)
         .background(palette.surface)
-        .accessibilityElement(children: .combine)
     }
 }
 

@@ -11,7 +11,7 @@ settings:
     TARGETED_DEVICE_FAMILY: "1,2"
     SUPPORTS_MACCATALYST: NO
     CODE_SIGN_STYLE: Automatic
-    TRUST_BASE_URL: https://trust.collapsetechnologies.com
+    TRUST_BASE_URL: https://trust-api-u0ft.onrender.com
   configs:
     Debug:
       TRUST_BASE_URL: http://127.0.0.1:5088
@@ -39,7 +39,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.collapsetechnologies.trust
         PRODUCT_NAME: Trust
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        CURRENT_PROJECT_VERSION: 18
+        CURRENT_PROJECT_VERSION: 19
         MARKETING_VERSION: 1.0
         ENABLE_USER_SCRIPT_SANDBOXING: YES
         SWIFT_STRICT_CONCURRENCY: targeted
@@ -60,7 +60,6 @@ targets:
         UIApplicationSupportsIndirectInputEvents: true
         UILaunchScreen:
           UIColorName: Paper
-        UIUserInterfaceStyle: Light
         UIAppFonts:
           - SpaceGrotesk-Variable.ttf
           - IBMPlexMono-Medium.ttf
@@ -85,8 +84,8 @@ targets:
           - location
         ITSAppUsesNonExemptEncryption: false
         NSLocationWhenInUseUsageDescription: Trust uses your location while the app is open so you can see yourself on the map and look at people who share with you. Trust does not sell your location.
-        NSLocationAlwaysAndWhenInUseUsageDescription: Trust uses your location in the background so a Look still works when the app is closed. A Look notifies you. Trust does not sell your location.
-        NSLocationAlwaysUsageDescription: Trust uses your location in the background so a Look still works when the app is closed. A Look notifies you. Trust does not sell your location.
+        NSLocationAlwaysAndWhenInUseUsageDescription: Trust uses your location in the background so a Look still works when the app is closed. A confirmed Look is recorded and requests a notification. Trust does not sell your location.
+        NSLocationAlwaysUsageDescription: Trust uses your location in the background so a Look still works when the app is closed. A confirmed Look is recorded and requests a notification. Trust does not sell your location.
         NSLocationTemporaryUsageDescriptionDictionary:
           PreciseEscrow: Trust needs precise location so a Look shows the current place. Approximate location is not enough.
         CFBundleURLTypes:

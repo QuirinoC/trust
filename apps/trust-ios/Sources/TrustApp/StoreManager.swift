@@ -66,6 +66,12 @@ final class StoreManager: ObservableObject {
             let loaded = try await Product.products(for: productIDs)
                 .sorted { $0.price < $1.price }
             products = loaded
+            guard !loaded.isEmpty else {
+                trialEligibility = .unavailable
+                errorMessage = TrustCopy.subscriptionUnavailable
+                return
+            }
+            errorMessage = nil
             guard let subscription = loaded.first?.subscription,
                   subscription.introductoryOffer != nil else {
                 trialEligibility = .unavailable
@@ -76,7 +82,7 @@ final class StoreManager: ObservableObject {
                 : .unavailable
         } catch {
             trialEligibility = .unavailable
-            errorMessage = error.localizedDescription
+            errorMessage = TrustCopy.subscriptionUnavailable
         }
     }
 

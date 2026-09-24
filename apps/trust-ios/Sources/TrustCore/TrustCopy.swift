@@ -24,7 +24,7 @@ public enum TrustCopy {
     /// Legacy key alias used by older call sites / localization tables.
     public static var circle: String { people }
     public static var sharing: String { value("sharing", defaultValue: "Sharing") }
-    public static var log: String { value("log", defaultValue: "Log") }
+    public static var log: String { value("log", defaultValue: "Activity") }
     public static var you: String { value("you", defaultValue: "You") }
     public static var map: String { value("map", defaultValue: "Map") }
     public static var viewLog: String { value("view_log", defaultValue: "View log") }
@@ -145,7 +145,7 @@ public enum TrustCopy {
     public static var recenterMap: String { value("recenter_map", defaultValue: "Recenter map") }
     public static var inviteSomeone: String { value("invite_someone", defaultValue: "Invite someone") }
     public static func lookHint(name: String) -> String {
-        format("look_hint", defaultValue: "Look at %@. They will be notified.", name)
+        format("look_hint", defaultValue: "Look at %@. This records one snapshot and requests a notification.", name)
     }
     public static func viewHint(name: String) -> String {
         format("view_hint", defaultValue: "View %@. The view is logged.", name)
@@ -157,7 +157,7 @@ public enum TrustCopy {
     public static func lookAtTitle(name: String) -> String { format("look_at_title", defaultValue: "Look at %@?", name) }
     public static func lookAt(name: String) -> String { format("look_at", defaultValue: "Look at %@", name) }
     public static func willBeNotified(name: String) -> String {
-        format("will_be_notified", defaultValue: "%@ will be notified.", name)
+        format("will_be_notified", defaultValue: "A notification will be requested for %@.", name)
     }
     public static var thenOneSnapshot: String {
         value("then_one_snapshot", defaultValue: "One snapshot of their current place.")
@@ -175,7 +175,7 @@ public enum TrustCopy {
     public static var oneTimeLook: String { value("one_time_look", defaultValue: "One-time Look") }
     public static var liveShare: String { value("live_share", defaultValue: "Always") }
     public static func receiptNotified(name: String) -> String {
-        format("receipt_notified", defaultValue: "%@ notified.", name)
+        format("receipt_notified", defaultValue: "Look recorded · notification requested for %@.", name)
     }
     public static func receiptViewLogged(name: String) -> String {
         format("receipt_view_logged", defaultValue: "%@ · view logged", name)
@@ -199,7 +199,7 @@ public enum TrustCopy {
     public static var noPlacesYet: String { value("no_places_yet", defaultValue: "No places yet") }
     public static var sealedTitle: String { value("sealed_title", defaultValue: "Sealed") }
     public static func sealedBody(name: String) -> String {
-        format("sealed_body", defaultValue: "%@ will be notified if you Look.", name)
+        format("sealed_body", defaultValue: "A Look records one snapshot and requests a notification for %@.", name)
     }
     public static var noLocationYet: String { value("no_location_yet", defaultValue: "Getting location…") }
     public static var noLocationBody: String {
@@ -280,13 +280,16 @@ public enum TrustCopy {
     // MARK: Sharing (T2)
 
     public static var sharingSub: String { value("sharing_sub", defaultValue: "What each person can see of you.") }
+    public static var sharingIntro: String {
+        value("sharing_intro", defaultValue: "Sealed gives one snapshot after a Look. Always shares location while it is on.")
+    }
     public static func youShareWith(count: Int) -> String {
         format("you_share_with", defaultValue: "You share with · %d", count)
     }
     public static var rowSealedUntilLook: String { value("row_sealed_until_look", defaultValue: "Sealed until Look") }
     public static var rowLocationAvailable: String { value("row_location_available", defaultValue: "Always") }
     public static var descOff: String { value("desc_off", defaultValue: "Not sharing. They cannot see your location.") }
-    public static var descUntil: String { value("desc_until", defaultValue: "Sealed. They can Look, and you are notified.") }
+    public static var descUntil: String { value("desc_until", defaultValue: "Sealed. A Look shows one snapshot and requests a notification.") }
     public static var descAlways: String {
         value("desc_always", defaultValue: "Always. They can View.")
     }
@@ -297,8 +300,11 @@ public enum TrustCopy {
     public static var plusLockHint: String { value("plus_lock_hint", defaultValue: "Always is Plus.") }
     public static var pause: String { value("pause", defaultValue: "Pause") }
     public static var pauseSharing: String { value("pause_sharing", defaultValue: "Pause") }
+    public static func pauseTitle(name: String) -> String {
+        format("pause_title", defaultValue: "Pause sharing with %@", name)
+    }
     public static func pauseReturns(mode: String) -> String {
-        format("pause_returns", defaultValue: "Back to %@.", mode)
+        format("pause_returns", defaultValue: "Their access pauses, then returns to %@ after the time you choose.", mode)
     }
     public static func pauseUntil(time: String, mode: String) -> String {
         format("pause_until", defaultValue: "Paused until %@. Back to %@.", time, mode)
@@ -316,7 +322,7 @@ public enum TrustCopy {
         value("stop_sharing_warning", defaultValue: "They cannot see your location.")
     }
     public static var lookNotifiedShort: String {
-        value("look_notified_short", defaultValue: "They’ll be notified.")
+        value("look_notified_short", defaultValue: "One snapshot · notification requested")
     }
     public static var addSomeone: String { value("add_someone", defaultValue: "Add someone") }
     public static var add: String { value("add", defaultValue: "Add") }
@@ -344,7 +350,7 @@ public enum TrustCopy {
     public static var alwaysBody: String {
         value(
             "always_body",
-            defaultValue: "A Look still works when Trust is closed. You are notified when they Look."
+            defaultValue: "A Look still works when Trust is closed. Trust requests a notification when they Look."
         )
     }
     public static var allowAlways: String { value("allow_always", defaultValue: "Allow background location") }
@@ -397,7 +403,7 @@ public enum TrustCopy {
     }
     public static var joined: String { value("joined", defaultValue: "Joined. Sharing is off both ways.") }
     public static func inviteMessage(code: String) -> String {
-        "\(inviteLine)\nhttps://trust.collapsetechnologies.com/i/\(code)\ntrust://invite/\(code)"
+        "\(inviteLine)\nhttps://jointrust.app/i/\(code)\nInvite code: \(code)"
     }
     public static var yourPhone: String { value("your_phone", defaultValue: "Your phone") }
     public static var phoneIntro: String {
@@ -413,6 +419,7 @@ public enum TrustCopy {
     public static var phoneNumber: String { value("phone_number", defaultValue: "Phone number") }
     public static var phonePlaceholder: String { value("phone_placeholder", defaultValue: "(415) 555-0100") }
     public static var sendCode: String { value("send_code", defaultValue: "Send code") }
+    public static var codeSent: String { value("code_sent", defaultValue: "Code sent. Enter it below to verify your number.") }
     public static var resendCode: String { value("resend_code", defaultValue: "Resend code") }
     public static var phoneCode: String { value("phone_code", defaultValue: "Code") }
     public static var codePlaceholderShort: String { value("code_placeholder_short", defaultValue: "123456") }
@@ -459,33 +466,6 @@ public enum TrustCopy {
     public static var presence: String { value("presence", defaultValue: "Presence") }
     public static var presenceNote: String {
         value("presence_note", defaultValue: "Home / Away / Hidden — separate from whether location is sealed or available.")
-    }
-    public static var homePlace: String { value("home_place", defaultValue: "Home place") }
-    public static var homePlaceNote: String {
-        value(
-            "home_place_note",
-            defaultValue: "Set from where you are now. Coordinates stay on this phone. With Always location, Trust marks Home or Away for your circle."
-        )
-    }
-    public static var setHomeHere: String { value("set_home_here", defaultValue: "Use current location as Home") }
-    public static var clearHome: String { value("clear_home", defaultValue: "Clear Home") }
-    public static var homeSetToast: String {
-        value("home_set_toast", defaultValue: "Home set on this phone. Presence can follow the boundary.")
-    }
-    public static var homeClearedToast: String {
-        value("home_cleared_toast", defaultValue: "Home cleared. Presence stays manual.")
-    }
-    public static var homeNeedsLocation: String {
-        value("home_needs_location", defaultValue: "Allow location, then set Home from where you are.")
-    }
-    public static var homeNeedsAlways: String {
-        value("home_needs_always", defaultValue: "Allow Always location so Home and Away update when Trust is closed.")
-    }
-    public static var homeIsSetLabel: String {
-        value("home_is_set_label", defaultValue: "Home is set on this phone.")
-    }
-    public static var homeNotSetLabel: String {
-        value("home_not_set_label", defaultValue: "No Home place yet.")
     }
     public static var presenceHomeCopy: String {
         value("presence_home_copy", defaultValue: "Home or Away. Not a location.")
@@ -535,7 +515,7 @@ public enum TrustCopy {
     public static var settings: String { value("settings", defaultValue: "Settings") }
     public static var lookNotifications: String { value("look_notifications", defaultValue: "Look notifications") }
     public static var lookNotificationsBody: String {
-        value("look_notifications_body", defaultValue: "Sealed Looks notify you. Views are logged.")
+        value("look_notifications_body", defaultValue: "Sealed Looks request a notification. Views are logged.")
     }
     public static var allowNotifications: String { value("allow_notifications", defaultValue: "Allow notifications") }
     public static var notificationsOff: String {
@@ -585,7 +565,7 @@ public enum TrustCopy {
     public static func logTheyViewed(name: String) -> String { format("log_they_viewed", defaultValue: "%@ viewed you.", name) }
     public static func logYouRemoved(name: String) -> String { format("log_you_removed", defaultValue: "You removed %@.", name) }
     public static func logTheyRemoved(name: String) -> String { format("log_they_removed", defaultValue: "%@ removed you.", name) }
-    public static var kindLook: String { value("kind_look", defaultValue: "Look · notified") }
+    public static var kindLook: String { value("kind_look", defaultValue: "Look recorded") }
     public static var kindView: String { value("kind_view", defaultValue: "view logged") }
     public static var kindRemoved: String { value("kind_removed", defaultValue: "removed") }
     public static func lookLogExportRow(timestamp: String, line: String, kind: String) -> String {
@@ -601,7 +581,7 @@ public enum TrustCopy {
         value("receipt_body", defaultValue: "One snapshot of your current place.")
     }
     public static func lookSaved(name: String) -> String {
-        format("look_saved", defaultValue: "%@ notified.", name)
+        format("look_saved", defaultValue: "Look recorded · notification requested for %@.", name)
     }
     public static func viewLogged(name: String) -> String {
         format("view_logged", defaultValue: "%@ · view logged.", name)
@@ -675,7 +655,7 @@ public enum TrustCopy {
     public static var locationAlwaysPurpose: String {
         value(
             "location_always",
-            defaultValue: "Trust uses your location in the background so a Look still works when the app is closed. A Look notifies you. Trust does not sell your location."
+            defaultValue: "Trust uses your location in the background so a Look still works when the app is closed. A confirmed Look is recorded and requests a notification. Trust does not sell your location."
         )
     }
     public static var locationPrecisePurpose: String {
@@ -753,7 +733,7 @@ public enum TrustCopy {
         case "look_requires_sealed":
             return value("api_look_requires_sealed", defaultValue: "Their location is already available. Use View.")
         case "view_requires_available":
-            return value("api_view_requires_available", defaultValue: "Sealed. Look instead — they’ll be notified.")
+            return value("api_view_requires_available", defaultValue: "Sealed. Look instead to record one snapshot and request a notification.")
         case "unauthorized":
             return value("api_unauthorized", defaultValue: "Sign in is required.")
         case "invalid_handle":

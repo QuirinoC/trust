@@ -16,13 +16,11 @@ struct YouView: View {
                 profileCard
                     .padding(.top, 22)
 
-                Button(TrustCopy.signOut) { model.signOut() }
-                    .buttonStyle(TrustTextButtonStyle())
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.bottom, 8)
-
                 presenceSection
                     .padding(.bottom, 22)
+
+                locationPermissionSection
+                    .padding(.bottom, 18)
 
                 homePlaceSection
                     .padding(.bottom, 22)
@@ -30,14 +28,26 @@ struct YouView: View {
                 plusCard
                     .padding(.bottom, 22)
 
-                Button(TrustCopy.deleteAccount) { showingDeleteAccount = true }
-                    .buttonStyle(TrustTextButtonStyle(color: Color(hex: 0x9C5C51)))
+                TrustSectionHeading("Account")
+                    .padding(.bottom, 4)
+                Button(TrustCopy.signOut) { model.signOut() }
+                    .buttonStyle(TrustTextButtonStyle())
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.bottom, 8)
+                Button(TrustCopy.deleteAccount) { showingDeleteAccount = true }
+                    .buttonStyle(TrustTextButtonStyle(color: palette.danger))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("delete-account")
 
+                TrustSectionHeading("Legal")
+                    .padding(.top, 16)
                 HStack(spacing: 8) {
                     Link(TrustCopy.privacy, destination: AppConfiguration.privacyURL)
                     Text("·")
                     Link(TrustCopy.terms, destination: AppConfiguration.termsURL)
+                    Text("·")
+                    Link(TrustCopy.support, destination: AppConfiguration.supportURL)
+                        .accessibilityIdentifier("support-link")
                 }
                 .font(TrustTheme.ui(12))
                 .foregroundStyle(palette.muted)
@@ -92,7 +102,34 @@ struct YouView: View {
             ) { kind in
                 model.setPresence(kind)
             }
-            .accessibilityLabel(TrustCopy.status)
+        }
+    }
+
+    private var locationPermissionSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            TrustSectionHeading("Location permission")
+            Text("\(model.location.statusLabel) · \(model.location.accuracyLabel)")
+                .trustFont(13, weight: .semibold)
+                .foregroundStyle(palette.ink)
+                .accessibilityIdentifier("location-permission-status")
+            if model.location.isDenied {
+                Text(TrustCopy.locationDeniedBody)
+                    .trustFont(12)
+                    .foregroundStyle(palette.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button(TrustCopy.openIOSSettings) { model.openSystemSettings() }
+                    .buttonStyle(TrustOutlineButtonStyle(compact: true))
+            } else if !model.location.hasAlways {
+                Text(model.location.isPrecise ? TrustCopy.keptWhileUsing : TrustCopy.locationReducedAccuracy)
+                    .trustFont(12)
+                    .foregroundStyle(palette.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button(model.location.needsSystemSettings ? TrustCopy.openIOSSettings : TrustCopy.allowAlways) {
+                    if model.location.needsSystemSettings { model.openSystemSettings() }
+                    else { model.requestAlwaysLocation() }
+                }
+                .buttonStyle(TrustOutlineButtonStyle(compact: true))
+            }
         }
     }
 
@@ -121,7 +158,7 @@ struct YouView: View {
                     .buttonStyle(TrustOutlineButtonStyle(compact: true))
                 if model.location.homeIsSet {
                     Button(TrustCopy.clearHome) { model.clearHomePlace() }
-                        .buttonStyle(TrustTextButtonStyle(color: Color(hex: 0x9C5C51)))
+                        .buttonStyle(TrustTextButtonStyle(color: palette.danger))
                 }
             }
         }
@@ -146,12 +183,13 @@ struct YouView: View {
                         .foregroundStyle(palette.ink)
                     Button(TrustCopy.seePlus) { model.showingPaywall = true }
                         .buttonStyle(TrustOutlineButtonStyle(compact: true))
+                        .accessibilityIdentifier("plus-cta")
                 }
             }
         }
         .overlay(
             RoundedRectangle(cornerRadius: TrustTheme.radius, style: .continuous)
-                .stroke(Color(hex: 0xE5E5DB), lineWidth: 1)
+                .stroke(palette.line, lineWidth: 1)
         )
     }
 }
@@ -167,9 +205,10 @@ struct ViewLogRow: View {
             Text(event.logLine(youID: youID))
                 .font(TrustTheme.ui(14))
                 .foregroundStyle(palette.ink)
-            Text("\(event.at.formatted(date: .abbreviated, time: .shortened)) · \(event.logKindLabel)")
+            Text("\(event.at.formatted(date: .omitted, time: .shortened)) · \(event.logKindLabel)")
                 .font(TrustTheme.ui(12))
                 .foregroundStyle(palette.muted)
+                .accessibilityLabel("\(event.at.formatted(date: .complete, time: .shortened)) · \(event.logKindLabel)")
         }
         .padding(.vertical, 12)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -207,15 +246,20 @@ struct ViewLogView: View {
                 if model.lookLog.isEmpty {
                     Text(TrustCopy.noViewsYet)
                         .font(TrustTheme.ui(13))
-                        .foregroundStyle(Color(hex: 0x808573))
+                .foregroundStyle(palette.muted)
                         .padding(18)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .background(palette.surface)
                         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                 } else {
-                    ForEach(model.lookLog) { event in
-                        ViewLogRow(event: event, youID: model.you.id)
-                        TrustRowDivider()
+                    ForEach(dayGroups) { group in
+                        TrustSectionHeading(group.title)
+                            .padding(.top, 14)
+                        ForEach(group.events) { event in
+                            ViewLogRow(event: event, youID: model.you.id)
+                                .accessibilityIdentifier("activity-event-\(event.id.uuidString)")
+                            TrustRowDivider()
+                        }
                     }
                 }
 
@@ -260,6 +304,26 @@ struct ViewLogView: View {
                     }
                 }
             }
+        }
+    }
+
+    private struct EventDay: Identifiable {
+        let date: Date
+        let events: [LookEvent]
+        var id: Date { date }
+        var title: String {
+            let calendar = Calendar.current
+            if calendar.isDateInToday(date) { return "Today" }
+            if calendar.isDateInYesterday(date) { return "Yesterday" }
+            return date.formatted(date: .complete, time: .omitted)
+        }
+    }
+
+    private var dayGroups: [EventDay] {
+        let calendar = Calendar.current
+        let groups = Dictionary(grouping: model.lookLog) { calendar.startOfDay(for: $0.at) }
+        return groups.keys.sorted(by: >).map { day in
+            EventDay(date: day, events: (groups[day] ?? []).sorted { $0.at > $1.at })
         }
     }
 }

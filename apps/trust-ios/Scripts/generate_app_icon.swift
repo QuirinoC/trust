@@ -4,9 +4,8 @@ import ImageIO
 import UniformTypeIdentifiers
 
 let size = 1024
-let paper = CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 1)
-let ink = CGColor(srgbRed: 0, green: 0, blue: 0, alpha: 1)
-let red = CGColor(srgbRed: 225 / 255, green: 6 / 255, blue: 0, alpha: 1)
+let navy = CGColor(srgbRed: 0x14 / 255.0, green: 0x23 / 255.0, blue: 0x3B / 255.0, alpha: 1)
+let white = CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 1)
 
 guard let context = CGContext(
     data: nil,
@@ -21,35 +20,24 @@ guard let context = CGContext(
     exit(1)
 }
 
-context.setFillColor(paper)
+context.setFillColor(navy)
 context.fill(CGRect(x: 0, y: 0, width: size, height: size))
 
-let center = CGPoint(x: CGFloat(size) / 2, y: CGFloat(size) / 2)
-func ring(diameter: CGFloat, color: CGColor, width: CGFloat) {
-    let rect = CGRect(
-        x: center.x - diameter / 2,
-        y: center.y - diameter / 2,
-        width: diameter,
-        height: diameter
+// Two overlapping circular rings form a simple connection mark.
+func ring(center: CGPoint, radius: CGFloat) {
+    let bounds = CGRect(
+        x: center.x - radius,
+        y: center.y - radius,
+        width: radius * 2,
+        height: radius * 2
     )
-    context.setStrokeColor(color)
-    context.setLineWidth(width)
-    context.strokeEllipse(in: rect)
+    context.setStrokeColor(white)
+    context.setLineWidth(58)
+    context.strokeEllipse(in: bounds)
 }
 
-ring(diameter: CGFloat(size) * 0.62, color: ink, width: 6)
-ring(diameter: CGFloat(size) * 0.46, color: CGColor(srgbRed: 0, green: 0, blue: 0, alpha: 0.35), width: 8)
-ring(diameter: CGFloat(size) * 0.30, color: red, width: 12)
-
-let aperture = CGFloat(size) * 0.07
-let apertureRect = CGRect(
-    x: center.x + CGFloat(size) * 0.08 - aperture / 2,
-    y: center.y + CGFloat(size) * 0.10 - aperture / 2,
-    width: aperture,
-    height: aperture
-)
-context.setFillColor(red)
-context.fillEllipse(in: apertureRect)
+ring(center: CGPoint(x: 400, y: 512), radius: 205)
+ring(center: CGPoint(x: 624, y: 512), radius: 205)
 
 guard let image = context.makeImage() else {
     fputs("Failed to make image\n", stderr)

@@ -1,16 +1,19 @@
-# Trust — still pending
+# iOS release work still pending
 
-**Current home IA (locked):** map + draggable People sheet (`CircleView`, build 15 / Round 8 / `debf974` lineage). Product name in UI is **Trust**. Do not ship list-first Circle. Phone verification is required before Home.
+This is a short iOS-specific checklist. The canonical, dated release status is [docs/STATUS.md](../../docs/STATUS.md); do not infer completion from this list or from a simulator run.
 
-These are the items still open after Home geofence, remove + removed Log events, Pause, Look trail windows (Free 24h / Plus 30d), StoreKit expiry at circle/share read + sweep, phone gate, locked-phone location, and the SMS send budget. They need a physical phone, or they were left on purpose.
+## Before TestFlight
 
-- Prove a Look receipt push on two real phones. APNs has to be enabled on Render. Do not print the .p8 or the auth key. Do not flip Trust__SeedReviewCircle or StoreKit__AllowReviewUnlock.
-- Prove GPS still updates on a locked phone.
-- Prove Home/Away flips from the on-device Home boundary when Always location is granted.
-- App Store listing and submit are not started. Do not submit.
-- Plaintext GPS on the server stays until encryption exists.
-- The widget is intentionally not built.
-- Promises / “back home by” and place-ping stay API-only (no iOS UI this pass).
-- Battery percent is ingested but not shown in UI.
-- Google sign-in is API-only; iOS ships Sign in with Apple.
-- Gifted Plus stays off. No SOS, chat, crash/driving alerts, or Spanish localization.
+- The configured release API origin is `https://trust-api-u0ft.onrender.com` and passed readiness; the optional custom hostname `trust.collapsetechnologies.com` still has unresolved TLS and must not be used until independently verified.
+- The local Debug simulator build and final iPhone 17 Pro UI suite have passed (4 UI tests; see [docs/STATUS.md](../../docs/STATUS.md)). Archive and upload the reviewed release build through the process in [docs/DEPLOYMENT.md](../../docs/DEPLOYMENT.md).
+- Record the actual archive, upload, processing, and device results in `docs/STATUS.md`. The current local target is 1.0 build 19; no TestFlight upload is recorded there.
+
+## Physical-device evidence
+
+- With two separate tester accounts, create an invitation, explicitly accept it, and confirm both directions start Off.
+- Confirm a Sealed Look produces one snapshot, leaves sharing Sealed, and does not expose location history. Confirm a Sealed-history request is rejected.
+- Confirm Always enables View and location history, while View is recorded without a Look receipt.
+- Verify SMS consent and code verification, account deletion, StoreKit sandbox purchase and restore, background location, and Home/Away geofence behavior on the intended devices.
+- Check APNs receipt behavior on physical devices. Delivery is best effort; an API request is not proof of delivery or display.
+
+Other deferred scope remains out of this release: widget, Google sign-in on iOS, promise UI, place-ping UI, gifting, SOS, chat, and driving/crash detection. Battery percentage is not displayed. See the root status and deployment docs for API, TLS, and production configuration details.

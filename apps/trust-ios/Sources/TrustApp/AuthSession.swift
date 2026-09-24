@@ -262,7 +262,8 @@ private final class AppleAuthorizationCoordinator: NSObject,
 
     private func start() {
         let request = ASAuthorizationAppleIDProvider().createRequest()
-        request.requestedScopes = [.fullName, .email]
+        // Display name is captured once for the account. Apple email is never used or stored.
+        request.requestedScopes = [.fullName]
         request.nonce = hashedNonce
         let controller = ASAuthorizationController(authorizationRequests: [request])
         controller.delegate = self

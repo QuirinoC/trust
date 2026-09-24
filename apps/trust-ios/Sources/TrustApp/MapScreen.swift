@@ -121,9 +121,10 @@ struct MapScreen: View {
                     .padding(.top, 16)
                     .padding(.bottom, 12)
             }
-            HStack {
-                TrustEyebrow(text: "● \(TrustCopy.mapLegend)", size: 9)
-                Spacer()
+            HStack(spacing: 14) {
+                if pins.contains(where: \.live) { mapLegend(color: palette.pinLive, title: TrustCopy.always) }
+                if pins.contains(where: { !$0.live }) { mapLegend(color: palette.pinLook, title: TrustCopy.snapshot) }
+                Spacer(minLength: 0)
             }
             .padding(.horizontal, TrustTheme.gutter)
             .padding(.vertical, 10)
@@ -193,6 +194,14 @@ struct MapScreen: View {
         .accessibilityElement(children: .combine)
     }
 
+    private func mapLegend(color: Color, title: String) -> some View {
+        HStack(spacing: 6) {
+            Circle().fill(color).frame(width: 8, height: 8)
+            Text(title).trustFont(11, weight: .medium).foregroundStyle(palette.muted)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
     private func subtitle(_ pin: AppModel.MapPin, _ member: TrustedPerson) -> String {
         let presence = member.visiblePresence?.label ?? TrustCopy.presenceHiddenBadge
         let time = pin.point.timestamp.formatted(date: .omitted, time: .shortened)
@@ -212,8 +221,8 @@ struct MapScreen: View {
         }
         let center = CLLocationCoordinate2D(latitude: (minLat + maxLat) / 2, longitude: (minLon + maxLon) / 2)
         let span = MKCoordinateSpan(
-            latitudeDelta: min(120, max((maxLat - minLat) * 1.4, 0.05)),
-            longitudeDelta: min(300, max((maxLon - minLon) * 1.4, 0.05))
+            latitudeDelta: min(170, max((maxLat - minLat) * 1.4, 0.05)),
+            longitudeDelta: min(340, max((maxLon - minLon) * 1.4, 0.05))
         )
         position = .region(MKCoordinateRegion(center: center, span: span))
     }

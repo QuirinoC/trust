@@ -60,9 +60,9 @@
 		</dict>
 	</dict>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>Trust uses your location in the background so a Look still works when the app is closed. A Look notifies you. Trust does not sell your location.</string>
+	<string>Trust uses your location in the background so a Look still works when the app is closed. A confirmed Look is recorded and requests a notification. Trust does not sell your location.</string>
 	<key>NSLocationAlwaysUsageDescription</key>
-	<string>Trust uses your location in the background so a Look still works when the app is closed. A Look notifies you. Trust does not sell your location.</string>
+	<string>Trust uses your location in the background so a Look still works when the app is closed. A confirmed Look is recorded and requests a notification. Trust does not sell your location.</string>
 	<key>NSLocationTemporaryUsageDescriptionDictionary</key>
 	<dict>
 		<key>PreciseEscrow</key>
@@ -99,7 +99,5 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
-	<key>UIUserInterfaceStyle</key>
-	<string>Light</string>
 </dict>
 </plist>

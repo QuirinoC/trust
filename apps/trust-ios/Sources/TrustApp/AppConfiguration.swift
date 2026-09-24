@@ -8,7 +8,7 @@ enum AppConfiguration {
     static let monthlyDisplayPrice = "$7.99"
     static let annualDisplayPrice = "$69.99"
     static let manageSubscriptionsURL = URL(string: "https://apps.apple.com/account/subscriptions")!
-    static let productionAPIURL = URL(string: "https://trust.collapsetechnologies.com")!
+    static let productionAPIURL = URL(string: "https://trust-api-u0ft.onrender.com")!
     static let localAPIURL = URL(string: "http://127.0.0.1:5088")!
     static let legalSiteURL = URL(string: "https://jointrust.app")!
     static let privacyURL = URL(string: "https://jointrust.app/privacy")!
@@ -34,7 +34,7 @@ enum AppConfiguration {
     }
 
     static var usesProductionAPI: Bool {
-        apiBaseURL.host?.contains("collapsetechnologies.com") == true
+        apiBaseURL.host == productionAPIURL.host
     }
 
     static var apiHostDescription: String {

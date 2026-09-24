@@ -4,13 +4,11 @@ import TrustCore
 struct RootView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.scenePhase) private var scenePhase
-
-    /// Light only — Trust paper / ink / `#E10600` (map chrome tokens on TrustPalette).
     private let palette = TrustPalette.paper
 
     var body: some View {
         ZStack {
-            palette.paper.ignoresSafeArea()
+            palette.canvas.ignoresSafeArea()
             switch model.phase {
             case .login:
                 LoginView()
@@ -23,7 +21,6 @@ struct RootView: View {
             }
         }
         .environment(\.trustPalette, palette)
-        .preferredColorScheme(.light)
         .tint(palette.accent)
         .onChange(of: scenePhase) { _, phase in
             model.location.setAppActive(phase == .active)

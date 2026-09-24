@@ -12,14 +12,21 @@ struct SharingView: View {
                 TrustPageTitle(text: TrustCopy.sharing)
                     .padding(.top, 4)
 
+                Text(TrustCopy.sharingIntro)
+                    .trustFont(14)
+                    .foregroundStyle(palette.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 6)
+                    .accessibilityIdentifier("sharing-intro")
+
                 AddSomeoneSection()
-                    .padding(.top, 16)
+                    .padding(.top, 14)
 
                 if !model.circle.isEmpty {
                     ForEach(model.circle) { member in
-                OutboundRow(member: member, seed: seed(member)) {
-                    model.pauseSheetPersonID = member.id
-                }
+                    OutboundRow(member: member, seed: seed(member)) {
+                        model.pauseSheetPersonID = member.id
+                    }
                         TrustRowDivider()
                     }
 
@@ -28,6 +35,7 @@ struct SharingView: View {
                             .buttonStyle(TrustTextButtonStyle(color: palette.accent))
                             .frame(maxWidth: .infinity)
                             .padding(.top, 18)
+                            .accessibilityIdentifier("stop-all-sharing")
                     }
                 }
             }
@@ -54,6 +62,7 @@ struct SharingView: View {
         }
         .confirmationDialog(TrustCopy.stopAllConfirm, isPresented: $model.stopAllRequested, titleVisibility: .visible) {
             Button(TrustCopy.stopAll, role: .destructive) { model.stopAll() }
+                .accessibilityIdentifier("stop-all-sharing-confirm")
             Button(TrustCopy.cancel, role: .cancel) {}
         }
     }
@@ -70,8 +79,10 @@ struct OutboundRow: View {
     let onPause: () -> Void
     @EnvironmentObject private var model: AppModel
     @Environment(\.trustPalette) private var palette
+    @State private var confirmOff = false
+    @State private var confirmRemove = false
 
-    private enum Mode: Hashable { case sealed, always, pause }
+    private enum Mode: Hashable { case off, sealed, always }
 
     private var presentation: SharePresentation {
         model.shareState(for: member.id).presentation(at: Date())
@@ -79,77 +90,116 @@ struct OutboundRow: View {
 
     private var selection: Mode? {
         switch presentation {
-        case .off: return nil
+        case .off: return .off
         case .untilTheyLook: return .sealed
         case .always: return .always
-        case .paused: return .pause
+        case .paused: return nil
         }
     }
 
-    private var alwaysLocked: Bool { !model.coverage.canShareAvailable }
+    private var summary: String {
+        switch presentation {
+        case .off: return "Not sharing"
+        case .untilTheyLook: return TrustCopy.sealed
+        case .always: return TrustCopy.always
+        case .paused(let ends, let restores):
+            let time = ends.formatted(date: .omitted, time: .shortened)
+            let mode = restores == .always ? TrustCopy.always : TrustCopy.sealed
+            return "Paused until \(time) · then \(mode)"
+        }
+    }
 
     var body: some View {
-        HStack(alignment: .center, spacing: 10) {
-            TrustAvatar(name: member.person.displayName, seed: seed, size: 36)
-            Text(member.person.displayName)
-                .trustFont(15, weight: .semibold)
-                .foregroundStyle(palette.ink)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-            Spacer(minLength: 8)
-            modeControl
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                TrustAvatar(name: member.person.displayName, seed: seed, size: 42)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(member.person.displayName)
+                        .trustFont(15, weight: .semibold)
+                        .foregroundStyle(palette.ink)
+                        .lineLimit(1)
+                    Text(summary)
+                        .trustFont(12)
+                        .foregroundStyle(palette.muted)
+                        .lineLimit(1)
+                        .accessibilityIdentifier("sharing-summary-\(member.firstName.lowercased())")
+                }
+                Spacer(minLength: 2)
+                Button(action: onPause) {
+                    Text(TrustCopy.pause)
+                        .trustFont(13, weight: .semibold)
+                        .foregroundStyle(palette.ink)
+                        .padding(.horizontal, 12)
+                        .frame(minHeight: 44)
+                        .background(Capsule().stroke(palette.line, lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Pause sharing with \(member.firstName)")
+                .accessibilityIdentifier("pause-sharing-\(member.firstName.lowercased())")
+                .disabled(presentation.isOff)
+            }
+
+            HStack(spacing: 4) {
+                modeButton(.off, label: "Off")
+                modeButton(.sealed, label: TrustCopy.sealed)
+                modeButton(.always, label: TrustCopy.always, locked: !model.coverage.canShareAvailable)
+                Spacer(minLength: 4)
+                Menu {
+                    Button(TrustCopy.removePerson, role: .destructive) { confirmRemove = true }
+                        .accessibilityIdentifier("remove-person-action-\(member.firstName.lowercased())")
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(palette.ink)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .accessibilityLabel("More sharing actions for \(member.firstName)")
+                .accessibilityIdentifier("sharing-actions-\(member.firstName.lowercased())")
+            }
+            .padding(3)
+            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(palette.surface))
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("sharing-mode-group-\(member.firstName.lowercased())")
         }
         .padding(.vertical, 12)
         .accessibilityElement(children: .contain)
-    }
-
-    private var modeControl: some View {
-        HStack(spacing: 2) {
-            modeButton(.sealed, label: TrustCopy.sealed, locked: false)
-            modeButton(.always, label: TrustCopy.always, locked: alwaysLocked)
-            modeButton(.pause, label: TrustCopy.pause, locked: false)
+        .confirmationDialog("Stop sharing with \(member.firstName)?", isPresented: $confirmOff, titleVisibility: .visible) {
+            Button(TrustCopy.stopSharing, role: .destructive) { model.stopSharing(personID: member.id) }
+                .accessibilityIdentifier("stop-sharing-confirm")
+            Button(TrustCopy.cancel, role: .cancel) {}
         }
-        .padding(2)
-        .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Color(hex: 0xF0F0E9))
-        )
-        .accessibilityLabel(TrustCopy.sharingModeLabel(name: member.firstName))
+        .confirmationDialog(TrustCopy.removePersonConfirm(name: member.firstName), isPresented: $confirmRemove, titleVisibility: .visible) {
+            Button(TrustCopy.removePerson, role: .destructive) { model.removePerson(personID: member.id) }
+                .accessibilityIdentifier("remove-person-confirm")
+            Button(TrustCopy.cancel, role: .cancel) {}
+        }
     }
 
-    private func modeButton(_ mode: Mode, label: String, locked: Bool) -> some View {
+    private func modeButton(_ mode: Mode, label: String, locked: Bool = false) -> some View {
         let selected = selection == mode
         return Button {
+            if selected { return }
+            if locked { model.showingPaywall = true; return }
             switch mode {
-            case .sealed:
-                model.setResting(.untilTheyLook, for: member.id)
-            case .always:
-                model.setResting(.always, for: member.id)
-            case .pause:
-                guard presentation.acceptsLocation || presentation.isPaused else { return }
-                onPause()
+            case .off: confirmOff = true
+            case .sealed: model.setResting(.untilTheyLook, for: member.id)
+            case .always: model.setResting(.always, for: member.id)
             }
         } label: {
-            HStack(spacing: 3) {
-                Text(label)
-                    .lineLimit(1)
-                if locked {
-                    Image(systemName: "lock.fill")
-                        .font(.system(size: 8, weight: .bold))
-                        .accessibilityHidden(true)
-                }
+            HStack(spacing: 4) {
+                Text(label).lineLimit(1)
+                if locked { Image(systemName: "lock.fill").font(.system(size: 9, weight: .bold)).accessibilityHidden(true) }
             }
             .trustFont(12, weight: selected ? .semibold : .medium)
-            .foregroundStyle(selected ? Color(hex: 0x272C24) : (locked ? palette.accent : Color(hex: 0x7B7E71)))
-            .padding(.horizontal, 8)
-            .frame(minHeight: 32)
-            .background(
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(selected ? palette.paper : .clear)
-            )
+            .foregroundStyle(selected ? palette.ink : (locked ? palette.accent : palette.muted))
+            .padding(.horizontal, 11)
+            .frame(minHeight: 44)
+            .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(selected ? palette.paper : .clear))
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(locked ? "\(label). \(TrustCopy.plus)" : label)
+        .accessibilityLabel(locked ? "Always. \(TrustCopy.plus)" : label)
+        .accessibilityIdentifier("sharing-mode-\(mode)-\(member.firstName.lowercased())")
         .accessibilityAddTraits(selected ? [.isSelected] : [])
     }
 }
@@ -160,7 +210,6 @@ struct PauseSharingSheet: View {
     let dismiss: () -> Void
     @EnvironmentObject private var model: AppModel
     @Environment(\.trustPalette) private var palette
-    @State private var confirmRemove = false
 
     private struct Choice: Identifiable {
         let id: TimeInterval
@@ -183,7 +232,7 @@ struct PauseSharingSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text(TrustCopy.pauseSharing)
+            Text(TrustCopy.pauseTitle(name: model.member(personID)?.firstName ?? TrustCopy.them))
                 .font(TrustTheme.display(28))
                 .tracking(-0.6)
                 .foregroundStyle(palette.ink)
@@ -201,28 +250,11 @@ struct PauseSharingSheet: View {
                     .buttonStyle(.plain)
                     .font(TrustTheme.ui(15, weight: .semibold))
                     .foregroundStyle(palette.ink)
-                    .frame(maxWidth: .infinity, minHeight: 40)
+                    .frame(maxWidth: .infinity, minHeight: 44)
                     .background(Capsule().fill(palette.surface))
+                    .accessibilityIdentifier("pause-duration-\(Int(choice.id))")
                 }
             }
-
-            Text(TrustCopy.stopSharingWarning)
-                .font(TrustTheme.ui(14))
-                .foregroundStyle(palette.muted)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.top, 4)
-
-            Button(TrustCopy.stopSharing) {
-                model.stopSharing(personID: personID)
-                dismiss()
-            }
-            .buttonStyle(TrustFilledButtonStyle())
-
-            Button(TrustCopy.removePerson) {
-                confirmRemove = true
-            }
-            .buttonStyle(TrustTextButtonStyle(color: palette.accent))
-            .frame(maxWidth: .infinity)
 
             Button(TrustCopy.cancel, action: dismiss)
                 .buttonStyle(TrustTextButtonStyle())
@@ -234,17 +266,6 @@ struct PauseSharingSheet: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .trustReadableWidth()
         .background(palette.paper)
-        .confirmationDialog(
-            TrustCopy.removePersonConfirm(name: model.member(personID)?.firstName ?? TrustCopy.them),
-            isPresented: $confirmRemove,
-            titleVisibility: .visible
-        ) {
-            Button(TrustCopy.removePerson, role: .destructive) {
-                model.removePerson(personID: personID)
-                dismiss()
-            }
-            Button(TrustCopy.cancel, role: .cancel) {}
-        }
     }
 }
 
