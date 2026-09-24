@@ -92,38 +92,6 @@ public sealed class PostgresStoreKitEntitlementStore(string connectionString) : 
         return true;
     }
 
-    public async Task RefreshExpiredCoveragesAsync(CancellationToken cancellationToken)
-    {
-        await using var connection = new NpgsqlConnection(_connectionString);
-        await connection.OpenAsync(cancellationToken);
-        await using var list = new NpgsqlCommand(
-            "SELECT DISTINCT account_id FROM trust.storekit_transactions;",
-            connection);
-        await using var reader = await list.ExecuteReaderAsync(cancellationToken);
-        var accountIds = new List<Guid>();
-        while (await reader.ReadAsync(cancellationToken))
-        {
-            accountIds.Add(reader.GetGuid(0));
-        }
-
-        await reader.CloseAsync();
-        foreach (var accountId in accountIds)
-        {
-            await using var db = await connection.BeginTransactionAsync(cancellationToken);
-            await RefreshCircleAsync(connection, db, accountId, cancellationToken);
-            await db.CommitAsync(cancellationToken);
-        }
-    }
-
-    public async Task RefreshAccountCoverageAsync(Guid accountId, CancellationToken cancellationToken)
-    {
-        await using var connection = new NpgsqlConnection(_connectionString);
-        await connection.OpenAsync(cancellationToken);
-        await using var db = await connection.BeginTransactionAsync(cancellationToken);
-        await RefreshCircleAsync(connection, db, accountId, cancellationToken);
-        await db.CommitAsync(cancellationToken);
-    }
-
     private static async Task<Guid?> ReadTokenAsync(
         NpgsqlConnection connection,
         NpgsqlTransaction db,
@@ -338,23 +306,6 @@ public sealed class MemoryStoreKitEntitlementStore(ITrustStore accounts) : IStor
         await RefreshAsync(accountId, cancellationToken);
         return true;
     }
-
-    public async Task RefreshExpiredCoveragesAsync(CancellationToken cancellationToken)
-    {
-        HashSet<Guid> accountIds;
-        lock (_gate)
-        {
-            accountIds = _owners.Values.ToHashSet();
-        }
-
-        foreach (var accountId in accountIds)
-        {
-            await RefreshAsync(accountId, cancellationToken);
-        }
-    }
-
-    public Task RefreshAccountCoverageAsync(Guid accountId, CancellationToken cancellationToken) =>
-        RefreshAsync(accountId, cancellationToken);
 
     private async Task RefreshAsync(Guid accountId, CancellationToken cancellationToken)
     {
