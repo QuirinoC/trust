@@ -27,8 +27,8 @@ public static class TrustEndpoints
         auth.MapPatch("/me", RenameAsync);
         auth.MapGet("/handles/available", CheckHandleAvailableAsync);
         auth.MapPut("/me/handle", SetHandleAsync);
-        auth.MapPost("/me/phone/send", SendPhoneCodeAsync);
-        auth.MapPost("/me/phone/verify", VerifyPhoneCodeAsync);
+        auth.MapPost("/me/phone/send", SendPhoneCodeAsync).RequireRateLimiting(RateLimitPolicies.PhoneSend);
+        auth.MapPost("/me/phone/verify", VerifyPhoneCodeAsync).RequireRateLimiting(RateLimitPolicies.PhoneVerify);
         auth.MapPost("/people/phone", AddPersonByPhoneAsync).RequireRateLimiting(RateLimitPolicies.Invite);
         auth.MapPost("/invites", CreateInviteAsync).RequireRateLimiting(RateLimitPolicies.Invite);
         auth.MapPost("/invites/accept", AcceptInviteAsync).RequireRateLimiting(RateLimitPolicies.Invite);
@@ -406,12 +406,23 @@ public static class TrustEndpoints
         TrustEngine engine,
         CancellationToken cancellationToken)
     {
+        const int maxBatchSize = 100;
+        var fixes = ContractMap.IngestFixes(request);
+        if (fixes.Count is 0 or > maxBatchSize
+            || fixes.Any(fix => !double.IsFinite(fix.Latitude)
+                || !double.IsFinite(fix.Longitude)
+                || fix.Latitude is < -90 or > 90
+                || fix.Longitude is < -180 or > 180))
+        {
+            return Results.BadRequest(new ApiError("invalid_location", "Location coordinates must be valid and a batch may contain at most 100 points."));
+        }
+
         return await RunAsync(
             principal,
             engine,
             (id, ct) => engine.IngestManyAsync(
                 id,
-                ContractMap.IngestFixes(request),
+                fixes,
                 request.BatteryPercent,
                 request.IsCharging,
                 ct),
@@ -779,7 +790,7 @@ public static class TrustEndpoints
         StoreKitOptions storeKit,
         CancellationToken cancellationToken)
     {
-        if (!storeKit.Enabled && storeKit.TrustedRootCertificates.Length == 0)
+        if (!storeKit.Enabled)
         {
             return Results.Json(
                 new ApiError("storekit_unavailable", "StoreKit verification is not enabled on this server."),
@@ -950,6 +961,8 @@ public static class RateLimitPolicies
 {
     public const string Auth = "auth";
     public const string Invite = "invite";
+    public const string PhoneSend = "phone-send";
+    public const string PhoneVerify = "phone-verify";
     public const string Location = "location";
     public const string Look = "look";
 }

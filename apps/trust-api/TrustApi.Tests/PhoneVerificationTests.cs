@@ -18,6 +18,26 @@ namespace TrustApi.Tests;
 public sealed class PhoneVerificationTests
 {
     [Fact]
+    public async Task MemorySmsBudgetReservationSerializesFirstSendAcrossConcurrentCalls()
+    {
+        var store = new MemoryTrustStore();
+        var now = DateTimeOffset.UtcNow;
+        var accountId = Guid.NewGuid();
+        var budgets = new[]
+        {
+            new SmsSendBudget(SmsSendBudget.AccountKey(accountId), now, 0, null),
+            new SmsSendBudget(SmsSendBudget.PhoneKey("+15555550123"), now, 0, null),
+            new SmsSendBudget(SmsSendBudget.AccountDayKey(accountId), now, 0, null),
+            new SmsSendBudget(SmsSendBudget.GlobalDayKey(), now, 0, null)
+        };
+
+        var reservations = await Task.WhenAll(Enumerable.Range(0, 12).Select(index =>
+            store.TryReserveSmsAsync(budgets, now.AddTicks(index), CancellationToken.None)));
+
+        Assert.Single(reservations, reserved => reserved);
+    }
+
+    [Fact]
     public void PlaceholderNameIsNotOnboardingComplete()
     {
         var account = new Account(Guid.NewGuid(), "apple", "sub", "You", false, null, DateTimeOffset.UtcNow);
@@ -168,17 +188,22 @@ public sealed class PhoneVerificationTests
     [Fact]
     public async Task PhoneCannotBeVerifiedOntoTwoAccounts()
     {
+        var clock = new MutableTimeProvider { UtcNow = new DateTimeOffset(2026, 9, 21, 12, 0, 0, TimeSpan.Zero) };
         var store = new MemoryTrustStore();
-        var engine = new TrustEngine(store, TimeProvider.System);
+        var engine = new TrustEngine(store, clock);
         var first = await engine.SignInAsync("development", "otp-a", "Sam", CancellationToken.None);
         var second = await engine.SignInAsync("development", "otp-b", "Jordan", CancellationToken.None);
-        var phones = NewPhones(store, new UnconfiguredSms(), NullLogger<PhoneVerificationService>.Instance, Environments.Development);
+        var phones = NewPhones(store, new UnconfiguredSms(), NullLogger<PhoneVerificationService>.Instance, Environments.Development, clock);
         var sent = await phones.SendAsync(first.Id, "+15555550127", CancellationToken.None);
         await phones.VerifyAsync(first.Id, "+15555550127", sent.DevelopmentCode!, CancellationToken.None);
 
+        clock.UtcNow = clock.UtcNow.AddSeconds(PhoneVerificationService.ResendCooldownSeconds);
+        var duplicatePhoneChallenge = await phones.SendAsync(second.Id, "+15555550127", CancellationToken.None);
+        Assert.False(string.IsNullOrWhiteSpace(duplicatePhoneChallenge.DevelopmentCode));
         var exception = await Assert.ThrowsAsync<TrustException>(() =>
-            phones.SendAsync(second.Id, "+15555550127", CancellationToken.None));
+            phones.VerifyAsync(second.Id, "+15555550127", duplicatePhoneChallenge.DevelopmentCode, CancellationToken.None));
         Assert.Equal("phone_in_use", exception.Code);
+        Assert.False((await store.FindAccountAsync(second.Id, CancellationToken.None))!.HasVerifiedPhone);
     }
 
     [Fact]
@@ -282,7 +307,7 @@ public sealed class PhoneVerificationTests
     }
 
     [Fact]
-    public async Task VerifiedPhoneConnectsWithoutSms()
+    public async Task VerifiedPhoneLookupStillUsesInviteWithoutRevealingAccount()
     {
         var store = new MemoryTrustStore();
         var engine = new TrustEngine(store, TimeProvider.System);
@@ -295,12 +320,13 @@ public sealed class PhoneVerificationTests
 
         var production = NewPhones(store, sms, NullLogger<PhoneVerificationService>.Instance, Environments.Production);
         var added = await production.AddPersonAsync(second.Id, "5555550143", CancellationToken.None);
-        Assert.Equal("connected", added.Outcome);
+        Assert.Equal("invited", added.Outcome);
         Assert.False(added.SmsSent);
-        Assert.Null(added.DevelopmentCode);
+        Assert.False(string.IsNullOrWhiteSpace(added.DevelopmentCode));
         Assert.Equal(0, sms.Sends);
-        Assert.True(await store.AreConnectedAsync(first.Id, second.Id, CancellationToken.None));
-        Assert.Null(await store.FindPendingInviteAsync(second.Id, CancellationToken.None));
+        Assert.False(await store.AreConnectedAsync(first.Id, second.Id, CancellationToken.None));
+        var invite = await store.FindPendingInviteAsync(second.Id, CancellationToken.None);
+        Assert.Equal(invite!.Code, added.DevelopmentCode);
     }
 
     [Fact]
@@ -565,7 +591,7 @@ public sealed class PhoneVerificationApiTests : IClassFixture<TrustApiFactory>
     }
 
     [Fact]
-    public async Task HttpLookupConnectsVerifiedPhoneWithoutSms()
+    public async Task HttpLookupOfVerifiedPhoneReturnsOrdinaryInvite()
     {
         var sam = await DevelopmentSessionAsync("Sam");
         var phone = UniquePhone();
@@ -574,12 +600,16 @@ public sealed class PhoneVerificationApiTests : IClassFixture<TrustApiFactory>
 
         var jordan = await DevelopmentSessionAsync("Jordan");
         var added = await AddPersonAsync(jordan.Token, phone);
-        Assert.Equal("connected", added.Outcome);
+        Assert.Equal("invited", added.Outcome);
         Assert.False(added.SmsSent);
-        Assert.True(string.IsNullOrWhiteSpace(added.DevelopmentCode));
+        Assert.False(string.IsNullOrWhiteSpace(added.DevelopmentCode));
 
         var circle = await CircleAsync(jordan.Token);
-        Assert.Contains(circle.Members, member => member.Person.Id == sam.You.Id);
+        Assert.DoesNotContain(circle.Members, member => member.Person.Id == sam.You.Id);
+        using var accept = Authorized(HttpMethod.Post, "/api/v1/invites/accept", (await DevelopmentSessionAsync("Alex")).Token);
+        accept.Content = JsonContent.Create(new { code = added.DevelopmentCode });
+        var accepted = await _client.SendAsync(accept);
+        accepted.EnsureSuccessStatusCode();
     }
 
     [Fact]

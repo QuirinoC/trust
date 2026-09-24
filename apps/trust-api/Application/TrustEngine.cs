@@ -285,6 +285,8 @@ public sealed class TrustEngine(ITrustStore store, TimeProvider time)
         var now = time.GetUtcNow();
         await store.RestoreExpiredPausesAsync(now, cancellationToken);
         var shareToViewer = await store.GetShareAsync(subjectId, viewer.Id, cancellationToken);
+        // History is an ongoing trail and is available only in Always. Sealed grants
+        // exactly one confirmed snapshot through LookAsync.
         if (!shareToViewer.SharesHistory(now))
         {
             throw TrustException.ShareOff();

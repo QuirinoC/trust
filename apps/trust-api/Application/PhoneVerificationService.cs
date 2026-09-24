@@ -44,12 +44,6 @@ public sealed class PhoneVerificationService(
             throw TrustException.InvalidPhone();
         }
 
-        var owner = await store.FindByVerifiedPhoneAsync(e164, cancellationToken);
-        if (owner is not null && owner.Id != accountId)
-        {
-            throw TrustException.PhoneInUse();
-        }
-
         var now = time.GetUtcNow();
         var existing = await store.GetPhoneChallengeAsync(accountId, cancellationToken);
         var samePhone = existing is not null
@@ -83,8 +77,8 @@ public sealed class PhoneVerificationService(
             now,
             sendCount + 1,
             windowStarted);
-        await store.UpsertPhoneChallengeAsync(challenge, cancellationToken);
         await CommitSmsAsync(gate, cancellationToken);
+        await store.UpsertPhoneChallengeAsync(challenge, cancellationToken);
 
         if (!gate.Bypass)
         {
@@ -103,7 +97,8 @@ public sealed class PhoneVerificationService(
         return new PhoneCodeSendResult(challenge.ExpiresAt, NextResendSeconds(gate), code);
     }
 
-    /// Verified number: connect that account. Unknown number: create an invite and return the code. No invite text is sent.
+    /// Phone entry always creates the ordinary invite. Looking up a number never reveals
+    /// whether it belongs to a Trust account and never connects accounts automatically.
     public async Task<AddPersonByPhoneResult> AddPersonAsync(
         Guid accountId,
         string? rawPhone,
@@ -113,18 +108,6 @@ public sealed class PhoneVerificationService(
         if (!PhoneE164.TryNormalize(rawPhone, out var e164))
         {
             throw TrustException.InvalidPhone();
-        }
-
-        var owner = await store.FindByVerifiedPhoneAsync(e164, cancellationToken);
-        if (owner is not null)
-        {
-            if (owner.Id == accountId)
-            {
-                throw TrustException.OwnPhone();
-            }
-
-            var added = await engine.ConnectAccountsAsync(accountId, owner.Id, cancellationToken);
-            return new AddPersonByPhoneResult(added ? "connected" : "already", false, null);
         }
 
         var invite = await engine.CreateInviteAsync(accountId, cancellationToken);
@@ -171,25 +154,36 @@ public sealed class PhoneVerificationService(
         var expected = Hash(accountId, e164, code);
         if (!FixedEquals(challenge.CodeHash, expected))
         {
-            var attempts = challenge.Attempts + 1;
+            var attempts = await store.IncrementPhoneChallengeFailureAsync(
+                accountId,
+                e164,
+                now,
+                MaxAttempts,
+                cancellationToken);
+            if (attempts is null)
+            {
+                throw TrustException.OtpExpired();
+            }
+
             if (attempts >= MaxAttempts)
             {
-                await store.ClearPhoneChallengeAsync(accountId, cancellationToken);
                 throw TrustException.OtpExhausted();
             }
 
-            await store.UpsertPhoneChallengeAsync(challenge with { Attempts = attempts }, cancellationToken);
             throw TrustException.OtpInvalid();
         }
 
-        var owner = await store.FindByVerifiedPhoneAsync(e164, cancellationToken);
-        if (owner is not null && owner.Id != accountId)
+        var completed = await store.TryCompletePhoneChallengeAsync(
+            accountId,
+            e164,
+            challenge.CodeHash,
+            now,
+            MaxAttempts,
+            cancellationToken);
+        if (!completed)
         {
-            throw TrustException.PhoneInUse();
+            throw TrustException.OtpExhausted();
         }
-
-        await store.SetVerifiedPhoneAsync(accountId, e164, now, cancellationToken);
-        await store.ClearPhoneChallengeAsync(accountId, cancellationToken);
         logger.LogInformation(
             "Verified phone {Phone} for account {AccountId}.",
             PhoneE164.Mask(e164),
@@ -250,14 +244,14 @@ public sealed class PhoneVerificationService(
 
     private async Task CommitSmsAsync(SmsGate gate, CancellationToken cancellationToken)
     {
-        await store.UpsertSmsSendBudgetAsync(Bump(gate.Account, gate.Now), cancellationToken);
-        await store.UpsertSmsSendBudgetAsync(Bump(gate.Phone, gate.Now), cancellationToken);
-        await store.UpsertSmsSendBudgetAsync(Bump(gate.AccountDay, gate.Now), cancellationToken);
-        await store.UpsertSmsSendBudgetAsync(Bump(gate.GlobalDay, gate.Now), cancellationToken);
+        if (!await store.TryReserveSmsAsync(
+            [gate.Account, gate.Phone, gate.AccountDay, gate.GlobalDay],
+            gate.Now,
+            cancellationToken))
+        {
+            throw TrustException.OtpCooldown();
+        }
     }
-
-    private static SmsSendBudget Bump(SmsSendBudget budget, DateTimeOffset now) =>
-        budget with { SendCount = budget.SendCount + 1, LastSentAt = now };
 
     private async Task DeliverCodeAsync(string e164, string code, CancellationToken cancellationToken)
     {

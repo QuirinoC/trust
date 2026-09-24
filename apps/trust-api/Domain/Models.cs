@@ -261,7 +261,8 @@ public sealed record ShareState(
         return mode is ShareResting.Always or ShareResting.UntilTheyLook;
     }
 
-    public bool SharesHistory(DateTimeOffset now) => AcceptsLocation(now);
+    /// Ongoing trail reads are available only in Always. Sealed grants a confirmed snapshot via Look.
+    public bool SharesHistory(DateTimeOffset now) => Effective(now) == ShareResting.Always;
 
     /// Paused still holds the trail so restore is not empty. Off does not.
     public bool KeepsTrail(DateTimeOffset now)
@@ -525,6 +526,9 @@ public interface ITrustStore
     Task<PhoneChallenge?> GetPhoneChallengeAsync(Guid accountId, CancellationToken cancellationToken);
     Task UpsertPhoneChallengeAsync(PhoneChallenge challenge, CancellationToken cancellationToken);
     Task ClearPhoneChallengeAsync(Guid accountId, CancellationToken cancellationToken);
+    Task<bool> TryReserveSmsAsync(IReadOnlyList<SmsSendBudget> budgets, DateTimeOffset now, CancellationToken cancellationToken);
+    Task<int?> IncrementPhoneChallengeFailureAsync(Guid accountId, string phoneE164, DateTimeOffset now, int maxAttempts, CancellationToken cancellationToken);
+    Task<bool> TryCompletePhoneChallengeAsync(Guid accountId, string phoneE164, string codeHash, DateTimeOffset verifiedAt, int maxAttempts, CancellationToken cancellationToken);
     Task<SmsSendBudget?> GetSmsSendBudgetAsync(string scopeKey, CancellationToken cancellationToken);
     Task UpsertSmsSendBudgetAsync(SmsSendBudget budget, CancellationToken cancellationToken);
 

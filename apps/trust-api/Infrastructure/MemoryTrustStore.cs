@@ -15,6 +15,7 @@ public sealed class MemoryTrustStore : ITrustStore
     private readonly ConcurrentDictionary<string, Invite> _invites = new();
     private readonly ConcurrentDictionary<Guid, PhoneChallenge> _phoneChallenges = new();
     private readonly ConcurrentDictionary<string, SmsSendBudget> _smsBudgets = new();
+    private readonly SemaphoreSlim _smsGate = new(1, 1);
     private readonly ConcurrentDictionary<(Guid Subject, Guid Trustee), PresenceGrant> _presenceGrants = new();
     private readonly ConcurrentDictionary<Guid, HomePlace> _homePlaces = new();
     private readonly ConcurrentDictionary<Guid, CurrentHomePresence> _homePresence = new();
@@ -520,6 +521,126 @@ public sealed class MemoryTrustStore : ITrustStore
     {
         _phoneChallenges.TryRemove(accountId, out _);
         return Task.CompletedTask;
+    }
+
+    public async Task<bool> TryReserveSmsAsync(IReadOnlyList<SmsSendBudget> budgets, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        await _smsGate.WaitAsync(cancellationToken);
+        try
+        {
+            foreach (var proposed in budgets)
+            {
+                var current = _smsBudgets.GetValueOrDefault(proposed.ScopeKey);
+                var window = proposed.ScopeKey.Contains("-day", StringComparison.Ordinal)
+                    ? TimeSpan.FromHours(24)
+                    : TimeSpan.FromHours(1);
+                var expired = current is null || now - current.WindowStartedAt >= window;
+                var count = expired ? 0 : current!.SendCount;
+                var limit = proposed.ScopeKey == SmsSendBudget.GlobalDayKey() ? 40 : 8;
+                if (count >= limit)
+                {
+                    return false;
+                }
+
+                if (!expired
+                    && (proposed.ScopeKey.StartsWith("account:", StringComparison.Ordinal)
+                        || proposed.ScopeKey.StartsWith("phone:", StringComparison.Ordinal))
+                    && current!.LastSentAt is { } lastSent)
+                {
+                    var seconds = count <= 1 ? 45 : Math.Min(45 << Math.Min(count - 1, 4), 180);
+                    if (now - lastSent < TimeSpan.FromSeconds(seconds))
+                    {
+                        return false;
+                    }
+                }
+            }
+
+            foreach (var proposed in budgets)
+            {
+                var current = _smsBudgets.GetValueOrDefault(proposed.ScopeKey);
+                var window = proposed.ScopeKey.Contains("-day", StringComparison.Ordinal)
+                    ? TimeSpan.FromHours(24)
+                    : TimeSpan.FromHours(1);
+                var expired = current is null || now - current.WindowStartedAt >= window;
+                var count = expired ? 0 : current!.SendCount;
+                _smsBudgets[proposed.ScopeKey] = new SmsSendBudget(
+                    proposed.ScopeKey,
+                    expired ? now : current!.WindowStartedAt,
+                    count + 1,
+                    now);
+            }
+
+            return true;
+        }
+        finally
+        {
+            _smsGate.Release();
+        }
+    }
+
+    public async Task<int?> IncrementPhoneChallengeFailureAsync(Guid accountId, string phoneE164, DateTimeOffset now, int maxAttempts, CancellationToken cancellationToken)
+    {
+        await _smsGate.WaitAsync(cancellationToken);
+        try
+        {
+            if (!_phoneChallenges.TryGetValue(accountId, out var challenge)
+                || challenge.PhoneE164 != phoneE164
+                || challenge.ExpiresAt <= now)
+            {
+                return null;
+            }
+
+            var attempts = challenge.Attempts + 1;
+            if (attempts >= maxAttempts)
+            {
+                _phoneChallenges.TryRemove(accountId, out _);
+            }
+            else
+            {
+                _phoneChallenges[accountId] = challenge with { Attempts = attempts };
+            }
+
+            return attempts;
+        }
+        finally
+        {
+            _smsGate.Release();
+        }
+    }
+
+    public async Task<bool> TryCompletePhoneChallengeAsync(Guid accountId, string phoneE164, string codeHash, DateTimeOffset verifiedAt, int maxAttempts, CancellationToken cancellationToken)
+    {
+        await _smsGate.WaitAsync(cancellationToken);
+        try
+        {
+            if (!_phoneChallenges.TryGetValue(accountId, out var challenge)
+                || challenge.PhoneE164 != phoneE164
+                || challenge.CodeHash != codeHash
+                || challenge.ExpiresAt <= verifiedAt
+                || challenge.Attempts >= maxAttempts)
+            {
+                return false;
+            }
+
+            if (_accounts.Values.Any(account => account.Id != accountId
+                && account.PhoneE164 == phoneE164 && account.PhoneVerifiedAt is not null))
+            {
+                throw TrustException.PhoneInUse();
+            }
+
+            if (_accounts.TryGetValue(accountId, out var account))
+            {
+                _accounts[accountId] = account with { PhoneE164 = phoneE164, PhoneVerifiedAt = verifiedAt };
+                _phoneChallenges.TryRemove(accountId, out _);
+                return true;
+            }
+
+            return false;
+        }
+        finally
+        {
+            _smsGate.Release();
+        }
     }
 
     public Task<SmsSendBudget?> GetSmsSendBudgetAsync(string scopeKey, CancellationToken cancellationToken)

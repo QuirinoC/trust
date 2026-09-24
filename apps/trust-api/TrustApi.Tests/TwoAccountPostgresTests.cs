@@ -74,12 +74,14 @@ public sealed class TwoAccountPostgresTests
         await engine.IngestAsync(sam.Id, new LocationFix(time.UtcNow.AddHours(-30), 37.200, -122.200), 70, false, CancellationToken.None);
         await engine.IngestAsync(sam.Id, new LocationFix(time.UtcNow.AddMinutes(-30), 37.300, -122.300), 70, false, CancellationToken.None);
 
-        var freeHistory = await engine.HistoryAsync(jordan.Id, sam.Id, CancellationToken.None);
-        Assert.Equal(new[] { 37.300, 37.750 }, freeHistory.Select(point => point.Latitude).ToArray());
+        var sealedHistory = await Assert.ThrowsAsync<TrustException>(() =>
+            engine.HistoryAsync(jordan.Id, sam.Id, CancellationToken.None));
+        Assert.Equal("share_off", sealedHistory.Code);
 
         await engine.GrantCircleAsync(jordan.Id, "test", CancellationToken.None);
-        var plusHistory = await engine.HistoryAsync(jordan.Id, sam.Id, CancellationToken.None);
-        Assert.Equal(new[] { 37.300, 37.750, 37.200, 37.100 }, plusHistory.Select(point => point.Latitude).ToArray());
+        var stillSealed = await Assert.ThrowsAsync<TrustException>(() =>
+            engine.HistoryAsync(jordan.Id, sam.Id, CancellationToken.None));
+        Assert.Equal("share_off", stillSealed.Code);
 
         var samStillFree = await engine.GetCircleAsync(sam.Id, CancellationToken.None);
         Assert.False(samStillFree.Coverage.IsCovered);
@@ -89,6 +91,8 @@ public sealed class TwoAccountPostgresTests
 
         await engine.GrantCircleAsync(sam.Id, "test", CancellationToken.None);
         await engine.SetShareAsync(sam.Id, jordan.Id, ShareResting.Always, null, CancellationToken.None);
+        var plusHistory = await engine.HistoryAsync(jordan.Id, sam.Id, CancellationToken.None);
+        Assert.Equal(new[] { 37.300, 37.750, 37.200, 37.100 }, plusHistory.Select(point => point.Latitude).ToArray());
         await engine.IngestAsync(sam.Id, new LocationFix(time.UtcNow, 37.770, -122.420), 90, false, CancellationToken.None);
         var always = await engine.GetCircleAsync(jordan.Id, CancellationToken.None);
         var liveSam = always.Members.Single(member => member.Person.Id == sam.Id);

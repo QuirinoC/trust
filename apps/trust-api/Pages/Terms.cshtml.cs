@@ -1,10 +1,9 @@
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.AspNetCore.Mvc;
 
 namespace TrustApi.Pages;
 
 public class TermsModel : PageModel
 {
-    public void OnGet()
-    {
-    }
+    public IActionResult OnGet() => RedirectPermanent("https://jointrust.app/terms");
 }

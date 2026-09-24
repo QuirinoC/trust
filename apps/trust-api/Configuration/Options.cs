@@ -46,6 +46,17 @@ public sealed class AuthOptions
     public bool AllowDevelopmentSignIn { get; set; }
 }
 
+public static class AuthOptionsGuard
+{
+    public static void EnsureDevelopmentSignInIsSafe(AuthOptions options, bool isDevelopment)
+    {
+        if (options.AllowDevelopmentSignIn && !isDevelopment)
+        {
+            throw new InvalidOperationException("Auth:AllowDevelopmentSignIn may only be enabled in the Development environment.");
+        }
+    }
+}
+
 public sealed class AppleOptions
 {
     public const string SectionName = "Apple";

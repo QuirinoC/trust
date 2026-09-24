@@ -70,10 +70,18 @@ public sealed class PostgresHistoryTests
         Assert.Single(rebuilt.Trail);
         Assert.True(rebuiltResult.IsNew);
 
+        var sealedHistory = await Assert.ThrowsAsync<TrustException>(() =>
+            afterRestart.HistoryAsync(jordan.Id, sam.Id, CancellationToken.None));
+        Assert.Equal("share_off", sealedHistory.Code);
+        await afterRestart.GrantCircleAsync(sam.Id, "test", CancellationToken.None);
+        await afterRestart.SetShareAsync(sam.Id, jordan.Id, ShareResting.Always, null, CancellationToken.None);
+        Assert.Equal(4, (await afterRestart.HistoryAsync(jordan.Id, sam.Id, CancellationToken.None)).Count);
+        await afterRestart.SetShareAsync(sam.Id, jordan.Id, ShareResting.UntilTheyLook, null, CancellationToken.None);
+
         var receipts = await restarted.ListLooksAsync(sam.Id, time.UtcNow.AddDays(-1), CancellationToken.None);
         Assert.Contains(receipts, item => item.Id == look.Event.Id && item.IncludedLive && item.Kind == LookKind.Look);
 
-        // A Look does not open a session and does not dump the stored trail.
+        // Returning to Sealed closes the live pin after the Always history read.
         var sealedView = await afterRestart.GetCircleAsync(jordan.Id, CancellationToken.None);
         Assert.Null(sealedView.Members.Single(member => member.Person.Id == sam.Id).Live);
         Assert.False(sealedView.Members.Single(member => member.Person.Id == sam.Id).InboundLive);
@@ -83,5 +91,53 @@ public sealed class PostgresHistoryTests
 
         await afterRestart.DeleteAccountAsync(sam.Id, CancellationToken.None);
         await afterRestart.DeleteAccountAsync(jordan.Id, CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task SmsBudgetReservationsAndOtpFailuresAreAtomicAcrossConcurrentCalls()
+    {
+        try
+        {
+            await PostgresMigrator.ApplyAsync(Connection);
+        }
+        catch (Exception exception)
+        {
+            Console.WriteLine($"Skipping Postgres SMS atomicity test; docker Postgres is not on 5433 ({exception.Message}).");
+            return;
+        }
+
+        var store = new PostgresTrustStore(Connection);
+        var now = DateTimeOffset.UtcNow;
+        var suffix = Guid.NewGuid().ToString("N");
+        var accountId = Guid.NewGuid();
+        var budgets = new[]
+        {
+            new SmsSendBudget($"account:{accountId:N}", now, 0, null),
+            new SmsSendBudget($"phone:+1555{suffix[..7]}", now, 0, null),
+            new SmsSendBudget($"account-day:{accountId:N}", now, 0, null),
+            new SmsSendBudget($"test-global-day:{suffix}", now, 0, null)
+        };
+        var reservations = await Task.WhenAll(Enumerable.Range(0, 12).Select(_ =>
+            store.TryReserveSmsAsync(budgets, now, CancellationToken.None)));
+        Assert.Single(reservations, reserved => reserved);
+
+        var engine = new TrustEngine(store, TimeProvider.System);
+        var account = await engine.SignInAsync("development", $"otp-concurrent-{suffix}", "Sam", CancellationToken.None);
+        var phone = $"+1555{suffix[..7]}";
+        await store.UpsertPhoneChallengeAsync(new PhoneChallenge(
+            account.Id,
+            phone,
+            "not-the-code",
+            now.AddMinutes(10),
+            0,
+            now,
+            1,
+            now), CancellationToken.None);
+        var failures = await Task.WhenAll(Enumerable.Range(0, 12).Select(_ =>
+            store.IncrementPhoneChallengeFailureAsync(account.Id, phone, now, 5, CancellationToken.None)));
+        Assert.Equal(new int?[] { 1, 2, 3, 4, 5 }, failures.Where(value => value is not null).Order().ToArray());
+        Assert.Equal(7, failures.Count(value => value is null));
+        Assert.Null(await store.GetPhoneChallengeAsync(account.Id, CancellationToken.None));
+        await store.DeleteAccountAsync(account.Id, CancellationToken.None);
     }
 }
