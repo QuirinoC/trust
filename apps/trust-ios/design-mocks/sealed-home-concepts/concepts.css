@@ -1,0 +1,968 @@
+/* Sealed Home concept boards — Masthead tokens via mocks.css */
+
+.concepts-page {
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 48px 28px 96px;
+}
+
+.editorial {
+  max-width: 720px;
+  margin-bottom: 48px;
+}
+
+.editorial .gallery-title {
+  font-size: clamp(40px, 5vw, 56px);
+}
+
+.verdict {
+  margin: 28px 0 0;
+  padding: 22px 24px;
+  border: 1px solid var(--ink);
+  background: var(--paper);
+  max-width: 640px;
+}
+
+.verdict-kicker {
+  font-family: var(--folio);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin: 0 0 8px;
+}
+
+.verdict h2 {
+  font-family: var(--display);
+  font-style: italic;
+  font-weight: 400;
+  font-size: 28px;
+  line-height: 1.15;
+  margin: 0 0 10px;
+}
+
+.verdict p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.take-list {
+  margin: 22px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 10px;
+  max-width: 640px;
+}
+
+.take-list li {
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--ink);
+  padding-left: 18px;
+  position: relative;
+}
+
+.take-list li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.55em;
+  width: 7px;
+  height: 7px;
+  background: var(--accent);
+}
+
+.take-list li.kill {
+  color: var(--muted);
+}
+
+.take-list li.kill::before {
+  background: var(--ink);
+  opacity: 0.35;
+}
+
+.concepts-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin: 32px 0 8px;
+}
+
+.concepts-nav a {
+  font-family: var(--folio);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border-bottom: 1px solid transparent;
+  padding-bottom: 2px;
+}
+
+.concepts-nav a:hover,
+.concepts-nav a.rec {
+  color: var(--ink);
+}
+
+.concepts-nav a.rec {
+  border-bottom-color: var(--accent);
+}
+
+.concept-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 56px 40px;
+  margin-top: 36px;
+  justify-items: center;
+}
+
+.concept-board {
+  width: 100%;
+  max-width: 390px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.concept-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.concept-meta .tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.badge {
+  font-family: var(--folio);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border: 1px solid var(--ink);
+}
+
+.badge.rec {
+  background: var(--accent);
+  color: var(--accent-on);
+  border-color: var(--accent);
+}
+
+.badge.kill {
+  background: transparent;
+  color: var(--muted);
+  border-color: #bbb;
+}
+
+.concept-meta h2 {
+  font-family: var(--display);
+  font-style: italic;
+  font-weight: 400;
+  font-size: 26px;
+  line-height: 1.1;
+  margin: 4px 0 0;
+}
+
+.concept-meta .blurb {
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--muted);
+  margin: 0;
+}
+
+.risk {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--ink);
+  margin: 0;
+  padding-top: 4px;
+  border-top: 1px solid rgba(0, 0, 0, 0.12);
+}
+
+.risk strong {
+  font-weight: 600;
+  color: var(--accent);
+}
+
+/* Shared phone chrome for concept interiors */
+.phone.concept {
+  background: var(--paper);
+}
+
+.phone.concept .status-bar {
+  color: var(--ink);
+}
+
+.phone.concept .screen-layer {
+  padding-bottom: 28px;
+}
+
+.sealed-strip {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 28px;
+  z-index: 6;
+  padding: 0 14px;
+}
+
+.sealed-strip .strip-scroll {
+  display: flex;
+  gap: 8px;
+  overflow: hidden;
+}
+
+.sealed-strip .person-chip {
+  flex: 0 0 auto;
+  min-width: 88px;
+  padding: 10px 12px;
+  border: 1px solid var(--ink);
+  background: rgba(255, 255, 255, 0.94);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sealed-strip .person-chip .name {
+  font-family: var(--display);
+  font-style: italic;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.sealed-strip .person-chip .verb {
+  font-family: var(--folio);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.sealed-strip .person-chip .verb .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ink);
+}
+
+.sealed-strip .person-chip .verb.away .dot {
+  background: transparent;
+  border: 1.5px solid var(--ink);
+}
+
+.sealed-strip .person-chip .verb.accent {
+  color: var(--accent);
+}
+
+.sealed-strip .invite-chip {
+  flex: 0 0 auto;
+  min-width: 72px;
+  padding: 10px 12px;
+  border: 1px dashed var(--ink);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.sealed-strip .invite-chip .plus {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.sealed-strip .invite-chip .label {
+  font-family: var(--folio);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.handle-tiny {
+  font-family: var(--folio);
+  font-size: 12px;
+  color: var(--muted);
+  padding: 6px 22px 0;
+  letter-spacing: 0.02em;
+}
+
+/* ——— A. Roster First ——— */
+.c-roster {
+  background:
+    radial-gradient(ellipse 120% 80% at 50% -10%, #f7f7f5 0%, transparent 55%),
+    linear-gradient(180deg, #fff 0%, #f4f4f2 100%);
+}
+
+.c-roster .roster-hero {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 8px 22px 120px;
+  min-height: 0;
+}
+
+.c-roster .count-line {
+  font-family: var(--folio);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 18px 0 6px;
+}
+
+.c-roster .roster-title {
+  font-family: var(--display);
+  font-style: italic;
+  font-size: 36px;
+  line-height: 1.05;
+  margin: 0 0 18px;
+}
+
+.c-roster .presence-roll {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--ink);
+  overflow: hidden;
+}
+
+.c-roster .presence-roll li {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 10px;
+  align-items: baseline;
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.12);
+}
+
+.c-roster .presence-roll .who {
+  font-family: var(--display);
+  font-style: italic;
+  font-size: 22px;
+}
+
+.c-roster .presence-roll .state {
+  font-family: var(--folio);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.c-roster .presence-roll .state.home {
+  color: var(--ink);
+}
+
+.c-roster .presence-roll .state.away {
+  color: var(--muted);
+}
+
+.c-roster .presence-roll .state.overdue {
+  color: var(--accent);
+}
+
+.c-roster .presence-roll .look {
+  font-family: var(--folio);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+  border-bottom: 1px solid var(--accent);
+}
+
+.c-roster .paper-grain {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  opacity: 0.04;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  z-index: 3;
+  animation: grain-shift 8s steps(6) infinite;
+}
+
+@keyframes grain-shift {
+  0%, 100% { transform: translate(0, 0); }
+  25% { transform: translate(-1%, 1%); }
+  50% { transform: translate(1%, -1%); }
+  75% { transform: translate(-1%, -1%); }
+}
+
+/* ——— B. Decorative Globe ——— */
+.c-globe {
+  background: #0a0a0a;
+  color: #f5f5f3;
+}
+
+.c-globe .status-bar,
+.c-globe .wordmark,
+.c-globe .folio-link,
+.c-globe .handle-tiny {
+  color: #f5f5f3;
+}
+
+.c-globe .masthead-rule {
+  background: rgba(245, 245, 243, 0.35);
+}
+
+.c-globe .globe-stage {
+  flex: 1;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  padding-bottom: 100px;
+}
+
+.c-globe .globe-orbit {
+  width: 240px;
+  height: 240px;
+  border-radius: 50%;
+  border: 1px solid rgba(245, 245, 243, 0.25);
+  position: relative;
+  animation: orbit-spin 48s linear infinite;
+}
+
+.c-globe .globe-sphere {
+  position: absolute;
+  inset: 18px;
+  border-radius: 50%;
+  border: 1px solid rgba(245, 245, 243, 0.55);
+  background:
+    radial-gradient(circle at 32% 28%, rgba(225, 6, 0, 0.35), transparent 42%),
+    radial-gradient(circle at 70% 70%, rgba(255, 255, 255, 0.06), transparent 50%),
+    #111;
+  overflow: hidden;
+}
+
+.c-globe .meridian {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(245, 245, 243, 0.18);
+  transform: rotateY(0deg);
+}
+
+.c-globe .meridian:nth-child(1) { transform: scaleX(0.35); }
+.c-globe .meridian:nth-child(2) { transform: scaleX(0.7); }
+.c-globe .meridian:nth-child(3) { transform: rotate(90deg) scaleX(0.45); }
+.c-globe .parallel {
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  height: 1px;
+  background: rgba(245, 245, 243, 0.2);
+}
+.c-globe .parallel.p1 { top: 32%; }
+.c-globe .parallel.p2 { top: 50%; }
+.c-globe .parallel.p3 { top: 68%; }
+
+.c-globe .mark {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #f5f5f3;
+  box-shadow: 0 0 0 3px rgba(225, 6, 0, 0.35);
+}
+
+.c-globe .caption {
+  position: absolute;
+  bottom: 118px;
+  left: 22px;
+  right: 22px;
+  text-align: center;
+  font-family: var(--display);
+  font-style: italic;
+  font-size: 20px;
+  color: rgba(245, 245, 243, 0.7);
+  z-index: 4;
+}
+
+.c-globe .sealed-strip .person-chip,
+.c-globe .sealed-strip .invite-chip {
+  background: rgba(20, 20, 20, 0.92);
+  border-color: rgba(245, 245, 243, 0.55);
+  color: #f5f5f3;
+}
+
+.c-globe .sealed-strip .person-chip .verb {
+  color: rgba(245, 245, 243, 0.55);
+}
+
+@keyframes orbit-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ——— C. Funny Map (killed) ——— */
+.c-funny {
+  background: #e8e6df;
+}
+
+.c-funny .fake-map {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  opacity: 0.85;
+}
+
+.c-funny .fake-map svg {
+  width: 100%;
+  height: 100%;
+}
+
+.c-funny .honesty-banner {
+  position: absolute;
+  top: 118px;
+  left: 22px;
+  right: 22px;
+  z-index: 5;
+  background: var(--paper);
+  border: 1px solid var(--ink);
+  padding: 14px 16px;
+}
+
+.c-funny .honesty-banner .k {
+  font-family: var(--folio);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin: 0 0 4px;
+}
+
+.c-funny .honesty-banner p {
+  margin: 0;
+  font-family: var(--display);
+  font-style: italic;
+  font-size: 22px;
+  line-height: 1.15;
+}
+
+.c-funny .sealed-chip-fake {
+  position: absolute;
+  z-index: 4;
+  font-family: var(--folio);
+  font-size: 11px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid var(--ink);
+  padding: 6px 8px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* ——— D. Constellation ——— */
+.c-constellation {
+  background:
+    radial-gradient(ellipse at 50% 40%, #1a1a1a 0%, #050505 70%);
+  color: #f5f5f3;
+}
+
+.c-constellation .status-bar,
+.c-constellation .wordmark,
+.c-constellation .folio-link,
+.c-constellation .handle-tiny {
+  color: #f5f5f3;
+}
+
+.c-constellation .masthead-rule {
+  background: rgba(245, 245, 243, 0.3);
+}
+
+.c-constellation .sky {
+  flex: 1;
+  position: relative;
+  min-height: 0;
+  margin: 8px 10px 110px;
+}
+
+.c-constellation .edge {
+  position: absolute;
+  background: rgba(245, 245, 243, 0.18);
+  height: 1px;
+  transform-origin: left center;
+  z-index: 1;
+}
+
+.c-constellation .node {
+  position: absolute;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 56px;
+  margin-left: -28px;
+  margin-top: -28px;
+}
+
+.c-constellation .node .star {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #f5f5f3;
+  box-shadow: 0 0 12px rgba(245, 245, 243, 0.45);
+  animation: twinkle 3.2s ease-in-out infinite;
+}
+
+.c-constellation .node.you .star {
+  background: var(--accent);
+  box-shadow: 0 0 16px rgba(225, 6, 0, 0.55);
+  width: 18px;
+  height: 18px;
+  animation: none;
+}
+
+.c-constellation .node.away .star {
+  background: transparent;
+  border: 1.5px solid rgba(245, 245, 243, 0.7);
+  box-shadow: none;
+}
+
+.c-constellation .node .lbl {
+  font-family: var(--folio);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(245, 245, 243, 0.65);
+  white-space: nowrap;
+}
+
+.c-constellation .node.you .lbl {
+  color: #f5f5f3;
+}
+
+.c-constellation .sky-caption {
+  position: absolute;
+  bottom: 118px;
+  left: 22px;
+  right: 22px;
+  text-align: center;
+  font-family: var(--display);
+  font-style: italic;
+  font-size: 18px;
+  color: rgba(245, 245, 243, 0.55);
+  z-index: 4;
+}
+
+@keyframes twinkle {
+  0%, 100% { opacity: 0.55; transform: scale(0.92); }
+  50% { opacity: 1; transform: scale(1); }
+}
+
+.c-constellation .sealed-strip .person-chip,
+.c-constellation .sealed-strip .invite-chip {
+  background: rgba(12, 12, 12, 0.9);
+  border-color: rgba(245, 245, 243, 0.45);
+  color: #f5f5f3;
+}
+
+.c-constellation .sealed-strip .person-chip .verb {
+  color: rgba(245, 245, 243, 0.5);
+}
+
+/* ——— E. Paper desk / envelopes ——— */
+.c-desk {
+  background:
+    linear-gradient(165deg, #fafaf8 0%, #eceae4 100%);
+}
+
+.c-desk .desk-field {
+  flex: 1;
+  position: relative;
+  margin: 12px 18px 118px;
+  min-height: 0;
+}
+
+.c-desk .envelope {
+  position: absolute;
+  width: 148px;
+  height: 96px;
+  background: #fff;
+  border: 1px solid var(--ink);
+  box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.06);
+  padding: 12px 12px 10px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  transform-origin: center;
+}
+
+.c-desk .envelope::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 36px;
+  background: linear-gradient(135deg, transparent 49%, rgba(0, 0, 0, 0.06) 50%),
+    linear-gradient(225deg, transparent 49%, rgba(0, 0, 0, 0.04) 50%);
+  pointer-events: none;
+}
+
+.c-desk .envelope .to {
+  font-family: var(--folio);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  position: relative;
+  z-index: 1;
+}
+
+.c-desk .envelope .who {
+  font-family: var(--display);
+  font-style: italic;
+  font-size: 22px;
+  position: relative;
+  z-index: 1;
+}
+
+.c-desk .envelope .seal {
+  align-self: flex-end;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-family: var(--folio);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  z-index: 1;
+}
+
+.c-desk .envelope.e1 { left: 8%; top: 8%; transform: rotate(-6deg); }
+.c-desk .envelope.e2 { right: 4%; top: 22%; transform: rotate(5deg); }
+.c-desk .envelope.e3 { left: 18%; top: 48%; transform: rotate(3deg); }
+.c-desk .envelope.e4 { right: 10%; top: 58%; transform: rotate(-4deg); opacity: 0.85; }
+
+.c-desk .desk-note {
+  position: absolute;
+  bottom: 118px;
+  left: 22px;
+  right: 22px;
+  text-align: center;
+  font-family: var(--display);
+  font-style: italic;
+  font-size: 18px;
+  color: var(--muted);
+  z-index: 4;
+}
+
+/* ——— F. Two rooms / presence field ——— */
+.c-rooms {
+  background: #fff;
+}
+
+.c-rooms .rooms {
+  flex: 1;
+  display: grid;
+  grid-template-rows: 1fr 1fr;
+  gap: 0;
+  margin: 12px 18px 118px;
+  border: 1px solid var(--ink);
+  min-height: 0;
+}
+
+.c-rooms .room {
+  position: relative;
+  padding: 16px;
+  overflow: hidden;
+}
+
+.c-rooms .room.home {
+  background: #f6f6f4;
+  border-bottom: 1px solid var(--ink);
+}
+
+.c-rooms .room.away {
+  background: #fff;
+}
+
+.c-rooms .room .room-label {
+  font-family: var(--folio);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 0 10px;
+}
+
+.c-rooms .room .room-title {
+  font-family: var(--display);
+  font-style: italic;
+  font-size: 28px;
+  margin: 0 0 14px;
+  line-height: 1;
+}
+
+.c-rooms .faces {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.c-rooms .face {
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--ink);
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--display);
+  font-style: italic;
+  font-size: 16px;
+}
+
+.c-rooms .room.away .face {
+  border-style: dashed;
+  color: var(--muted);
+}
+
+.c-rooms .room.home .pulse {
+  position: absolute;
+  right: -20px;
+  bottom: -30px;
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  border: 1px solid rgba(225, 6, 0, 0.25);
+  animation: pulse-ring 4s ease-out infinite;
+}
+
+@keyframes pulse-ring {
+  0% { transform: scale(0.7); opacity: 0.6; }
+  100% { transform: scale(1.25); opacity: 0; }
+}
+
+/* ——— G. Wax ledger (bonus / stronger hybrid) ——— */
+.c-ledger {
+  background: #fff;
+}
+
+.c-ledger .ledger-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 10px 22px 120px;
+  min-height: 0;
+}
+
+.c-ledger .folio-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin: 14px 0 6px;
+  font-family: var(--folio);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.c-ledger .big-line {
+  font-family: var(--display);
+  font-style: italic;
+  font-size: 34px;
+  line-height: 1.05;
+  margin: 0 0 4px;
+}
+
+.c-ledger .sub-line {
+  font-size: 13px;
+  color: var(--muted);
+  margin: 0 0 20px;
+}
+
+.c-ledger .wax-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.c-ledger .wax {
+  width: 64px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.c-ledger .wax .blob {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--display);
+  font-style: italic;
+  font-size: 18px;
+  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.15);
+  position: relative;
+}
+
+.c-ledger .wax.away .blob {
+  background: transparent;
+  color: var(--ink);
+  border: 1.5px solid var(--ink);
+  box-shadow: none;
+}
+
+.c-ledger .wax.overdue .blob::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 1px dashed var(--accent);
+  animation: spin-slow 12s linear infinite;
+}
+
+.c-ledger .wax .nm {
+  font-family: var(--folio);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+@keyframes spin-slow {
+  to { transform: rotate(360deg); }
+}
+
+.c-ledger .accent-rule-thin {
+  width: 48px;
+  height: 2px;
+  background: var(--accent);
+  margin: 8px 0 16px;
+}
+
+/* Reduce motion */
+@media (prefers-reduced-motion: reduce) {
+  .c-globe .globe-orbit,
+  .c-constellation .node .star,
+  .c-roster .paper-grain,
+  .c-rooms .room.home .pulse,
+  .c-ledger .wax.overdue .blob::after {
+    animation: none !important;
+  }
+}

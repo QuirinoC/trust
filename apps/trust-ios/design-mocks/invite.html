@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Invite — Trust mocks</title>
+  <link rel="stylesheet" href="mocks.css" />
+</head>
+<body>
+  <div class="screen-page">
+    <div class="screen-meta">
+      <a class="back" href="index.html">← Gallery</a>
+      <h1>Invite</h1>
+      <p>Trust copy — not “see my location.” Code is how they join.</p>
+    </div>
+
+    <div class="phone">
+      <div class="map-plane"><img src="map.svg" alt="" width="390" height="844" /></div>
+      <div class="map-scrim"></div>
+      <div class="status-bar"><span>9:41</span><span class="sig"><i aria-hidden="true"></i></span></div>
+
+      <div class="screen-layer">
+        <header class="masthead">
+          <div class="masthead-row">
+            <div class="wordmark">Trust</div>
+            <div class="masthead-actions">
+              <span class="folio-link">Log</span>
+              <a class="folio-link" href="settings.html">You</a>
+            </div>
+          </div>
+          <div class="masthead-rule"></div>
+        </header>
+        <div class="handle-line">@jordan</div>
+        <div class="map-marks"></div>
+        <div class="people-strip" style="opacity:0.4;pointer-events:none">
+          <div class="strip-scroll">
+            <div class="invite-chip"><span class="plus">+</span><span class="label">Invite</span></div>
+          </div>
+        </div>
+      </div>
+
+      <a class="sheet-backdrop" href="home-sealed.html" aria-label="Dismiss"></a>
+      <div class="sheet" role="dialog" aria-label="Invite">
+        <div class="grabber"></div>
+        <p class="sheet-eyebrow">Invite</p>
+        <h2 class="sheet-title">I trust you with my location.</h2>
+        <div class="accent-rule"></div>
+        <p class="sheet-intro">
+          They join your circle. Location stays sealed until someone Looks — unless you set Always or For a while.
+        </p>
+
+        <div style="border:1px solid var(--ink);padding:20px;text-align:center;margin-bottom:16px">
+          <p class="section-label" style="margin-bottom:8px">Your code</p>
+          <p style="font-family:var(--display);font-style:italic;font-size:36px;letter-spacing:0.12em;margin:0">K7M2</p>
+        </div>
+
+        <a class="btn-ink" href="home-sealed.html">Share invite</a>
+        <a class="btn-ghost" href="home-sealed.html">Enter a code</a>
+        <a class="btn-text-danger" href="home-sealed.html" style="color:var(--muted)">Not now</a>
+      </div>
+      <div class="home-indicator"></div>
+    </div>
+
+    <nav class="screen-links">
+      <a href="home-sealed.html">← Home</a>
+      <a href="person.html">Person</a>
+    </nav>
+  </div>
+</body>
+</html>

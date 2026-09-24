@@ -1,0 +1,40 @@
+:root {
+  --paper: #ffffff;
+  --ink: #000000;
+  --muted: #5c5c5c;
+  --accent: #e10600;
+}
+html, body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+.sheet {
+  max-width: 42rem;
+  margin: 0 auto;
+  padding: 2.5rem 1.5rem 4rem;
+}
+.brand {
+  font-size: 0.7rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-weight: 500;
+  line-height: 1.4;
+}
+h1 {
+  font-family: Didot, "Bodoni 72", "Times New Roman", serif;
+  font-style: italic;
+  font-weight: 400;
+  font-size: 3rem;
+  margin: 2rem 0 0.4rem;
+}
+.rule {
+  width: 4.5rem;
+  height: 2px;
+  background: var(--accent);
+  margin: 0 0 1.75rem;
+}
+p, li { color: var(--ink); line-height: 1.55; }
+.muted { color: var(--muted); }
+a { color: var(--ink); }

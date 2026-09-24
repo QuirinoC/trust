@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 390 844" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+  <defs>
+    <pattern id="hatch" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(35)">
+      <line x1="0" y1="0" x2="0" y2="8" stroke="#d4d4d0" stroke-width="1"/>
+    </pattern>
+  </defs>
+  <rect width="390" height="844" fill="#ececea"/>
+  <rect x="0" y="420" width="390" height="180" fill="#d8d8d4" opacity="0.85"/>
+  <path d="M0 480 Q80 450 140 470 T280 460 T390 490 L390 600 L0 600 Z" fill="#d8d8d4"/>
+  <rect x="40" y="180" width="90" height="70" fill="#e2e4dc"/>
+  <rect x="220" y="260" width="110" height="80" fill="#e2e4dc" opacity="0.9"/>
+  <rect x="60" y="560" width="70" height="55" fill="#e2e4dc"/>
+  <g stroke="#2a2a2a" stroke-width="1.2" fill="none" opacity="0.55">
+    <path d="M0 220 H390"/>
+    <path d="M0 340 H390"/>
+    <path d="M0 520 H390"/>
+    <path d="M0 640 H390"/>
+    <path d="M70 80 V760"/>
+    <path d="M160 60 V800"/>
+    <path d="M250 100 V780"/>
+    <path d="M330 40 V820"/>
+  </g>
+  <g stroke="#2a2a2a" stroke-width="2.2" fill="none" opacity="0.7">
+    <path d="M-10 300 C80 280 120 360 200 340 S320 280 400 310"/>
+    <path d="M-20 580 C60 560 140 610 220 590 S340 540 410 570"/>
+  </g>
+  <rect width="390" height="844" fill="url(#hatch)" opacity="0.35"/>
+</svg>

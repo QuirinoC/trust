@@ -1,0 +1,21 @@
+node_modules/
+.next/
+out/
+.env*.local
+coverage/
+test-results/
+playwright-report/
+.wrangler/
+.DS_Store
+
+# .NET build artifacts
+[Bb]in/
+[Oo]bj/
+*.user
+
+# Apple private keys — never commit Auth Key / Sign in with Apple .p8 files
+*.p8
+AuthKey_*.p8
+
+# Swift Package Manager / Xcode workspace metadata
+.swiftpm/

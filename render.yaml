@@ -1,0 +1,71 @@
+# Trust — Render Blueprint (trust-api only)
+# Do NOT blueprint-sync over live secrets (Twilio, Apns KeyId/PrivateKey, Auth__SigningKey).
+# Review flags stay false outside an App Review window.
+services:
+  - type: web
+    name: trust-api
+    runtime: docker
+    dockerfilePath: ./apps/trust-api/Dockerfile
+    dockerContext: ./apps/trust-api
+    plan: starter
+    healthCheckPath: /health/ready
+    autoDeploy: true
+    envVars:
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production
+      - key: FORWARDEDHEADERS__TRUSTPLATFORMPROXY
+        value: "true"
+      - key: Trust__Store
+        value: postgres
+      - key: Trust__SeedReviewCircle
+        value: "false" # set true only while Apple is reviewing
+      - key: StoreKit__Enabled
+        value: "true"
+      - key: StoreKit__AllowReviewUnlock
+        value: "false" # set true only while Apple is reviewing
+      - key: StoreKit__BundleId
+        value: com.collapsetechnologies.trust
+      - key: StoreKit__MonthlyProductId
+        value: com.collapsetechnologies.trust.circle.monthly
+      - key: StoreKit__AnnualProductId
+        value: com.collapsetechnologies.trust.circle.annual
+      - key: StoreKit__AllowedEnvironments__0
+        value: Production
+      - key: StoreKit__AllowedEnvironments__1
+        value: Sandbox
+      - key: Apple__BundleId
+        value: com.collapsetechnologies.trust
+      - key: Auth__Audience
+        value: com.collapsetechnologies.trust
+      - key: Auth__AllowDevelopmentSignIn
+        value: "false"
+      - key: Auth__SigningKey
+        generateValue: true
+      - key: ConnectionStrings__Postgres
+        fromDatabase:
+          name: trust-postgres
+          property: connectionString
+      - key: Apns__Enabled
+        value: "false"
+      - key: Apns__TeamId
+        value: "3S529795M9"
+      - key: Apns__BundleId
+        value: com.collapsetechnologies.trust
+      - key: Apns__KeyId
+        sync: false
+      - key: Apns__PrivateKey
+        sync: false
+      - key: Twilio__AccountSid
+        sync: false
+      - key: Twilio__AuthToken
+        sync: false
+      - key: Twilio__FromNumber
+        sync: false
+      - key: Twilio__MessagingServiceSid
+        sync: false
+
+databases:
+  - name: trust-postgres
+    plan: basic-256mb
+    databaseName: trust
+    user: trust

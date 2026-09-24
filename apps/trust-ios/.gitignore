@@ -1,0 +1,9 @@
+.build/
+DerivedData/
+xcuserdata/
+*.xcuserstate
+build/
+*.p8
+AuthKey_*.p8
+
+.swiftpm/

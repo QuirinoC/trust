@@ -1,0 +1,34 @@
+@page
+@model PrivacyModel
+@{
+    ViewData["Title"] = "Privacy";
+}
+<main class="sheet">
+    <div class="brand">Collapse<br />Technologies</div>
+    <h1>Privacy</h1>
+    <div class="rule"></div>
+    <p class="muted">Last updated 21 September 2026. This policy covers the Trust iOS app and this API.</p>
+    <h2>Who we are</h2>
+    <p>Trust is operated by Collapse Technologies. Contact <a href="mailto:hello@collapsetechnologies.com">hello@collapsetechnologies.com</a>.</p>
+    <h2>What we collect</h2>
+    <ul>
+        <li>Account identifiers from Sign in with Apple or Google (subject, and a display name when you provide one).</li>
+        <li>A unique handle you choose (letters, numbers, underscore). Completing it is required before the map. Phone number is not collected for onboarding.</li>
+        <li>Location points you send while Sealed or Always. Pause and Stop do not add points. A Look is the current place and notifies the person. History on a person is 24 hours on Free and 30 days on Plus.</li>
+        <li>Presence without coordinates: Home, Away, or Hidden.</li>
+        <li>Log events (look, view, removed). Neither side can erase a row.</li>
+        <li>Share settings per person (Sealed, Always, Pause, or Stop).</li>
+        <li>Plus subscription status from StoreKit. We receive an entitlement, not your card number. Plus is this account only.</li>
+    </ul>
+    <h2>What we do not do</h2>
+    <ul>
+        <li>We do not sell location. There are no ads and no data brokerage.</li>
+        <li>We do not show coordinates while someone has Stop or Pause, or before a Look when they are Sealed.</li>
+        <li>Looking is never silent. The other person gets a receipt.</li>
+    </ul>
+    <h2>Retention</h2>
+    <p>Location is kept up to 30 days while you are Sealed, Always, or Paused, then pruned. Stop, or sharing with nobody, drops the trail. Coordinates are stored on our servers. We do not sell them. The log of looks, views, and removals is kept 30 days on Free and one year on Plus.</p>
+    <h2>Account deletion</h2>
+    <p>In Trust, You → Delete account removes your account, location, presence, people, log, and push tokens on this server. Remaining people keep their own accounts.</p>
+    <p><a href="/Terms">Terms of Use</a> · <a href="/Support">Support</a></p>
+</main>

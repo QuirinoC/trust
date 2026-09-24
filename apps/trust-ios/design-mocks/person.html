@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Person sheet — Trust mocks</title>
+  <link rel="stylesheet" href="mocks.css" />
+</head>
+<body>
+  <div class="screen-page">
+    <div class="screen-meta">
+      <a class="back" href="index.html">← Gallery</a>
+      <h1>Person sheet</h1>
+      <p>Sparse relationship sheet. Look is sacred. Share modes + presence — no Directions/battery row.</p>
+    </div>
+
+    <div class="phone">
+      <div class="map-plane"><img src="map.svg" alt="" width="390" height="844" /></div>
+      <div class="map-scrim"></div>
+      <div class="status-bar"><span>9:41</span><span class="sig"><i aria-hidden="true"></i></span></div>
+
+      <div class="screen-layer">
+        <header class="masthead">
+          <div class="masthead-row">
+            <div class="wordmark">Trust</div>
+            <div class="masthead-actions">
+              <span class="folio-link">Log</span>
+              <a class="folio-link" href="settings.html">You</a>
+            </div>
+          </div>
+          <div class="masthead-rule"></div>
+        </header>
+        <div class="handle-line">@jordan</div>
+        <div class="map-marks">
+          <div class="you-dot" style="left:48%;top:36%"></div>
+          <div class="sealed-chip" style="left:54%;top:44%">
+            <svg class="lock" viewBox="0 0 10 12" aria-hidden="true"><rect x="1.5" y="5" width="7" height="5.5" fill="none" stroke="currentColor" stroke-width="1"/><path d="M3 5V3.4a2 2 0 014 0V5" fill="none" stroke="currentColor" stroke-width="1"/></svg>
+            Alex · sealed
+          </div>
+        </div>
+        <div class="people-strip" style="opacity:0.35;pointer-events:none">
+          <div class="strip-scroll">
+            <div class="person-chip selected"><span class="name">Alex</span><span class="verb">Away</span></div>
+            <div class="person-chip"><span class="name">Maya</span><span class="verb">Away</span></div>
+          </div>
+        </div>
+      </div>
+
+      <a class="sheet-backdrop" href="home-sealed.html" aria-label="Dismiss"></a>
+      <div class="sheet sheet-tall" role="dialog" aria-label="Alex">
+        <div class="grabber"></div>
+        <p class="sheet-eyebrow">@alex</p>
+        <h2 class="sheet-title">What Alex can see</h2>
+        <p class="sheet-intro">This is your location, not theirs. When sealed, they still use Look — live, two hours, a receipt.</p>
+
+        <a class="btn-primary" href="look-confirm.html">Look</a>
+
+        <p class="section-label">Share mode</p>
+        <div class="mode-list">
+          <button type="button" class="mode-row selected">
+            <span class="check" aria-hidden="true"></span>
+            <span class="body">
+              <p class="label">Until they look</p>
+              <p class="hint">Escrow. Live only when they Look.</p>
+            </span>
+            <span class="mode-tag">Default</span>
+          </button>
+          <button type="button" class="mode-row">
+            <span class="check" aria-hidden="true"></span>
+            <span class="body">
+              <p class="label">Always</p>
+              <p class="hint">Live on their map without Looking.</p>
+            </span>
+            <span class="mode-tag exception">Exception</span>
+          </button>
+          <a class="mode-row" href="for-a-while.html" style="display:flex">
+            <span class="check" aria-hidden="true"></span>
+            <span class="body">
+              <p class="label">For a while</p>
+              <p class="hint">Timed share, then reverts.</p>
+            </span>
+            <span class="mode-tag exception">Exception</span>
+          </a>
+        </div>
+
+        <div class="presence-row">
+          <div class="left">
+            <p class="title">Home / Away</p>
+            <p class="sub">Alex sees Home or Away — not where you are.</p>
+          </div>
+          <div class="toggle" role="switch" aria-checked="true" aria-label="Share Home Away"></div>
+        </div>
+
+        <a class="btn-text-danger" href="home-sealed.html">Break trust</a>
+      </div>
+      <div class="home-indicator"></div>
+    </div>
+
+    <nav class="screen-links">
+      <a href="home-sealed.html">← Home</a>
+      <a href="look-confirm.html">Look confirm</a>
+      <a href="for-a-while.html">For a while</a>
+    </nav>
+  </div>
+</body>
+</html>

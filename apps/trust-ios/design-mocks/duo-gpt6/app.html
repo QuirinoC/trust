@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f8f7f3">
+  <title>Trust Circle — interactive prototype</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="app.js" defer></script>
+</head>
+<body class="prototype-page">
+  <a class="back-to-gallery" href="index.html">← The design collection</a>
+  <div class="phone" id="phone">
+    <div class="status-bar" aria-hidden="true"><span>9:41</span><span class="dynamic-island"></span><span class="status-icons">▮▮▮ <svg viewBox="0 0 20 15"><path d="M2 5 Q10 -2 18 5 M5 8 Q10 3 15 8 M8 11 Q10 9 12 11"/></svg><span class="battery"></span></span></div>
+    <header class="app-header"><a href="#circle" class="wordmark" aria-label="Trust — Circle">Trust<span class="brand-dot">.</span></a><span class="header-caption">CIRCLE</span></header>
+    <main id="screen" tabindex="-1"></main>
+    <nav class="tab-bar" aria-label="Main navigation" id="tabs"></nav>
+    <div class="home-indicator" aria-hidden="true"></div>
+    <div class="modal-layer" id="modal-layer" hidden></div>
+    <div class="toast" id="toast" role="status" hidden></div>
+  </div>
+  <p class="prototype-note">Interactive design study · fictional people & locations<br>No location access. No messages sent. State resets on reload.</p>
+</body>
+</html>

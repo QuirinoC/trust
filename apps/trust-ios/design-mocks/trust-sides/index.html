@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>People I trust — Trust Circle</title>
+  <link rel="stylesheet" href="sides.css" />
+</head>
+<body>
+  <div class="page">
+    <aside class="editorial">
+      <a class="back" href="../index.html">← Gallery</a>
+      <p class="eyebrow">Trust Circle · sharing</p>
+      <h1>People I trust</h1>
+      <p class="lead">
+        Outbound grants on one screen. Change share mode inline — no person sheet,
+        no mode picker, no confirm loop. No top direction switch.
+      </p>
+      <ul class="hint-list">
+        <li><strong>Sharing</strong> — who you share with. Tap Until / Always / While on the row.</li>
+        <li><strong>Home</strong> — presence without live coords. Toggle on the same row.</li>
+        <li><strong>For a while</strong> — duration popover only when you pick While.</li>
+        <li><strong>Footer Home</strong> — goes to presence (contact-snap). This page is outbound only.</li>
+      </ul>
+      <p class="phone-url" id="phoneUrl"></p>
+      <p class="brand-foot">Trust · Collapse Technologies</p>
+    </aside>
+
+    <div class="phone-wrap">
+      <div class="phone" id="phone" data-tab="sharing">
+        <div class="status-bar"><span>9:41</span><span class="sig"><i aria-hidden="true"></i></span></div>
+
+        <header class="chrome">
+          <div class="masthead-row">
+            <div class="wordmark" id="wordmark">Trust</div>
+          </div>
+          <div class="masthead-rule"></div>
+        </header>
+
+        <div class="shell" id="shell">
+          <!-- Outbound sharing (default surface) -->
+          <section class="surface surface-sharing is-active" data-surface="sharing" aria-label="People I trust">
+            <div class="surface-head">
+              <h2 class="surface-title">People I trust</h2>
+              <p class="surface-sub">Who can see your location — and how.</p>
+            </div>
+
+            <div class="bulk-bar">
+              <button type="button" class="bulk-btn" id="bulkUntil">
+                Set all to Until they look
+              </button>
+            </div>
+
+            <div class="people-scroll" id="outboundList" role="list" aria-label="People you share with">
+              <!-- rows injected -->
+            </div>
+          </section>
+
+          <!-- Invite -->
+          <section class="surface surface-invite" data-surface="invite" aria-label="Invite" hidden>
+            <div class="invite-body">
+              <p class="surface-eyebrow">Invite</p>
+              <h2 class="invite-title">I trust you with my location.</h2>
+              <div class="invite-rule"></div>
+              <p class="invite-copy">
+                They join your circle. Location stays sealed until someone Looks — unless you set Always or For a while.
+              </p>
+
+              <div class="invite-code">
+                <p class="section-label">Your code</p>
+                <p class="code-value">K7M2</p>
+              </div>
+
+              <div class="invite-actions">
+                <button type="button" class="btn-ink">Share invite</button>
+                <button type="button" class="btn-ghost-block">Enter a code</button>
+              </div>
+            </div>
+          </section>
+
+          <!-- You -->
+          <section class="surface surface-you" data-surface="you" aria-label="You" hidden>
+            <div class="you-body">
+              <div class="you-identity">
+                <p class="you-handle">@jordan</p>
+                <p class="you-meta">Signed in with Apple</p>
+              </div>
+
+              <div class="settings-group">
+                <h3>Circle</h3>
+                <div class="billing-card">
+                  <p class="plan">Free trial</p>
+                  <p class="price">Circle · $4.99 / month after trial</p>
+                  <p class="meta">Free keeps one person, Look, last 2 hours, quiet receipts. Circle adds seats.</p>
+                </div>
+                <button type="button" class="settings-row">
+                  <span>Restore purchases</span>
+                  <span class="value">→</span>
+                </button>
+              </div>
+
+              <div class="settings-group">
+                <h3>Places</h3>
+                <button type="button" class="settings-row">
+                  <span>Set Home</span>
+                  <span class="value">Capitol Hill</span>
+                </button>
+              </div>
+
+              <div class="settings-group">
+                <h3>Appearance</h3>
+                <div class="settings-row">
+                  <span>Night Edition</span>
+                  <div class="toggle off" role="switch" aria-checked="false" aria-label="Night Edition"></div>
+                </div>
+              </div>
+
+              <div class="settings-group">
+                <h3>Legal</h3>
+                <button type="button" class="settings-row"><span>Privacy</span><span class="value">→</span></button>
+                <button type="button" class="settings-row"><span>Terms</span><span class="value">→</span></button>
+                <button type="button" class="settings-row"><span>Support</span><span class="value">→</span></button>
+              </div>
+
+              <button type="button" class="btn-text-danger">Delete account</button>
+            </div>
+          </section>
+        </div>
+
+        <!-- Duration popover -->
+        <div class="popover-scrim" id="popoverScrim" hidden></div>
+        <div class="duration-popover" id="durationPopover" role="dialog" aria-label="For a while" hidden>
+          <p class="popover-eyebrow" id="popoverEyebrow">Exception · Alex</p>
+          <h3 class="popover-title">For a while</h3>
+          <p class="popover-copy">They see you live for the time you pick. Then back to Until they look.</p>
+          <div class="duration-chips" role="radiogroup" aria-label="Duration" id="durationChips">
+            <button type="button" class="chip selected" data-duration="1 hour" role="radio" aria-checked="true">
+              1 hour
+              <span class="sub">Default</span>
+            </button>
+            <button type="button" class="chip" data-duration="Tonight" role="radio" aria-checked="false">
+              Tonight
+              <span class="sub">Until 11</span>
+            </button>
+            <button type="button" class="chip" data-duration="4 hours" role="radio" aria-checked="false">
+              4 hours
+              <span class="sub">Home run</span>
+            </button>
+          </div>
+          <button type="button" class="btn-ink" id="durationStart">Start</button>
+          <button type="button" class="btn-ghost" id="durationCancel">Cancel</button>
+        </div>
+
+        <nav class="tab-bar" role="tablist" aria-label="Trust">
+          <button type="button" role="tab" class="tab" data-tab="home" aria-selected="false">
+            <span class="tab-mark" aria-hidden="true"></span>
+            <span class="tab-label">Home</span>
+          </button>
+          <button type="button" role="tab" class="tab" data-tab="invite" aria-selected="false">
+            <span class="tab-mark" aria-hidden="true"></span>
+            <span class="tab-label">Invite</span>
+          </button>
+          <button type="button" role="tab" class="tab" data-tab="you" aria-selected="false">
+            <span class="tab-mark" aria-hidden="true"></span>
+            <span class="tab-label">You</span>
+          </button>
+        </nav>
+
+        <div class="home-indicator" aria-hidden="true"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="sides.js"></script>
+</body>
+</html>
