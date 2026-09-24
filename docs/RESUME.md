@@ -31,3 +31,16 @@ Checkpoint: 2026-09-24. The release candidate is commit `0b5975f` in [PR #1](htt
 ## Release evidence
 
 See [STATUS.md](STATUS.md) for test results, current deployed API/site versions, known TLS and notification-delivery limits, and remaining release gates.
+
+## Explicit pause before Mac update
+
+The user explicitly paused work to update macOS. Do not resume implementation, installation, deployment, or restart automatically. Resume only when the user asks after the update.
+
+- All product changes are pushed in PR #1. Release source: `0b5975f`; handoff checkpoint: `679a054`. The working tree was clean before this pause note.
+- The final local simulator suite and signed IPA export passed. Upload failed only because Xcode could not find an App Store Connect account for team `3S529795M9`. The user was asked to sign in under Xcode Settings → Apple Accounts. Browser ASC sign-in is already valid but does not supply Xcode credentials.
+- Current TestFlight build 19 has not been uploaded or assigned to testers. Resume with account verification, upload, Apple processing, and assignment to the existing **iPhone Juan** internal group. Physical testing remains the user's chosen follow-up from TestFlight.
+- The beta download is `/Users/juanquirino/Downloads/Xcode_27.1_beta.xip`; download completeness and installation remain unverified. macOS 26.7 was downloading through `softwareupdate --download` with no automatic install/restart. The user will handle installation. Do not assume the Mac or Xcode was upgraded: verify on resume.
+- Six unused simulator devices were deleted at the user's request. Only **iPhone 17 Pro**, UDID `61DC2501-3A93-4123-A6D5-D3512AF07464`, remains. Duo is not installed yet. Test its outer/inner layouts and pose transitions after the supported beta/runtime is installed.
+- GitHub Actions reran after the handoff commit; the latest run at pause was `36057777163` (pending). The preceding run had API and web passing, with iOS still pending. Inspect current results rather than assuming they passed.
+- TestFlight marketing/privacy URLs now use jointrust.app and its privacy page; beta review notes were corrected for phone verification, explicit invites, and no production review bypass. The ASC privacy disclosure includes Phone Number for app functionality, linked to identity, not tracking.
+- Implementation/model policy remains Luna for fixes, Sol for review, Astra for orchestration/design/testing. Sol's final targeted review found no remaining blocker in refresh, revocation, history freshness, invitation, or paywall changes.
