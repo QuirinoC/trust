@@ -26,14 +26,15 @@ function inviteLanding(code) {
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Trust invitation</title>
     <meta name="robots" content="noindex, nofollow" />
-    <meta name="theme-color" content="#FFFEFA" />
+    <meta name="theme-color" content="#F6F8FC" />
+    <meta name="color-scheme" content="light dark" />
     <link rel="canonical" href="https://jointrust.app/i/${escapedCode}" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/styles.css?v=invite" />
+    <link rel="stylesheet" href="/styles.css?v=together-lines" />
   </head>
   <body>
     <header class="top">
-      <p class="wordmark"><a href="/">Trust</a></p>
+      <p class="wordmark"><a href="/" aria-label="Trust home"><svg class="brand-mark" viewBox="0 0 30 30" aria-hidden="true" focusable="false"><path class="mark-ink" d="M2.4 22.2 C9 18.3 12 7.2 21 5.1"/><path class="mark-blue" d="M9.6 26.4 C14.7 21.6 20.1 11.7 27.9 9.9"/></svg><span>Trust</span></a><span class="publisher">by Collapse Technologies</span></p>
       <nav class="legal" aria-label="Trust links"><a href="/privacy">Privacy</a></nav>
     </header>
     <main>
