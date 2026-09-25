@@ -67,9 +67,16 @@ public struct AvatarDescriptor: Hashable, Codable, Sendable {
 
     public var knownPresetID: String? {
         guard kind == "preset", let presetId,
-              ["fern", "ember", "sky", "ocean", "sunrise", "lavender"].contains(presetId) else { return nil }
+              Self.presetIDs.contains(presetId) else { return nil }
         return presetId
     }
+
+    public static let presetIDs = [
+        "fern", "ember", "sky", "ocean", "sunrise", "lavender",
+        "moon", "star", "cloud", "raindrop", "rainbow", "mountain", "river", "meadow",
+        "clover", "bloom", "cherry", "lotus", "mushroom", "seashell", "coral", "butterfly",
+        "hummingbird", "fox", "whale", "koi"
+    ]
 
     public var photoVersion: UUID? {
         guard kind == "photo", let version else { return nil }

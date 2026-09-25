@@ -2,9 +2,10 @@
 
 **Current prep record.** This is a working copy sheet, not a submission approval. App Store Connect is still in **Prepare for Submission** and the review-readiness blockers are tracked in [REVIEW-READINESS.md](REVIEW-READINESS.md). Production `Trust__SeedReviewCircle` and `StoreKit__AllowReviewUnlock` remain disabled; the review path must not depend on seeded partners or a review bypass.
 
-**Current local checks:** API 106/106, Swift core 26/26, Duo UI 4/4, and web 3/3 passed for the redesign. M6 iPhone/iPad screenshots were refreshed from the final build 22 source on 2026-09-24; they have not been uploaded to ASC. The redesigned source is on this branch and not yet deployed. These checks do not establish App Review readiness.
+**Release checkpoint:** PR #1 merged to `main` at `8ebdc0f`; its API, iOS, and web CI passed. The post-merge Remove-alert UI failure is fixed locally by moving Remove into the parent alert; this fix is not pushed and PR/CI validation is pending. After feedback changes, local Duo UI passed 4/4, Swift core 26/26, and API 107/107 with local Postgres; independent review found no issue. Final screen was checked in closed Duo, while open-Duo and far-end carousel sign-off remain. Render deployment `dep-dar0hsivcj2c739t5hfg` and Cloudflare version `387f20df-6ce6-46f0-bf55-5b32f1771e67` remain live; no new API or website changes are deployed. Build 22 remains the latest uploaded build, with ASC processing/group assignment unverified while signed out. Build 23 was validated but not uploaded. Build 24's archive succeeded and codesign verified for team `3S529795M9`, but Organizer validation/upload are pending. M6 screenshots still reflect build 22; recapture after visual sign-off. ASC privacy answers and age-policy decision remain pending.
 
-**Current ASC blockers:** Attempting Add for Review rejected version 1.0 because selected build 21 was made with Xcode 27.1 beta (27A9269); Apple requires a release archive/build from stable public Xcode 27 (27A266a). Only the beta is installed at `/Applications/Xcode.app`. Current source is version 1.0 build 22, intended for internal TestFlight; it can be archived with the installed beta. The App Review draft contains the Trust Plus group, Plus Monthly, and Plus Annual; all three show **Ready for Review**, but none has been submitted. The app version could not join the draft. The $0.00 Free base price is saved with US as base territory and `AUTO_FREE` in 175 countries/regions; App Availability is unset pending the owner's US-only vs. all-175 choice. Apple silicon Mac and Apple Vision Pro availability are checked by default, but compatibility has not been verified. Paid Apps agreement status is unverified: the Business page returned a generic load error and a reload redirected to sign-in.
+
+**Current ASC blockers:** Build 22 remains the latest uploaded TestFlight build, but ASC processing/group assignment are unverified because Chrome is signed out. Build 24 is not Organizer-validated or uploaded. Build 21 (beta-built) was rejected for App Review; stable public Xcode 27 (27A266a) is required for the review archive. Screenshot upload, App Privacy answers, age-policy alignment, and physical-device checks remain pending. The draft contains the Trust Plus group and both products, all **Ready for Review**; nothing has been submitted. App Availability and Paid Apps agreement remain unverified.
 
 | | |
 | --- | --- |
@@ -13,7 +14,7 @@
 | Team | `3S529795M9` |
 | ASC App ID | `6806879060` |
 | IAP group | `22346972` |
-| Version / build | ASC version 1.0 remains **Prepare for Submission** and currently selects build **21**, the older pre-redesign TestFlight build, **Ready to Submit** in the existing internal **iPhone Juan** group. Current local source is version 1.0 build **22**, intended for internal TestFlight; it has not been archived or uploaded. Nothing has been submitted. Archive the **`Trust`** scheme (Release), not `Trust-Sandbox`. |
+| Version / build | ASC version 1.0 remains **Prepare for Submission**; last observed selection was build **21**. Build **22** is the latest uploaded build, with ASC processing/group assignment unverified. Build 23 was validated but not uploaded. Build 24's archive is codesign verified but still needs Organizer validation/upload. Nothing has been submitted. Archive the **`Trust`** scheme (Release), not `Trust-Sandbox`. |
 | Release API | `https://trust-api-u0ft.onrender.com` (ready check passed; custom host TLS remains unresolved) |
 | English only | `CFBundleLocalizations` = `en` |
 | Export compliance | `ITSAppUsesNonExemptEncryption` = **false** (HTTPS / standard encryption only) |
@@ -51,13 +52,13 @@ Sealed until Look. Available when you choose. Adult-peer location escrow — not
 ```
 Trust Circle lets adults share location by choice with trusted peers. Sharing starts Off in both directions after an invitation is accepted.
 
-A confirmed Look requests one current-location snapshot for the requester and leaves the relationship Sealed; it does not make location history available. People who choose Always or For a while can be viewed while that sharing mode is active, with views recorded in Activity.
+A confirmed Look requests one current-location snapshot for the requester and leaves the relationship Sealed; it does not make location history available. People who choose Always can be viewed while that sharing mode is active, with views recorded in Activity.
 
 Join starts Off both ways. An invite is not permission. Presence is Home, Away, or Hidden — free, manual, and Hidden never reaches the circle.
 
-Free includes up to 5 people, Off and Until they look, confirmed Looks with a single location snapshot, View when someone is Available, and 30 days of Activity history.
+Free includes up to 5 people, Off and Sealed sharing, confirmed Looks with a single location snapshot, View when someone is Available, and 30 days of Activity history.
 
-Trust Plus is $7.99/month or $69.99/year, with a 7-day trial. Plus adds up to 20 people, Always and For a while, the circle map, and a year of view log with export. A paying member covers unpaid people on the edges they share. Looking is not paywalled. Family Sharing is off. No ads. We do not sell location.
+Trust Plus is $7.99/month or $69.99/year, with a 7-day trial. Plus adds up to 20 people, Always sharing, the circle map, and a year of view log with export. Looking is not paywalled. Family Sharing is off. No ads. We do not sell location.
 
 Sign in with Apple and verify your phone number to finish setup. Delete your account in You → Delete account.
 ```
@@ -94,9 +95,9 @@ Contact (review / IAP mismatch copy): `hello@collapsetechnologies.com`
 
 ---
 
-## 2. Age rating — 18+
+## 2. Age rating — decision pending
 
-Set **18+**. This is an adult-peer location escrow. Precise location is shared only with a **named person the user invited**, and only after a **confirmed Look** (or while the user opted into Always / For a while).
+The proposed listing is **18+**, but the live Terms and Privacy pages currently exclude only children under 13. Choose the product age policy before setting the listing rating. Precise location is shared only with a **named person the user invited**, and only after a **confirmed Look** (or while the user opted into Always).
 
 ### Questionnaire notes (do not use “unrestricted web” as the 18+ reason)
 
@@ -104,7 +105,7 @@ Set **18+**. This is an adult-peer location escrow. Precise location is shared o
 | --- | --- |
 | Unrestricted Web Access | **No.** No in-app browser, no arbitrary URLs. |
 | User-generated content | No public feed. Circle membership is invite-only. |
-| Age of users | Adults. Terms require 17+; listing is **18+**. |
+| Age of users | **Unresolved:** live Terms/Privacy allow household use and exclude only children under 13; ASC draft proposes adults **18+**. Choose and align before submission. |
 | Kids / parental controls / family locator | **No.** Not a child tracker. No Family Sharing. |
 | Gambling, alcohol, drugs, sexual content, violence, horror | None. |
 | Frequent/intense mature themes | None as entertainment. The 18+ override is **precise location sharing among adults**, not mature media. |
@@ -123,24 +124,27 @@ Trust Circle shares precise location with named adult peers the user invited. A 
 **Data used to track you:** No  
 **Tracking:** No (`NSPrivacyTracking` = false; no tracking domains; no ATT)
 
-Live ASC currently declares **Name** and **Device ID**, but omits **Coarse Location**. Source review found Coarse Location is collected in Sealed and declared in the privacy manifest. Device ID appears only in DEBUG/unused Google helper code, not release Sign in with Apple. The server transiently reads the Apple identity token's email claim; ASC includes Email while the manifest omits it. Reconcile ASC answers, manifest, and shipped release behavior before submission; the list below is a draft, not a final determination. The account also requires a verified phone number. Drop **battery** (not an ASC data type; 1.0 does not show battery).
+Live ASC currently declares **Name** and **Device ID**, but omits **Coarse Location**. Source review found Coarse Location is collected in Sealed and declared in the privacy manifest. Device ID appears only in DEBUG/unused Google helper code, not release Sign in with Apple. The server transiently reads the Apple identity token's email claim; ASC includes Email while the manifest omits it. Reconcile ASC answers, manifest, and shipped release behavior before submission; the list below is a draft, not a final determination. The account also requires a verified phone number. Battery is transmitted and stored with presence but is not shown in the 1.0 UI; reconcile its applicable App Privacy label.
 
 | Type | Linked to user | Used for tracking | Purpose | What it is |
 | --- | --- | --- | --- | --- |
-| **Precise Location** | Yes | No | App Functionality | Escrowed GPS while an outbound share ≠ Off. Revealed to a named peer only after a confirmed Look, or live while Always / For a while. |
+| **Precise Location** | Yes | No | App Functionality | Escrowed GPS while Sealed or Always sharing is active. Revealed to a named peer only after a confirmed Look, or live while Always. |
 | **Coarse Location** | Yes | No | App Functionality | Sealed tier uses hundred-meters / significant-change. Also used for “miles from you” on View / Map. Confirm its disclosure in ASC. |
 | **User ID** | Yes | No | App Functionality | Sign in with Apple `sub` / account id, plus the unique handle. |
 | **Name** | Yes | No | App Functionality | Apple full name, used as the account display name and sent to the API. |
 | **Email** | Yes | No | App Functionality | Apple identity token email claim is read transiently by the server. Confirm the applicable disclosure and retention answers against implementation. |
 | **Phone Number** | Yes | No | App Functionality | Required for account verification and SMS login/account security. |
+| **Photos or Videos** | Yes | No | App Functionality | Optional profile photo selected by the user, uploaded for their account, and retrieved for display. |
 | **Purchases** | Yes | No | App Functionality | Trust Plus StoreKit entitlement (`Purchase History` in the privacy manifest). |
 | **Product Interaction** | Yes | No | App Functionality | Looks, views, and share-mode settings (view log). |
 
-**Not collected:** contacts, browsing history, search history, advertising data, battery as a product field. Email is not a separate stored account field; verify the final App Privacy answers against the shipped sign-in scopes and actual data handling before submitting.
+**Not collected:** contacts, browsing history, search history, and advertising data. Battery is transmitted and stored with presence but is not shown in the 1.0 UI; reconcile its applicable App Privacy label before submission. Email is not a separate stored account field; verify the final App Privacy answers against the shipped sign-in scopes and actual data handling before submitting.
 
 Do not sell location. No ads. Family Sharing off.
 
-The shipped `Resources/PrivacyInfo.xcprivacy` declares Name and Purchases among collected data types. Compare the final table to live ASC's current Name/Device ID selections and reconcile Coarse Location and Email before submission. See [review readiness](REVIEW-READINESS.md).
+**Age-policy blocker:** Current live Terms/Privacy allow household use and exclude only children under 13, while the ASC draft describes adults 18+. Resolve this decision and align legal pages and listing before submission.
+
+The shipped `Resources/PrivacyInfo.xcprivacy` declares Name, Photos or Videos, and Purchases among collected data types. Compare the final table to live ASC's current Name/Device ID selections and reconcile Coarse Location, Email, and battery handling before submission. See [review readiness](REVIEW-READINESS.md).
 
 ---
 
@@ -185,11 +189,11 @@ Subscription group **22346972**:
 | Group reference name | Trust Plus | |
 | Monthly product ID | | `com.collapsetechnologies.trust.circle.monthly` |
 | Monthly display name (en-US) | **Plus Monthly** | |
-| Monthly description | Trust Plus monthly. Up to 20 people, Always and For a while, full view log, circle map. | |
+| Monthly description | Trust Plus monthly. Up to 20 people, Always sharing, full view log, circle map. | |
 | Monthly price / intro | $7.99 / month · 7-day free trial · not family-shareable | |
 | Annual product ID | | `com.collapsetechnologies.trust.circle.annual` |
 | Annual display name (en-US) | **Plus Annual** | |
-| Annual description | Trust Plus annual. Up to 20 people, Always and For a while, full view log, circle map. | |
+| Annual description | Trust Plus annual. Up to 20 people, Always sharing, full view log, circle map. | |
 | Annual price / intro | $69.99 / year · 7-day free trial · not family-shareable | |
 
 ASC click-path: **Apps → Trust Circle → Subscriptions → [group] → Localization / Product localization.**
@@ -232,12 +236,12 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
   bash AppStore/capture-m6-screenshots.sh
 ```
 
-The current tracked M6 capture sets were refreshed from the final build 22 source on 2026-09-24. The seven-route iPhone 6.9-inch and iPad 13-inch sets are **not uploaded to ASC**. These are DEBUG offline-fixture screenshots, not live account testing.
+The current tracked M6 capture sets reflect build 22 and were captured on 2026-09-24. The seven-route iPhone 6.9-inch and iPad 13-inch sets are **not uploaded to ASC**; Chrome ASC is signed out. Recapture after visual sign-off on the latest picker changes. These are DEBUG offline-fixture screenshots, not live account testing.
 
 - `AppStore/Screenshots/m6/iphone-69/{circle,look,view,share,you,map,invite}.png` — 1320×2868
 - `AppStore/Screenshots/m6/ipad-13/{circle,look,view,share,you,map,invite}.png` — 2064×2752
 
-The capture script builds once, then creates one temporary simulator at a time, captures iPhone 6.9-inch (iPhone 17 Pro Max) and iPad 13-inch (iPad Pro 13-inch M5), and deletes each simulator when done. It refuses to run while any simulator is booted; it does not reuse old/manual leftover simulators. It grants location and writes seven routes per device. The current 14 images have passed visual review; they are ready for ASC upload.
+The capture script builds once, then creates one temporary simulator at a time, captures iPhone 6.9-inch (iPhone 17 Pro Max) and iPad 13-inch (iPad Pro 13-inch M5), and deletes each simulator when done. It refuses to run while any simulator is booted; it does not reuse old/manual leftover simulators. It grants location and writes seven routes per device. Existing build 22 images passed visual review and await replacement capture and ASC upload.
 
 The script is the maintained capture path. It owns temporary simulator creation and cleanup; keep its one-simulator-at-a-time behavior and the two device sizes above. It grants location and `TRUST_SCREENSHOT` skips the notification prompt.
 
@@ -245,7 +249,7 @@ The script is the maintained capture path. It owns temporary simulator creation 
 
 ## 7. Current release state
 
-Build 21 is selected on version 1.0 and remains the older internal TestFlight build. The current local source is build 22, intended for internal TestFlight with installed Xcode 27.1 beta; it has not been archived or uploaded. For App Review, ASC requires a new release archive/build from stable public Xcode 27 (27A266a). The M6 screenshots were refreshed from build 22 and are pending ASC upload. The draft already contains the Trust Plus group, Plus Monthly, and Plus Annual, all **Ready for Review**; none has been submitted. The $0.00 Free base price is saved; App Availability is unset pending the owner's US-only or all-175-region choice. Mac and Vision Pro availability are checked by default, but compatibility is unverified. Paid Apps agreement status is unverified because ASC's Business page failed to load and then redirected to sign-in. Keep production `Trust__SeedReviewCircle` and `StoreKit__AllowReviewUnlock` set to **`false`**.
+Build 22 is the latest uploaded build, with ASC processing and internal group assignment unverified while Chrome is signed out. Build 24's local archive is codesign verified, but Organizer validation/upload are pending. Stable public Xcode 27 (27A266a) is required for App Review. M6 screenshots still reflect build 22 and need recapture after visual sign-off; privacy answers remain pending in ASC. Resolve the age-policy conflict between live legal pages and the 18+ listing before submission. The draft contains the Trust Plus group and both products, all **Ready for Review**; none has been submitted. App Availability, Mac/Vision Pro compatibility, and Paid Apps agreement remain unverified. Keep production `Trust__SeedReviewCircle` and `StoreKit__AllowReviewUnlock` set to **`false`**.
 
 ---
 
@@ -254,9 +258,9 @@ Build 21 is selected on version 1.0 and remains the older internal TestFlight bu
 Use this checklist for the remaining ASC work. Never enable production seed or review-bypass flags for submission or review.
 
 1. **ASC → Trust Circle → App Information** — paste name, subtitle, support / marketing / privacy URLs, primary Lifestyle + secondary Social Networking, copyright, 18+ notes.
-2. **ASC → 1.0 version** — paste description + keywords. Upload the refreshed build 22 seven-route sets from `m6/iphone-69/` and `m6/ipad-13/`, in this order: People → Look → View → Sharing → You → Map → Invite. These are DEBUG offline-fixture screenshots, not live account tests. Discard `iphone-67-*` / old `ipad-13-*.png` / `asc-65/`.
-3. **ASC → App Privacy** — republish with no tracking and accurate collected data, including required Phone Number; use the table above as a draft and confirm it against the submitted binary and actual data handling. Drop battery as a product field.
-4. **ASC → TestFlight** — build 21 is the older pre-redesign build. Archive and upload local build 22 with installed Xcode 27.1 beta for internal testing, then install it for physical-device checks.
+2. **ASC → 1.0 version** — recapture the seven-route sets after the latest picker changes pass visual sign-off, then upload from `m6/iphone-69/` and `m6/ipad-13/`, in this order: People → Look → View → Sharing → You → Map → Invite. These are DEBUG offline-fixture screenshots, not live account tests. Discard `iphone-67-*` / old `ipad-13-*.png` / `asc-65/`.
+3. **ASC → App Privacy** — republish with no tracking and accurate collected data, including required Phone Number; use the table above as a draft and confirm it against the submitted binary and actual data handling. Confirm the applicable battery disclosure; battery is transmitted and stored with presence.
+4. **ASC → TestFlight** — build 22 is the latest uploaded build. Restore ASC sign-in to verify processing and internal group assignment. Build 24 still needs Organizer validation and upload before physical-device checks on the latest design.
 5. **Xcode / ASC → 1.0** — after stable Xcode 27 (27A266a) is available, make and upload a release build for App Review, then select it on version 1.0. ASC rejected beta-built build 21 for App Review.
 6. **ASC → App Review draft** — choose App Availability (US-only or all 175 regions; currently unset), then add version 1.0 to the draft containing the Trust Plus group and both products. Paste [review notes](#4-review-notes-paste). Confirm Paid Apps agreement status when ASC is available; it is currently unverified. Nothing has been submitted.
 7. Verify the Production and Sandbox App Store Server Notifications V2 URLs both use `https://trust-api-u0ft.onrender.com/api/v1/storekit/notifications`. This configuration is recorded as verified, but end-to-end signed notification delivery/processing is not.

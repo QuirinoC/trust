@@ -22,58 +22,79 @@ struct ProfileAvatarPicker: View {
     @State private var showingCameraAlert = false
     @State private var errorMessage: String?
 
-    private let presetIDs = ["fern", "ember", "sky", "ocean", "sunrise", "lavender"]
+    private let presetIDs = AvatarDescriptor.presetIDs
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
-                    HStack(spacing: 16) {
-                        stagedAvatar
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Your picture")
-                                .font(TrustTheme.display(22))
-                                .foregroundStyle(palette.ink)
-                            Text("Visible to people connected with you.")
-                                .trustFont(12)
-                                .foregroundStyle(palette.muted)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    ScrollViewReader { carousel in
+                        VStack(spacing: 22) {
+                            VStack(spacing: 10) {
+                                stagedAvatar
+                                    .frame(width: 116, height: 116)
+                                    .accessibilityLabel("Profile picture preview")
+                                Text("Visible to people connected with you.")
+                                    .trustFont(12)
+                                    .foregroundStyle(palette.muted)
+                                    .multilineTextAlignment(.center)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, 6)
 
-                    VStack(alignment: .leading, spacing: 10) {
-                        TrustSectionHeading("Choose an icon")
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 68), spacing: 12)], spacing: 12) {
-                            ForEach(presetIDs, id: \.self) { id in
-                                Button { selectPreset(id) } label: {
-                                    presetTile(id, selected: selectedPreset == id && !removeSelected && photoData == nil)
+                            VStack(alignment: .leading, spacing: 10) {
+                                TrustSectionHeading("Choose an icon")
+                                    .padding(.horizontal, 22)
+                                ScrollView(.horizontal) {
+                                    HStack(spacing: 10) {
+                                        ForEach(presetIDs, id: \.self) { id in
+                                            Button { selectPreset(id) } label: {
+                                                presetTile(id, selected: selectedPreset == id && !removeSelected && photoData == nil)
+                                            }
+                                            .buttonStyle(.plain)
+                                            .id(id)
+                                            .accessibilityLabel("\(ProfileAvatarArtwork.title(for: id)) icon")
+                                            .accessibilityAddTraits(selectedPreset == id && !removeSelected && photoData == nil ? .isSelected : [])
+                                        }
+                                    }
+                                    .padding(.horizontal, 22)
                                 }
-                                .buttonStyle(.plain)
-                                .accessibilityLabel("\(ProfileAvatarArtwork.title(for: id)) icon")
-                                .accessibilityAddTraits(selectedPreset == id && !removeSelected ? .isSelected : [])
+                                .scrollIndicators(.hidden)
                             }
+
+                            VStack(alignment: .leading, spacing: 10) {
+                                TrustSectionHeading("Or use a photo")
+                                HStack(spacing: 10) {
+                                    PhotosPicker(selection: $photoItem, matching: .images) {
+                                        Label("Photos", systemImage: "photo.on.rectangle")
+                                            .frame(maxWidth: .infinity, minHeight: 52)
+                                    }
+                                    .buttonStyle(TrustOutlineButtonStyle(compact: true))
+                                    .accessibilityLabel("Choose from Photos")
+                                    .accessibilityIdentifier("avatar-choose-photo")
+
+                                    Button {
+                                        requestCamera()
+                                    } label: {
+                                        Label("Camera", systemImage: "camera")
+                                            .frame(maxWidth: .infinity, minHeight: 52)
+                                    }
+                                    .buttonStyle(TrustOutlineButtonStyle(compact: true))
+                                    .accessibilityIdentifier("avatar-take-photo")
+                                }
+                            }
+                            .padding(.horizontal, 22)
+                        }
+                        .onAppear {
+                            if let selectedPreset { carousel.scrollTo(selectedPreset, anchor: .center) }
+                        }
+                        .onChange(of: selectedPreset) { _, preset in
+                            guard let preset else { return }
+                            withAnimation(.easeInOut(duration: 0.2)) { carousel.scrollTo(preset, anchor: .center) }
                         }
                     }
 
                     VStack(alignment: .leading, spacing: 10) {
-                        TrustSectionHeading("Use a photo")
-                        HStack(spacing: 10) {
-                            PhotosPicker(selection: $photoItem, matching: .images) {
-                                Label("Choose from Library", systemImage: "photo.on.rectangle")
-                                    .frame(maxWidth: .infinity, minHeight: 46)
-                            }
-                            .buttonStyle(TrustOutlineButtonStyle(compact: true))
-                            .accessibilityIdentifier("avatar-choose-photo")
-
-                            Button {
-                                requestCamera()
-                            } label: {
-                                Label("Take Photo", systemImage: "camera")
-                                    .frame(maxWidth: .infinity, minHeight: 46)
-                            }
-                            .buttonStyle(TrustOutlineButtonStyle(compact: true))
-                            .accessibilityIdentifier("avatar-take-photo")
-                        }
                         if isLoadingPhoto {
                             ProgressView("Preparing photo…")
                                 .trustFont(12)
@@ -169,31 +190,31 @@ struct ProfileAvatarPicker: View {
         if let previewImage {
             Image(uiImage: previewImage)
                 .resizable().scaledToFill()
-                .frame(width: 72, height: 72).clipShape(Circle())
+                .frame(width: 116, height: 116).clipShape(Circle())
         } else if let selectedPreset, !removeSelected {
-            presetIcon(selectedPreset, size: 72)
+            presetIcon(selectedPreset, size: 116)
         } else if removeSelected {
-            TrustAvatar(name: model.you.displayName, seed: 0, size: 72, personID: model.you.id)
+            TrustAvatar(name: model.you.displayName, seed: 0, size: 116, personID: model.you.id)
         } else {
-            TrustAvatar(name: model.you.displayName, seed: 0, size: 72, avatar: model.you.avatar, personID: model.you.id)
+            TrustAvatar(name: model.you.displayName, seed: 0, size: 116, avatar: model.you.avatar, personID: model.you.id)
         }
     }
 
     private func presetTile(_ id: String, selected: Bool) -> some View {
-        VStack(spacing: 6) {
-            presetIcon(id, size: 60)
-            Text(ProfileAvatarArtwork.title(for: id))
-                .trustFont(10, weight: .medium)
-                .foregroundStyle(palette.muted)
+        ZStack(alignment: .bottomTrailing) {
+            presetIcon(id, size: 72)
+                .overlay(Circle().stroke(selected ? palette.accent : palette.line.opacity(0.5), lineWidth: selected ? 3 : 1))
+            if selected {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 21, weight: .semibold))
+                    .symbolRenderingMode(.palette)
+                    .foregroundStyle(.white, palette.accent)
+                    .background(Circle().fill(palette.paper).padding(-2))
+                    .offset(x: 2, y: 2)
+            }
         }
-        .padding(5)
-        .frame(maxWidth: .infinity, minHeight: 82)
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(selected ? palette.accentSoft : palette.surface)
-        )
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(selected ? palette.accent : palette.line, lineWidth: selected ? 2 : 1))
-        .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .frame(width: 84, height: 84)
+        .contentShape(Circle())
     }
 
     private func presetIcon(_ id: String, size: CGFloat) -> some View {

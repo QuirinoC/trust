@@ -2,17 +2,19 @@
 
 The dated project status is in [docs/STATUS.md](../../docs/STATUS.md). This page tracks only the iOS build and device checks.
 
-**Current branch is newer than TestFlight build 21.** It contains the Together Lines sign-in/icon redesign, Sharing/People/You changes, profile pictures, the Home/Away privacy gate, and startup refresh changes. Source version is 1.0 build **22**, intended for internal TestFlight. The redesign has not been deployed, archived, or uploaded. The M6 iPhone/iPad screenshot sets were recaptured on 2026-09-24 and are not uploaded to App Store Connect. Local verification is API 106/106, Swift core 26/26, Duo UI 4/4, and web 3/3, recorded in [docs/STATUS.md](../../docs/STATUS.md); physical-device checks are pending.
+Build 22 TestFlight feedback identified two UI issues: keep You legal links at the bottom, and center the profile preview with a horizontal strip of choices, no visible icon names, and Photos/Camera. Implemented locally with 26 illustrated options (20 new PNGs) and an API preset allowlist. Current source is build 24; its archive succeeded and codesign verified for team `3S529795M9`, but Organizer validation and upload have not happened. Build 23 was archive-validated but not uploaded; build 22 remains the latest uploaded build, with ASC processing/group unverified while signed out.
+
+The post-merge Remove-alert UI failure was fixed locally by moving Remove into the parent alert; it has not been pushed and PR/CI validation is pending. After the feedback changes, local Duo UI passed **4/4**, Swift core **26/26**, API **107/107** with local Postgres. Independent code review found no issues. Final screen was checked in closed Duo; far-end carousel and open-Duo visual sign-off remain. API preset allowlist changes are not deployed, and no new site changes are deployed. M6 screenshot/privacy ASC work, age-policy decision, and physical-device tests remain open.
 
 ## Verified
 
 - The app uses the healthy release API origin, https://trust-api-u0ft.onrender.com. The optional custom hostname trust.collapsetechnologies.com still has unresolved TLS.
-- The redesigned iOS 27.1 Duo UI suite passed **4/4** via `xcodebuild` on 2026-09-24; log: `/tmp/trust-redesign-ui-full.log`. Swift core tests passed **26/26**, API tests **106/106**, and website tests **3/3**.
+- After the TestFlight feedback changes, local Duo UI tests passed **4/4**, Swift core **26/26**, and API **107/107** with local Postgres.
 - Sol's final read-only review found no actionable issue in adaptive navigation, Map layout, or the sharing confirmation flow.
-- Build 21 is the older pre-redesign TestFlight build, **Ready to Submit** and assigned to the existing internal iPhone Juan group. Current local source is build **22**, intended for internal TestFlight; it is not archived or uploaded. Version 1.0 currently selects build 21; nothing has been submitted.
+- Build 22 is the latest uploaded build; ASC processing and internal group assignment are unverified. Build 23's archive was validated but not uploaded. Build 24's archive succeeded and codesign verified, but Organizer validation and upload are pending.
 - Build 20 remains uploaded and processed, Ready to Submit, and assigned to the IJ iPhone Juan internal group. Build 19 predates the Duo changes.
 - The build 21 TestFlight “What to Test” note is saved live in ASC for one internal tester. It covers phone sign-in, invite consent defaults, sharing modes, Look receipts, People/Map/You, TestFlight sandbox Plus purchase/restore, and best-effort push observation with device and steps. There are no test results yet.
-- Xcode 27.1 beta 27A9269 and macOS 26.7 are installed. Duo UDID C6495E9A-B165-46E1-97F9-0B92ABBDDC0D and iPhone 17 Pro UDID 61DC2501-3A93-4123-A6D5-D3512AF07464 are the two retained simulators; eleven unused generated devices were removed. Both are shut down after screenshot capture.
+- Xcode 27.1 beta 27A9269 and macOS 26.7 are installed. Duo UDID C6495E9A-B165-46E1-97F9-0B92ABBDDC0D and iPhone 17 Pro UDID 61DC2501-3A93-4123-A6D5-D3512AF07464 are the two retained simulators; eleven unused generated devices were removed. Duo is currently booted; iPhone 17 Pro is shut down.
 
 ## Build 20 TestFlight
 
@@ -22,8 +24,8 @@ The dated project status is in [docs/STATUS.md](../../docs/STATUS.md). This page
 
 ## App Store review readiness
 
-- Stable public Xcode 27 (27A266a) is required for App Review; installed Xcode 27.1 beta can be used to archive build 22 for internal TestFlight. The existing draft contains the Trust Plus group and both products, all Ready for Review; nothing has been submitted. Base price $0.00 Free is saved; availability, metadata, privacy disclosures, and physical checks remain open. The redesigned 14 M6 DEBUG offline-fixture screenshots were recaptured 2026-09-24 and are not uploaded. See [REVIEW-READINESS.md](AppStore/REVIEW-READINESS.md).
-- Website support correction deployed on 2026-09-24 as Cloudflare version `5c1d221f-4e07-4adb-9b4d-9c1844de332b`. Live `/`, `/support`, `/privacy`, `/terms`, `/sms`, `/sms-opt-in.png`, `/i/ABC234`, and `/.well-known/apple-app-site-association` returned **200**.
+- Stable public Xcode 27 (27A266a) is required for App Review; Xcode 27.1 beta was used for the uploaded internal build. ASC is signed out, so screenshot upload and privacy answers remain pending. The 14 M6 DEBUG screenshots reflect build 22 and remain unuploaded; recapture the updated picker after visual sign-off. Age policy is unresolved between live legal pages (household use, under-13 exclusion) and the 18+ ASC draft. See [REVIEW-READINESS.md](AppStore/REVIEW-READINESS.md).
+- Cloudflare version `387f20df-6ce6-46f0-bf55-5b32f1771e67` is deployed. `/`, `/privacy`, `/terms`, `/support`, `/sms`, `/sms-opt-in.png`, `/i/ABC234`, and `/.well-known/apple-app-site-association` returned **200**. Photo privacy content and best-effort push support wording were verified.
 
 ## Remaining device evidence
 

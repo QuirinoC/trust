@@ -9,12 +9,14 @@ struct SharingView: View {
 
     private enum SharingConfirmation: Equatable {
         case stopSharing(personID: UUID, name: String)
+        case removePerson(personID: UUID, name: String)
         case stopAll
     }
 
     private var confirmationTitle: String {
         switch activeConfirmation {
         case .some(.stopSharing(_, let name)): return "Stop sharing with \(name)?"
+        case .some(.removePerson(_, let name)): return TrustCopy.removePersonConfirm(name: name)
         case .some(.stopAll): return TrustCopy.stopAllConfirm
         case .none: return ""
         }
@@ -23,6 +25,7 @@ struct SharingView: View {
     private var confirmationMessage: String {
         switch activeConfirmation {
         case .some(.stopSharing(_, _)): return "They will not see your location or Home/Away status until you choose a sharing mode again."
+        case .some(.removePerson(_, _)): return "They leave your People list and both sharing directions stop."
         case .some(.stopAll): return "No one will see your location or Home/Away status until you choose sharing modes again."
         case .none: return ""
         }
@@ -57,7 +60,8 @@ struct SharingView: View {
                                 compact: geometry.size.width < 430,
                                 stackModes: geometry.size.width < 380,
                                 onPause: { model.pauseSheetPersonID = member.id },
-                                onStopSharing: { activeConfirmation = .stopSharing(personID: member.id, name: member.firstName) }
+                                onStopSharing: { activeConfirmation = .stopSharing(personID: member.id, name: member.firstName) },
+                                onRemove: { activeConfirmation = .removePerson(personID: member.id, name: member.firstName) }
                             )
                             TrustRowDivider()
                         }
@@ -111,6 +115,10 @@ struct SharingView: View {
                 Button(TrustCopy.stopSharing, role: .destructive) { model.stopSharing(personID: personID) }
                     .accessibilityIdentifier("stop-sharing-confirm")
                 Button(TrustCopy.cancel, role: .cancel) {}
+            case .some(.removePerson(let personID, _)):
+                Button(TrustCopy.removePerson, role: .destructive) { model.removePerson(personID: personID) }
+                    .accessibilityIdentifier("remove-person-confirm")
+                Button(TrustCopy.cancel, role: .cancel) {}
             case .some(.stopAll):
                 Button(TrustCopy.stopAll, role: .destructive) { model.stopAll() }
                     .accessibilityIdentifier("stop-all-sharing-confirm")
@@ -155,10 +163,10 @@ struct OutboundRow: View {
     var stackModes = false
     let onPause: () -> Void
     let onStopSharing: () -> Void
+    let onRemove: () -> Void
     @EnvironmentObject private var model: AppModel
     @Environment(\.trustPalette) private var palette
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @State private var confirmRemove = false
 
     private enum Mode: Hashable { case off, sealed, always }
 
@@ -211,16 +219,6 @@ struct OutboundRow: View {
         .padding(.vertical, dynamicTypeSize.isAccessibilitySize ? 15 : 9)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("sharing-mode-group-\(member.firstName.lowercased())")
-        .alert(
-            TrustCopy.removePersonConfirm(name: member.firstName),
-            isPresented: $confirmRemove
-        ) {
-            Button(TrustCopy.removePerson, role: .destructive) { model.removePerson(personID: member.id) }
-                .accessibilityIdentifier("remove-person-confirm")
-            Button(TrustCopy.cancel, role: .cancel) {}
-        } message: {
-            Text("They leave your People list and both sharing directions stop.")
-        }
     }
 
     private var personLabel: some View {
@@ -259,7 +257,7 @@ struct OutboundRow: View {
             Button(TrustCopy.pause, action: onPause)
                 .disabled(presentation.isOff)
                 .accessibilityIdentifier("pause-sharing-\(member.firstName.lowercased())")
-            Button(TrustCopy.removePerson, role: .destructive) { confirmRemove = true }
+            Button(TrustCopy.removePerson, role: .destructive, action: onRemove)
                 .accessibilityIdentifier("remove-person-action-\(member.firstName.lowercased())")
         } label: {
             Image(systemName: "ellipsis")

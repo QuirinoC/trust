@@ -156,6 +156,31 @@ public sealed class AvatarApiTests
         }
     }
 
+    [Fact]
+    public async Task AvatarPresetRouteAcceptsAllAdditionalCatalogPresets()
+    {
+        using var factory = new TrustApiFactory();
+        using var client = factory.CreateClient();
+        var sam = await CreateAccountAsync(client, "Avatar Catalog");
+        var presetIds = new[]
+        {
+            "moon", "star", "cloud", "raindrop", "rainbow", "mountain", "river", "meadow",
+            "clover", "bloom", "cherry", "lotus", "mushroom", "seashell", "coral", "butterfly",
+            "hummingbird", "fox", "whale", "koi"
+        };
+
+        foreach (var presetId in presetIds)
+        {
+            using var request = Authorized(HttpMethod.Put, "/api/v1/me/avatar/preset", sam.Token);
+            request.Content = JsonContent.Create(new { presetId });
+            using var response = await client.SendAsync(request);
+            response.EnsureSuccessStatusCode();
+            using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            Assert.Equal("preset", json.RootElement.GetProperty("kind").GetString());
+            Assert.Equal(presetId, json.RootElement.GetProperty("presetId").GetString());
+        }
+    }
+
     private static string PhotoPath(Guid id, Guid version) => $"/api/v1/people/{id}/avatar/{version}";
 
     private static HttpRequestMessage Authorized(HttpMethod method, string path, string token)
