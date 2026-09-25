@@ -2,19 +2,19 @@
 
 The dated project status is in [docs/STATUS.md](../../docs/STATUS.md). This page tracks only the iOS build and device checks.
 
-Build 22 TestFlight feedback identified two UI issues: keep You legal links at the bottom, and center the profile preview with a horizontal strip of choices, no visible icon names, and Photos/Camera. Implemented locally with 26 illustrated options (20 new PNGs) and an API preset allowlist. Current source is build 24; its archive succeeded and codesign verified for team `3S529795M9`, but Organizer validation and upload have not happened. Build 23 was archive-validated but not uploaded; build 22 remains the latest uploaded build, with ASC processing/group unverified while signed out.
+Build 22 TestFlight feedback identified two UI issues: keep You legal links at the bottom, and center the profile preview with a horizontal strip of choices, no visible icon names, and Photos/Camera. Implemented locally with 26 illustrated options (20 new PNGs) and an API preset allowlist. Current source is build 24; its archive succeeded and codesign verified for team `3S529795M9`, but `xcodebuild -exportArchive` validation is blocked by Xcode App Store Connect account access while the Mac is locked. Build 24 is not uploaded. Build 23 was archive-validated but not uploaded; build 22 remains the latest uploaded build, with ASC processing/group unverified while signed out.
 
-The Remove-alert fix moves Remove into the parent alert and is in open PR #2 (`50fec6b`); checks are pending. After the feedback changes, local Duo UI passed **4/4**, Swift core **26/26**, API **107/107** with local Postgres. Independent code review found no issues. Final screen was checked in closed Duo; far-end carousel and open-Duo visual sign-off remain. API preset allowlist changes are not deployed, and no new site changes are deployed. M6 screenshot/privacy ASC work, age-policy decision, and physical-device tests remain open.
+PR #2 (`31db6cc`) merged the Remove-alert fix; all API/iOS/web checks passed, including hosted iOS 26 core and 4 UI tests. After the feedback changes, local Duo UI passed **4/4**, Swift core **26/26**, API **107/107** with local Postgres. Independent code review found no issues. Final screen was checked in closed Duo; Duo is currently open and booted, with open-Duo and far-end carousel visual sign-off still pending. The API preset allowlist is deployed; no new site changes are deployed. M6 screenshot/privacy ASC work, age-policy decision, and physical-device tests remain open.
 
 ## Verified
 
 - The app uses the healthy release API origin, https://trust-api-u0ft.onrender.com. The optional custom hostname trust.collapsetechnologies.com still has unresolved TLS.
 - After the TestFlight feedback changes, local Duo UI tests passed **4/4**, Swift core **26/26**, and API **107/107** with local Postgres.
 - Sol's final read-only review found no actionable issue in adaptive navigation, Map layout, or the sharing confirmation flow.
-- Build 22 is the latest uploaded build; ASC processing and internal group assignment are unverified. Build 23's archive was validated but not uploaded. Build 24's archive succeeded and codesign verified, but Organizer validation and upload are pending.
+- Build 22 is the latest uploaded build; ASC processing and internal group assignment are unverified. Build 23 was validated but not uploaded.
 - Build 20 remains uploaded and processed, Ready to Submit, and assigned to the IJ iPhone Juan internal group. Build 19 predates the Duo changes.
 - The build 21 TestFlight “What to Test” note is saved live in ASC for one internal tester. It covers phone sign-in, invite consent defaults, sharing modes, Look receipts, People/Map/You, TestFlight sandbox Plus purchase/restore, and best-effort push observation with device and steps. There are no test results yet.
-- Xcode 27.1 beta 27A9269 and macOS 26.7 are installed. Duo UDID C6495E9A-B165-46E1-97F9-0B92ABBDDC0D and iPhone 17 Pro UDID 61DC2501-3A93-4123-A6D5-D3512AF07464 are the two retained simulators; eleven unused generated devices were removed. Duo is currently booted; iPhone 17 Pro is shut down.
+- Xcode 27.1 beta 27A9269 and macOS 26.7 are installed. Duo UDID C6495E9A-B165-46E1-97F9-0B92ABBDDC0D and iPhone 17 Pro UDID 61DC2501-3A93-4123-A6D5-D3512AF07464 are the two retained simulators; eleven unused generated devices were removed. Duo is currently open and booted; open-Duo and far-edge carousel visual sign-off remain pending. iPhone 17 Pro is shut down.
 
 ## Build 20 TestFlight
 
