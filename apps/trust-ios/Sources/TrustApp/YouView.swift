@@ -10,50 +10,38 @@ struct YouView: View {
     @State private var showingLocation = false
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                TrustPageTitle(text: TrustCopy.you)
-                    .padding(.top, 20)
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    TrustPageTitle(text: TrustCopy.you)
+                        .padding(.top, 20)
 
-                profileCard
-                    .padding(.top, 22)
+                    profileCard
+                        .padding(.top, 22)
 
-                myLocationRow
-                    .padding(.top, 20)
-                    .padding(.bottom, 22)
+                    myLocationRow
+                        .padding(.top, 20)
+                        .padding(.bottom, 22)
 
-                plusCard
-                    .padding(.bottom, 22)
+                    plusCard
+                        .padding(.bottom, 22)
 
-                TrustSectionHeading("Account")
-                    .padding(.bottom, 4)
-                Button(TrustCopy.signOut) { model.signOut() }
-                    .buttonStyle(TrustTextButtonStyle())
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.bottom, 8)
-                Button(TrustCopy.deleteAccount) { showingDeleteAccount = true }
-                    .buttonStyle(TrustTextButtonStyle(color: palette.danger))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .accessibilityIdentifier("delete-account")
-
-                TrustSectionHeading("Legal")
-                    .padding(.top, 16)
-                HStack(spacing: 8) {
-                    Link(TrustCopy.privacy, destination: AppConfiguration.privacyURL)
-                    Text("·")
-                    Link(TrustCopy.terms, destination: AppConfiguration.termsURL)
-                    Text("·")
-                    Link(TrustCopy.support, destination: AppConfiguration.supportURL)
-                        .accessibilityIdentifier("support-link")
+                    TrustSectionHeading("Account")
+                        .padding(.bottom, 4)
+                    Button(TrustCopy.signOut) { model.signOut() }
+                        .buttonStyle(TrustTextButtonStyle())
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.bottom, 8)
+                    Button(TrustCopy.deleteAccount) { showingDeleteAccount = true }
+                        .buttonStyle(TrustTextButtonStyle(color: palette.danger))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .accessibilityIdentifier("delete-account")
                 }
-                .font(TrustTheme.ui(12))
-                .foregroundStyle(palette.muted)
-                .tint(palette.muted)
-                .padding(.top, 18)
+                .padding(.horizontal, TrustTheme.gutter)
+                .padding(.bottom, 28)
+                .trustReadableWidth()
             }
-            .padding(.horizontal, TrustTheme.gutter)
-            .padding(.bottom, 28)
-            .trustReadableWidth()
+            legalLinks
         }
         .background(palette.paper.ignoresSafeArea())
         .confirmationDialog(TrustCopy.deleteAccountConfirm, isPresented: $showingDeleteAccount, titleVisibility: .visible) {
@@ -80,28 +68,53 @@ struct YouView: View {
         }
     }
 
+    private var legalLinks: some View {
+        VStack(spacing: 0) {
+            Rectangle()
+                .fill(palette.line)
+                .frame(height: 1)
+            HStack(spacing: 8) {
+                Link(TrustCopy.privacy, destination: AppConfiguration.privacyURL)
+                    .frame(minHeight: 44)
+                Text("·")
+                Link(TrustCopy.terms, destination: AppConfiguration.termsURL)
+                    .frame(minHeight: 44)
+                Text("·")
+                Link(TrustCopy.support, destination: AppConfiguration.supportURL)
+                    .frame(minHeight: 44)
+                    .accessibilityIdentifier("support-link")
+            }
+            .font(TrustTheme.ui(12))
+            .foregroundStyle(palette.muted)
+            .tint(palette.muted)
+            .frame(maxWidth: .infinity)
+        }
+        .padding(.horizontal, TrustTheme.gutter)
+        .padding(.bottom, 8)
+        .trustReadableWidth()
+        .background(palette.paper)
+    }
+
     // MARK: Profile and personal settings
 
     private var profileCard: some View {
         TrustCard(fill: palette.surface) {
-            HStack(spacing: 14) {
-                TrustAvatar(name: model.you.displayName, seed: 0, size: 70, avatar: model.you.avatar, personID: model.you.id)
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(model.you.displayName)
-                        .font(TrustTheme.display(23))
-                        .tracking(-0.6)
-                        .foregroundStyle(palette.ink)
-                    if let handle = model.you.handle {
-                        Text("@\(handle)")
-                            .font(TrustTheme.ui(13))
-                            .foregroundStyle(palette.muted)
-                    }
-                    Button("Edit picture") { showingAvatarPicker = true }
-                        .buttonStyle(TrustTextButtonStyle(color: palette.accent))
-                        .accessibilityIdentifier("edit-profile-picture")
+            VStack(spacing: 7) {
+                TrustAvatar(name: model.you.displayName, seed: 0, size: 96, avatar: model.you.avatar, personID: model.you.id)
+                Text(model.you.displayName)
+                    .font(TrustTheme.display(23))
+                    .tracking(-0.6)
+                    .foregroundStyle(palette.ink)
+                if let handle = model.you.handle {
+                    Text("@\(handle)")
+                        .font(TrustTheme.ui(13))
+                        .foregroundStyle(palette.muted)
                 }
-                Spacer(minLength: 0)
+                Button("Edit picture") { showingAvatarPicker = true }
+                    .buttonStyle(TrustTextButtonStyle(color: palette.accent))
+                    .accessibilityIdentifier("edit-profile-picture")
             }
+            .frame(maxWidth: .infinity)
         }
     }
 

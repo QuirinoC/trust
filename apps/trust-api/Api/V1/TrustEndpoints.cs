@@ -21,7 +21,12 @@ public static class TrustEndpoints
     private const int AvatarDimensionMin = 64;
     private const int AvatarDimensionMax = 1024;
     private static readonly HashSet<string> AvatarPresetIds = new(StringComparer.Ordinal)
-        { "fern", "ember", "sky", "ocean", "sunrise", "lavender" };
+    {
+        "fern", "ember", "sky", "ocean", "sunrise", "lavender",
+        "moon", "star", "cloud", "raindrop", "rainbow", "mountain", "river", "meadow",
+        "clover", "bloom", "cherry", "lotus", "mushroom", "seashell", "coral", "butterfly",
+        "hummingbird", "fox", "whale", "koi"
+    };
 
     public static IEndpointRouteBuilder MapTrustApiV1(this IEndpointRouteBuilder endpoints)
     {

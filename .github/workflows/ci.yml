@@ -50,12 +50,29 @@ jobs:
       - uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: "26.6"
+      - name: Install and boot iPhone 17 Pro simulator
+        run: |
+          xcodebuild -downloadPlatform iOS
+
+          runtime_id=$(xcrun simctl list runtimes -j | jq -r '[.runtimes[] | select(.isAvailable and (.identifier | startswith("com.apple.CoreSimulator.SimRuntime.iOS-")))] | sort_by(.version | split(".") | map(tonumber)) | last | .identifier // empty')
+          device_type_id=$(xcrun simctl list devicetypes -j | jq -r '.devicetypes[] | select(.name == "iPhone 17 Pro") | .identifier' | head -n 1)
+          if [[ -z "$runtime_id" || -z "$device_type_id" ]]; then
+            echo "Could not find an available iOS simulator runtime or iPhone 17 Pro device type."
+            xcrun simctl list runtimes
+            xcrun simctl list devicetypes | grep -F 'iPhone 17 Pro' || true
+            exit 1
+          fi
+
+          simulator_id=$(xcrun simctl create "Trust CI iPhone 17 Pro" "$device_type_id" "$runtime_id")
+          echo "TRUST_SIMULATOR_ID=$simulator_id" >> "$GITHUB_ENV"
+          xcrun simctl boot "$simulator_id"
+          xcrun simctl bootstatus "$simulator_id" -b
       - name: Build and test iOS simulator scheme
         run: >-
           xcodebuild
           -project apps/trust-ios/Trust.xcodeproj
           -scheme Trust
-          -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5'
+          -destination "platform=iOS Simulator,id=$TRUST_SIMULATOR_ID"
           -derivedDataPath "$RUNNER_TEMP/trust-derived-data"
           CODE_SIGNING_ALLOWED=NO
           test

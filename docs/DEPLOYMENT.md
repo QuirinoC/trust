@@ -1,6 +1,6 @@
 # Trust release runbook
 
-This runbook covers the API, canonical website, and iOS TestFlight build. As of 2026-09-24, API and website deployments are verified. iOS build 21 is the older pre-redesign TestFlight build; the redesign is on the current branch and not yet deployed. Source is now version 1.0 build 22, intended for internal TestFlight, and has not been archived or uploaded. The redesign's M6 iPhone/iPad screenshots were recaptured on 2026-09-24 and have not been uploaded to App Store Connect. Installed Xcode 27.1 beta can build internal TestFlight build 22; stable public Xcode 27 is required for App Review. Keep production secrets in their service secret stores; the names below are configuration keys only.
+This runbook covers the API, canonical website, and iOS TestFlight build. PR #1 merged to `main` at `8ebdc0f`; its API, iOS, and web CI passed. The Remove-alert fix moves Remove into the parent alert and is in open PR #2 (`50fec6b`); checks are pending. Render deployment `dep-dar0hsivcj2c739t5hfg` is live for the merge commit and `/health/ready` returned `200 Healthy`. Cloudflare version `387f20df-6ce6-46f0-bf55-5b32f1771e67` remains live; the documented public routes returned 200, and no newer site changes are deployed. Build 22 is the latest uploaded build, though ASC processing and group assignment are unverified while signed out. Build 23 passed archive validation but was not uploaded. Build 24's local archive succeeded and codesign verified for team `3S529795M9`, but it has not been Organizer-validated or uploaded. M6 screenshots, privacy answers, age-policy choice, physical-device checks, and carousel visual sign-off remain open. Stable public Xcode 27 is required for App Review. Keep production secrets in their service secret stores; the names below are configuration keys only.
 
 ## Before a release
 
@@ -15,14 +15,14 @@ This runbook covers the API, canonical website, and iOS TestFlight build. As of 
    ```
 
    In another terminal, run `python3 apps/trust-api/scripts/e2e_two_account_http.py`. It creates temporary accounts in the local database and mutates test rows; do not point it at production.
-3. If needed, generate `apps/trust-ios/Trust.xcodeproj` from `project.yml` by running `xcodegen generate` in `apps/trust-ios`. The local redesign passed API tests 106/106, Swift core tests 26/26, Duo UI tests 4/4, and web tests 3/3. Build 21 is the older TestFlight build; current source version 1.0 build 22 is intended for internal TestFlight and can be archived with installed Xcode 27.1 beta. Deploy the reviewed API and website changes before testing the release app against production. Stable public Xcode 27 is required when preparing the App Review build.
+3. If needed, generate `apps/trust-ios/Trust.xcodeproj` from `project.yml` by running `xcodegen generate` in `apps/trust-ios`. PR #1's API, iOS, and web CI passed. The Remove-alert fix is in open PR #2 (`50fec6b`); PR/CI validation is pending. Build 24 is archived and codesign verified, but Organizer validation/upload remain pending; build 22 is the latest uploaded build, with ASC processing/group assignment unverified. Stable public Xcode 27 is required for the App Review build.
 4. Confirm the website's legal pages and `sms-opt-in.png` are present in `apps/jointrust-web/public`; use the repository's authenticated Wrangler setup for deployment.
 
 ## API deployment
 
 The Render web service is `trust-api` (`srv-daabv1lg1s2s73co5gm0`), connected to `QuirinoC/trust` on `main`, with root directory `apps/trust-api` and Dockerfile `./Dockerfile`. Its existing database is `trust-postgres` (`dpg-daabu1e7bikc73808dt0-a`). The checked-in `render.yaml` is a blueprint definition, not a safe way to refresh existing production configuration: **do not Blueprint Sync it over the live service**, because secret-backed values are managed separately.
 
-The current live deployment is `dep-daqocb8473hc73btvbmg`, commit `3a010ec` (2026-09-24). Deploy a later reviewed commit through the existing Render service's deployment controls. Before triggering another production deploy, confirm that the commit is the intended release and that Render still points to the existing service and database. Preserve the live values for `Auth__SigningKey`, `ConnectionStrings__Postgres`, `Apns__KeyId`, `Apns__PrivateKey`, and Twilio credentials. Keep `Auth__AllowDevelopmentSignIn`, `Trust__SeedReviewCircle`, and `StoreKit__AllowReviewUnlock` set to `false` in production. Stripe remains disabled.
+The current live deployment is `dep-dar0hsivcj2c739t5hfg`, for merged commit `8ebdc0f`. `/health/ready` returned `200 Healthy`. Deploy a later reviewed commit through the existing Render service's deployment controls. Before triggering another production deploy, confirm that the commit is intended and Render still points to the existing service and database. Preserve live secret-backed settings; keep `Auth__AllowDevelopmentSignIn`, `Trust__SeedReviewCircle`, and `StoreKit__AllowReviewUnlock` set to `false` in production. Stripe remains disabled. An unauthenticated avatar PUT returned `401`, confirming the endpoint rejects unauthenticated writes.
 
 After the deploy finishes, check `/health/live` and `/health/ready`. The Render service URL `https://trust-api-u0ft.onrender.com` returned healthy readiness after the current deployment on 2026-09-24, and is the configured release API origin. Render verified ownership of `trust.collapsetechnologies.com`; its CNAME points to the Render service in DNS-only mode, but TLS still fails/pends certificate provisioning. Do not report the custom host as healthy until HTTPS succeeds from an independent client. The live API configuration was read-only verified as Production/Postgres with development sign-in, review seeding, and review unlock disabled; StoreKit and APNs enabled; Twilio configured. The Twilio 2FA campaign is `VERIFIED`. No secret values were read or changed.
 
@@ -30,23 +30,23 @@ If readiness fails, stop the release and inspect Render logs and the database mi
 
 ## Website deployment
 
-The canonical site is the Cloudflare Worker in `apps/jointrust-web` with config `wrangler.jsonc`. The current live Cloudflare version is `5c1d221f-4e07-4adb-9b4d-9c1844de332b`, deployed from the working tree on 2026-09-24 with the corrected support copy. Deploy from the repository root after reviewing later site changes:
+The canonical site is the Cloudflare Worker in `apps/jointrust-web` with config `wrangler.jsonc`. The current live Cloudflare version is `387f20df-6ce6-46f0-bf55-5b32f1771e67`. Its `/`, `/privacy`, `/terms`, `/support`, `/sms`, `/sms-opt-in.png`, `/i/ABC234`, and `/.well-known/apple-app-site-association` routes all returned 200. The live privacy page includes the photo information and support describes push as best-effort. Deploy from the repository root after reviewing later site changes:
 
 ```bash
 npx wrangler deploy --config apps/jointrust-web/wrangler.jsonc
 ```
 
-After a deployment, check `https://jointrust.app`, `/privacy`, `/terms`, `/support`, `/sms`, `/sms-opt-in.png`, `/i/ABC234`, and `/.well-known/apple-app-site-association`. On 2026-09-24 these paths all returned 200 on the live site, including the invite landing and AASA response. The API legal routes previously returned successful redirects to canonical website pages. If the Worker update fails verification, use Cloudflare's deployment/version history to restore the prior working version, then repeat the URL checks.
+After a deployment, check `https://jointrust.app`, `/privacy`, `/terms`, `/support`, `/sms`, `/sms-opt-in.png`, `/i/ABC234`, and `/.well-known/apple-app-site-association`. All returned 200 for the current version. If the Worker update fails verification, use Cloudflare's deployment/version history to restore the prior working version, then repeat the URL checks.
 
 ## Release order
 
-1. Review the local redesign and complete the intended source changes; commit and push before preparing distribution.
-2. Archive version 1.0 build 22 with installed Xcode 27.1 beta, validate and upload it for internal TestFlight, then complete physical-device checks. Build 21 remains the older uploaded TestFlight build.
-3. Upload the recaptured M6 screenshots to ASC and verify the listing assets; reconcile privacy disclosures and remaining listing metadata.
-4. Before App Review, install stable public Xcode 27 (27A266a), create a new compliant release archive/build, select it for version 1.0, and submit the app and subscription group together when all review blockers are resolved.
+1. Complete PR/CI validation for the Remove-alert fix in PR #2; visually sign off the open Duo and far end of the profile carousel.
+2. Validate build 24 in Organizer and upload it when ready. Build 22 remains the latest uploaded build; restore ASC access to verify its processing/group status, then install an available build for physical-device checks.
+3. Upload the refreshed M6 screenshots to ASC and verify the listing assets; reconcile privacy disclosures and the age-policy conflict with the live legal pages.
+4. Before App Review, install stable public Xcode 27 (27A266a), create a compliant release archive/build, select it for version 1.0, and submit the app and subscription group together when all review blockers are resolved.
 5. Deploy API or website changes only when their reviewed source is ready; verify the live health/routes after each deployment.
 
-Build 21 is the older uploaded TestFlight build and is distinct from intended internal build 22. Neither the redesigned source nor its screenshots have been uploaded. Since stable Xcode 27 is required for App Review, build 22's beta-built archive is for internal testing; prepare a stable-Xcode release build for submission. See `docs/STATUS.md` and `apps/trust-ios/AppStore/REVIEW-READINESS.md` for current evidence and blockers.
+Build 22 is the latest uploaded TestFlight build; ASC processing and group assignment remain unverified. Build 24 is locally archived and codesign verified but not yet Organizer-validated/uploaded. Screenshots, privacy answers, and age-policy alignment remain pending in ASC, whose browser session is signed out. Since stable Xcode 27 is required for App Review, prepare a stable-Xcode release build for submission. See `docs/STATUS.md` and `apps/trust-ios/AppStore/REVIEW-READINESS.md` for current evidence and blockers.
 
 ## TestFlight upload
 
