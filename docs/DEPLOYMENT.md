@@ -1,6 +1,6 @@
 # Trust release runbook
 
-This runbook covers the API, canonical website, and iOS TestFlight build. PR #1 merged to `main` at `8ebdc0f`; its API, iOS, and web CI passed. The post-merge UI failure was fixed locally by moving Remove into the parent alert; that change has not been pushed and PR/CI checks are pending. Render deployment `dep-dar0hsivcj2c739t5hfg` is live for the merge commit and `/health/ready` returned `200 Healthy`. Cloudflare version `387f20df-6ce6-46f0-bf55-5b32f1771e67` remains live; the documented public routes returned 200, and no newer site changes are deployed. Build 22 is the latest uploaded build, though ASC processing and group assignment are unverified while signed out. Build 23 passed archive validation but was not uploaded. Build 24's local archive succeeded and codesign verified for team `3S529795M9`, but it has not been Organizer-validated or uploaded. M6 screenshots, privacy answers, age-policy choice, physical-device checks, and carousel visual sign-off remain open. Stable public Xcode 27 is required for App Review. Keep production secrets in their service secret stores; the names below are configuration keys only.
+This runbook covers the API, canonical website, and iOS TestFlight build. PR #1 merged to `main` at `8ebdc0f`; its API, iOS, and web CI passed. The Remove-alert fix moves Remove into the parent alert and is in open PR #2 (`50fec6b`); checks are pending. Render deployment `dep-dar0hsivcj2c739t5hfg` is live for the merge commit and `/health/ready` returned `200 Healthy`. Cloudflare version `387f20df-6ce6-46f0-bf55-5b32f1771e67` remains live; the documented public routes returned 200, and no newer site changes are deployed. Build 22 is the latest uploaded build, though ASC processing and group assignment are unverified while signed out. Build 23 passed archive validation but was not uploaded. Build 24's local archive succeeded and codesign verified for team `3S529795M9`, but it has not been Organizer-validated or uploaded. M6 screenshots, privacy answers, age-policy choice, physical-device checks, and carousel visual sign-off remain open. Stable public Xcode 27 is required for App Review. Keep production secrets in their service secret stores; the names below are configuration keys only.
 
 ## Before a release
 
@@ -15,7 +15,7 @@ This runbook covers the API, canonical website, and iOS TestFlight build. PR #1 
    ```
 
    In another terminal, run `python3 apps/trust-api/scripts/e2e_two_account_http.py`. It creates temporary accounts in the local database and mutates test rows; do not point it at production.
-3. If needed, generate `apps/trust-ios/Trust.xcodeproj` from `project.yml` by running `xcodegen generate` in `apps/trust-ios`. PR #1's API, iOS, and web CI passed. The post-merge Remove-alert UI failure is fixed locally but awaits push and PR/CI validation. Build 24 is archived and codesign verified, but Organizer validation/upload remain pending; build 22 is the latest uploaded build, with ASC processing/group assignment unverified. Stable public Xcode 27 is required for the App Review build.
+3. If needed, generate `apps/trust-ios/Trust.xcodeproj` from `project.yml` by running `xcodegen generate` in `apps/trust-ios`. PR #1's API, iOS, and web CI passed. The Remove-alert fix is in open PR #2 (`50fec6b`); PR/CI validation is pending. Build 24 is archived and codesign verified, but Organizer validation/upload remain pending; build 22 is the latest uploaded build, with ASC processing/group assignment unverified. Stable public Xcode 27 is required for the App Review build.
 4. Confirm the website's legal pages and `sms-opt-in.png` are present in `apps/jointrust-web/public`; use the repository's authenticated Wrangler setup for deployment.
 
 ## API deployment
@@ -40,7 +40,7 @@ After a deployment, check `https://jointrust.app`, `/privacy`, `/terms`, `/suppo
 
 ## Release order
 
-1. Push and validate the local Remove-alert fix through PR/CI; visually sign off the open Duo and far end of the profile carousel.
+1. Complete PR/CI validation for the Remove-alert fix in PR #2; visually sign off the open Duo and far end of the profile carousel.
 2. Validate build 24 in Organizer and upload it when ready. Build 22 remains the latest uploaded build; restore ASC access to verify its processing/group status, then install an available build for physical-device checks.
 3. Upload the refreshed M6 screenshots to ASC and verify the listing assets; reconcile privacy disclosures and the age-policy conflict with the live legal pages.
 4. Before App Review, install stable public Xcode 27 (27A266a), create a compliant release archive/build, select it for version 1.0, and submit the app and subscription group together when all review blockers are resolved.
