@@ -14,6 +14,9 @@ struct PlusPaywall: View {
         [AppConfiguration.monthlyProductID, AppConfiguration.annualProductID]
     }
 
+    /// StoreKit's purchase button uses white text, so keep its blue dark enough in dark mode.
+    private let storeKitButtonTint = Color(hex: 0x245CE7)
+
     var body: some View {
         Group {
             if model.coverage.isCovered {
@@ -24,12 +27,11 @@ struct PlusPaywall: View {
         }
         .background(palette.paper.ignoresSafeArea())
         .task { await model.store.loadProducts() }
-        .accessibilityLabel(TrustCopy.trustPlus)
     }
 
     private var store: some View {
         SubscriptionStoreView(productIDs: productIDs) {
-            marketing
+            marketing(showsClose: true)
         }
         .subscriptionStoreButtonLabel(.multiline)
         .storeButton(.visible, for: .restorePurchases)
@@ -46,120 +48,136 @@ struct PlusPaywall: View {
             await model.handleStorePurchase(result)
         }
         .containerBackground(palette.paper, for: .subscriptionStore)
-        .tint(palette.accent)
-        .safeAreaInset(edge: .bottom) {
-            extras
-        }
+        .tint(storeKitButtonTint)
+        .accessibilityIdentifier("plus-subscription-store")
     }
 
-    private var marketing: some View {
+    private func marketing(showsClose: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            TrustEyebrow(text: TrustCopy.trustPlus, color: palette.accent, size: 10)
+            HStack(alignment: .center) {
+                TrustEyebrow(text: TrustCopy.trustPlus, color: palette.accent, size: 10)
+                Spacer(minLength: 8)
+                if showsClose {
+                    Button(TrustCopy.close) { model.showingPaywall = false }
+                        .buttonStyle(TrustTextButtonStyle())
+                        .frame(minWidth: 44, minHeight: 44)
+                        .accessibilityIdentifier("plus-close")
+                }
+            }
+
             Text(TrustCopy.plusHeadline)
-                .font(TrustTheme.display(32))
+                .font(TrustTheme.display(25))
                 .tracking(-1)
                 .foregroundStyle(palette.ink)
-                .padding(.top, 10)
-                .padding(.bottom, 12)
+                .padding(.top, 2)
+                .padding(.bottom, 7)
                 .accessibilityAddTraits(.isHeader)
 
-            VStack(alignment: .leading, spacing: 8) {
-                feature(TrustCopy.plusFeatureSeats)
-                feature(TrustCopy.plusFeatureModes)
-                feature(TrustCopy.plusFeatureMap)
-                feature(TrustCopy.plusFeatureLog)
-            }
-            .padding(.bottom, 14)
+            Text("\(TrustCopy.plusFeatureSeats) · \(TrustCopy.plusFeatureModes)\nLive pins · \(TrustCopy.plusFeatureLog)")
+                .trustFont(13)
+                .lineSpacing(2)
+                .foregroundStyle(palette.ink)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.bottom, 6)
 
             Text(TrustCopy.plusStaysFree)
-                .trustFont(13)
-                .lineSpacing(3)
+                .trustFont(12)
+                .lineSpacing(2)
                 .foregroundStyle(palette.muted)
                 .fixedSize(horizontal: false, vertical: true)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 26)
-        .padding(.top, 22)
-        .padding(.bottom, 8)
-        .trustReadableWidth()
-    }
+                .padding(.bottom, 6)
 
-    private var extras: some View {
-        VStack(alignment: .leading, spacing: 10) {
+            Text(TrustCopy.plusLegal)
+                .trustFont(11)
+                .lineSpacing(1)
+                .foregroundStyle(palette.muted)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if let error = model.store.errorMessage, !error.isEmpty, showsClose {
+                Label(error, systemImage: "exclamationmark.triangle.fill")
+                    .trustFont(12)
+                    .foregroundStyle(palette.danger)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 6)
+                    .accessibilityLabel("Subscription error. \(error)")
+                    .accessibilityIdentifier("plus-store-error")
+            }
+
             if model.store.linkedToAnotherAccount {
                 Text(TrustCopy.subscriptionLinked)
-                    .trustFont(13)
-                    .foregroundStyle(palette.accent)
+                    .trustFont(12)
+                    .foregroundStyle(palette.danger)
                     .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 6)
                     .accessibilityLabel(TrustCopy.subscriptionLinked)
             }
-            if let error = model.store.errorMessage, !error.isEmpty {
-                Text(error)
-                    .trustFont(13)
-                    .foregroundStyle(palette.accent)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            if model.snapshot?.allowsReviewUnlock == true {
+
+            if showsClose, model.snapshot?.allowsReviewUnlock == true {
                 Button(TrustCopy.unlockPlusForReview) { model.unlockPlusForReview() }
                     .buttonStyle(TrustOutlineButtonStyle(compact: true))
+                    .padding(.top, 8)
             }
-            Text(TrustCopy.plusLegal)
-                .trustFont(12)
-                .lineSpacing(3)
-                .foregroundStyle(palette.muted)
-                .fixedSize(horizontal: false, vertical: true)
-            Button(TrustCopy.close) { model.showingPaywall = false }
-                .buttonStyle(TrustTextButtonStyle())
-                .frame(maxWidth: .infinity)
         }
-        .padding(.horizontal, 26)
-        .padding(.top, 8)
-        .padding(.bottom, 16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(palette.paper)
+        .padding(.horizontal, TrustTheme.gutter)
+        .padding(.top, 10)
+        .padding(.bottom, 4)
         .trustReadableWidth()
     }
 
     private var covered: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                marketing
+                marketing()
                 Text(TrustCopy.youHavePlus)
                     .trustFont(15, weight: .semibold)
                     .foregroundStyle(palette.ink)
-                    .padding(.horizontal, 26)
+                    .padding(.horizontal, TrustTheme.gutter)
                     .padding(.top, 8)
+                if let error = model.store.errorMessage, !error.isEmpty {
+                    Label(error, systemImage: "exclamationmark.triangle.fill")
+                        .trustFont(13)
+                        .foregroundStyle(palette.danger)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, TrustTheme.gutter)
+                        .padding(.top, 12)
+                        .accessibilityLabel("Subscription error. \(error)")
+                        .accessibilityIdentifier("plus-store-error")
+                }
                 Text(TrustCopy.plusCoveredBody)
                     .trustFont(13)
                     .foregroundStyle(palette.muted)
                     .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, 26)
+                    .padding(.horizontal, TrustTheme.gutter)
                     .padding(.top, 8)
                 Link(TrustCopy.manageSubscription, destination: StoreManager.manageSubscriptionsURL)
                     .trustFont(14, weight: .medium)
                     .foregroundStyle(palette.accent)
                     .frame(minHeight: 44)
-                    .padding(.horizontal, 26)
+                    .padding(.horizontal, TrustTheme.gutter)
                 Button(TrustCopy.restorePurchases) {
                     Task { await model.restorePurchases() }
                 }
                 .buttonStyle(TrustTextButtonStyle())
-                .frame(maxWidth: .infinity)
+                .frame(maxWidth: .infinity, minHeight: 44)
                 .disabled(model.store.isWorking)
-                .padding(.horizontal, 26)
+                .accessibilityIdentifier("plus-restore-purchases")
+                .padding(.horizontal, TrustTheme.gutter)
                 HStack(spacing: 8) {
                     Link(TrustCopy.privacy, destination: AppConfiguration.privacyURL)
                     Text("·")
                     Link(TrustCopy.terms, destination: AppConfiguration.termsURL)
                 }
+                .frame(minHeight: 44)
                 .trustFont(12, weight: .medium)
                 .foregroundStyle(palette.muted)
                 .tint(palette.muted)
-                .padding(.horizontal, 26)
+                .padding(.horizontal, TrustTheme.gutter)
                 .padding(.top, 8)
                 Button(TrustCopy.close) { model.showingPaywall = false }
-                    .buttonStyle(TrustTextButtonStyle())
-                    .frame(maxWidth: .infinity)
+                    .buttonStyle(TrustOutlineButtonStyle(compact: true))
+                    .accessibilityLabel(TrustCopy.close)
+                    .accessibilityIdentifier("plus-close")
                     .padding(.top, 10)
             }
             .padding(.bottom, 24)
@@ -168,17 +186,4 @@ struct PlusPaywall: View {
         .background(palette.paper.ignoresSafeArea())
     }
 
-    private func feature(_ text: String) -> some View {
-        HStack(alignment: .top, spacing: 8) {
-            Image(systemName: "checkmark")
-                .trustFont(12, weight: .semibold)
-                .foregroundStyle(palette.accent)
-                .padding(.top, 2)
-                .accessibilityHidden(true)
-            Text(text)
-                .trustFont(13)
-                .foregroundStyle(palette.ink)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-    }
 }

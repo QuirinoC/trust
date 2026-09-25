@@ -1,20 +1,16 @@
 import SwiftUI
 import TrustCore
 
-/// People owns the map. Sharing, Log, and You keep the Trust. masthead.
+/// The selected screen owns its title; the shell supplies navigation and global status.
 struct MainShellView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.trustPalette) private var palette
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         VStack(spacing: 0) {
-            if showsMasthead {
-                masthead
-            }
             if model.isOffline, let since = model.snapshot?.fetchedAt {
-                TrustOfflineBanner(since: since) {
-                    Task { await model.refresh() }
-                }
+                TrustOfflineBanner(since: since) { Task { await model.refresh() } }
             }
             ZStack {
                 CircleView()
@@ -35,28 +31,45 @@ struct MainShellView: View {
                     .accessibilityHidden(model.selectedTab != .you)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            paperTabBar
+            tabBar
         }
-        .background(palette.paper.ignoresSafeArea(edges: .bottom))
+        .background(palette.canvas.ignoresSafeArea(edges: .bottom))
         .overlay(alignment: .bottom) {
             if let toast = model.toast {
                 TrustToastView(toast: toast) { model.toast = nil }
                     .padding(.horizontal, 20)
-                    .padding(.bottom, 62)
+                    .padding(.bottom, 68)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
         .animation(.easeOut(duration: 0.22), value: model.toast?.id)
-        .onAppear {
-            Task { await model.refresh() }
+        // Authentication and app startup already refresh before entering the home shell.
+        // A second unconditional request here races that first call; when the API is
+        // waking up, one request can fail and briefly show the offline banner while
+        // the queued request succeeds. Keep the shell lifecycle path freshness-gated.
+        .onAppear { Task { await model.refreshIfStale() } }
+        .onChange(of: model.selectedTab) { _, _ in
+            Task { await model.refreshIfStale() }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active else { return }
+            Task { await model.refreshIfStale() }
+        }
+        .task(id: scenePhase) {
+            guard scenePhase == .active else { return }
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(60))
+                guard !Task.isCancelled else { return }
+                await model.refreshIfStale()
+            }
         }
         .sheet(item: $model.lookSubject) { subject in
             LookConfirmSheet(subject: subject)
                 .environmentObject(model)
                 .environment(\.trustPalette, palette)
-                .presentationDetents([.large])
+                .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
-                .presentationBackground(palette.paper)
+                .presentationBackground(palette.sheet)
                 .presentationCornerRadius(28)
                 .trustFormSheet()
         }
@@ -66,7 +79,7 @@ struct MainShellView: View {
                 .environment(\.trustPalette, palette)
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
-                .presentationBackground(palette.paper)
+                .presentationBackground(palette.sheet)
                 .trustFormSheet()
         }
         .sheet(isPresented: $model.showingAlwaysExplainer) {
@@ -75,30 +88,37 @@ struct MainShellView: View {
                 .environment(\.trustPalette, palette)
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
-                .presentationBackground(palette.paper)
+                .presentationBackground(palette.sheet)
                 .trustFormSheet()
         }
     }
 
-    /// Opaque paper bar in the safe area. The system tab bar on iOS 26 is a glass pill
-    /// whose content inset is taller than the pill, which clipped the People list.
-    private var paperTabBar: some View {
-        HStack(spacing: 0) {
+    private var tabBar: some View {
+        HStack(spacing: 4) {
             ForEach(MainTab.allCases) { tab in
                 let selected = model.selectedTab == tab
                 Button {
                     model.selectedTab = tab
                 } label: {
-                    VStack(spacing: 3) {
+                    VStack(spacing: 5) {
                         Image(systemName: tab.systemImage)
-                            .font(.system(size: 20, weight: .semibold))
+                            .font(.system(size: 19, weight: selected ? .semibold : .regular))
+                            .frame(height: 21)
                         Text(tab.title)
-                            .font(.system(size: 10, weight: .medium))
+                            .font(.system(size: 11, weight: selected ? .semibold : .medium))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
                     }
                     .foregroundStyle(selected ? palette.accent : palette.muted)
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, 14)
-                    .padding(.bottom, 6)
+                    .frame(maxWidth: .infinity, minHeight: 56)
+                    .background {
+                        if selected {
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .fill(palette.accentSoft)
+                                .padding(.horizontal, 4)
+                        }
+                    }
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(tab.title)
@@ -106,48 +126,11 @@ struct MainShellView: View {
                 .accessibilityAddTraits(selected ? .isSelected : [])
             }
         }
-        .background(palette.paper.ignoresSafeArea(edges: .bottom))
-        .overlay(alignment: .top) {
-            Rectangle()
-                .fill(palette.ink.opacity(0.08))
-                .frame(height: 0.5)
-        }
-    }
-
-    /// Map owns the top on People; masthead stays on Sharing / Log / You.
-    private var showsMasthead: Bool {
-        model.selectedTab != .circle
-    }
-
-    /// `.app-header`: wordmark left, route caption right.
-    private var masthead: some View {
-        HStack(alignment: .center) {
-            TrustWordmarkTitle(size: 34)
-            if model.isDemoMode, !model.isScreenshotLaunch {
-                TrustEyebrow(text: TrustCopy.demoBannerTitle, color: palette.accent, size: 9)
-                    .padding(.leading, 8)
-            }
-            Spacer(minLength: 0)
-            Text(caption.uppercased())
-                .font(TrustTheme.folio(9))
-                .tracking(1.2)
-                .foregroundStyle(palette.muted)
-                .accessibilityHidden(true)
-        }
-        .padding(.horizontal, TrustTheme.gutter)
-        .padding(.top, 10)
-        .padding(.bottom, 12)
-        .background(palette.paper)
-    }
-
-    private var caption: String {
-        switch model.selectedTab {
-        case .circle:
-            if model.circlePath.last == .map { return TrustCopy.map }
-            return TrustCopy.people
-        case .sharing: return TrustCopy.sharing
-        case .log: return TrustCopy.log
-        case .you: return TrustCopy.you
-        }
+        .padding(.horizontal, 10)
+        .padding(.top, 8)
+        .padding(.bottom, 4)
+        .background(palette.surface.ignoresSafeArea(edges: .bottom))
+        .overlay(alignment: .top) { Rectangle().fill(palette.line).frame(height: 0.7) }
+        .shadow(color: .black.opacity(0.05), radius: 12, x: 0, y: -4)
     }
 }

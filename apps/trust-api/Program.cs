@@ -67,6 +67,14 @@ builder.Services.AddRateLimiter(options =>
         PartitionKey(context),
         _ => new FixedWindowRateLimiterOptions { Window = TimeSpan.FromMinutes(1), PermitLimit = 30, QueueLimit = 0 }));
 
+    options.AddPolicy(RateLimitPolicies.PhoneSend, context => RateLimitPartition.GetFixedWindowLimiter(
+        PartitionKey(context),
+        _ => new FixedWindowRateLimiterOptions { Window = TimeSpan.FromMinutes(1), PermitLimit = 5, QueueLimit = 0 }));
+
+    options.AddPolicy(RateLimitPolicies.PhoneVerify, context => RateLimitPartition.GetFixedWindowLimiter(
+        PartitionKey(context),
+        _ => new FixedWindowRateLimiterOptions { Window = TimeSpan.FromMinutes(1), PermitLimit = 15, QueueLimit = 0 }));
+
     options.AddPolicy(RateLimitPolicies.Location, context => RateLimitPartition.GetFixedWindowLimiter(
         PartitionKey(context),
         _ => new FixedWindowRateLimiterOptions { Window = TimeSpan.FromMinutes(1), PermitLimit = 120, QueueLimit = 0 }));
@@ -74,6 +82,10 @@ builder.Services.AddRateLimiter(options =>
     options.AddPolicy(RateLimitPolicies.Look, context => RateLimitPartition.GetFixedWindowLimiter(
         PartitionKey(context),
         _ => new FixedWindowRateLimiterOptions { Window = TimeSpan.FromMinutes(1), PermitLimit = 60, QueueLimit = 0 }));
+
+    options.AddPolicy(RateLimitPolicies.Avatar, context => RateLimitPartition.GetFixedWindowLimiter(
+        PartitionKey(context),
+        _ => new FixedWindowRateLimiterOptions { Window = TimeSpan.FromMinutes(1), PermitLimit = 15, QueueLimit = 0 }));
 });
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
@@ -83,6 +95,8 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 });
 
 var authOptions = builder.Configuration.GetSection(AuthOptions.SectionName).Get<AuthOptions>() ?? new AuthOptions();
+AuthOptionsGuard.EnsureDevelopmentSignInIsSafe(authOptions, builder.Environment.IsDevelopment());
+
 if (builder.Environment.IsDevelopment() && string.IsNullOrWhiteSpace(authOptions.SigningKey))
 {
     authOptions.SigningKey = "development-signing-key-32bytes-min!!";

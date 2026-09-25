@@ -182,6 +182,23 @@ def main() -> int:
         },
         expect=204,
     )
+    bad_lat_status, _ = req(
+        "POST",
+        "/api/v1/location",
+        token=sam_tok,
+        body={"timestamp": iso(utcnow()), "latitude": 91, "longitude": 0, "points": None},
+    )
+    check("Input validation", "latitude above 90 is rejected", bad_lat_status == 400, f"status={bad_lat_status}")
+    oversized_status, _ = req(
+        "POST",
+        "/api/v1/location",
+        token=sam_tok,
+        body={
+            "timestamp": iso(utcnow()), "latitude": 0, "longitude": 0,
+            "points": [{"timestamp": iso(utcnow()), "latitude": 0, "longitude": 0} for _ in range(101)],
+        },
+    )
+    check("Input validation", "location batches over 100 points are rejected", oversized_status == 400, f"status={oversized_status}")
 
     free_circ = circle(jordan_tok)
     free_sam = member(free_circ, sam_id)
@@ -190,6 +207,15 @@ def main() -> int:
         "free viewer has no live pin / no live coordinates on circle",
         free_sam["inboundLive"] is False and free_sam.get("live") is None,
         f"inboundLive={free_sam['inboundLive']} live={free_sam.get('live')}",
+    )
+    sealed_history_status, sealed_history = req(
+        "GET", f"/api/v1/people/{sam_id}/history", token=jordan_tok
+    )
+    check(
+        "1 Sealed",
+        "sealed history endpoint rejects access before a confirmed Look",
+        sealed_history_status == 409 and sealed_history.get("code") == "share_off",
+        f"status={sealed_history_status} body={sealed_history}",
     )
 
     # Prove free Always path: grant Plus on sharer only, set Always, free viewer still no coords
@@ -553,12 +579,12 @@ def main() -> int:
     )
 
     # --- 6 History ---
-    # Ensure Sam sharing Sealed to Jordan again (may have been Off)
+    # Sealed remains snapshot-only. A separate Always grant unlocks the trail.
     req(
         "PATCH",
         f"/api/v1/people/{jordan_id}/share",
         token=sam_tok,
-        body={"resting": "untilTheyLook", "pause": None, "timed": None},
+        body={"resting": "always", "pause": None, "timed": None},
         expect=204,
     )
     now = utcnow()
@@ -595,7 +621,7 @@ def main() -> int:
         "PATCH",
         f"/api/v1/people/{bea_id}/share",
         token=sam_tok,
-        body={"resting": "untilTheyLook", "pause": None, "timed": None},
+        body={"resting": "always", "pause": None, "timed": None},
         expect=204,
     )
     # Re-ingest so Bea share path has history (same points)

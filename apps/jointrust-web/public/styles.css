@@ -14,16 +14,26 @@
   src: url("/fonts/space-grotesk-latin-600-normal.woff2") format("woff2");
 }
 
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/fonts/ibm-plex-mono-latin-500-normal.woff2") format("woff2");
+}
+
 :root {
-  --paper: #fffefa;
-  --ink: #141613;
-  --muted: #5e635c;
-  --line: #e4e2d8;
-  --accent: #e10600;
-  --ui: "Helvetica Neue", Helvetica, Arial, sans-serif;
-  --display: "Bodoni Moda", Didot, "Bodoni 72", "Times New Roman", serif;
-  --grotesk: "Space Grotesk", "Helvetica Neue", Helvetica, Arial, sans-serif;
-  --pad: clamp(24px, 5vw, 72px);
+  --paper: #f4f7fb;
+  --surface: #ffffff;
+  --ink: #17243a;
+  --muted: #5e6d82;
+  --line: #dce4ee;
+  --accent: #3478f6;
+  --positive: #1a9b88;
+  --ui: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --display: var(--ui);
+  --grotesk: var(--ui);
+  --pad: clamp(20px, 5vw, 72px);
 }
 
 * { box-sizing: border-box; }
@@ -41,22 +51,24 @@ body {
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
-  padding: 22px var(--pad) 28px;
+  padding: 20px var(--pad) 28px;
 }
 
 .top {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 24px;
+  width: min(68rem, 100%);
+  margin: 0 auto;
 }
 
 .wordmark {
   margin: 0;
   font-family: var(--grotesk);
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 600;
-  letter-spacing: -0.03em;
+  letter-spacing: -0.02em;
 }
 
 .wordmark a {
@@ -64,17 +76,36 @@ body {
   text-decoration: none;
 }
 
+.publisher {
+  margin-left: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
 .legal {
   display: flex;
-  gap: 1.25rem;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .legal a,
 footer a,
 .back a {
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
   text-decoration: none;
+}
+
+.legal a {
+  padding: 8px 10px;
+  border-radius: 999px;
+}
+
+.legal a[aria-current="page"] {
+  background: #e8f0ff;
+  color: #205cc4;
 }
 
 .legal a:hover,
@@ -88,33 +119,74 @@ main {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  width: min(36rem, 100%);
+  width: min(42rem, 100%);
   margin: 0 auto;
-  padding: 48px 0 32px;
+  padding: 48px 0 40px;
 }
 
 h1 {
   margin: 0;
   font-family: var(--display);
-  font-style: italic;
+  font-style: normal;
   font-weight: 400;
-  font-size: clamp(4.5rem, 12vw, 7.5rem);
-  line-height: 0.85;
-  letter-spacing: -0.03em;
+  font-size: clamp(3.4rem, 9vw, 5.5rem);
+  line-height: 0.98;
+  letter-spacing: -0.055em;
   font-synthesis: none;
 }
 
 .rule {
   width: 48px;
-  height: 2px;
+  height: 3px;
   margin: 22px 0 18px;
   background: var(--accent);
+  border-radius: 99px;
 }
 
 .lede {
   margin: 0;
   font-size: clamp(1.15rem, 2vw, 1.35rem);
   line-height: 1.35;
+}
+
+.invite-code {
+  margin: 24px 0;
+  padding: 18px 20px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+  font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: clamp(1.8rem, 8vw, 2.5rem);
+  font-weight: 500;
+  letter-spacing: 0.22em;
+  text-align: center;
+  user-select: all;
+}
+
+.invite-action {
+  display: inline-flex;
+  min-height: 48px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 24px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.invite-action:focus-visible {
+  outline: 3px solid var(--positive);
+  outline-offset: 3px;
+}
+
+.invite-note {
+  max-width: 34rem;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
 }
 
 ul {
@@ -125,7 +197,7 @@ ul {
 
 li {
   margin: 0;
-  padding: 11px 0;
+  padding: 12px 0;
   border-top: 1px solid var(--line);
   font-size: 16px;
   line-height: 1.4;
@@ -136,7 +208,7 @@ li:last-child {
 }
 
 footer {
-  width: min(36rem, 100%);
+  width: min(42rem, 100%);
   margin: 0 auto;
   color: var(--muted);
   font-size: 13px;
@@ -153,22 +225,33 @@ footer p {
 
 body.doc main {
   justify-content: flex-start;
-  width: min(40rem, 100%);
-  padding-top: 36px;
+  width: min(48rem, 100%);
+  margin: 28px auto 36px;
+  padding: clamp(24px, 5vw, 48px);
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: var(--surface);
+  box-shadow: 0 12px 40px rgb(23 36 58 / 5%);
 }
 
 body.doc h1 {
-  font-size: clamp(2.6rem, 7vw, 4.2rem);
+  font-size: clamp(2.25rem, 6vw, 3.25rem);
+  letter-spacing: -0.045em;
 }
 
-body.doc .rule { margin-bottom: 22px; }
+body.doc .rule { margin: 18px 0 22px; }
+
+body.doc main > p:first-of-type {
+  color: var(--muted);
+  font-size: 14px;
+}
 
 body.doc h2 {
-  margin: 28px 0 8px;
+  margin: 32px 0 8px;
   font-family: var(--grotesk);
-  font-size: 15px;
+  font-size: 17px;
   font-weight: 600;
-  letter-spacing: -0.03em;
+  letter-spacing: -0.02em;
 }
 
 body.doc p,
@@ -189,7 +272,18 @@ body.doc li:last-child {
   padding: 4px 0;
 }
 
-body.doc a { color: var(--ink); }
+body.doc a { color: #205cc4; text-underline-offset: 3px; }
+
+body.doc a:hover { color: #17459a; }
+
+body.doc a:focus-visible,
+.legal a:focus-visible,
+footer a:focus-visible,
+.back a:focus-visible {
+  outline: 3px solid var(--positive);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
 
 body.doc img.opt-in {
   width: 100%;
@@ -204,7 +298,42 @@ body.doc img.opt-in {
     gap: 12px;
   }
 
+  .legal { gap: 2px; }
+
+  .legal a { padding: 8px; }
+
+  .publisher { display: block; margin: 2px 0 0; }
+
   h1 {
     font-size: clamp(3.6rem, 18vw, 5rem);
   }
+
+  body.doc main {
+    margin: 20px auto 28px;
+    padding: 24px 20px;
+    border-radius: 20px;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #101a2a;
+    --surface: #19263a;
+    --ink: #eef4ff;
+    --muted: #b0bfd3;
+    --line: #31415a;
+    --accent: #78a6ff;
+    --positive: #53c9b5;
+  }
+
+  .legal a[aria-current="page"] {
+    background: #263a59;
+    color: #c7dcff;
+  }
+
+  .invite-action { color: #101a2a; }
+
+  body.doc a { color: #a9c7ff; }
+
+  body.doc a:hover { color: #d0e0ff; }
 }

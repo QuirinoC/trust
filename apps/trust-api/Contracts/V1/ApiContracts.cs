@@ -22,7 +22,18 @@ public sealed record PersonDto(
     bool HasCircle,
     bool OnboardingComplete,
     bool PhoneVerified,
-    string? Handle);
+    string? Handle,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    AvatarDto? Avatar = null);
+
+public sealed record AvatarDto(
+    string Kind,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? PresetId = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    Guid? Version = null);
+
+public sealed record SetAvatarPresetRequest(string PresetId);
 
 public sealed record PresenceDto(
     DateTimeOffset LastActiveAt,
@@ -195,7 +206,8 @@ public sealed record ApiError(string Code, string Message);
 public static class ContractMap
 {
     public static PersonDto Person(Account account) =>
-        new(account.Id, account.DisplayName, account.HasCircle, account.OnboardingComplete, account.HasVerifiedPhone, account.Handle);
+        new(account.Id, account.DisplayName, account.HasCircle, account.OnboardingComplete, account.HasVerifiedPhone, account.Handle,
+            account.Avatar is null ? null : new AvatarDto(account.Avatar.Kind, account.Avatar.PresetId, account.Avatar.Version));
 
     public static PresenceDto? Presence(Presence? presence) =>
         presence is null

@@ -57,6 +57,7 @@ struct ViewScreen: View {
                     .foregroundStyle(palette.ink)
                 }
                 .accessibilityLabel(TrustCopy.backToCircle)
+                .accessibilityIdentifier("circle-back")
             }
         }
         .onAppear { model.prepareMapLocation() }
@@ -80,12 +81,13 @@ struct ViewScreen: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 HStack(alignment: .center, spacing: 14) {
-                    TrustAvatar(name: member.person.displayName, seed: seed, size: 70)
+                    TrustAvatar(name: member.person.displayName, seed: seed, size: 70, avatar: member.person.avatar, personID: member.id)
                     VStack(alignment: .leading, spacing: 7) {
                         TrustPageTitle(text: member.firstName, size: 32)
                         Text(isAvailable ? TrustCopy.liveShare : TrustCopy.oneTimeLook)
                             .trustFont(12)
                             .foregroundStyle(palette.muted)
+                        directionSummary(member)
                     }
                 }
                 .padding(.top, 8)
@@ -111,7 +113,7 @@ struct ViewScreen: View {
 
                 Text(metaLine)
                     .trustFont(13)
-                    .foregroundStyle(Color(hex: 0x72786A))
+                    .foregroundStyle(palette.muted)
 
                 HStack(spacing: 8) {
                     Image(systemName: "checkmark")
@@ -122,27 +124,15 @@ struct ViewScreen: View {
                         : TrustCopy.receiptNotified(name: member.firstName))
                 }
                 .font(TrustTheme.ui(12, weight: .medium))
-                .foregroundStyle(Color(hex: 0x6E7B61))
+                .foregroundStyle(palette.positive)
                 .padding(.top, 18)
                 .padding(.bottom, 20)
 
                 if let point {
-                    if let snapshot, snapshot.event.historyWindowHours > 0, snapshot.trail.count > 1 {
-                        trailMap(snapshot.trail, live: snapshot.live, name: member.person.displayName)
-                            .padding(.bottom, 14)
-                    } else {
-                        pinMap(point, name: member.person.displayName)
-                            .padding(.bottom, 14)
-                    }
+                    pinMap(point, name: member.person.displayName)
+                        .padding(.bottom, 14)
                 }
 
-                if !isAvailable, let snapshot, snapshot.event.historyWindowHours <= 0 {
-                    Button(TrustCopy.seeTrail(hours: model.coverage.historyHours)) {
-                        model.extendOpenLook(personID: personID)
-                    }
-                    .buttonStyle(TrustOutlineButtonStyle(compact: true))
-                    .padding(.bottom, 10)
-                }
 
                 HStack(spacing: 10) {
                     Button {
@@ -151,6 +141,7 @@ struct ViewScreen: View {
                         Label(TrustCopy.circleMap, systemImage: "map")
                     }
                     .buttonStyle(TrustOutlineButtonStyle(compact: true))
+                    .accessibilityIdentifier("view-open-map")
                     Button {
                         model.circlePath = []
                     } label: {
@@ -163,10 +154,10 @@ struct ViewScreen: View {
                 }
 
                 TrustInfoStrip(
-                    glyph: isAvailable ? "eye" : (snapshot?.event.historyWindowHours ?? 0) > 0 ? "point.topleft.down.to.point.bottomright.curvepath" : "lock",
+                    glyph: isAvailable ? "eye" : "lock",
                     text: isAvailable
                         ? TrustCopy.stripLive
-                        : (snapshot?.event.historyWindowHours ?? 0) > 0 ? TrustCopy.stripTrail : TrustCopy.stripSnapshot
+                        : TrustCopy.stripSnapshot
                 )
                 .padding(.top, 18)
 
@@ -209,10 +200,30 @@ struct ViewScreen: View {
             parts.append(TrustCopy.distanceFromYou(distance))
         }
         if let point {
-            let time = point.timestamp.formatted(date: .omitted, time: .shortened)
-            parts.append(isAvailable ? TrustCopy.updatedAt(time) : TrustCopy.snapshotAt(time))
+            let time = point.timestamp.formatted(date: .abbreviated, time: .shortened)
+            let freshness = point.timestamp.formatted(.relative(presentation: .named))
+            parts.append(isAvailable ? "Updated \(freshness) · \(time)" : TrustCopy.snapshotAt(time))
         }
         return parts.joined(separator: " · ")
+    }
+
+    private func directionSummary(_ member: TrustedPerson) -> some View {
+        let inbound = shareLabel(member.inboundPresentation)
+        let outbound = shareLabel(model.shareState(for: member.id).presentation(at: Date()))
+        return Text("They share with you: \(inbound) · You share with them: \(outbound)")
+            .trustFont(11)
+            .foregroundStyle(palette.muted)
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityIdentifier("person-sharing-directions")
+    }
+
+    private func shareLabel(_ presentation: SharePresentation?) -> String {
+        switch presentation {
+        case .off, nil: return "Off"
+        case .untilTheyLook: return TrustCopy.sealed
+        case .always: return TrustCopy.always
+        case .paused: return "Paused"
+        }
     }
 
     private var distanceFromYou: String? {
@@ -235,33 +246,10 @@ struct ViewScreen: View {
         .mapStyle(.standard(elevation: .flat, emphasis: .muted, pointsOfInterest: .excludingAll))
         .frame(height: 200)
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Color(hex: 0xDFE4D6), lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(palette.line, lineWidth: 1))
         .onAppear { position = .region(Self.region(for: point)) }
         .onChange(of: point) { _, next in position = .region(Self.region(for: next)) }
         .accessibilityLabel(TrustCopy.pinAccessibility(name: name, live: isAvailable))
-    }
-
-    /// Open Look trail — retained points for this Look only (not a Log breadcrumb).
-    private func trailMap(_ trail: [LocationPoint], live: LocationPoint, name: String) -> some View {
-        Map(position: $position, interactionModes: [.pan, .zoom]) {
-            ForEach(Array(trail.enumerated()), id: \.offset) { index, point in
-                Annotation(index == trail.count - 1 ? name : "", coordinate: point.coordinate) {
-                    if index == trail.count - 1 {
-                        TrustMapPin(initials: name.trustInitials, live: false)
-                    } else {
-                        Circle()
-                            .fill(Color(hex: 0xA8B09A).opacity(0.85))
-                            .frame(width: 10, height: 10)
-                    }
-                }
-            }
-        }
-        .mapStyle(.standard(elevation: .flat, emphasis: .muted, pointsOfInterest: .excludingAll))
-        .frame(height: 220)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Color(hex: 0xDFE4D6), lineWidth: 1))
-        .onAppear { position = .region(Self.region(for: live)) }
-        .accessibilityLabel(TrustCopy.pinAccessibility(name: name, live: false))
     }
 
     private static func region(for point: LocationPoint) -> MKCoordinateRegion {
@@ -312,7 +300,7 @@ struct TrustMapPin: View {
     var body: some View {
         Text(initials)
             .font(TrustTheme.chrome(13, weight: .bold))
-            .foregroundStyle(.white)
+            .foregroundStyle(palette.accentOn)
             .frame(width: 40, height: 40)
             .background(live ? palette.pinLive : palette.pinLook)
             .clipShape(Circle())

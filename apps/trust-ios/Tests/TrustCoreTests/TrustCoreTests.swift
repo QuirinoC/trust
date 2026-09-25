@@ -330,7 +330,7 @@ final class LookServiceTests: XCTestCase {
     func testLeanDemoMatchesDesignFixture() throws {
         let service = DemoTrustService()
         service.startLeanDemo()
-        XCTAssertEqual(service.circle.count, 9)
+        XCTAssertEqual(service.circle.count, 5, "the Free demo fills, but does not exceed, its five-person circle")
         XCTAssertFalse(service.coverage.isCovered, "the fixture account is on Free")
 
         func row(_ name: String) -> TrustedPerson {
@@ -340,17 +340,19 @@ final class LookServiceTests: XCTestCase {
         XCTAssertEqual(row("Maya Chen").visiblePresence, .home)
         XCTAssertTrue(row("Leo Park").isAvailable)
         XCTAssertNotNil(row("Leo Park").livePoint)
+        XCTAssertEqual(row("Leo Park").visiblePresence, .away)
         XCTAssertTrue(row("Jules Morgan").isPaused, "Pause is not a live share")
         XCTAssertFalse(row("Jules Morgan").isAvailable)
         XCTAssertTrue(row("Eli Brooks").isAvailable)
         XCTAssertNil(row("Eli Brooks").visiblePresence, "Hidden presence, location Available")
-        XCTAssertNil(row("Inês Costa").visiblePresence)
-        XCTAssertNil(row("Noah Wilson").visiblePresence)
+        XCTAssertEqual(row("Noah Wilson").inboundPresentation, .off)
+        XCTAssertEqual(row("Noah Wilson").visiblePresence, .home, "Off does not remove someone or hide their presence")
         XCTAssertNil(row("Maya Chen").livePoint, "sealed rows never carry coordinates")
 
         XCTAssertEqual(service.shareState(for: row("Maya Chen").id).presentation(at: Date()), .untilTheyLook)
-        XCTAssertEqual(service.shareState(for: row("Leo Park").id).presentation(at: Date()), .always)
-        XCTAssertEqual(service.shareState(for: row("Sam Rivera").id).presentation(at: Date()), .off)
+        XCTAssertEqual(service.shareState(for: row("Leo Park").id).presentation(at: Date()), .untilTheyLook,
+                       "Alex can share Sealed on Free while Leo's inbound Always share remains independent")
+        XCTAssertEqual(service.shareState(for: row("Noah Wilson").id).presentation(at: Date()), .off)
 
         XCTAssertEqual(service.visibleMapPins().count, 0, "Free does not get live pins")
         service.setPro(enabled: true)

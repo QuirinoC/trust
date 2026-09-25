@@ -1,8 +1,7 @@
 import SwiftUI
 import TrustCore
 
-/// Look confirm — consequence before action. "Maya will be notified." leads; the snapshot
-/// line follows. One primary button that names both the verb and the receipt.
+/// Look confirm — one snapshot and a requested notification, stated before the action.
 struct LookConfirmSheet: View {
     let subject: TrustedPerson
     @EnvironmentObject private var model: AppModel
@@ -14,7 +13,7 @@ struct LookConfirmSheet: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 HStack(alignment: .top) {
-                    TrustAvatar(name: subject.person.displayName, seed: seed, size: 70)
+                    TrustAvatar(name: subject.person.displayName, seed: seed, size: 70, avatar: subject.person.avatar, personID: subject.id)
                     Spacer()
                     Button {
                         model.cancelLook()
@@ -22,7 +21,7 @@ struct LookConfirmSheet: View {
                         Image(systemName: "xmark")
                             .font(.system(size: 14, weight: .semibold))
                             .foregroundStyle(palette.ink)
-                            .frame(width: 40, height: 40)
+                            .frame(width: 44, height: 44)
                             .background(Circle().stroke(palette.line, lineWidth: 1))
                     }
                     .buttonStyle(.plain)
@@ -39,27 +38,24 @@ struct LookConfirmSheet: View {
                     .padding(.bottom, 14)
                     .accessibilityAddTraits(.isHeader)
 
-                (Text(TrustCopy.willBeNotified(name: first)).fontWeight(.semibold).foregroundColor(palette.ink)
+                (Text(TrustCopy.thenOneSnapshot).fontWeight(.semibold).foregroundColor(palette.ink)
                     + Text("\n")
-                    + Text(TrustCopy.thenOneSnapshot).foregroundColor(Color(hex: 0x777A6E)))
+                    + Text("Trust records this Look. A notification may be delivered.").foregroundColor(palette.muted))
                     .trustFont(15)
                     .lineSpacing(5)
                     .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 6)
+                    .padding(.bottom, 24)
 
-                notificationPreview
-                    .padding(.vertical, 22)
-
-                HStack(spacing: 7) {
-                    Image(systemName: "clock")
-                        .font(.system(size: 12, weight: .medium))
-                        .accessibilityHidden(true)
-                    Text(TrustCopy.receiptNoteSealed)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .trustFont(12)
-                .foregroundStyle(Color(hex: 0x858779))
-                .padding(.bottom, 22)
-
+            }
+            .padding(.horizontal, 26)
+            .padding(.top, 18)
+            .padding(.bottom, 16)
+            .trustReadableWidth()
+        }
+        .background(palette.paper.ignoresSafeArea())
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            VStack(spacing: 6) {
                 Button {
                     model.confirmLook()
                 } label: {
@@ -77,61 +73,26 @@ struct LookConfirmSheet: View {
                 .buttonStyle(TrustFilledButtonStyle())
                 .disabled(model.isLooking)
                 .accessibilityLabel(TrustCopy.lookNotify(name: first))
+                .accessibilityIdentifier("confirm-look-notify")
 
-                Button(TrustCopy.cancel) {
-                    model.cancelLook()
-                }
-                .buttonStyle(TrustTextButtonStyle())
-                .frame(maxWidth: .infinity)
-                .padding(.top, 6)
+                Button(TrustCopy.cancel) { model.cancelLook() }
+                    .buttonStyle(TrustTextButtonStyle())
+                    .frame(maxWidth: .infinity)
+                    .accessibilityIdentifier("cancel-look")
 
                 if model.isDemoMode, !model.isScreenshotLaunch {
                     Text(TrustCopy.demoSimulated)
                         .font(TrustTheme.ui(11))
                         .foregroundStyle(palette.muted)
-                        .frame(maxWidth: .infinity)
-                        .padding(.top, 4)
                 }
             }
             .padding(.horizontal, 26)
-            .padding(.top, 18)
-            .padding(.bottom, 28)
+            .padding(.top, 8)
+            .padding(.bottom, 8)
+            .frame(maxWidth: .infinity)
+            .background(palette.paper)
             .trustReadableWidth()
         }
-        .background(palette.paper.ignoresSafeArea())
-    }
-
-    /// `.notification-preview` — what the subject's lock screen will say.
-    private var notificationPreview: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Text("T")
-                .font(TrustTheme.display(24))
-                .foregroundStyle(palette.ink)
-                .frame(width: 34, height: 34)
-                .background(palette.paper)
-                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 5) {
-                HStack {
-                    Text(TrustCopy.mastheadName.uppercased())
-                    Spacer()
-                    Text(TrustCopy.now)
-                        .fontWeight(.regular)
-                        .foregroundStyle(palette.muted)
-                }
-                .font(TrustTheme.ui(11, weight: .semibold))
-                .foregroundStyle(palette.ink)
-                Text(TrustCopy.previewLine(viewer: model.you.displayName.trustFirstName))
-                    .font(TrustTheme.ui(13))
-                    .foregroundStyle(palette.ink)
-            }
-        }
-        .padding(16)
-        .background(Color(hex: 0xF0F1EB))
-        .overlay(RoundedRectangle(cornerRadius: 15, style: .continuous).stroke(Color(hex: 0xE4E6DB), lineWidth: 1))
-        .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(TrustCopy.notification): \(TrustCopy.previewLine(viewer: model.you.displayName.trustFirstName))")
     }
 
     private var seed: Int {

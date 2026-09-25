@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 import TrustCore
 import UIKit
 
@@ -14,6 +15,7 @@ struct PersonDTO: Decodable {
     var onboardingComplete: Bool?
     var phoneVerified: Bool?
     var handle: String?
+    var avatar: AvatarDescriptor?
 }
 
 struct HandleAvailabilityPayload: Decodable {
@@ -262,6 +264,8 @@ enum CircleCache {
 
 @MainActor
 final class TrustClient {
+    private static let networkLogger = Logger(subsystem: AppConfiguration.bundleIdentifier, category: "network")
+
     var token: String?
     var snapshot: CircleSnapshot?
     private(set) var resolvedBaseURL: URL = AppConfiguration.apiBaseURL
@@ -274,6 +278,12 @@ final class TrustClient {
         config.timeoutIntervalForResource = AppConfiguration.requestTimeout + 5
         return URLSession(configuration: config)
     }()
+    private struct AvatarCacheKey: Hashable {
+        let accountID: UUID
+        let personID: UUID
+        let version: UUID
+    }
+    private var avatarImages: [AvatarCacheKey: UIImage] = [:]
 
     func prepare() async {
         let preferred = AppConfiguration.apiBaseURL
@@ -375,7 +385,48 @@ final class TrustClient {
 
     func clearCache() {
         CircleCache.clear()
+        avatarImages.removeAll()
         snapshot = nil
+    }
+
+    func setAvatarPreset(_ presetID: String) async throws -> AvatarDescriptor {
+        struct Body: Encodable { var presetId: String }
+        var request = try makeRequest(path: "/api/v1/me/avatar/preset", method: "PUT", authorized: true)
+        request.httpBody = try encoder.encode(Body(presetId: presetID))
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        return try await send(request)
+    }
+
+    func setAvatarPhoto(_ jpeg: Data) async throws -> AvatarDescriptor {
+        var request = try makeRequest(path: "/api/v1/me/avatar/photo", method: "PUT", authorized: true)
+        request.httpBody = jpeg
+        request.setValue("image/jpeg", forHTTPHeaderField: "Content-Type")
+        let avatar: AvatarDescriptor = try await send(request)
+        if let version = avatar.photoVersion,
+           let accountID = snapshot?.you.id,
+           let image = UIImage(data: jpeg) {
+            avatarImages[AvatarCacheKey(accountID: accountID, personID: accountID, version: version)] = image
+        }
+        return avatar
+    }
+
+    func removeAvatar() async throws {
+        try await deleteEmpty(path: "/api/v1/me/avatar")
+    }
+
+    /// Photo bytes stay in memory only. The version in the descriptor is immutable, so
+    /// changing a photo naturally gets a fresh cache entry.
+    func avatarImage(personID: UUID, descriptor: AvatarDescriptor?) async throws -> UIImage? {
+        guard let version = descriptor?.photoVersion else { return nil }
+        let key = AvatarCacheKey(accountID: snapshot?.you.id ?? personID, personID: personID, version: version)
+        if let image = avatarImages[key] { return image }
+        let path = "/api/v1/people/\(personID.uuidString)/avatar/\(version.uuidString)"
+        var request = try makeRequest(path: path, method: "GET", authorized: true)
+        request.setValue("image/jpeg", forHTTPHeaderField: "Accept")
+        let data = try await sendRaw(request)
+        guard let image = UIImage(data: data) else { throw TrustClientError.decoding }
+        avatarImages[key] = image
+        return image
     }
 
     func ingest(_ point: LocationPoint, battery: Int?, charging: Bool?) async throws {
@@ -444,15 +495,6 @@ final class TrustClient {
             path += "?subjectId=\(subjectID.uuidString)"
         }
         try await postEmpty(path: path, body: EmptyBody())
-    }
-
-    func extendLook(subjectID: UUID) async throws -> LookSession {
-        let payload: LookSessionDTO = try await post(
-            path: "/api/v1/looks/\(subjectID.uuidString)/extend",
-            body: EmptyBody(),
-            authorized: true
-        )
-        return payload.model
     }
 
     /// Resting `off|untilTheyLook|always`, or pause `1h|8h|1d|2d|3d`.
@@ -685,6 +727,8 @@ final class TrustClient {
     /// Performs the request and maps transport + HTTP failures to `TrustClientError`.
     /// Returns the 2xx body untouched so callers can cache or decode it.
     private func sendRaw(_ request: URLRequest) async throws -> Data {
+        let isCircleRequest = request.url?.path == "/api/v1/circle"
+        let startedAt = DispatchTime.now().uptimeNanoseconds
         let data: Data
         let response: URLResponse
         do {
@@ -702,15 +746,35 @@ final class TrustClient {
                 return result
             }
         } catch let error as TrustClientError {
+            if isCircleRequest {
+                Self.networkLogger.error("GET /api/v1/circle failed before response: clientError=\(String(describing: type(of: error)), privacy: .public) elapsedMs=\(Self.elapsedMilliseconds(since: startedAt), privacy: .public)")
+            }
             throw error
         } catch let error as URLError where error.code == .timedOut {
+            if isCircleRequest {
+                Self.networkLogger.error("GET /api/v1/circle failed before response: urlErrorCode=\(error.code.rawValue, privacy: .public) elapsedMs=\(Self.elapsedMilliseconds(since: startedAt), privacy: .public)")
+            }
             throw TrustClientError.timeout
         } catch is CancellationError {
+            if isCircleRequest {
+                Self.networkLogger.error("GET /api/v1/circle cancelled before response elapsedMs=\(Self.elapsedMilliseconds(since: startedAt), privacy: .public)")
+            }
             throw TrustClientError.timeout
+        } catch let error as URLError {
+            if isCircleRequest {
+                Self.networkLogger.error("GET /api/v1/circle failed before response: urlErrorCode=\(error.code.rawValue, privacy: .public) elapsedMs=\(Self.elapsedMilliseconds(since: startedAt), privacy: .public)")
+            }
+            throw TrustClientError.unreachable
         } catch {
+            if isCircleRequest {
+                Self.networkLogger.error("GET /api/v1/circle failed before response: errorType=\(String(describing: type(of: error)), privacy: .public) elapsedMs=\(Self.elapsedMilliseconds(since: startedAt), privacy: .public)")
+            }
             throw TrustClientError.unreachable
         }
         guard let http = response as? HTTPURLResponse else { throw TrustClientError.unreachable }
+        if isCircleRequest {
+            Self.networkLogger.info("GET /api/v1/circle received HTTP \(http.statusCode, privacy: .public) elapsedMs=\(Self.elapsedMilliseconds(since: startedAt), privacy: .public)")
+        }
         if [502, 503, 504].contains(http.statusCode) {
             throw TrustClientError.serverUnavailable(http.statusCode)
         }
@@ -732,6 +796,10 @@ final class TrustClient {
             throw TrustClientError.server(message)
         }
         throw TrustClientError.server(TrustCopy.requestFailedStatus(http.statusCode))
+    }
+
+    private static func elapsedMilliseconds(since start: UInt64) -> Int {
+        Int((DispatchTime.now().uptimeNanoseconds - start) / 1_000_000)
     }
 
     private var decoder: JSONDecoder {
@@ -809,7 +877,8 @@ extension PersonDTO {
             hasPro: hasCircle,
             onboardingComplete: onboardingComplete ?? (handle != nil),
             phoneVerified: phoneVerified ?? false,
-            handle: handle
+            handle: handle,
+            avatar: avatar
         )
     }
 }

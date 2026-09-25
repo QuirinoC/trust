@@ -99,9 +99,9 @@ public final class DemoTrustService: ObservableObject {
 
     // MARK: Fixtures
 
-    /// Nine people. Inbound — Leo and Eli Always, Jules paused (restores to Sealed), Noah Off
-    /// (chose off, not removed), everyone else Sealed. Inês, Eli, Noah Hidden. Outbound — Maya
-    /// Sealed, Leo Always, Jules Sealed, the rest Off. You are on Free.
+    /// Five people, matching the Free circle limit. Inbound — Leo and Eli Always, Jules paused
+    /// (restores to Sealed), Noah Off (chose off, not removed), Maya Sealed. Eli has Hidden
+    /// presence. Outbound — Maya, Leo, and Jules Sealed; Eli and Noah Off. You are on Free.
     public func startLeanDemo() {
         let now = clock.now()
         you = Person(displayName: "Alex Laurent", hasPro: false, onboardingComplete: true, handle: "alex")
@@ -118,19 +118,15 @@ public final class DemoTrustService: ObservableObject {
         myPresence = .home
 
         let maya = add("Maya Chen", presence: .home, place: "Inner Sunset", origin: LocationTrail.DemoCity.missionSF.point(at: now), inbound: .untilTheyLook, outbound: .untilTheyLook, now: now)
-        let leo = add("Leo Park", presence: .away, place: "Capitol Hill", origin: LocationTrail.DemoCity.capitolHillSeattle.point(at: now), inbound: .always, outbound: .always, now: now)
-        add("Inês Costa", presence: .hidden, place: "Príncipe Real", origin: LocationPoint(timestamp: now, latitude: 38.7169, longitude: -9.1478), inbound: .untilTheyLook, outbound: .off, now: now)
+        let leo = add("Leo Park", presence: .away, place: "Capitol Hill", origin: LocationTrail.DemoCity.capitolHillSeattle.point(at: now), inbound: .always, outbound: .untilTheyLook, now: now)
         let jules = add("Jules Morgan", presence: .away, place: "Fort Greene", origin: LocationTrail.DemoCity.brooklyn.point(at: now), inbound: .untilTheyLook, outbound: .untilTheyLook, now: now)
         inbound[jules.id] = PersonShareState(
             resting: .paused,
             pauseUntil: now.addingTimeInterval(47 * 60),
             restoresTo: .untilTheyLook
         )
-        add("Sam Rivera", presence: .home, place: "Hyde Park", origin: LocationTrail.DemoCity.austin.point(at: now), inbound: .untilTheyLook, outbound: .off, now: now)
         add("Eli Brooks", presence: .hidden, place: "Hackney", origin: LocationPoint(timestamp: now, latitude: 51.5450, longitude: -0.0553), inbound: .always, outbound: .off, now: now)
-        add("Ren Tanaka", presence: .home, place: "Shimokitazawa", origin: LocationPoint(timestamp: now, latitude: 35.6613, longitude: 139.6681), inbound: .untilTheyLook, outbound: .off, now: now)
-        add("Sofía López", presence: .away, place: "Condesa", origin: LocationPoint(timestamp: now, latitude: 19.4116, longitude: -99.1747), inbound: .untilTheyLook, outbound: .off, now: now)
-        add("Noah Wilson", presence: .hidden, place: "Surry Hills", origin: LocationPoint(timestamp: now, latitude: -33.8845, longitude: 151.2110), inbound: .off, outbound: .off, now: now)
+        add("Noah Wilson", presence: .home, place: "Surry Hills", origin: LocationPoint(timestamp: now, latitude: -33.8845, longitude: 151.2110), inbound: .off, outbound: .off, now: now)
 
         // Prior activity so the view log is not blank: Leo looked at you yesterday; you viewed Leo.
         lookLog.append(LookEvent(

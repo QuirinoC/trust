@@ -1,6 +1,8 @@
-# Trust — 50 user stories
+# Trust — 50 user-story audit (historical snapshot)
 
-These stories describe how people might use Trust (iOS + API). Each status was checked against the **current code** in `apps/trust-ios` and `apps/trust-api` (models, UI, `TrustEngine`, endpoints)—not product docs alone. Product name in new surfaces is **Trust** (`TrustCopy.mastheadName`); some strings still say “Trust Circle.”
+> This is a point-in-time feature audit (2026-09-24), not a release checklist. For current release evidence and open blockers, use [docs/STATUS.md](../../docs/STATUS.md); for current screen behavior, use [SCREENS.md](SCREENS.md).
+
+These stories describe supported, partial, and unsupported behavior in the iOS app and API at the time of this audit. Current user-facing tabs are **People**, **Sharing**, **Activity**, and **You**. The brand uses the adaptive navy, porcelain, and blue palette described in [docs/DESIGN.md](../../docs/DESIGN.md).
 
 ---
 
@@ -8,11 +10,11 @@ These stories describe how people might use Trust (iOS + API). Each status was c
    **Status:** SUPPORTED
    **Why:** Onboarding is Apple → handle → phone; `Account.OnboardingComplete` requires handle + verified phone (`Domain/Models.cs`), with `PhoneView` / `HandleView` and `/me/phone/send|verify` wired in `AppModel` and `TrustEndpoints.cs`.
 
-2. **Story:** "Omar invites his partner with a six-character code; after she joins, neither can Look until each picks a share mode."
+2. **Story:** "Omar invites his partner with a code; after she reviews it and taps Join, neither can Look until each picks a share mode."
    **Status:** SUPPORTED
    **Why:** `InviteView` + `TrustEngine.AcceptInviteAsync` insert membership with `ShareState.Default` (Off/Off). Copy and join toast say sharing stays off both ways.
 
-3. **Story:** "Elena keeps her adult son Sealed (Until they look) and only Looks when she is worried—he gets a receipt push."
+3. **Story:** "Elena keeps her adult son Sealed (Until they look) and only Looks when she is worried; Trust requests a best-effort receipt notification."
    **Status:** SUPPORTED
    **Why:** Sealed Look needs confirm (`LookConfirmSheet` / `LookAsync`), one snapshot, receipt via APNs (`LookReceiptPublisher` / `LookReceiptNotifier`). Share mode set in `SharingView`.
 
@@ -24,11 +26,11 @@ These stories describe how people might use Trust (iOS + API). Each status was c
    **Status:** SUPPORTED
    **Why:** Timed overlays `15m|1h|4h|8h` in `TimedShareDuration` / `SetShareAsync`. `LookReceiptNotifier.scheduleTimedEnd` fires `TrustCopy.timerEnded` locally when the overlay ends.
 
-6. **Story:** "Diego stops sharing with his ex; she remains in his Circle under “Not sharing with you,” but she cannot Look until he chooses a mode again."
+6. **Story:** "Diego stops sharing with his ex; she remains in People under “Not sharing with you,” but she cannot Look until he chooses a mode again."
    **Status:** SUPPORTED
    **Why:** Stop sets resting `off` (`stopSharing` → `setResting(.off)`). Circle splits Sharing / Not sharing (`CircleView`); Look on Off returns `share_off`.
 
-7. **Story:** "Noah taps Stop all on You so nobody in the circle can Look; every outbound mode goes Off."
+7. **Story:** "Noah taps Stop all in Sharing so nobody in the circle can Look; every outbound mode goes Off."
    **Status:** SUPPORTED
    **Why:** `YouView` stop-all dialog → `AppModel.stopAll()` patches each non-Off share to Off.
 
@@ -52,7 +54,7 @@ These stories describe how people might use Trust (iOS + API). Each status was c
     **Status:** SUPPORTED
     **Why:** `YouView` confirm → `AppModel.deleteAccount()` → `DELETE /account` → `DeleteAccountAsync`.
 
-13. **Story:** "Andre opens the View log and sees both “You looked at …” and “Sam viewed you” entries—not a GPS breadcrumb trail."
+13. **Story:** "Andre opens the Activity and sees both “You looked at …” and “Sam viewed you” entries—not a GPS breadcrumb trail."
     **Status:** SUPPORTED
     **Why:** Log kinds are `look` / `view` / `removed` (`LookKind`, `ViewLogView` / `LookEvent.logLine`). Free retention 30 days, Plus 365 (`TrustRules`, `CircleCoverage`). No GPS trail in Log.
 
@@ -68,7 +70,7 @@ These stories describe how people might use Trust (iOS + API). Each status was c
     **Status:** SUPPORTED
     **Why:** Timed share reverts to Until-they-look unless the resting mode was Always (`SetShareAsync` revert logic); UI duration picker in `SharingView` / timed sheet.
 
-17. **Story:** "Helen allows Always location permission after her first non-Off share so Looks still work when Trust is closed."
+17. **Story:** "Helen allows Always location permission after her first non-Off share so a confirmed Look can use a recent location while Trust is closed."
     **Status:** SUPPORTED
     **Why:** `afterFirstShare` → Always explainer → `LocationCoordinator.requestAlways`; tiers keep background updates when sharing (`setSharingTier`).
 
@@ -116,11 +118,11 @@ These stories describe how people might use Trust (iOS + API). Each status was c
     **Status:** SUPPORTED
     **Why:** Off is resting mode; membership stays until revoke. Circle “Not sharing with you” section.
 
-29. **Story:** "Felix upgrades to Plus, invites up to twenty people, and uses Always + circle map live pins."
+29. **Story:** "Felix upgrades to Plus, invites up to twenty people, and uses Always + People map live pins."
     **Status:** SUPPORTED
     **Why:** Seat limit + `canShareAvailable` + Map Available pins; StoreKit entitlement → `HasCircle`.
 
-30. **Story:** "Rita allows Look notifications so Sealed Looks show as banners; Available views stay log-only."
+30. **Story:** "Rita allows Look notifications; a Sealed Look may produce a best-effort receipt. Available Views stay Activity-only."
     **Status:** SUPPORTED
     **Why:** Settings copy on You; push registration for Look receipts; View has no push path in `ViewAsync`.
 
@@ -134,7 +136,7 @@ These stories describe how people might use Trust (iOS + API). Each status was c
 
 33. **Story:** "Omar removes his roommate from Trust entirely so the pair disappears from both circles and the log records a removed event."
     **Status:** SUPPORTED
-    **Why:** Sharing → Remove calls `revoke`; membership dropped both ways. `RevokeAsync` inserts `LookKind.Removed` so Log shows you removed / they removed you.
+    **Why:** Sharing → Remove calls `revoke`; membership dropped both ways. `RevokeAsync` inserts `LookKind.Removed` so Activity shows who removed whom.
 
 34. **Story:** "Priya promises her partner “back home by 11” and Trust marks the promise resolved when she arrives Home."
     **Status:** PARTIAL
@@ -144,9 +146,9 @@ These stories describe how people might use Trust (iOS + API). Each status was c
     **Status:** PARTIAL
     **Why:** `POST /presence/place-ping` is Plus-gated in `PlacePingAsync`, but no iOS UI. Home geofence / manual presence cover the main path instead.
 
-36. **Story:** "Nadia opens a Look then extends it to a 30-day location history trail because she has Plus."
+36. **Story:** "Nadia views recent places for a person who shares Always; Plus gives her the longer history window."
     **Status:** SUPPORTED
-    **Why:** Look stays one snapshot; View offers “See last …”, calling `ExtendLookAsync` / `extendLook`. Free unlocks 24h (`FreeHistoryHours`); Plus unlocks 30 days (`ProHistoryHours`). Trail is on the open Look only—not the Log tab.
+    **Why:** Location history is available only while the subject shares Always. A Look against a Sealed share returns one snapshot and does not grant history. Plus controls the longer Always-history window; Activity remains an event log, not a location trail.
 
 37. **Story:** "Ben’s circle sees his phone battery percent while he shares Always."
     **Status:** PARTIAL
@@ -156,9 +158,9 @@ These stories describe how people might use Trust (iOS + API). Each status was c
     **Status:** SUPPORTED
     **Why:** You → set Home saves place id + “Home” label to the server; coords stay on device. Circle shows place label via `VisibleHomePresence` when presence is granted.
 
-39. **Story:** "Elias’s View log lists when someone was removed from the circle alongside Looks and Views."
+39. **Story:** "Elias’s Activity lists when someone was removed from the circle alongside Looks and Views."
     **Status:** SUPPORTED
-    **Why:** `LookKind.Removed` on revoke; client `logLine` / View log kind label.
+    **Why:** `LookKind.Removed` on revoke; client `logLine` / Activity kind label.
 
 40. **Story:** "Grace gifts Plus to her parents so they get Always without paying."
     **Status:** NOT SUPPORTED
@@ -186,7 +188,7 @@ These stories describe how people might use Trust (iOS + API). Each status was c
 
 46. **Story:** "Mo opens the Log tab to replay a GPS breadcrumb of where someone drove today."
     **Status:** NOT SUPPORTED
-    **Why:** View log is look/view receipts only. Location history is server retention for Look/extend—not exposed as a trail UI in the log.
+    **Why:** Activity is look/view receipts only. Location history is server retention for Look/extend—not exposed as a trail UI in the log.
 
 47. **Story:** "Noor’s parents get push alerts automatically every time she leaves a geofenced Home."
     **Status:** NOT SUPPORTED
@@ -206,7 +208,7 @@ These stories describe how people might use Trust (iOS + API). Each status was c
 
 ---
 
-## Tally
+## Tally (this audit snapshot)
 
 | Status | Count |
 |--------|------:|

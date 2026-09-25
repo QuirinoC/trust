@@ -1,0 +1,72 @@
+name: Trust CI
+
+on:
+  pull_request:
+    paths:
+      - "apps/trust-api/**"
+      - "apps/trust-ios/**"
+      - "apps/jointrust-web/**"
+      - ".github/workflows/ci.yml"
+  push:
+    branches: [main]
+    paths:
+      - "apps/trust-api/**"
+      - "apps/trust-ios/**"
+      - "apps/jointrust-web/**"
+      - ".github/workflows/ci.yml"
+  workflow_dispatch:
+
+jobs:
+  api:
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: trust
+          POSTGRES_PASSWORD: trust
+          POSTGRES_DB: trust
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U trust -d trust"
+          --health-interval 3s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+      - name: Run API and Postgres integration tests
+        env:
+          ConnectionStrings__Postgres: Host=127.0.0.1;Port=5433;Database=trust;Username=trust;Password=trust
+        run: dotnet test apps/trust-api/TrustApi.sln --configuration Release
+
+  ios:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: "26.6"
+      - name: Build and test iOS simulator scheme
+        run: >-
+          xcodebuild
+          -project apps/trust-ios/Trust.xcodeproj
+          -scheme Trust
+          -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5'
+          -derivedDataPath "$RUNNER_TEMP/trust-derived-data"
+          CODE_SIGNING_ALLOWED=NO
+          test
+
+  web:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run web route tests
+        working-directory: apps/jointrust-web
+        run: npm test

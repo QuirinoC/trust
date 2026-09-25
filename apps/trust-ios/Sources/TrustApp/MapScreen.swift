@@ -7,7 +7,6 @@ import TrustCore
 struct MapScreen: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.trustPalette) private var palette
-    @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var position: MapCameraPosition = .automatic
     @State private var selectedID: UUID?
 
@@ -18,20 +17,23 @@ struct MapScreen: View {
     }
 
     var body: some View {
-        Group {
-            if pins.isEmpty {
-                TrustEmptyState(
-                    glyph: "lock",
-                    title: TrustCopy.noLocationsYet,
-                    message: TrustCopy.mapEmptyBody,
-                    actionTitle: TrustCopy.backToCircle
-                ) {
-                    model.circlePath = []
+        GeometryReader { geometry in
+            let isWide = geometry.size.width >= 760
+            Group {
+                if pins.isEmpty {
+                    TrustEmptyState(
+                        glyph: "lock",
+                        title: TrustCopy.noLocationsYet,
+                        message: TrustCopy.mapEmptyBody,
+                        actionTitle: TrustCopy.backToCircle
+                    ) {
+                        model.circlePath = []
+                    }
+                } else if isWide {
+                    regularContent
+                } else {
+                    compactContent
                 }
-            } else if sizeClass == .regular {
-                regularContent
-            } else {
-                compactContent
             }
         }
         .background(palette.paper.ignoresSafeArea())
@@ -51,6 +53,7 @@ struct MapScreen: View {
                     .foregroundStyle(palette.ink)
                 }
                 .accessibilityLabel(TrustCopy.backToCircle)
+                .accessibilityIdentifier("map-back-to-people")
             }
         }
         .onAppear {
@@ -67,7 +70,7 @@ struct MapScreen: View {
             mapCanvas
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             palette.line.frame(width: 1)
-            personPanel
+            personPanel(isWide: true)
                 .frame(width: 360)
                 .background(palette.paper)
         }
@@ -81,7 +84,7 @@ struct MapScreen: View {
                 .padding(.bottom, 12)
             mapCanvas
                 .frame(minHeight: 260, maxHeight: .infinity)
-            personPanel
+            personPanel(isWide: false)
         }
         .padding(.bottom, 16)
     }
@@ -111,19 +114,21 @@ struct MapScreen: View {
         .mapStyle(.standard(elevation: .flat, emphasis: .muted, pointsOfInterest: .excludingAll))
         .mapControls { MapCompass() }
         .accessibilityLabel(TrustCopy.mapAccessibility)
+        .accessibilityIdentifier("map-screen-canvas")
     }
 
-    private var personPanel: some View {
+    private func personPanel(isWide: Bool) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            if sizeClass == .regular {
+            if isWide {
                 mapHeader
                     .padding(.horizontal, TrustTheme.gutter)
                     .padding(.top, 16)
                     .padding(.bottom, 12)
             }
-            HStack {
-                TrustEyebrow(text: "● \(TrustCopy.mapLegend)", size: 9)
-                Spacer()
+            HStack(spacing: 14) {
+                if pins.contains(where: \.live) { mapLegend(color: palette.pinLive, title: TrustCopy.always) }
+                if pins.contains(where: { !$0.live }) { mapLegend(color: palette.pinLook, title: TrustCopy.snapshot) }
+                Spacer(minLength: 0)
             }
             .padding(.horizontal, TrustTheme.gutter)
             .padding(.vertical, 10)
@@ -170,12 +175,14 @@ struct MapScreen: View {
             }
             Spacer(minLength: 0)
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("map-screen-person-panel")
     }
 
     private func personCard(_ pin: AppModel.MapPin, _ member: TrustedPerson) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 12) {
-                TrustAvatar(name: member.person.displayName, seed: model.circle.firstIndex { $0.id == member.id } ?? 0, size: 40)
+                TrustAvatar(name: member.person.displayName, seed: model.circle.firstIndex { $0.id == member.id } ?? 0, size: 40, avatar: member.person.avatar, personID: member.id)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(member.person.displayName)
                         .trustFont(15, weight: .semibold)
@@ -190,6 +197,14 @@ struct MapScreen: View {
         }
         .padding(.horizontal, TrustTheme.gutter)
         .padding(.bottom, 12)
+        .accessibilityElement(children: .combine)
+    }
+
+    private func mapLegend(color: Color, title: String) -> some View {
+        HStack(spacing: 6) {
+            Circle().fill(color).frame(width: 8, height: 8)
+            Text(title).trustFont(11, weight: .medium).foregroundStyle(palette.muted)
+        }
         .accessibilityElement(children: .combine)
     }
 
@@ -212,8 +227,8 @@ struct MapScreen: View {
         }
         let center = CLLocationCoordinate2D(latitude: (minLat + maxLat) / 2, longitude: (minLon + maxLon) / 2)
         let span = MKCoordinateSpan(
-            latitudeDelta: min(120, max((maxLat - minLat) * 1.4, 0.05)),
-            longitudeDelta: min(300, max((maxLon - minLon) * 1.4, 0.05))
+            latitudeDelta: min(170, max((maxLat - minLat) * 1.4, 0.05)),
+            longitudeDelta: min(340, max((maxLon - minLon) * 1.4, 0.05))
         )
         position = .region(MKCoordinateRegion(center: center, span: span))
     }

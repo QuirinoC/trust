@@ -30,12 +30,14 @@ its JWS as "certificate chain is not trusted").
    (localizations, price, review screenshot). Product IDs stay `com.collapsetechnologies.
    trust.circle.monthly` / `.annual` (plan decision 4 — IDs don't change even after the
    **Plus** display rename).
-4. **App Store Server Notifications V2** — App Store Connect → App Information:
-   - Production URL: `https://trust.collapsetechnologies.com/api/v1/storekit/notifications`.
-   - Sandbox URL: optional for 1.0 — the client already submits the signed JWS on every
-     purchase/restore/renewal, which drives entitlement without server push notifications.
-     Only wire a Sandbox URL if you want to test the notification path itself (needs a
-     public tunnel to the Dev API, e.g. Tailscale Funnel).
+4. **App Store Server Notifications V2** — App Store Connect → App Information. Both the
+   Production URL and Sandbox URL are currently configured as
+   `https://trust-api-u0ft.onrender.com/api/v1/storekit/notifications` (read-only checked
+   2026-09-24). The custom `trust.collapsetechnologies.com` host still has unresolved TLS;
+   do not switch these URLs back until its HTTPS endpoint is independently healthy. This
+   confirms configuration only; it is not proof that a signed Apple notification was
+   delivered, accepted, or processed end to end. The app also submits signed transaction
+   JWS on purchase/restore/renewal.
 5. **Devices** — on the iPhone and iPad: Settings → Developer → Sandbox Apple Account → sign
    in tester A / B respectively.
 
@@ -169,7 +171,7 @@ agent doesn't have — flagging as a Juan follow-up, not doing it now.
   StoreKit Configuration **None**, `TRUST_STRICT_API=1`, placeholder `TRUST_BASE_URL`).
 - `apps/trust-ios/Sources/TrustApp/AppConfiguration.swift` — `TRUST_STRICT_API=1` makes
   `debugAPICandidates` / `remapLoopbackOnDevice` refuse the production fallback, so a down
-  Dev API fails loud instead of silently resolving to `https://trust.collapsetechnologies.com`.
+  Dev API fails loud instead of silently resolving to a production API host.
 - `apps/trust-ios/Resources/Trust.storekit` — copy only (Plus naming/features) for the L1
   loop; product IDs unchanged.
 - `apps/trust-ios/Trust.xcodeproj/**` — regenerated via `xcodegen generate` (adds the

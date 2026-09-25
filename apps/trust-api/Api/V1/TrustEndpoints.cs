@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Buffers;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Options;
@@ -10,11 +11,18 @@ using TrustApi.Domain;
 using TrustApi.Infrastructure.Identity;
 using TrustApi.Infrastructure.Notifications;
 using TrustApi.Infrastructure.StoreKit;
+using SkiaSharp;
 
 namespace TrustApi.Api.V1;
 
 public static class TrustEndpoints
 {
+    private const int AvatarUploadMaxBytes = 1024 * 1024;
+    private const int AvatarDimensionMin = 64;
+    private const int AvatarDimensionMax = 1024;
+    private static readonly HashSet<string> AvatarPresetIds = new(StringComparer.Ordinal)
+        { "fern", "ember", "sky", "ocean", "sunrise", "lavender" };
+
     public static IEndpointRouteBuilder MapTrustApiV1(this IEndpointRouteBuilder endpoints)
     {
         var api = endpoints.MapGroup("/api/v1");
@@ -24,16 +32,20 @@ public static class TrustEndpoints
 
         var auth = api.MapGroup(string.Empty).RequireAuthorization();
         auth.MapGet("/circle", GetCircleAsync);
+        auth.MapPut("/me/avatar/preset", SetAvatarPresetAsync);
+        auth.MapPut("/me/avatar/photo", SetAvatarPhotoAsync).RequireRateLimiting(RateLimitPolicies.Avatar);
+        auth.MapDelete("/me/avatar", ClearAvatarAsync);
         auth.MapPatch("/me", RenameAsync);
         auth.MapGet("/handles/available", CheckHandleAvailableAsync);
         auth.MapPut("/me/handle", SetHandleAsync);
-        auth.MapPost("/me/phone/send", SendPhoneCodeAsync);
-        auth.MapPost("/me/phone/verify", VerifyPhoneCodeAsync);
+        auth.MapPost("/me/phone/send", SendPhoneCodeAsync).RequireRateLimiting(RateLimitPolicies.PhoneSend);
+        auth.MapPost("/me/phone/verify", VerifyPhoneCodeAsync).RequireRateLimiting(RateLimitPolicies.PhoneVerify);
         auth.MapPost("/people/phone", AddPersonByPhoneAsync).RequireRateLimiting(RateLimitPolicies.Invite);
         auth.MapPost("/invites", CreateInviteAsync).RequireRateLimiting(RateLimitPolicies.Invite);
         auth.MapPost("/invites/accept", AcceptInviteAsync).RequireRateLimiting(RateLimitPolicies.Invite);
         auth.MapPatch("/people/{personId:guid}/share", SetShareAsync);
         auth.MapGet("/people/{personId:guid}/history", HistoryAsync);
+        auth.MapGet("/people/{personId:guid}/avatar/{version:guid}", GetAvatarPhotoAsync);
         auth.MapPost("/people/{personId:guid}/revoke", RevokeAsync);
         auth.MapPost("/location", IngestAsync).RequireRateLimiting(RateLimitPolicies.Location);
         auth.MapPost("/looks", LookAsync).RequireRateLimiting(RateLimitPolicies.Look);
@@ -213,6 +225,227 @@ public static class TrustEndpoints
         await engine.RenameAsync(accountId.Value, request.DisplayName, cancellationToken);
         return Results.NoContent();
     }
+
+    public static async Task<IResult> SetAvatarPresetAsync(
+        SetAvatarPresetRequest request,
+        ClaimsPrincipal principal,
+        ITrustStore store,
+        CancellationToken cancellationToken)
+    {
+        var accountId = AccountClaims.AccountId(principal);
+        if (accountId is null) return Results.Unauthorized();
+        if (request.PresetId is not { } presetId || !AvatarPresetIds.Contains(presetId))
+        {
+            return Results.BadRequest(new ApiError("invalid_avatar_preset", "Choose an available profile icon."));
+        }
+
+        var avatar = await store.SetAvatarPresetAsync(accountId.Value, presetId, cancellationToken);
+        return Results.Ok(new AvatarDto(avatar.Kind, avatar.PresetId, avatar.Version));
+    }
+
+    public static async Task<IResult> SetAvatarPhotoAsync(
+        HttpRequest request,
+        ClaimsPrincipal principal,
+        ITrustStore store,
+        CancellationToken cancellationToken)
+    {
+        var accountId = AccountClaims.AccountId(principal);
+        if (accountId is null) return Results.Unauthorized();
+        if (!string.Equals(request.ContentType?.Split(';', 2)[0].Trim(), "image/jpeg", StringComparison.OrdinalIgnoreCase))
+        {
+            return Results.StatusCode(StatusCodes.Status415UnsupportedMediaType);
+        }
+        if (request.ContentLength is > AvatarUploadMaxBytes)
+        {
+            return Results.StatusCode(StatusCodes.Status413PayloadTooLarge);
+        }
+
+        var input = await ReadLimitedBodyAsync(request.Body, AvatarUploadMaxBytes, cancellationToken);
+        if (input is null) return Results.StatusCode(StatusCodes.Status413PayloadTooLarge);
+        if (!TrySanitizeJpeg(input, out var sanitized))
+        {
+            return Results.BadRequest(new ApiError("invalid_avatar_image", "Upload a valid JPEG image between 64 and 1024 pixels on each side."));
+        }
+
+        var avatar = await store.SetAvatarPhotoAsync(accountId.Value, Guid.NewGuid(), sanitized, cancellationToken);
+        return Results.Ok(new AvatarDto(avatar.Kind, avatar.PresetId, avatar.Version));
+    }
+
+    public static async Task<IResult> ClearAvatarAsync(
+        ClaimsPrincipal principal,
+        ITrustStore store,
+        CancellationToken cancellationToken)
+    {
+        var accountId = AccountClaims.AccountId(principal);
+        if (accountId is null) return Results.Unauthorized();
+        await store.ClearAvatarAsync(accountId.Value, cancellationToken);
+        return Results.NoContent();
+    }
+
+    public static async Task<IResult> GetAvatarPhotoAsync(
+        Guid personId,
+        Guid version,
+        HttpContext context,
+        ClaimsPrincipal principal,
+        ITrustStore store,
+        CancellationToken cancellationToken)
+    {
+        var viewerId = AccountClaims.AccountId(principal);
+        if (viewerId is null) return Results.Unauthorized();
+        if (viewerId != personId && !await store.AreConnectedAsync(viewerId.Value, personId, cancellationToken))
+        {
+            return Results.NotFound();
+        }
+
+        var jpeg = await store.GetAvatarPhotoAsync(personId, version, cancellationToken);
+        if (jpeg is null) return Results.NotFound();
+        context.Response.Headers.CacheControl = "private, no-store";
+        context.Response.Headers.XContentTypeOptions = "nosniff";
+        return Results.Bytes(jpeg, "image/jpeg");
+    }
+
+    private static async Task<byte[]?> ReadLimitedBodyAsync(Stream body, int maxBytes, CancellationToken cancellationToken)
+    {
+        await using var output = new MemoryStream();
+        var buffer = ArrayPool<byte>.Shared.Rent(16 * 1024);
+        try
+        {
+            while (true)
+            {
+                var read = await body.ReadAsync(buffer.AsMemory(0, buffer.Length), cancellationToken);
+                if (read == 0) return output.ToArray();
+                if (output.Length + read > maxBytes) return null;
+                await output.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
+            }
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
+        }
+    }
+
+    private static bool TrySanitizeJpeg(byte[] input, out byte[] sanitized)
+    {
+        sanitized = [];
+        if (input.Length < 4) return false;
+        try
+        {
+            using var data = SKData.CreateCopy(input);
+            using var codec = SKCodec.Create(data);
+            if (codec is null || codec.EncodedFormat != SKEncodedImageFormat.Jpeg) return false;
+            var info = codec.Info;
+            if (info.Width is < AvatarDimensionMin or > AvatarDimensionMax
+                || info.Height is < AvatarDimensionMin or > AvatarDimensionMax)
+            {
+                return false;
+            }
+
+            using var bitmap = SKBitmap.Decode(data);
+            if (bitmap is null || bitmap.Width != info.Width || bitmap.Height != info.Height) return false;
+            using var image = SKImage.FromBitmap(bitmap);
+            using var encoded = image.Encode(SKEncodedImageFormat.Jpeg, 85);
+            if (encoded is null || encoded.Size == 0 || encoded.Size > AvatarUploadMaxBytes) return false;
+            return TryStripJpegMetadata(encoded.ToArray(), out sanitized);
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
+    // The encoder drops source metadata, but JPEG encoders may add their own APP0/JFIF header.
+    // Strip every APPn and COM segment from the normalized output as a final privacy guarantee.
+    private static bool TryStripJpegMetadata(byte[] jpeg, out byte[] sanitized)
+    {
+        sanitized = [];
+        if (jpeg.Length < 4 || jpeg[0] != 0xff || jpeg[1] != 0xd8) return false;
+        using var output = new MemoryStream(jpeg.Length);
+        output.Write(jpeg, 0, 2);
+        var position = 2;
+        var foundFrame = false;
+        var foundScan = false;
+        var foundEnd = false;
+
+        while (position < jpeg.Length)
+        {
+            var markerStart = position;
+            if (jpeg[position] != 0xff) return false;
+            while (position < jpeg.Length && jpeg[position] == 0xff) position++;
+            if (position >= jpeg.Length) return false;
+            var marker = jpeg[position++];
+
+            if (marker == 0xd9)
+            {
+                output.Write(jpeg, markerStart, position - markerStart);
+                foundEnd = position == jpeg.Length;
+                break;
+            }
+
+            if (marker is 0xd8 or 0x00) return false;
+            if (marker is 0x01 or >= 0xd0 and <= 0xd7)
+            {
+                output.Write(jpeg, markerStart, position - markerStart);
+                continue;
+            }
+
+            if (position + 2 > jpeg.Length) return false;
+            var segmentLength = jpeg[position] * 256 + jpeg[position + 1];
+            if (segmentLength < 2 || position + segmentLength > jpeg.Length) return false;
+            var segmentEnd = position + segmentLength;
+            if (IsJpegFrameMarker(marker)) foundFrame = true;
+            var isMetadata = marker is >= 0xe0 and <= 0xef or 0xfe;
+            if (!isMetadata)
+            {
+                output.Write(jpeg, markerStart, segmentEnd - markerStart);
+            }
+
+            position = segmentEnd;
+            if (marker == 0xda)
+            {
+                foundScan = true;
+                var nextMarker = FindJpegMarkerInScan(jpeg, position);
+                if (nextMarker < 0) return false;
+                output.Write(jpeg, position, nextMarker - position);
+                position = nextMarker;
+            }
+        }
+
+        if (!foundFrame || !foundScan || !foundEnd) return false;
+        sanitized = output.ToArray();
+        return true;
+    }
+
+    private static int FindJpegMarkerInScan(byte[] jpeg, int start)
+    {
+        for (var position = start; position < jpeg.Length;)
+        {
+            if (jpeg[position] != 0xff)
+            {
+                position++;
+                continue;
+            }
+
+            var markerStart = position;
+            var markerPosition = position + 1;
+            while (markerPosition < jpeg.Length && jpeg[markerPosition] == 0xff) markerPosition++;
+            if (markerPosition >= jpeg.Length) return -1;
+            var marker = jpeg[markerPosition];
+            if (marker == 0x00 || marker is >= 0xd0 and <= 0xd7)
+            {
+                position = markerPosition + 1;
+                continue;
+            }
+
+            return markerStart;
+        }
+
+        return -1;
+    }
+
+    private static bool IsJpegFrameMarker(byte marker) =>
+        marker is 0xc0 or 0xc1 or 0xc2 or 0xc3
+            or 0xc5 or 0xc6 or 0xc7 or 0xc9 or 0xca or 0xcb
+            or 0xcd or 0xce or 0xcf;
 
     public static async Task<IResult> CheckHandleAvailableAsync(
         [FromQuery] string? handle,
@@ -406,12 +639,23 @@ public static class TrustEndpoints
         TrustEngine engine,
         CancellationToken cancellationToken)
     {
+        const int maxBatchSize = 100;
+        var fixes = ContractMap.IngestFixes(request);
+        if (fixes.Count is 0 or > maxBatchSize
+            || fixes.Any(fix => !double.IsFinite(fix.Latitude)
+                || !double.IsFinite(fix.Longitude)
+                || fix.Latitude is < -90 or > 90
+                || fix.Longitude is < -180 or > 180))
+        {
+            return Results.BadRequest(new ApiError("invalid_location", "Location coordinates must be valid and a batch may contain at most 100 points."));
+        }
+
         return await RunAsync(
             principal,
             engine,
             (id, ct) => engine.IngestManyAsync(
                 id,
-                ContractMap.IngestFixes(request),
+                fixes,
                 request.BatteryPercent,
                 request.IsCharging,
                 ct),
@@ -779,7 +1023,7 @@ public static class TrustEndpoints
         StoreKitOptions storeKit,
         CancellationToken cancellationToken)
     {
-        if (!storeKit.Enabled && storeKit.TrustedRootCertificates.Length == 0)
+        if (!storeKit.Enabled)
         {
             return Results.Json(
                 new ApiError("storekit_unavailable", "StoreKit verification is not enabled on this server."),
@@ -950,6 +1194,9 @@ public static class RateLimitPolicies
 {
     public const string Auth = "auth";
     public const string Invite = "invite";
+    public const string PhoneSend = "phone-send";
+    public const string PhoneVerify = "phone-verify";
     public const string Location = "location";
     public const string Look = "look";
+    public const string Avatar = "avatar";
 }

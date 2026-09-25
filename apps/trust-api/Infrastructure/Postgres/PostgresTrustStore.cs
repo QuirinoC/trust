@@ -7,7 +7,7 @@ namespace TrustApi.Infrastructure.Postgres;
 public sealed class PostgresTrustStore(string connectionString) : ITrustStore
 {
     private const string AccountColumns =
-        "account_id, provider, provider_subject, display_name, has_circle, circle_source, created_at, phone_e164, phone_verified_at, handle";
+        "account_id, provider, provider_subject, display_name, has_circle, circle_source, created_at, phone_e164, phone_verified_at, handle, avatar_kind, avatar_preset_id, avatar_version";
 
     private readonly string _connectionString = PostgresConnectionString.Normalize(connectionString);
 
@@ -39,7 +39,7 @@ public sealed class PostgresTrustStore(string connectionString) : ITrustStore
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             ON CONFLICT (provider, provider_subject) DO UPDATE
                 SET display_name = EXCLUDED.display_name
-            RETURNING account_id, provider, provider_subject, display_name, has_circle, circle_source, created_at, phone_e164, phone_verified_at, handle;
+            RETURNING account_id, provider, provider_subject, display_name, has_circle, circle_source, created_at, phone_e164, phone_verified_at, handle, avatar_kind, avatar_preset_id, avatar_version;
             """,
             connection);
         command.Parameters.AddWithValue(account.Id);
@@ -73,12 +73,95 @@ public sealed class PostgresTrustStore(string connectionString) : ITrustStore
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
+    public async Task<ProfileAvatar> SetAvatarPresetAsync(Guid accountId, string presetId, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        await using (var update = new NpgsqlCommand(
+            "UPDATE trust.accounts SET avatar_kind = 'preset', avatar_preset_id = $2, avatar_version = NULL WHERE account_id = $1;",
+            connection, transaction))
+        {
+            update.Parameters.AddWithValue(accountId);
+            update.Parameters.AddWithValue(presetId);
+            if (await update.ExecuteNonQueryAsync(cancellationToken) == 0)
+            {
+                throw new InvalidOperationException("Account not found while setting avatar.");
+            }
+        }
+        await using (var delete = new NpgsqlCommand("DELETE FROM trust.profile_avatar_photos WHERE account_id = $1;", connection, transaction))
+        {
+            delete.Parameters.AddWithValue(accountId);
+            await delete.ExecuteNonQueryAsync(cancellationToken);
+        }
+        await transaction.CommitAsync(cancellationToken);
+        return new ProfileAvatar("preset", presetId);
+    }
+
+    public async Task<ProfileAvatar> SetAvatarPhotoAsync(Guid accountId, Guid version, byte[] jpeg, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        await using (var update = new NpgsqlCommand(
+            "UPDATE trust.accounts SET avatar_kind = 'photo', avatar_preset_id = NULL, avatar_version = $2 WHERE account_id = $1;",
+            connection, transaction))
+        {
+            update.Parameters.AddWithValue(accountId);
+            update.Parameters.AddWithValue(version);
+            if (await update.ExecuteNonQueryAsync(cancellationToken) == 0)
+            {
+                throw new InvalidOperationException("Account not found while setting avatar.");
+            }
+        }
+        await using (var upsert = new NpgsqlCommand(
+            "INSERT INTO trust.profile_avatar_photos (account_id, version, jpeg) VALUES ($1, $2, $3) ON CONFLICT (account_id) DO UPDATE SET version = EXCLUDED.version, jpeg = EXCLUDED.jpeg;",
+            connection, transaction))
+        {
+            upsert.Parameters.AddWithValue(accountId);
+            upsert.Parameters.AddWithValue(version);
+            upsert.Parameters.AddWithValue(NpgsqlTypes.NpgsqlDbType.Bytea, jpeg);
+            await upsert.ExecuteNonQueryAsync(cancellationToken);
+        }
+        await transaction.CommitAsync(cancellationToken);
+        return new ProfileAvatar("photo", Version: version);
+    }
+
+    public async Task ClearAvatarAsync(Guid accountId, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        await using (var update = new NpgsqlCommand(
+            "UPDATE trust.accounts SET avatar_kind = NULL, avatar_preset_id = NULL, avatar_version = NULL WHERE account_id = $1;",
+            connection, transaction))
+        {
+            update.Parameters.AddWithValue(accountId);
+            await update.ExecuteNonQueryAsync(cancellationToken);
+        }
+        await using (var delete = new NpgsqlCommand("DELETE FROM trust.profile_avatar_photos WHERE account_id = $1;", connection, transaction))
+        {
+            delete.Parameters.AddWithValue(accountId);
+            await delete.ExecuteNonQueryAsync(cancellationToken);
+        }
+        await transaction.CommitAsync(cancellationToken);
+    }
+
+    public async Task<byte[]?> GetAvatarPhotoAsync(Guid accountId, Guid version, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(
+            "SELECT p.jpeg FROM trust.profile_avatar_photos p JOIN trust.accounts a ON a.account_id = p.account_id AND a.avatar_kind = 'photo' AND a.avatar_version = p.version WHERE p.account_id = $1 AND p.version = $2;",
+            connection);
+        command.Parameters.AddWithValue(accountId);
+        command.Parameters.AddWithValue(version);
+        var bytes = await command.ExecuteScalarAsync(cancellationToken);
+        return bytes is byte[] jpeg ? jpeg : null;
+    }
+
     public async Task<IReadOnlyList<Account>> ListConnectedAsync(Guid accountId, CancellationToken cancellationToken)
     {
         await using var connection = await OpenAsync(cancellationToken);
         await using var command = new NpgsqlCommand(
             """
-            SELECT a.account_id, a.provider, a.provider_subject, a.display_name, a.has_circle, a.circle_source, a.created_at, a.phone_e164, a.phone_verified_at, a.handle
+            SELECT a.account_id, a.provider, a.provider_subject, a.display_name, a.has_circle, a.circle_source, a.created_at, a.phone_e164, a.phone_verified_at, a.handle, a.avatar_kind, a.avatar_preset_id, a.avatar_version
             FROM trust.memberships m
             JOIN trust.accounts a ON a.account_id = CASE WHEN m.person_a = $1 THEN m.person_b ELSE m.person_a END
             WHERE m.status = 'active' AND (m.person_a = $1 OR m.person_b = $1);
@@ -659,6 +742,180 @@ public sealed class PostgresTrustStore(string connectionString) : ITrustStore
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
+    public async Task<bool> TryReserveSmsAsync(IReadOnlyList<SmsSendBudget> budgets, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        var keys = budgets.Select(budget => budget.ScopeKey).Order(StringComparer.Ordinal).ToArray();
+        await using (var seed = new NpgsqlCommand(
+            "INSERT INTO trust.sms_send_budgets (scope_key, window_started_at, send_count) SELECT key, $2, 0 FROM unnest($1::text[]) AS key ON CONFLICT (scope_key) DO NOTHING;",
+            connection,
+            transaction))
+        {
+            seed.Parameters.AddWithValue(keys);
+            seed.Parameters.AddWithValue(now);
+            await seed.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        var current = new Dictionary<string, SmsSendBudget>(StringComparer.Ordinal);
+        await using (var read = new NpgsqlCommand(
+            "SELECT scope_key, window_started_at, send_count, last_sent_at FROM trust.sms_send_budgets WHERE scope_key = ANY($1) ORDER BY scope_key FOR UPDATE;",
+            connection,
+            transaction))
+        {
+            read.Parameters.AddWithValue(keys);
+            await using var reader = await read.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                current[reader.GetString(0)] = new SmsSendBudget(
+                    reader.GetString(0),
+                    reader.GetFieldValue<DateTimeOffset>(1),
+                    reader.GetInt32(2),
+                    reader.IsDBNull(3) ? null : reader.GetFieldValue<DateTimeOffset>(3));
+            }
+        }
+
+        foreach (var proposed in budgets)
+        {
+            var row = current[proposed.ScopeKey];
+            var window = proposed.ScopeKey.Contains("-day", StringComparison.Ordinal)
+                ? TimeSpan.FromHours(24)
+                : TimeSpan.FromHours(1);
+            var expired = now - row.WindowStartedAt >= window;
+            var count = expired ? 0 : row.SendCount;
+            var limit = proposed.ScopeKey == SmsSendBudget.GlobalDayKey() ? 40 : 8;
+            if (count >= limit)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return false;
+            }
+
+            if (!expired
+                && (proposed.ScopeKey.StartsWith("account:", StringComparison.Ordinal)
+                    || proposed.ScopeKey.StartsWith("phone:", StringComparison.Ordinal))
+                && row.LastSentAt is { } lastSent)
+            {
+                var seconds = count <= 1 ? 45 : Math.Min(45 << Math.Min(count - 1, 4), 180);
+                if (now - lastSent < TimeSpan.FromSeconds(seconds))
+                {
+                    await transaction.RollbackAsync(cancellationToken);
+                    return false;
+                }
+            }
+        }
+
+        foreach (var proposed in budgets)
+        {
+            var row = current[proposed.ScopeKey];
+            var expired = now - row.WindowStartedAt >= (proposed.ScopeKey.Contains("-day", StringComparison.Ordinal)
+                ? TimeSpan.FromHours(24)
+                : TimeSpan.FromHours(1));
+            await using var update = new NpgsqlCommand(
+                "UPDATE trust.sms_send_budgets SET window_started_at = $2, send_count = $3, last_sent_at = $4 WHERE scope_key = $1;",
+                connection,
+                transaction);
+            update.Parameters.AddWithValue(proposed.ScopeKey);
+            update.Parameters.AddWithValue(expired ? now : row.WindowStartedAt);
+            update.Parameters.AddWithValue((expired ? 0 : row.SendCount) + 1);
+            update.Parameters.AddWithValue(now);
+            await update.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        await transaction.CommitAsync(cancellationToken);
+        return true;
+    }
+
+    public async Task<int?> IncrementPhoneChallengeFailureAsync(Guid accountId, string phoneE164, DateTimeOffset now, int maxAttempts, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        int? attempts;
+        await using (var update = new NpgsqlCommand(
+            "UPDATE trust.phone_challenges SET attempts = attempts + 1 WHERE account_id = $1 AND phone_e164 = $2 AND expires_at > $3 AND attempts < $4 RETURNING attempts;",
+            connection,
+            transaction))
+        {
+            update.Parameters.AddWithValue(accountId);
+            update.Parameters.AddWithValue(phoneE164);
+            update.Parameters.AddWithValue(now);
+            update.Parameters.AddWithValue(maxAttempts);
+            var value = await update.ExecuteScalarAsync(cancellationToken);
+            attempts = value is null or DBNull ? null : Convert.ToInt32(value);
+        }
+
+        if (attempts >= maxAttempts)
+        {
+            await using var delete = new NpgsqlCommand(
+                "DELETE FROM trust.phone_challenges WHERE account_id = $1;",
+                connection,
+                transaction);
+            delete.Parameters.AddWithValue(accountId);
+            await delete.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        await transaction.CommitAsync(cancellationToken);
+        return attempts;
+    }
+
+    public async Task<bool> TryCompletePhoneChallengeAsync(Guid accountId, string phoneE164, string codeHash, DateTimeOffset verifiedAt, int maxAttempts, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        string? storedHash = null;
+        DateTimeOffset expiresAt = default;
+        var attempts = maxAttempts;
+        await using (var read = new NpgsqlCommand(
+            "SELECT code_hash, expires_at, attempts FROM trust.phone_challenges WHERE account_id = $1 AND phone_e164 = $2 FOR UPDATE;",
+            connection,
+            transaction))
+        {
+            read.Parameters.AddWithValue(accountId);
+            read.Parameters.AddWithValue(phoneE164);
+            await using var reader = await read.ExecuteReaderAsync(cancellationToken);
+            if (await reader.ReadAsync(cancellationToken))
+            {
+                storedHash = reader.GetString(0);
+                expiresAt = reader.GetFieldValue<DateTimeOffset>(1);
+                attempts = reader.GetInt32(2);
+            }
+        }
+
+        if (storedHash != codeHash || expiresAt <= verifiedAt || attempts >= maxAttempts)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return false;
+        }
+
+        try
+        {
+            await using var update = new NpgsqlCommand(
+                "UPDATE trust.accounts SET phone_e164 = $2, phone_verified_at = $3 WHERE account_id = $1;",
+                connection,
+                transaction);
+            update.Parameters.AddWithValue(accountId);
+            update.Parameters.AddWithValue(phoneE164);
+            update.Parameters.AddWithValue(verifiedAt);
+            await update.ExecuteNonQueryAsync(cancellationToken);
+        }
+        catch (PostgresException exception) when (exception.SqlState == PostgresErrorCodes.UniqueViolation)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            throw TrustException.PhoneInUse();
+        }
+
+        await using (var delete = new NpgsqlCommand(
+            "DELETE FROM trust.phone_challenges WHERE account_id = $1;",
+            connection,
+            transaction))
+        {
+            delete.Parameters.AddWithValue(accountId);
+            await delete.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        await transaction.CommitAsync(cancellationToken);
+        return true;
+    }
+
     public async Task<SmsSendBudget?> GetSmsSendBudgetAsync(string scopeKey, CancellationToken cancellationToken)
     {
         await using var connection = await OpenAsync(cancellationToken);
@@ -1102,7 +1359,11 @@ public sealed class PostgresTrustStore(string connectionString) : ITrustStore
             reader.GetFieldValue<DateTimeOffset>(6),
             reader.IsDBNull(7) ? null : reader.GetString(7),
             reader.IsDBNull(8) ? null : reader.GetFieldValue<DateTimeOffset>(8),
-            reader.IsDBNull(9) ? null : reader.GetString(9));
+            reader.IsDBNull(9) ? null : reader.GetString(9),
+            reader.IsDBNull(10) ? null : new ProfileAvatar(
+                reader.GetString(10),
+                reader.IsDBNull(11) ? null : reader.GetString(11),
+                reader.IsDBNull(12) ? null : reader.GetGuid(12)));
 
     private static PhoneChallenge ReadChallenge(NpgsqlDataReader reader) =>
         new(

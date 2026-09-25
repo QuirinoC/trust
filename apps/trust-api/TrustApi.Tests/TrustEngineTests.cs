@@ -12,6 +12,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.IdentityModel.Tokens;
 using TrustApi.Application;
 using TrustApi.Contracts.V1;
+using TrustApi.Configuration;
 using TrustApi.Domain;
 using TrustApi.Infrastructure;
 using TrustApi.Infrastructure.Identity;
@@ -20,6 +21,15 @@ namespace TrustApi.Tests;
 
 public sealed class TrustEngineTests
 {
+    [Fact]
+    public void DevelopmentSignInFlagIsRejectedOutsideDevelopment()
+    {
+        Assert.Throws<InvalidOperationException>(() =>
+            AuthOptionsGuard.EnsureDevelopmentSignInIsSafe(new AuthOptions { AllowDevelopmentSignIn = true }, isDevelopment: false));
+        AuthOptionsGuard.EnsureDevelopmentSignInIsSafe(new AuthOptions { AllowDevelopmentSignIn = true }, isDevelopment: true);
+        AuthOptionsGuard.EnsureDevelopmentSignInIsSafe(new AuthOptions { AllowDevelopmentSignIn = false }, isDevelopment: false);
+    }
+
     [Fact]
     public async Task LookRequiresConfirmAndDoesNotLeakSealedCoordinates()
     {
@@ -190,7 +200,7 @@ public sealed class TrustEngineTests
     }
 
     [Fact]
-    public async Task OwnPlusReadsTheTrailWithoutTurningLookIntoHistory()
+    public async Task PlusReadsTrailInAlwaysAndLookRemainsASealedSnapshot()
     {
         var engine = NewEngine(out _);
         var you = await engine.SignInAsync("development", "you", "Sam", CancellationToken.None);
@@ -200,12 +210,15 @@ public sealed class TrustEngineTests
         Assert.True(circle.Coverage.IsCovered);
         Assert.True(circle.Coverage.ActingIsSponsor);
         var alex = circle.Members.Single(member => member.Person.DisplayName == "Alex");
-        var lookResult = await engine.LookAsync(you.Id, alex.Person.Id, true, CancellationToken.None);
-        Assert.Single(lookResult.Session.Trail);
-        Assert.Equal(0, lookResult.Session.Event.HistoryWindowHours);
+        await engine.GrantCircleAsync(alex.Person.Id, "test", CancellationToken.None);
+        await engine.SetShareAsync(alex.Person.Id, you.Id, ShareResting.Always, null, CancellationToken.None);
         var history = await engine.HistoryAsync(you.Id, alex.Person.Id, CancellationToken.None);
         Assert.True(history.Count > 1);
         Assert.True(history[0].Timestamp >= history[^1].Timestamp);
+        await engine.SetShareAsync(alex.Person.Id, you.Id, ShareResting.UntilTheyLook, null, CancellationToken.None);
+        var lookResult = await engine.LookAsync(you.Id, alex.Person.Id, true, CancellationToken.None);
+        Assert.Single(lookResult.Session.Trail);
+        Assert.Equal(0, lookResult.Session.Event.HistoryWindowHours);
         await engine.PlacePingAsync(you.Id, CancellationToken.None);
     }
 
@@ -395,7 +408,8 @@ public sealed class TrustEngineTests
         var time = new MutableTimeProvider { UtcNow = start };
         var engine = NewEngine(out _, time);
         var (sam, jordan) = await PairAsync(engine);
-        await engine.SetShareAsync(sam.Id, jordan.Id, ShareResting.UntilTheyLook, null, CancellationToken.None);
+        await engine.GrantCircleAsync(sam.Id, "test", CancellationToken.None);
+        await engine.SetShareAsync(sam.Id, jordan.Id, ShareResting.Always, null, CancellationToken.None);
 
         await engine.IngestAsync(sam.Id, new LocationFix(start, 37.70, -122.40), 80, false, CancellationToken.None);
         time.UtcNow = start.AddHours(30);
@@ -411,6 +425,7 @@ public sealed class TrustEngineTests
         Assert.Equal(37.80, plus[0].Latitude);
         Assert.Equal(37.70, plus[1].Latitude);
 
+        await engine.SetShareAsync(sam.Id, jordan.Id, ShareResting.UntilTheyLook, null, CancellationToken.None);
         var look = await engine.LookAsync(jordan.Id, sam.Id, true, CancellationToken.None);
         Assert.Single(look.Session.Trail);
         Assert.Equal(37.80, look.Session.Live.Latitude);
@@ -437,8 +452,9 @@ public sealed class TrustEngineTests
         await engine.IngestAsync(
             sam.Id, new LocationFix(DateTimeOffset.UtcNow, 37.72, -122.42), 80, false, CancellationToken.None);
 
-        var jordanView = await engine.HistoryAsync(jordan.Id, sam.Id, CancellationToken.None);
-        Assert.Equal(2, jordanView.Count);
+        var sealedHistory = await Assert.ThrowsAsync<TrustException>(() =>
+            engine.HistoryAsync(jordan.Id, sam.Id, CancellationToken.None));
+        Assert.Equal("share_off", sealedHistory.Code);
 
         var third = await engine.SignInAsync("development", "plus-isolation-ada", "Ada", CancellationToken.None);
         var invite = await engine.CreateInviteAsync(sam.Id, CancellationToken.None);
@@ -513,6 +529,7 @@ public sealed class TrustEngineTests
     {
         var engine = NewEngine(out _);
         var (sam, jordan) = await PairAsync(engine);
+        await engine.SetShareAsync(sam.Id, jordan.Id, ShareResting.UntilTheyLook, null, CancellationToken.None);
         await engine.IngestAsync(
             sam.Id,
             new LocationFix(DateTimeOffset.UtcNow, 37.76, -122.42),
@@ -541,6 +558,7 @@ public sealed class TrustEngineTests
         var placeId = Guid.NewGuid();
         await engine.SetHomePlaceAsync(sam.Id, placeId, "Home", CancellationToken.None);
         await engine.SetPresenceGrantAsync(sam.Id, jordan.Id, true, CancellationToken.None);
+        await engine.SetShareAsync(sam.Id, jordan.Id, ShareResting.UntilTheyLook, null, CancellationToken.None);
         await engine.PostHomePresenceAsync(sam.Id, HomePresenceState.Away, null, CancellationToken.None);
 
         var jordanView = await engine.GetCircleAsync(jordan.Id, CancellationToken.None);
@@ -788,11 +806,48 @@ public sealed class TrustEngineTests
     }
 
     [Fact]
+    public async Task HomePresenceFollowsEffectiveOutboundShareMode()
+    {
+        var time = new MutableTimeProvider { UtcNow = new DateTimeOffset(2026, 9, 24, 12, 0, 0, TimeSpan.Zero) };
+        var engine = NewEngine(out _, time);
+        var (sam, jordan) = await PairAsync(engine);
+        await engine.SetPresenceGrantAsync(sam.Id, jordan.Id, true, CancellationToken.None);
+        await engine.PostHomePresenceAsync(sam.Id, HomePresenceState.Home, null, CancellationToken.None);
+
+        async Task<CircleMember> GetSamMemberAsync() =>
+            (await engine.GetCircleAsync(jordan.Id, CancellationToken.None)).Members
+                .Single(member => member.Person.Id == sam.Id);
+
+        var offMember = await GetSamMemberAsync();
+        Assert.Equal(ShareResting.Off, offMember.InboundShare.Effective(time.UtcNow));
+        Assert.Null(offMember.HomePresence);
+        Assert.True(offMember.InboundPresenceGranted);
+
+        await engine.SetShareAsync(sam.Id, jordan.Id, ShareResting.UntilTheyLook, null, CancellationToken.None);
+        var sealedMember = await GetSamMemberAsync();
+        Assert.Equal(ShareResting.UntilTheyLook, sealedMember.InboundShare.Effective(time.UtcNow));
+        Assert.Equal(HomePresenceState.Home, sealedMember.HomePresence!.State);
+
+        await engine.SetShareAsync(sam.Id, jordan.Id, null, PauseDuration.OneHour, CancellationToken.None);
+        var pausedMember = await GetSamMemberAsync();
+        Assert.Equal(ShareResting.Paused, pausedMember.InboundShare.Effective(time.UtcNow));
+        Assert.Null(pausedMember.HomePresence);
+        Assert.True(pausedMember.InboundPresenceGranted);
+
+        await engine.GrantCircleAsync(sam.Id, "test", CancellationToken.None);
+        await engine.SetShareAsync(sam.Id, jordan.Id, ShareResting.Always, null, CancellationToken.None);
+        var alwaysMember = await GetSamMemberAsync();
+        Assert.Equal(ShareResting.Always, alwaysMember.InboundShare.Effective(time.UtcNow));
+        Assert.Equal(HomePresenceState.Home, alwaysMember.HomePresence!.State);
+    }
+
+    [Fact]
     public async Task PresenceCanBeSetManuallyWithoutAHomePlace()
     {
         var engine = NewEngine(out _);
         var (sam, jordan) = await PairAsync(engine);
         await engine.SetPresenceGrantAsync(sam.Id, jordan.Id, true, CancellationToken.None);
+        await engine.SetShareAsync(sam.Id, jordan.Id, ShareResting.UntilTheyLook, null, CancellationToken.None);
 
         // No SetHomePlaceAsync call at all — the triad doesn't require Home to be set.
         await engine.PostHomePresenceAsync(sam.Id, HomePresenceState.Away, null, CancellationToken.None);
@@ -867,10 +922,91 @@ public sealed class TrustApiTests : IClassFixture<TrustApiFactory>
     };
 
     private readonly HttpClient _client;
+    private readonly TrustApiFactory _factory;
 
     public TrustApiTests(TrustApiFactory factory)
     {
+        _factory = factory;
         _client = factory.CreateClient();
+    }
+
+    [Fact]
+    public async Task SealedHttpFlowDeniesHistoryAndReturnsSingleConfirmedSnapshot()
+    {
+        using var factory = new TrustApiFactory();
+        using var client = factory.CreateClient();
+        async Task<(string Token, Guid Id)> CreateAccount(string name)
+        {
+            var response = await client.PostAsJsonAsync("/api/v1/session/development", new
+            {
+                displayName = name,
+                deviceId = Guid.NewGuid().ToString("N")
+            });
+            response.EnsureSuccessStatusCode();
+            using var json = System.Text.Json.JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            return (json.RootElement.GetProperty("token").GetString()!,
+                json.RootElement.GetProperty("you").GetProperty("id").GetGuid());
+        }
+
+        var sam = await CreateAccount("Sealed Sam");
+        var jordan = await CreateAccount("Sealed Jordan");
+        using var inviteRequest = new HttpRequestMessage(HttpMethod.Post, "/api/v1/invites");
+        inviteRequest.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", sam.Token);
+        var inviteResponse = await client.SendAsync(inviteRequest);
+        inviteResponse.EnsureSuccessStatusCode();
+        using var inviteJson = System.Text.Json.JsonDocument.Parse(await inviteResponse.Content.ReadAsStringAsync());
+        var code = inviteJson.RootElement.GetProperty("code").GetString();
+
+        using var accept = new HttpRequestMessage(HttpMethod.Post, "/api/v1/invites/accept");
+        accept.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", jordan.Token);
+        accept.Content = JsonContent.Create(new { code });
+        (await client.SendAsync(accept)).EnsureSuccessStatusCode();
+
+        using var share = new HttpRequestMessage(HttpMethod.Patch, $"/api/v1/people/{jordan.Id}/share");
+        share.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", sam.Token);
+        share.Content = JsonContent.Create(new { resting = "untilTheyLook" });
+        (await client.SendAsync(share)).EnsureSuccessStatusCode();
+
+        using var ingest = new HttpRequestMessage(HttpMethod.Post, "/api/v1/location");
+        ingest.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", sam.Token);
+        ingest.Content = JsonContent.Create(new { timestamp = DateTimeOffset.UtcNow, latitude = 37.75, longitude = -122.41 });
+        (await client.SendAsync(ingest)).EnsureSuccessStatusCode();
+
+        using var history = new HttpRequestMessage(HttpMethod.Get, $"/api/v1/people/{sam.Id}/history");
+        history.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", jordan.Token);
+        var denied = await client.SendAsync(history);
+        Assert.Equal(System.Net.HttpStatusCode.Conflict, denied.StatusCode);
+
+        using var look = new HttpRequestMessage(HttpMethod.Post, "/api/v1/looks");
+        look.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", jordan.Token);
+        look.Content = JsonContent.Create(new { subjectId = sam.Id, confirmed = true });
+        var looked = await client.SendAsync(look);
+        looked.EnsureSuccessStatusCode();
+        using var lookJson = System.Text.Json.JsonDocument.Parse(await looked.Content.ReadAsStringAsync());
+        Assert.Equal("look", lookJson.RootElement.GetProperty("event").GetProperty("kind").GetString());
+        Assert.Single(lookJson.RootElement.GetProperty("trail").EnumerateArray());
+        Assert.Equal(37.75, lookJson.RootElement.GetProperty("live").GetProperty("latitude").GetDouble());
+    }
+
+    [Fact]
+    public async Task DisabledStoreKitRejectsTransactionsEvenWithEmbeddedAppleRoots()
+    {
+        using var factory = _factory.WithWebHostBuilder(builder => builder.ConfigureAppConfiguration((_, config) =>
+            config.AddInMemoryCollection(new Dictionary<string, string?> { ["StoreKit:Enabled"] = "false" })));
+        using var client = factory.CreateClient();
+        var session = await client.PostAsJsonAsync("/api/v1/session/development", new
+        {
+            displayName = "StoreKit test",
+            deviceId = Guid.NewGuid().ToString("N")
+        });
+        session.EnsureSuccessStatusCode();
+        using var sessionJson = System.Text.Json.JsonDocument.Parse(await session.Content.ReadAsStringAsync());
+        var token = sessionJson.RootElement.GetProperty("token").GetString();
+        using var transaction = new HttpRequestMessage(HttpMethod.Post, "/api/v1/storekit/transactions");
+        transaction.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+        transaction.Content = JsonContent.Create(new { signedTransactionInfo = "invalid" });
+        var response = await client.SendAsync(transaction);
+        Assert.Equal(System.Net.HttpStatusCode.ServiceUnavailable, response.StatusCode);
     }
 
     [Fact]
@@ -1012,11 +1148,21 @@ public sealed class TrustApiTests : IClassFixture<TrustApiFactory>
     }
 
     [Fact]
-    public async Task PrivacyAndSupportArePublic()
+    public async Task LegalPagesRedirectToCanonicalWebsite()
     {
-        Assert.True((await _client.GetAsync("/Privacy")).IsSuccessStatusCode);
-        Assert.True((await _client.GetAsync("/Terms")).IsSuccessStatusCode);
-        Assert.True((await _client.GetAsync("/Support")).IsSuccessStatusCode);
+        using var factory = new TrustApiFactory();
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+        foreach (var (path, destination) in new[]
+        {
+            ("/Privacy", "https://jointrust.app/privacy"),
+            ("/Terms", "https://jointrust.app/terms"),
+            ("/Support", "https://jointrust.app/support")
+        })
+        {
+            var response = await client.GetAsync(path);
+            Assert.Equal(System.Net.HttpStatusCode.MovedPermanently, response.StatusCode);
+            Assert.Equal(destination, response.Headers.Location?.ToString());
+        }
     }
 
     [Fact]

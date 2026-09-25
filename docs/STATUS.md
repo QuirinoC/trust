@@ -1,0 +1,67 @@
+# Trust readiness status — 2026-09-24
+
+This page separates local verification from live-service observations. App Store version 1.0 remains **Prepare for Submission** and currently selects build 21. Build 21 is the **older, pre-redesign** TestFlight build. The redesign is on the current branch; source version is now 1.0 build 22, intended for internal TestFlight. The redesign has not been deployed, archived, or uploaded. The new M6 iPhone/iPad screenshots were recaptured on 2026-09-24 and have not been uploaded. Nothing has been submitted for App Review, and APNs has not been verified on a physical device.
+
+## Current redesign (after build 21)
+
+- Implemented a new Together Lines sign-in treatment and open-stroke app icon, compact Sharing rows, a clearer People empty state, and a simpler You screen with a My location detail. Home/Away/Hidden moved to Sharing. The Sharing/You title spacing, centered stop-sharing confirmation, and full-height profile-picture chooser were inspected on the open Duo. The latest full Duo UI suite passed **4/4**, with **26/26** core tests in the same `xcodebuild test` run (`/tmp/trust-redesign-ui-full.log`); the final profile-picture/Plus layout change passed its targeted UI test (`/tmp/trust-redesign-final-targeted.log`).
+- Added optional profile pictures: six bundled illustrated icons, camera and Photos selection, staged Save/Remove, authenticated image retrieval, metadata-stripped server storage, and automatic cleanup on replacement/account deletion. A saved photo's returned version now lets the app show it immediately, even if the next circle refresh fails. Full API tests passed **106/106** against isolated Postgres; Swift core tests passed **26/26**; Duo UI tests passed **4/4**; web tests passed **3/3**. Physical camera/Photos, two-account photo sync, and actual TestFlight use are still pending.
+- Corrected a privacy gap: Home/Away was previously returned to connected people while their location mode was Off. The API now hides status for Off and active Pause; Sealed and Always can show it. The Sharing and privacy copy now describe this behavior.
+- Refreshed the Terms, Privacy, and Support page styling and added profile-picture/privacy detail. The web suite passed **3/3**. These page changes and the new favicon are **local only**; the live website still serves the earlier deployment. Twilio legal paths were preserved in source.
+- Reduced duplicate startup/foreground circle refreshes and added redacted circle-request diagnostics. The user's reported live Offline/Retry symptom is **not yet proven resolved**; the release build and authenticated production flow need retesting.
+- The 14 M6 listing screenshots for the redesign were recaptured on 2026-09-24; they have not been uploaded to ASC. App Store Connect privacy disclosures must add optional Photos/Videos and reconcile the other open categories. Xcode 27.1 beta is installed; stable public Xcode 27 is required for App Review. Build 22 is intended for internal TestFlight and can use the installed beta; it has not been archived or uploaded.
+
+## Current redesign handoff
+
+### Done or verified
+
+- Reviewed the earlier iOS screens against the design guide; the later redesign and profile-picture feature are described above.
+- CircleView now keeps one NavigationStack while switching between compact and wide layouts. The map remains left and People/detail routes use the right pane when the available width is at least 760 points.
+- MapScreen chooses its split from its actual width, so the Map route retains a useful canvas inside the Duo detail pane.
+- The iOS 27.1 Duo UI suite passed **4/4** via `xcodebuild`; the Swift core suite passed **26/26**, API suite **106/106**, and website suite **3/3** for the local redesign.
+- Sol's final read-only review found no actionable issue in the adaptive navigation, Map layout, or sharing confirmation flow.
+- Build 21 is the uploaded pre-redesign build, **Ready to Submit** in the existing internal iPhone Juan group. The local redesigned source is now version 1.0 build **22**, intended for internal TestFlight; it has not been archived or uploaded. Version 1.0 currently selects build 21; nothing has been submitted.
+- Build 20 remains processed and **Ready to Submit** in the IJ iPhone Juan group, with no install or device-session evidence recorded.
+- The build 21 TestFlight “What to Test” note is saved in ASC for one internal tester. It covers phone sign-in, invite consent defaults, sharing modes, Look receipts, People/Map/You, sandbox Plus purchase/restore, and best-effort push observation; no test results are recorded.
+- The simulator inventory contains only the retained Duo and iPhone 17 Pro devices; eleven unused generated simulators were removed. A manual Device Hub check confirmed Maya Chen remains selected after closing and reopening Duo: closed mode shows the compact person detail, while open mode restores map-left/person-detail-right. Both retained simulators are shut down after the screenshot capture.
+
+### Still in progress
+
+- Upload build 22 to the internal iPhone Juan group, then install it on the physical iPhone and run the planned device checks; physical push receipt and StoreKit sandbox purchase/restore remain unverified.
+
+### App Store and website update
+
+- App Store version 1.0 currently selects build 21. ASC requires a release archive/build made with stable public Xcode 27 (27A266a) for App Review; only Xcode 27.1 beta (27A9269) is installed. Build 22 is the redesigned source version intended for internal TestFlight and may be archived with the beta, but has not been archived or uploaded. The three-item draft (Trust Plus group and both products) shows all items Ready for Review; nothing has been submitted. Base price is $0.00 Free; availability, metadata, privacy disclosures, and physical checks remain open. The current 14 M6 screenshots are redesigned fixture captures recaptured 2026-09-24, not uploaded. See [App Store review readiness](../apps/trust-ios/AppStore/REVIEW-READINESS.md).
+- Website support correction is deployed as Cloudflare version `5c1d221f-4e07-4adb-9b4d-9c1844de332b`. Live `/`, `/support`, `/privacy`, `/terms`, `/sms`, `/sms-opt-in.png`, `/i/ABC234`, and `/.well-known/apple-app-site-association` returned **200**. The support copy describes push as best-effort and includes You restore/delete guidance.
+## Verified
+
+- API: `dotnet test apps/trust-api/TrustApi.sln --no-restore` passed **103 tests** locally, including HTTP tests, two-account Postgres tests, sealed-history denial, phone lookup invite behavior, StoreKit disabled behavior, and concurrent Postgres SMS budget/OTP-attempt operations. Local Postgres runs on port `5433`.
+- iOS: Swift package tests passed 26/26 earlier on 2026-09-24; no TrustCore source changed in this pass. Current UI tests passed 4/4 on iPhone Duo and 4/4 on iPhone 17 Pro, recorded in /tmp/trust-duo-ui-suite-final.log and /tmp/trust-iphone-ui-suite-final.log. The final layout review concern was fixed and a focused compact-width pause test passed. Hosted iOS CI has not been rerun. Manual Device Hub testing confirmed selected-person retention across close/open; both retained simulators are now shut down.
+- Build 20 history: `/tmp/Trust-1.0-20.xcarchive` and `/tmp/Trust-1.0-20-export/Trust.ipa` were signed by team `3S529795M9`. Organizer upload UUID `96ca1915-82ec-4b9c-8974-53fe93400d57` completed processing; build 20 is Ready to Submit and assigned to IJ iPhone Juan. Build 19 remains available in that group but predates the Duo changes.
+- Uploaded build 21 history: its Xcode Release archive passed Organizer validation and upload; ASC marked it Ready to Submit and automatically assigned it to the existing internal iPhone Juan group. Version 1.0 currently selects build 21. This is the older pre-redesign TestFlight binary; nothing has been submitted.
+- Local simulator/API flow: against the local Development API, a bad phone OTP was rejected and the correct OTP completed verification. The explicit invite was accepted with both sharing directions Off; a Sealed Look returned a snapshot, and Always/View returned live location. This is local simulator evidence, not a production or physical-device test.
+- Production Render: deployment `dep-daqocb8473hc73btvbmg`, commit `3a010ec`, is live on 2026-09-24. The linked `trust-api` service is configured for Production/Postgres. Read-only configuration inspection confirmed development sign-in, review circle seeding, and review unlock were disabled; StoreKit and APNs were enabled, and Twilio credentials were present. Secret values were not read into the report. The Twilio 2FA messaging campaign status was `VERIFIED` with use case `2FA`.
+- Health check and release origin: `https://trust-api-u0ft.onrender.com/health/ready` returned healthy on 2026-09-24 after that deployment, and this is the configured release API origin while the custom hostname is unresolved. The custom hostname `trust.collapsetechnologies.com` is verified with Render and its CNAME now uses DNS-only mode, but HTTPS/TLS health is still failing/pending certificate provisioning; do not configure or describe it as healthy yet. The updated local two-account HTTP script passed **32 checks** against local API/Postgres on 2026-09-24.
+- App Store Server Notifications V2: App Store Connect Production and Sandbox notification URLs were read-only verified as `https://trust-api-u0ft.onrender.com/api/v1/storekit/notifications` on 2026-09-24. This confirms the configured destination only; no signed notification delivery and processing result is recorded.
+- Website: Cloudflare deployment commit `65fa48a`, version `7d90d280-a37f-42f4-b198-215e016069cd`, is live. On 2026-09-24, `/privacy`, `/terms`, `/support`, `/sms`, `/sms-opt-in.png`, `/i/ABC234`, and `/apple-app-site-association` each returned 200; API legal routes redirected successfully to canonical pages. `npm test` passed **3 route tests** locally; GitHub Actions now runs these tests when web files change. The hosted job still needs a recorded run. The URL checks confirm route responses, not a full visual or legal review.
+- Backend safeguards now reject development sign-in config outside Development; disable StoreKit transaction verification when its feature flag is off; atomically reserve SMS budgets and advance/complete OTP challenges in Postgres; throttle phone send/verify routes; validate coordinates and cap location batches at 100; and return invites for both known and unknown phone numbers.
+
+## Release blockers and limits
+
+- **API custom hostname TLS:** Render verified the custom domain on 2026-09-24 and its CNAME is in DNS-only mode, but HTTPS for trust.collapsetechnologies.com still fails or awaits certificate provisioning. The configured release origin, https://trust-api-u0ft.onrender.com, passes readiness and remains the origin for this build; keep the custom hostname out of client configuration until TLS is independently healthy.
+- **APNs delivery proof:** the live API has APNs configured, but notifications are best effort. There is no durable outbox or retry worker, and no physical-device delivery/display test is recorded. A successful API request is not delivery confirmation.
+- **TestFlight:** build 20 is Ready to Submit and assigned to IJ iPhone Juan. Build 21 is Ready to Submit and assigned to the internal iPhone Juan group, with no install/session evidence. Physical iPhone verification remains outstanding.
+- **Duo/release validation:** the current iOS 27.1 Duo UI suite passed 4/4, Sol review found no actionable issue, and manual Device Hub testing confirmed selected-person retention across closed/open layouts. Build 21 is assigned for device testing; no install or device results are recorded.
+- **StoreKit production flow:** server verification is enabled, but a current end-to-end sandbox purchase/restore and server-notification test on the release build is not recorded.
+- **Runtime maintenance:** the API targets .NET 9. Microsoft lists support ending 2026-11-10; plan a supported-runtime upgrade ahead of that date rather than expanding this hardening pass.
+
+## Contract the clients should follow
+
+- A confirmed `POST /api/v1/looks` from a connected viewer whose subject is Sealed returns exactly one current-location snapshot and records the Look event. It does not expose the sealed history endpoint.
+- `GET /api/v1/people/{id}/history` requires the subject to share Always with that viewer. Sealed history returns `409 share_off`; the viewer's Plus entitlement controls the history window only after Always access is granted.
+- Phone entry never reveals whether the number belongs to a Trust account and never connects accounts automatically. Both cases return an ordinary invite code; the recipient joins through the existing invite acceptance flow.
+- Accepting an invite creates a connection. It does not enable sharing; each person chooses sharing for that peer.
+
+## Next evidence to collect
+
+Archive and upload intended build 22 with installed Xcode 27.1 beta for internal TestFlight, then install it on the physical iPhone and record actual device results here. Build 21 is the older pre-redesign build currently selected on version 1.0, which remains Prepare for Submission. Stable public Xcode 27 is required for the App Review build. The current simulator and UI test evidence does not establish physical push delivery or StoreKit sandbox purchase/restore. Keep secrets and signing material out of this file.

@@ -74,6 +74,9 @@ public sealed record HomePromise(
 
 public sealed record LookResult(LookSession Session, bool IsNew);
 
+/// <summary>Public metadata for the account's one current profile image.</summary>
+public sealed record ProfileAvatar(string Kind, string? PresetId = null, Guid? Version = null);
+
 public static class AccountIdentity
 {
     public const int DisplayNameMinLength = 2;
@@ -152,7 +155,8 @@ public sealed record Account(
     DateTimeOffset CreatedAt,
     string? PhoneE164 = null,
     DateTimeOffset? PhoneVerifiedAt = null,
-    string? Handle = null)
+    string? Handle = null,
+    ProfileAvatar? Avatar = null)
 {
     public bool HasChosenDisplayName => AccountIdentity.IsChosenDisplayName(DisplayName);
 
@@ -261,7 +265,8 @@ public sealed record ShareState(
         return mode is ShareResting.Always or ShareResting.UntilTheyLook;
     }
 
-    public bool SharesHistory(DateTimeOffset now) => AcceptsLocation(now);
+    /// Ongoing trail reads are available only in Always. Sealed grants a confirmed snapshot via Look.
+    public bool SharesHistory(DateTimeOffset now) => Effective(now) == ShareResting.Always;
 
     /// Paused still holds the trail so restore is not empty. Off does not.
     public bool KeepsTrail(DateTimeOffset now)
@@ -486,6 +491,10 @@ public interface ITrustStore
     Task<Account?> FindByProviderAsync(string provider, string subject, CancellationToken cancellationToken);
     Task<Account> UpsertAccountAsync(Account account, CancellationToken cancellationToken);
     Task UpdateAccountAsync(Account account, CancellationToken cancellationToken);
+    Task<ProfileAvatar> SetAvatarPresetAsync(Guid accountId, string presetId, CancellationToken cancellationToken);
+    Task<ProfileAvatar> SetAvatarPhotoAsync(Guid accountId, Guid version, byte[] jpeg, CancellationToken cancellationToken);
+    Task ClearAvatarAsync(Guid accountId, CancellationToken cancellationToken);
+    Task<byte[]?> GetAvatarPhotoAsync(Guid accountId, Guid version, CancellationToken cancellationToken);
     Task<IReadOnlyList<Account>> ListConnectedAsync(Guid accountId, CancellationToken cancellationToken);
     Task<int> ActiveMembershipCountAsync(Guid accountId, CancellationToken cancellationToken);
     Task<bool> AreConnectedAsync(Guid a, Guid b, CancellationToken cancellationToken);
@@ -525,6 +534,9 @@ public interface ITrustStore
     Task<PhoneChallenge?> GetPhoneChallengeAsync(Guid accountId, CancellationToken cancellationToken);
     Task UpsertPhoneChallengeAsync(PhoneChallenge challenge, CancellationToken cancellationToken);
     Task ClearPhoneChallengeAsync(Guid accountId, CancellationToken cancellationToken);
+    Task<bool> TryReserveSmsAsync(IReadOnlyList<SmsSendBudget> budgets, DateTimeOffset now, CancellationToken cancellationToken);
+    Task<int?> IncrementPhoneChallengeFailureAsync(Guid accountId, string phoneE164, DateTimeOffset now, int maxAttempts, CancellationToken cancellationToken);
+    Task<bool> TryCompletePhoneChallengeAsync(Guid accountId, string phoneE164, string codeHash, DateTimeOffset verifiedAt, int maxAttempts, CancellationToken cancellationToken);
     Task<SmsSendBudget?> GetSmsSendBudgetAsync(string scopeKey, CancellationToken cancellationToken);
     Task UpsertSmsSendBudgetAsync(SmsSendBudget budget, CancellationToken cancellationToken);
 

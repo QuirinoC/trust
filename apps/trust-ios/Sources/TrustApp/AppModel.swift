@@ -80,8 +80,12 @@ final class AppModel: ObservableObject {
     @Published private(set) var isLooking = false
     /// Snapshots opened this session, by subject. A Look never flips a Sealed row Available.
     @Published private(set) var openedSnapshots: [UUID: LookSession] = [:]
-    /// Person-screen trails from `GET /people/{id}/history`. Newest first.
+    /// Location history is only fetched for Always shares.
     @Published private(set) var historyByPerson: [UUID: [LocationVisit]] = [:]
+    @Published private(set) var historyLoadingIDs: Set<UUID> = []
+    @Published private(set) var historyLoadedIDs: Set<UUID> = []
+    @Published private(set) var historyErrors: Set<UUID> = []
+    private var historyFetchedAt: [UUID: Date] = [:]
 
     @Published var showingViewLog = false
     @Published var showingPaywall = false
@@ -92,6 +96,7 @@ final class AppModel: ObservableObject {
 
     @Published var inviteCodeDraft = ""
     @Published var inviteNotice: String?
+    @Published var phoneInviteCode: String?
     @Published private(set) var isJoining = false
 
     @Published var isSigningIn = false
@@ -118,6 +123,11 @@ final class AppModel: ObservableObject {
     private var demo: DemoTrustService?
     private var demoTickTask: Task<Void, Never>?
     private var toastTask: Task<Void, Never>?
+    private var lastRefreshAttemptAt: Date?
+    private var refreshQueued = false
+    private var queuedRefreshEntersHome = false
+    private var queuedRefreshFallback: Bool?
+    private var refreshWaiters: [CheckedContinuation<Void, Never>] = []
 
     private var cancellables: Set<AnyCancellable> = []
 
@@ -168,14 +178,19 @@ final class AppModel: ObservableObject {
         openedSnapshot(for: member.id) != nil
     }
 
-    /// Pins on the people map: Always, and only if you have Plus. A Look snapshot stays on the person view.
+    /// Confirmed Looks are visible as single pins for everyone. Live pins require Plus.
     var homeMapPins: [MapPin] {
-        guard coverage.isCovered else { return [] }
-        return circle.compactMap { member in
-            guard TrustProductRules.showsLivePin(viewerHasPlus: true, inbound: member.inboundPresentation ?? .off),
-                  let live = member.livePoint else { return nil }
-            return MapPin(id: member.id, name: member.person.displayName, point: live, live: true)
+        var pins: [MapPin] = []
+        for member in circle {
+            if coverage.isCovered,
+               TrustProductRules.showsLivePin(viewerHasPlus: true, inbound: member.inboundPresentation ?? .off),
+               let live = member.livePoint {
+                pins.append(MapPin(id: member.id, name: member.person.displayName, point: live, live: true))
+            } else if let snapshot = openedSnapshot(for: member.id) {
+                pins.append(MapPin(id: member.id, name: member.person.displayName, point: snapshot.live, live: false))
+            }
         }
+        return pins
     }
 
     struct MapPin: Identifiable, Equatable {
@@ -277,41 +292,72 @@ final class AppModel: ObservableObject {
         applyScreenshotLaunch()
     }
 
-    /// Simulator App Store shots. `SIMCTL_CHILD_TRUST_SCREENSHOT=circle|look|view|share|you|map|invite`
+    /// DEBUG screenshot launch routes. Pair with `TRUST_DEMO=1` for fixture-backed screens.
     private func applyScreenshotLaunch() {
         #if DEBUG
         let shot = ProcessInfo.processInfo.environment["TRUST_SCREENSHOT"] ?? ""
-        guard !shot.isEmpty, auth.isAuthenticated else { return }
+        guard !shot.isEmpty else { return }
         switch shot {
+        case "login":
+            phase = .login
+        case "handle":
+            phase = .handle
+        case "phone":
+            phase = .phone
+        case "paywall":
+            selectedTab = .you
+            showingPaywall = true
         case "circle":
+            guard auth.isAuthenticated else { return }
             selectedTab = .circle
         case "person":
+            guard auth.isAuthenticated else { return }
             selectedTab = .circle
-            if let member = circle.first(where: { $0.isNotSharingWithYou == false }) {
+            if let member = circle.first(where: { $0.isAvailable }) ?? circle.first {
                 openPerson(member)
             }
         case "empty":
+            guard auth.isAuthenticated else { return }
             selectedTab = .circle
             if let member = circle.first(where: { $0.person.displayName == "Maya Chen" }) ?? circle.first {
                 openPerson(member)
             }
         case "pause":
+            guard auth.isAuthenticated else { return }
             selectedTab = .sharing
             pauseSheetPersonID = circle.first(where: { $0.person.displayName == "Maya Chen" })?.id ?? circle.first?.id
         case "look":
+            guard auth.isAuthenticated else { return }
             if let sealed = circle.first(where: \.isSealed) { openLook(sealed) }
         case "view":
+            guard auth.isAuthenticated else { return }
             if let available = circle.first(where: \.isAvailable) { openView(available) }
         case "log":
+            guard auth.isAuthenticated else { return }
             selectedTab = .log
         case "share":
+            guard auth.isAuthenticated else { return }
             selectedTab = .sharing
         case "you", "settings":
+            guard auth.isAuthenticated else { return }
             selectedTab = .you
         case "map":
+            guard auth.isAuthenticated else { return }
+            // Show a real one-time pin in the offline listing fixture. A fresh
+            // Free demo has no live pins until a person is explicitly looked at.
+            if let demo,
+               let sealed = circle.first(where: \.isSealed),
+               let session = try? demo.look(confirmed: true, subjectID: sealed.id) {
+                openedSnapshots[sealed.id] = session
+                publishDemoSnapshot()
+            }
             openMap()
         case "invite":
+            guard auth.isAuthenticated else { return }
             selectedTab = .sharing
+            // Listing captures need the code and share action visible. Only seed
+            // the offline fixture; screenshot launches must never call the live API.
+            if isDemoMode { createInvite() }
         default:
             break
         }
@@ -488,6 +534,10 @@ final class AppModel: ObservableObject {
         snapshot = nil
         openedSnapshots = [:]
         historyByPerson = [:]
+        historyLoadingIDs = []
+        historyLoadedIDs = []
+        historyErrors = []
+        historyFetchedAt = [:]
         presenceOverride = nil
         isOffline = false
         phase = .login
@@ -523,7 +573,47 @@ final class AppModel: ObservableObject {
         }
     }
 
+    func saveAvatar(presetID: String) async throws {
+        guard !isDemoMode else { throw TrustClientError.server("Profile pictures are unavailable in demo mode.") }
+        let avatar = try await client.setAvatarPreset(presetID)
+        updateLocalAvatar(avatar)
+        await refresh()
+    }
+
+    func saveAvatarPhoto(_ jpeg: Data) async throws {
+        guard !isDemoMode else { throw TrustClientError.server("Profile pictures are unavailable in demo mode.") }
+        let avatar = try await client.setAvatarPhoto(jpeg)
+        updateLocalAvatar(avatar)
+        await refresh()
+    }
+
+    func removeAvatar() async throws {
+        guard !isDemoMode else { throw TrustClientError.server("Profile pictures are unavailable in demo mode.") }
+        try await client.removeAvatar()
+        updateLocalAvatar(nil)
+        await refresh()
+    }
+
+    private func updateLocalAvatar(_ avatar: AvatarDescriptor?) {
+        guard var current = snapshot else { return }
+        current.you.avatar = avatar
+        snapshot = current
+        client.snapshot = current
+    }
+
     // MARK: Refresh / offline
+
+    /// Refresh circle data when returning to a tab or foregrounding, but avoid a request
+    /// for every quick tab switch. The interval is based on attempts so an offline device
+    /// does not hammer the API while the user moves around the app.
+    func refreshIfStale(minimumInterval: TimeInterval = 45) async {
+        guard phase == .home, auth.isAuthenticated else { return }
+        guard !isDemoMode else { return }
+        guard !isRefreshing else { return }
+        let lastAttempt = lastRefreshAttemptAt ?? snapshot?.fetchedAt
+        if let lastAttempt, Date().timeIntervalSince(lastAttempt) < minimumInterval { return }
+        await refresh()
+    }
 
     func refresh(enterHome: Bool = false, fallbackOnboardingComplete: Bool? = nil) async {
         if isDemoMode {
@@ -531,12 +621,43 @@ final class AppModel: ObservableObject {
             if enterHome { phase = .home }
             return
         }
-        client.token = auth.sessionToken
+        if isRefreshing {
+            refreshQueued = true
+            queuedRefreshEntersHome = queuedRefreshEntersHome || enterHome
+            if fallbackOnboardingComplete != nil {
+                queuedRefreshFallback = fallbackOnboardingComplete
+            }
+            await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+                refreshWaiters.append(continuation)
+            }
+            return
+        }
+
         isRefreshing = true
-        defer { isRefreshing = false }
+        var nextEntersHome = enterHome
+        var nextFallback = fallbackOnboardingComplete
+        repeat {
+            refreshQueued = false
+            queuedRefreshEntersHome = false
+            queuedRefreshFallback = nil
+            await performRefresh(enterHome: nextEntersHome, fallbackOnboardingComplete: nextFallback)
+            nextEntersHome = queuedRefreshEntersHome
+            nextFallback = queuedRefreshFallback
+        } while refreshQueued
+
+        isRefreshing = false
+        let waiters = refreshWaiters
+        refreshWaiters.removeAll()
+        for waiter in waiters { waiter.resume() }
+    }
+
+    private func performRefresh(enterHome: Bool, fallbackOnboardingComplete: Bool?) async {
+        client.token = auth.sessionToken
+        lastRefreshAttemptAt = Date()
         do {
             let fresh = try await client.refreshCircle()
             snapshot = fresh
+            reconcileInboundLocationData(with: fresh)
             isOffline = false
             presenceOverride = nil
             if enterHome || phase == .home || phase == .handle || phase == .phone {
@@ -545,6 +666,7 @@ final class AppModel: ObservableObject {
             syncLocationSharing()
             syncHomeMonitoring()
             await flushIngestQueue()
+            refreshVisibleHistoryIfStale()
         } catch TrustClientError.unauthorized {
             signOut()
         } catch let error as TrustClientError where error.isConnectivity {
@@ -566,6 +688,37 @@ final class AppModel: ObservableObject {
                 routeAfterAuth(onboardingComplete: fallbackOnboardingComplete ?? snapshot?.you.onboardingComplete ?? false)
             }
         }
+    }
+
+    private func reconcileInboundLocationData(with fresh: CircleSnapshot) {
+        let members = Dictionary(uniqueKeysWithValues: fresh.members.map { ($0.id, $0) })
+
+        // A server-confirmed Off or removed relationship revokes cached snapshots too.
+        for id in Array(openedSnapshots.keys) {
+            guard let member = members[id], member.inboundPresentation?.isOff != true else {
+                openedSnapshots[id] = nil
+                continue
+            }
+        }
+
+        // History is only available while the current inbound mode is Always. Drop both
+        // its rows and load markers when that entitlement is no longer present.
+        let cachedHistoryIDs = Set(historyByPerson.keys)
+            .union(historyLoadedIDs)
+            .union(historyErrors)
+        for id in cachedHistoryIDs where members[id]?.isAvailable != true {
+            historyByPerson[id] = nil
+            historyLoadedIDs.remove(id)
+            historyErrors.remove(id)
+            historyFetchedAt[id] = nil
+        }
+    }
+
+    private func refreshVisibleHistoryIfStale() {
+        guard case let .person(personID)? = circlePath.last,
+              member(personID)?.isAvailable == true,
+              historyFetchedAt[personID].map({ Date().timeIntervalSince($0) >= 60 }) ?? true else { return }
+        Task { await loadHistory(for: personID) }
     }
 
     /// Offline is a state, not a screen. Mutations need the server; reads use the cache.
@@ -674,28 +827,54 @@ final class AppModel: ObservableObject {
         }
     }
 
-    /// Person screen: status, and history when they are Sealed or Always. Not the Look peek.
+    /// Person screen: status, with history only for Always shares.
     func openPerson(_ member: TrustedPerson) {
         selectedTab = .circle
         circlePath = [.person(member.id)]
-        guard !isDemoMode else { return }
+        guard member.isAvailable, !isDemoMode else { return }
         Task { await loadHistory(for: member.id) }
     }
 
     func loadHistory(for personID: UUID) async {
-        guard !isDemoMode else { return }
+        let historyIsFresh = historyFetchedAt[personID].map { Date().timeIntervalSince($0) < 60 } ?? false
+        guard !isDemoMode, member(personID)?.isAvailable == true,
+              !historyLoadingIDs.contains(personID),
+              !historyLoadedIDs.contains(personID) || !historyIsFresh else { return }
+        historyLoadingIDs.insert(personID)
+        historyErrors.remove(personID)
+        defer { historyLoadingIDs.remove(personID) }
         do {
             let points = try await client.history(personID: personID)
+            guard member(personID)?.isAvailable == true else {
+                historyByPerson[personID] = nil
+                historyLoadedIDs.remove(personID)
+                historyErrors.remove(personID)
+                historyFetchedAt[personID] = nil
+                return
+            }
             historyByPerson[personID] = points.map {
                 LocationVisit(label: TrustCopy.location, at: $0.timestamp, point: $0)
             }
+            historyLoadedIDs.insert(personID)
+            historyFetchedAt[personID] = Date()
         } catch {
-            historyByPerson[personID] = []
+            if member(personID)?.isAvailable == true {
+                historyErrors.insert(personID)
+                historyByPerson[personID] = nil
+                historyLoadedIDs.remove(personID)
+                historyFetchedAt[personID] = nil
+            } else {
+                historyByPerson[personID] = nil
+                historyLoadedIDs.remove(personID)
+                historyErrors.remove(personID)
+                historyFetchedAt[personID] = nil
+            }
         }
     }
 
     /// Newest first. Free is 24 hours. Plus is 30 days. Empty when they are not sharing.
     func locationHistory(for member: TrustedPerson) -> [LocationVisit] {
+        guard member.isAvailable else { return [] }
         if ProcessInfo.processInfo.environment["TRUST_SCREENSHOT"] == "empty" {
             return []
         }
@@ -840,26 +1019,6 @@ final class AppModel: ObservableObject {
     }
 
 
-    func extendOpenLook(personID: UUID) {
-        guard requireOnline() || isDemoMode else { return }
-        Task {
-            do {
-                let session: LookSession
-                if let demo {
-                    session = try demo.extendLook(subjectID: personID)
-                    publishDemoSnapshot()
-                } else {
-                    session = try await client.extendLook(subjectID: personID)
-                    await refresh()
-                }
-                openedSnapshots[personID] = session
-                showToast(TrustCopy.stripTrail)
-            } catch {
-                showToast(plainMessage(for: error))
-            }
-        }
-    }
-
     func stopAll() {
         guard requireOnline() else { return }
         Task {
@@ -938,6 +1097,7 @@ final class AppModel: ObservableObject {
             inviteNotice = TrustCopy.phoneAddNeedsAccount
             return
         }
+        phoneInviteCode = nil
         isAddingByPhone = true
         Task {
             defer { isAddingByPhone = false }
@@ -946,13 +1106,10 @@ final class AppModel: ObservableObject {
                 addPhoneDraft = ""
                 switch result.outcome {
                 case "invited":
-                    if result.smsSent {
-                        inviteNotice = TrustCopy.inviteTextSent
-                    } else if let code = result.developmentCode, !code.isEmpty {
-                        inviteNotice = TrustCopy.inviteNotTexted(code)
-                    } else {
-                        inviteNotice = TrustCopy.inviteNotTextedPlain
-                    }
+                    phoneInviteCode = result.developmentCode
+                    inviteNotice = result.developmentCode == nil
+                        ? "Invite created. Share the invite link; they must accept before joining."
+                        : "Invite ready. Share the link; they must accept before joining."
                 case "already":
                     inviteNotice = TrustCopy.alreadyAdded
                     await refresh()
@@ -1019,29 +1176,31 @@ final class AppModel: ObservableObject {
     }
 
     func handleIncomingURL(_ url: URL) {
-        guard auth.isAuthenticated else { return }
-        let code: String?
+        let candidate: String?
         if url.scheme == "https",
-           url.host == "trust.collapsetechnologies.com",
-           url.path.hasPrefix("/i/") {
-            code = url.lastPathComponent
+           url.host == "jointrust.app",
+           url.pathComponents.count == 3,
+           url.pathComponents[1] == "i" {
+            candidate = url.pathComponents[2]
         } else if url.scheme == "trust" {
             let parts = url.pathComponents.filter { $0 != "/" }
-            if url.host == "invite" {
-                code = parts.first
-            } else if parts.first == "invite", parts.count > 1 {
-                code = parts[1]
+            if url.host == "invite", parts.count == 1 {
+                candidate = parts.first
+            } else if parts.first == "invite", parts.count == 2 {
+                candidate = parts[1]
             } else {
-                code = nil
+                candidate = nil
             }
         } else {
-            code = nil
+            candidate = nil
         }
-        guard let code, !code.isEmpty else { return }
+        guard let candidate else { return }
+        let code = candidate.uppercased()
+        guard code.range(of: "^[A-HJ-NP-Z2-9]{6}$", options: .regularExpression) != nil else { return }
         inviteCodeDraft = code
-        selectedTab = .sharing
-        guard phase == .home else { return }
-        joinInvite()
+        if auth.isAuthenticated, phase == .home {
+            selectedTab = .sharing
+        }
     }
 
     // MARK: Handle (A2)
@@ -1113,9 +1272,6 @@ final class AppModel: ObservableObject {
         let complete = snapshot?.you.onboardingComplete == true
         if complete {
             routeAfterAuth(onboardingComplete: true)
-            if phase == .home, !inviteCodeDraft.isEmpty {
-                joinInvite()
-            }
         }
     }
 
@@ -1123,6 +1279,7 @@ final class AppModel: ObservableObject {
         #if DEBUG
         if !(ProcessInfo.processInfo.environment["TRUST_SCREENSHOT"] ?? "").isEmpty {
             phase = .home
+            if !inviteCodeDraft.isEmpty { selectedTab = .sharing }
             return
         }
         #endif
@@ -1140,6 +1297,9 @@ final class AppModel: ObservableObject {
             }
         } else {
             phase = next
+        }
+        if phase == .home, !inviteCodeDraft.isEmpty {
+            selectedTab = .sharing
         }
     }
 

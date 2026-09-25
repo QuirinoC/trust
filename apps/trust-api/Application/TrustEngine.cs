@@ -78,9 +78,12 @@ public sealed class TrustEngine(ITrustStore store, TimeProvider time)
 
             VisibleHomePresence? homePresence = null;
             var current = await store.GetCurrentHomePresenceAsync(person.Id, cancellationToken);
-            // Status is free and global. Hidden is not a share mode and is not shown.
-            // A per-pair grant is not required.
-            if (current is not null && current.State is HomePresenceState.Home or HomePresenceState.Away)
+            // Home/Away presence follows the same outbound share mode as location:
+            // Sealed and Always reveal it; Off and an active Pause do not.
+            // Hidden remains distinct from no signal, and the per-pair grant field is independent.
+            if (inbound.AcceptsLocation(now)
+                && current is not null
+                && current.State is HomePresenceState.Home or HomePresenceState.Away)
             {
                 var place = await store.GetHomePlaceAsync(person.Id, cancellationToken);
                 homePresence = new VisibleHomePresence(
@@ -285,6 +288,8 @@ public sealed class TrustEngine(ITrustStore store, TimeProvider time)
         var now = time.GetUtcNow();
         await store.RestoreExpiredPausesAsync(now, cancellationToken);
         var shareToViewer = await store.GetShareAsync(subjectId, viewer.Id, cancellationToken);
+        // History is an ongoing trail and is available only in Always. Sealed grants
+        // exactly one confirmed snapshot through LookAsync.
         if (!shareToViewer.SharesHistory(now))
         {
             throw TrustException.ShareOff();

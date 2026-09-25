@@ -1,38 +1,44 @@
 # Trust
 
-Location escrow for adult peers: **Trust Circle** (iOS) + API + [jointrust.app](https://jointrust.app).
+Trust is a location sharing service for people who choose each other. It has three applications: an iOS client, an ASP.NET Core API with Postgres, and the public site at [jointrust.app](https://jointrust.app).
 
-Split from [QuirinoC/collapse-tech](https://github.com/QuirinoC/collapse-tech) at `f9569af`.
-
-## Layout
+## Repository map
 
 | Path | Purpose |
 | --- | --- |
-| `apps/trust-ios` | SwiftUI + MapKit client (Trust Circle) |
-| `apps/trust-api` | ASP.NET Core + Postgres API |
-| `apps/jointrust-web` | Marketing + legal at jointrust.app |
+| `apps/trust-ios` | SwiftUI client, shared domain code, and iOS tests |
+| `apps/trust-api` | ASP.NET Core 9 API, Postgres migrations, HTTP and service tests |
+| `apps/jointrust-web` | Public landing page, privacy, terms, support, and SMS opt-in |
+| `docs/DEPLOYMENT.md` | Safe API, website, and TestFlight release steps |
+| `docs/STATUS.md` | Verified readiness, known gaps, and release blockers |
 
-Canonical legal/marketing URLs: `https://jointrust.app` (`/privacy`, `/terms`, `/support`, `/sms`, `/sms-opt-in.png`).
+## Run the API locally
 
-Production API: `https://trust.collapsetechnologies.com` (Render `trust-api`).
-
-## Local development
+With Docker and .NET 9 installed:
 
 ```bash
 cd apps/trust-api
 docker compose up postgres -d
+dotnet test TrustApi.sln
 dotnet run --launch-profile TrustApi
 ```
 
-```bash
-cd apps/trust-ios && xcodegen generate
-# Run the Trust scheme. Simulator Debug → http://127.0.0.1:5088
-```
+The API listens on `http://127.0.0.1:5088`; Postgres is exposed on port `5433`. Development settings enable development sign-in and seed review accounts. Those flags are rejected at startup in other environments. For an HTTP two-account consent run after the API starts:
 
 ```bash
-npx wrangler deploy --config apps/jointrust-web/wrangler.jsonc
+python3 apps/trust-api/scripts/e2e_two_account_http.py
 ```
 
-## Render
+The script exercises invite acceptance, Sealed and Always sharing, confirmed Looks, denied Sealed history, pause/stop, presence, deletion, and input validation against the local API and database.
 
-Blueprint: root `render.yaml` (trust-api only). **Do not** blueprint-sync over live secrets. Keep `Trust__SeedReviewCircle` and `StoreKit__AllowReviewUnlock` **false** except during App Review.
+## Build the iOS client
+
+Use Xcode with the `Trust` scheme. If needed, run `xcodegen generate` from `apps/trust-ios`, then run the `Trust` scheme's tests on an available iOS Simulator. See [the iOS README](apps/trust-ios/README.md) and [release runbook](docs/DEPLOYMENT.md) for archive steps. App Store Connect upload requires the configured Apple signing account.
+
+## Public site
+
+The public pages and canonical legal URLs are served from Cloudflare at `https://jointrust.app`. The API's `/Privacy`, `/Terms`, and `/Support` routes permanently redirect there. Deployment and rollback notes are in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+
+## Current release state
+
+The API is deployed and its configured release origin `https://trust-api-u0ft.onrender.com` passed readiness. Production service readiness and the remaining TestFlight checks are tracked in [docs/STATUS.md](docs/STATUS.md). The custom hostname currently has unresolved TLS; use the Render service URL until DNS/TLS is independently verified.

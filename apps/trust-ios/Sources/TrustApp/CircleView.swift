@@ -9,71 +9,190 @@ struct CircleView: View {
     @State private var position: MapCameraPosition = .automatic
     @State private var sheetFraction: CGFloat = PeopleSheetDetent.half.rawValue
     @State private var dragOrigin: CGFloat?
+    @State private var userMovedMap = false
+    @State private var didFitInitialCamera = false
     @GestureState private var dragTranslation: CGFloat = 0
 
     private var pins: [AppModel.MapPin] { model.homeMapPins }
 
     var body: some View {
-        NavigationStack(path: $model.circlePath) {
-            GeometryReader { geo in
-                let width = geo.size.width
-                let fullHeight = max(geo.size.height, 1)
-                let sheetHeight = fullHeight * liveSheetFraction(containerHeight: fullHeight)
-                ZStack(alignment: .bottom) {
-                    homeMap
-                        .ignoresSafeArea(edges: .top)
-                    peopleSheet(
-                        height: sheetHeight,
-                        containerHeight: fullHeight,
-                        listInset: 20
-                    )
+        GeometryReader { geo in
+            let width = geo.size.width
+            let fullHeight = max(geo.size.height, 1)
+            let isWide = width >= 760
+            let panelWidth = min(390, max(330, width * 0.36))
+
+            ZStack(alignment: .topLeading) {
+                if isWide {
+                    wideMap
+                        .frame(width: width - panelWidth, height: fullHeight)
+                        .overlay(alignment: .trailing) { palette.line.frame(width: 1) }
                 }
-                .frame(width: width, height: fullHeight, alignment: .bottom)
-                .overlay(alignment: .bottomTrailing) {
-                    recenterButton
-                        .padding(.trailing, 16)
-                        .padding(.bottom, sheetHeight + 16)
+
+                NavigationStack(path: $model.circlePath) {
+                    Group {
+                        if isWide {
+                            widePeoplePanel
+                        } else {
+                            compactRoot(width: width, height: fullHeight)
+                        }
+                    }
+                    .toolbar(.hidden, for: .navigationBar)
+                    .navigationDestination(for: CircleRoute.self, destination: routeDestination)
                 }
+                .frame(width: isWide ? panelWidth : width, height: fullHeight)
+                .frame(
+                    maxWidth: .infinity,
+                    maxHeight: .infinity,
+                    alignment: isWide ? .trailing : .leading
+                )
             }
-            .toolbar(.hidden, for: .navigationBar)
-            .navigationDestination(for: CircleRoute.self) { route in
-                switch route {
-                case .person(let id):
-                    PersonScreen(personID: id)
-                case .view(let id):
-                    ViewScreen(personID: id)
-                case .map:
-                    MapScreen()
-                }
-            }
+            .frame(width: width, height: fullHeight)
         }
         .onAppear {
             model.prepareMapLocation()
             fitAll()
         }
-        .onChange(of: pins.map(\.id)) { _, _ in fitAll() }
+        .onChange(of: pins.map(\.id)) { _, _ in
+            if !userMovedMap { fitAll() }
+        }
+        .onChange(of: model.location.lastFix) { _, fix in
+            guard fix != nil, !didFitInitialCamera, !userMovedMap else { return }
+            didFitInitialCamera = true
+            fitAll()
+        }
+        .onChange(of: position.positionedByUser) { _, movedByUser in
+            if movedByUser { userMovedMap = true }
+        }
         .onDisappear { model.releaseMapLocation() }
     }
 
+    private func compactRoot(width: CGFloat, height: CGFloat) -> some View {
+        let sheetHeight = height * liveSheetFraction(containerHeight: height)
+        return ZStack(alignment: .bottom) {
+            homeMap
+                .ignoresSafeArea(edges: .top)
+            mapTitle
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            peopleSheet(
+                height: sheetHeight,
+                containerHeight: height,
+                listInset: 20
+            )
+        }
+        .frame(width: width, height: height, alignment: .bottom)
+        .overlay(alignment: .bottomTrailing) {
+            recenterButton
+                .padding(.trailing, 16)
+                .padding(.bottom, sheetHeight + 16)
+        }
+    }
+
+    @ViewBuilder
+    private func routeDestination(_ route: CircleRoute) -> some View {
+        switch route {
+        case .person(let id):
+            PersonScreen(personID: id)
+        case .view(let id):
+            ViewScreen(personID: id)
+        case .map:
+            MapScreen()
+        }
+    }
+
     // MARK: Map
+
+    /// The wide People layout keeps the map and its controls in a stable leading pane.
+    /// A width threshold lets fold and Stage Manager changes adapt to the space actually
+    /// available instead of relying on a particular device's size class.
+    private var wideMap: some View {
+        ZStack(alignment: .topLeading) {
+            homeMap
+                .ignoresSafeArea(edges: .top)
+            wideMapStatus
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 8)
+            recenterButton
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                .padding(16)
+        }
+        .clipped()
+    }
+
+    private var widePeoplePanel: some View {
+        VStack(spacing: 0) {
+            HStack {
+                TrustPageTitle(text: TrustCopy.people)
+                Spacer(minLength: 8)
+                Text("\(model.circle.count)")
+                    .trustFont(13, weight: .semibold)
+                    .foregroundStyle(palette.muted)
+                    .padding(.horizontal, 10)
+                    .frame(minHeight: 30)
+                    .background(Capsule().fill(palette.surface))
+                    .accessibilityLabel("\(model.circle.count) people")
+            }
+            .padding(.horizontal, TrustTheme.gutter)
+            .padding(.top, 20)
+            .padding(.bottom, 14)
+
+            TrustRowDivider()
+            sheetBody(listInset: 20)
+        }
+        .background(palette.paper)
+        .accessibilityElement(children: .contain)
+    }
 
     private var homeMap: some View {
         Map(position: $position) {
             UserAnnotation()
             ForEach(pins) { pin in
                 Annotation(pin.name, coordinate: pin.point.coordinate) {
-                    TrustMapPin(
-                        initials: pin.name.trustInitials,
-                        live: pin.live,
-                        selected: false
-                    )
+                    Button {
+                        if let member = model.member(pin.id) { model.openView(member) }
+                    } label: {
+                        TrustMapPin(initials: pin.name.trustInitials, live: pin.live)
+                    }
+                    .buttonStyle(.plain)
                     .accessibilityLabel(TrustCopy.pinAccessibility(name: pin.name, live: pin.live))
+                    .accessibilityHint(TrustCopy.viewLocation(name: pin.name.trustFirstName))
                 }
             }
         }
-        .mapStyle(.standard(pointsOfInterest: .excludingAll))
+        .mapStyle(.standard(elevation: .flat, emphasis: .muted, pointsOfInterest: .excludingAll))
         .mapControls {}
         .accessibilityLabel(TrustCopy.mapAccessibility)
+    }
+
+    private var mapTitle: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            TrustPageTitle(text: TrustCopy.people, size: 28)
+            Text(TrustCopy.onMap(count: pins.count, sealed: max(0, model.circle.count - pins.count)))
+                .trustFont(12, weight: .medium)
+                .foregroundStyle(palette.chromeMuted)
+        }
+        .padding(.horizontal, 18)
+        .padding(.top, 10)
+        .padding(.bottom, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.ultraThinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .padding(.horizontal, TrustTheme.gutter)
+        .padding(.top, 8)
+        .allowsHitTesting(false)
+    }
+
+    private var wideMapStatus: some View {
+        Text(TrustCopy.onMap(count: pins.count, sealed: max(0, model.circle.count - pins.count)))
+            .trustFont(12, weight: .medium)
+            .foregroundStyle(palette.chromeMuted)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(.ultraThinMaterial)
+            .clipShape(Capsule())
+            .padding(.horizontal, TrustTheme.gutter)
+            .padding(.top, 8)
+            .allowsHitTesting(false)
     }
 
     private var recenterButton: some View {
@@ -95,14 +214,24 @@ struct CircleView: View {
 
     private func peopleSheet(height: CGFloat, containerHeight: CGFloat, listInset: CGFloat) -> some View {
         VStack(spacing: 0) {
-            Capsule()
-                .fill(Color(hex: 0xC9CAC2))
-                .frame(width: 36, height: 5)
-                .padding(.top, 10)
-                .padding(.bottom, 8)
-                .frame(maxWidth: .infinity)
-                .contentShape(Rectangle())
-                .gesture(sheetDrag(containerHeight: containerHeight))
+            Button {
+                toggleDetent()
+            } label: {
+                Capsule()
+                    .fill(palette.line)
+                    .frame(width: 36, height: 5)
+                    .padding(.vertical, 10)
+                    .frame(maxWidth: .infinity)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .simultaneousGesture(sheetDrag(containerHeight: containerHeight))
+            .accessibilityLabel("People list size")
+            .accessibilityValue(PeopleSheetDetent.nearest(to: sheetFraction).accessibilityLabel)
+            .accessibilityHint("Swipe up or down to change the list size. Double-tap to expand or collapse.")
+            .accessibilityAddTraits(.isButton)
+            .accessibilityAdjustableAction(adjustDetent)
+            .accessibilityIdentifier("people-sheet-detent")
 
             sheetBody(listInset: listInset)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -120,10 +249,10 @@ struct CircleView: View {
             if model.circle.isEmpty {
                 ScrollView {
                     TrustEmptyState(
-                        glyph: "lock",
+                        glyph: "person.2.wave.2",
                         title: TrustCopy.circleEmptyTitle,
                         message: TrustCopy.circleEmptyBody,
-                        actionTitle: TrustCopy.addSomeone
+                        actionTitle: "Go to Sharing"
                     ) {
                         model.selectedTab = .sharing
                     }
@@ -134,12 +263,29 @@ struct CircleView: View {
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
-                        TrustSectionHeading(TrustCopy.sharedWithYou)
-                            .padding(.top, 2)
-
-                        ForEach(sharing) { member in
-                            CirclePersonRow(member: member, seed: seed(member))
-                            TrustRowDivider()
+                        if sharing.isEmpty {
+                            VStack(alignment: .leading, spacing: 10) {
+                                Text("No one is sharing with you yet")
+                                    .trustFont(17, weight: .semibold)
+                                    .foregroundStyle(palette.ink)
+                                Text("You can invite someone or choose what to share with them.")
+                                    .trustFont(13)
+                                    .foregroundStyle(palette.muted)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                Button("Go to Sharing") { model.selectedTab = .sharing }
+                                    .buttonStyle(TrustOutlineButtonStyle(compact: true))
+                            }
+                            .padding(16)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(palette.surface))
+                            .padding(.top, 4)
+                        } else {
+                            TrustSectionHeading(TrustCopy.sharedWithYou)
+                                .padding(.top, 2)
+                            ForEach(sharing) { member in
+                                CirclePersonRow(member: member, seed: seed(member))
+                                TrustRowDivider()
+                            }
                         }
 
                         if !notSharing.isEmpty {
@@ -194,6 +340,27 @@ struct CircleView: View {
         return sheetFraction
     }
 
+    private func adjustDetent(_ direction: AccessibilityAdjustmentDirection) {
+        let detents = PeopleSheetDetent.allCases
+        guard let current = detents.firstIndex(of: .nearest(to: sheetFraction)) else { return }
+        let next: Int
+        switch direction {
+        case .increment: next = min(current + 1, detents.count - 1)
+        case .decrement: next = max(current - 1, 0)
+        @unknown default: return
+        }
+        withAnimation(.interactiveSpring(response: 0.32, dampingFraction: 0.86)) {
+            sheetFraction = detents[next].rawValue
+        }
+    }
+
+    private func toggleDetent() {
+        let current = PeopleSheetDetent.nearest(to: sheetFraction)
+        withAnimation(.interactiveSpring(response: 0.32, dampingFraction: 0.86)) {
+            sheetFraction = (current == .expanded ? PeopleSheetDetent.half : .expanded).rawValue
+        }
+    }
+
     // MARK: List helpers
 
     private var sharing: [TrustedPerson] {
@@ -217,20 +384,28 @@ struct CircleView: View {
         if includeUser, let fix = model.location.lastFix {
             coordinates.append(fix.coordinate)
         }
-        let region = metroRegion(for: coordinates) ?? Self.neighborhood
         withAnimation(.easeInOut(duration: 0.35)) {
-            position = .region(region)
+            if let region = metroRegion(for: coordinates) {
+                position = .region(region)
+            } else {
+                position = .automatic
+            }
         }
     }
 
     /// Street-level camera. Pins spread across cities must not zoom the home map out to a globe.
     private func metroRegion(for coordinates: [CLLocationCoordinate2D]) -> MKCoordinateRegion? {
-        let anchor = model.location.lastFix?.coordinate ?? Self.neighborhood.center
-        let nearby = coordinates.filter { coordinate in
-            abs(coordinate.latitude - anchor.latitude) < 0.35
-                && abs(coordinate.longitude - anchor.longitude) < 0.45
+        guard !coordinates.isEmpty else {
+            if let fix = model.location.lastFix {
+                return MKCoordinateRegion(center: fix.coordinate, span: MKCoordinateSpan(latitudeDelta: 0.06, longitudeDelta: 0.06))
+            }
+            return nil
         }
-        let focus = nearby.isEmpty ? (coordinates.isEmpty ? [] : [anchor]) : nearby
+        let nearby = model.location.lastFix.map { fix in coordinates.filter { coordinate in
+            abs(coordinate.latitude - fix.latitude) < 0.35
+                && abs(coordinate.longitude - fix.longitude) < 0.45
+        }} ?? coordinates
+        let focus = nearby.isEmpty ? coordinates : nearby
         guard let first = focus.first else { return nil }
         var minLat = first.latitude, maxLat = first.latitude
         var minLon = first.longitude, maxLon = first.longitude
@@ -241,24 +416,30 @@ struct CircleView: View {
             maxLon = max(maxLon, coordinate.longitude)
         }
         let center = CLLocationCoordinate2D(latitude: (minLat + maxLat) / 2, longitude: (minLon + maxLon) / 2)
+        let localCluster = model.location.lastFix != nil && !nearby.isEmpty
+        let maxLatitudeSpan: CLLocationDegrees = localCluster ? 0.12 : 170
+        let maxLongitudeSpan: CLLocationDegrees = localCluster ? 0.12 : 320
         let span = MKCoordinateSpan(
-            latitudeDelta: min(0.12, max((maxLat - minLat) * 1.6, 0.045)),
-            longitudeDelta: min(0.12, max((maxLon - minLon) * 1.6, 0.045))
+            latitudeDelta: min(maxLatitudeSpan, max((maxLat - minLat) * 1.6, 0.045)),
+            longitudeDelta: min(maxLongitudeSpan, max((maxLon - minLon) * 1.6, 0.045))
         )
         return MKCoordinateRegion(center: center, span: span)
     }
 
-    /// Mission, San Francisco — the demo neighborhood when no local pin or fix is ready.
-    private static let neighborhood = MKCoordinateRegion(
-        center: CLLocationCoordinate2D(latitude: 37.7599, longitude: -122.4148),
-        span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
-    )
 }
 
 private enum PeopleSheetDetent: CGFloat, CaseIterable {
     case peek = 0.28
     case half = 0.55
     case expanded = 0.82
+
+    var accessibilityLabel: String {
+        switch self {
+        case .peek: return "Compact"
+        case .half: return "Half height"
+        case .expanded: return "Expanded"
+        }
+    }
 
     static func nearest(to value: CGFloat) -> PeopleSheetDetent {
         allCases.min(by: { abs($0.rawValue - value) < abs($1.rawValue - value) }) ?? .half
@@ -277,6 +458,7 @@ struct CirclePersonRow: View {
     var seed: Int = 0
     @EnvironmentObject private var model: AppModel
     @Environment(\.trustPalette) private var palette
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private var isNotSharing: Bool { member.isNotSharingWithYou }
 
@@ -289,55 +471,72 @@ struct CirclePersonRow: View {
     }
 
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
-            Button {
-                model.openPerson(member)
-            } label: {
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 8) {
+                    personButton(multiline: true)
+                    if canPeek {
+                        HStack { Spacer(minLength: 0); peekButton }
+                    }
+                }
+            } else {
                 HStack(alignment: .center, spacing: 12) {
-                    TrustAvatar(name: member.person.displayName, seed: seed, size: 44)
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(member.person.displayName)
-                            .trustFont(16, weight: .semibold)
-                            .foregroundStyle(palette.ink)
-                            .lineLimit(1)
-                        Text(statusText)
-                            .trustFont(13)
-                            .foregroundStyle(palette.muted)
-                            .lineLimit(1)
-                    }
-                    Spacer(minLength: 8)
+                    personButton(multiline: false)
+                    if canPeek { peekButton }
                 }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("\(member.person.displayName). \(statusText)")
-
-            if canPeek {
-                Button {
-                    if peekIsLook {
-                        model.openLook(member)
-                    } else {
-                        model.openView(member)
-                    }
-                } label: {
-                    Text(peekIsLook ? TrustCopy.look : TrustCopy.view)
-                        .trustFont(13, weight: .semibold)
-                        .foregroundStyle(peekIsLook ? palette.accent : palette.muted)
-                        .padding(.horizontal, 14)
-                        .frame(minWidth: 66, minHeight: 34)
-                        .background(
-                            Capsule().stroke(
-                                peekIsLook ? Color(hex: 0xF0C8BE) : palette.line,
-                                lineWidth: 1
-                            )
-                        )
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(peekIsLook ? TrustCopy.lookHint(name: member.firstName) : TrustCopy.viewHint(name: member.firstName))
             }
         }
-        .padding(.vertical, 14)
-        .frame(minHeight: 64)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, minHeight: 68, alignment: .leading)
+    }
+
+    private func personButton(multiline: Bool) -> some View {
+        Button {
+            model.openPerson(member)
+        } label: {
+            HStack(alignment: .center, spacing: 12) {
+                TrustAvatar(name: member.person.displayName, seed: seed, size: 44, avatar: member.person.avatar, personID: member.id)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(member.person.displayName)
+                        .trustFont(16, weight: .semibold)
+                        .foregroundStyle(palette.ink)
+                        .lineLimit(multiline ? 2 : 1)
+                        .fixedSize(horizontal: false, vertical: multiline)
+                    Text(statusText)
+                        .trustFont(13)
+                        .foregroundStyle(palette.muted)
+                        .lineLimit(multiline ? 2 : 1)
+                        .fixedSize(horizontal: false, vertical: multiline)
+                }
+                Spacer(minLength: 8)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(member.person.displayName). \(statusText)")
+        .accessibilityIdentifier("person-row-\(member.firstName.lowercased())")
+    }
+
+    @ViewBuilder
+    private var peekButton: some View {
+        Button {
+            if peekIsLook {
+                model.openLook(member)
+            } else {
+                model.openView(member)
+            }
+        } label: {
+            Text(peekIsLook ? TrustCopy.look : TrustCopy.view)
+                .trustFont(13, weight: .semibold)
+                .foregroundStyle(peekIsLook ? palette.accent : palette.muted)
+                .padding(.horizontal, 14)
+                .frame(minWidth: 66, minHeight: 44)
+                .background(Capsule().stroke(peekIsLook ? palette.accentSoft : palette.line, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(peekIsLook ? TrustCopy.lookHint(name: member.firstName) : TrustCopy.viewHint(name: member.firstName))
+        .accessibilityIdentifier("person-peek-\(member.firstName.lowercased())")
     }
 
     private var statusText: String {
@@ -388,6 +587,7 @@ struct PersonScreen: View {
                     .foregroundStyle(palette.ink)
                 }
                 .accessibilityLabel(TrustCopy.backToCircle)
+                .accessibilityIdentifier("circle-back")
             }
         }
     }
@@ -395,8 +595,14 @@ struct PersonScreen: View {
     private func content(_ member: TrustedPerson) -> some View {
         let history = model.locationHistory(for: member)
         return Group {
-            if history.isEmpty {
+            if !member.isAvailable {
                 empty(member)
+            } else if !model.isDemoMode && (model.historyLoadingIDs.contains(member.id) || (!model.historyLoadedIDs.contains(member.id) && !model.historyErrors.contains(member.id))) {
+                historyProgress(member)
+            } else if model.historyErrors.contains(member.id) {
+                historyError(member)
+            } else if history.isEmpty {
+                historyEmpty(member)
             } else {
                 historyList(member, history: history)
             }
@@ -404,22 +610,69 @@ struct PersonScreen: View {
         .task(id: history.map(\.id)) {
             await geocode(history)
         }
+        .task(id: member.isAvailable) {
+            if member.isAvailable { await model.loadHistory(for: member.id) }
+        }
+    }
+
+    private func historyProgress(_ member: TrustedPerson) -> some View {
+        VStack(spacing: 14) {
+            TrustAvatar(name: member.person.displayName, seed: seed, size: 72, avatar: member.person.avatar, personID: member.id)
+            Text(member.person.displayName).font(TrustTheme.display(28)).foregroundStyle(palette.ink)
+            ProgressView().tint(palette.accent)
+            Text("Loading recent places")
+                .trustFont(14)
+                .foregroundStyle(palette.muted)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityIdentifier("person-history-loading")
+    }
+
+    private func historyError(_ member: TrustedPerson) -> some View {
+        TrustEmptyState(
+            glyph: "exclamationmark.triangle",
+            title: "Places unavailable",
+            message: "Recent places could not be loaded.",
+            actionTitle: "Try again"
+        ) {
+            Task { await model.loadHistory(for: member.id) }
+        }
+        .accessibilityIdentifier("person-history-error")
+    }
+
+    private func historyEmpty(_ member: TrustedPerson) -> some View {
+        TrustEmptyState(
+            glyph: "location",
+            title: "No recent places",
+            message: "New places will appear here while Always sharing is on.",
+            actionTitle: TrustCopy.backToCircle
+        ) {
+            model.circlePath = []
+        }
+        .accessibilityIdentifier("person-history-empty")
     }
 
     private func empty(_ member: TrustedPerson) -> some View {
         VStack(spacing: 16) {
             Spacer(minLength: 12)
-            TrustAvatar(name: member.person.displayName, seed: seed, size: 88)
+            TrustAvatar(name: member.person.displayName, seed: seed, size: 88, avatar: member.person.avatar, personID: member.id)
             TrustPageTitle(text: member.person.displayName, size: 32)
                 .multilineTextAlignment(.center)
             Text(statusText(member))
                 .trustFont(17)
                 .foregroundStyle(palette.muted)
+                .accessibilityIdentifier("person-status")
+            Text(directionText(member))
+                .trustFont(13)
+                .foregroundStyle(palette.muted)
+                .multilineTextAlignment(.center)
+                .accessibilityIdentifier("person-sharing-directions")
             if canPeek(member) {
                 Button(peekTitle(member)) {
                     peek(member)
                 }
                 .buttonStyle(TrustFilledButtonStyle())
+                .accessibilityIdentifier("person-profile-peek")
                 .padding(.top, 8)
                 Text(peekIsLook(member) ? TrustCopy.lookNotifiedShort : TrustCopy.kindView)
                     .trustFont(13)
@@ -436,7 +689,7 @@ struct PersonScreen: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 HStack(alignment: .center, spacing: 14) {
-                    TrustAvatar(name: member.person.displayName, seed: seed, size: 64)
+                    TrustAvatar(name: member.person.displayName, seed: seed, size: 64, avatar: member.person.avatar, personID: member.id)
                     VStack(alignment: .leading, spacing: 4) {
                         TrustPageTitle(text: member.person.displayName, size: 30)
                         Text(statusText(member))
@@ -448,6 +701,12 @@ struct PersonScreen: View {
                 .padding(.bottom, 22)
                 .accessibilityElement(children: .combine)
 
+                Text(directionText(member))
+                    .trustFont(12)
+                    .foregroundStyle(palette.muted)
+                    .padding(.bottom, 14)
+                    .accessibilityIdentifier("person-sharing-directions")
+
                 ForEach(Array(history.enumerated()), id: \.element.id) { index, visit in
                     HStack(alignment: .firstTextBaseline, spacing: 12) {
                         Text(label(for: visit))
@@ -455,7 +714,7 @@ struct PersonScreen: View {
                             .foregroundStyle(palette.ink)
                             .lineLimit(1)
                         Spacer(minLength: 8)
-                        Text(visit.at.formatted(date: .omitted, time: .shortened))
+                        Text(visit.at.formatted(date: .abbreviated, time: .shortened))
                             .trustFont(13)
                             .foregroundStyle(palette.muted)
                     }
@@ -468,6 +727,7 @@ struct PersonScreen: View {
             .padding(.bottom, 28)
             .trustReadableWidth()
         }
+        .accessibilityIdentifier("person-history")
     }
 
     private func canPeek(_ member: TrustedPerson) -> Bool {
@@ -495,6 +755,21 @@ struct PersonScreen: View {
         if member.isNotSharingWithYou { return TrustCopy.choseOff(name: member.firstName) }
         if let presence = member.visiblePresence { return presence.label }
         return TrustCopy.presenceHiddenBadge
+    }
+
+    private func directionText(_ member: TrustedPerson) -> String {
+        let inbound = shareLabel(member.inboundPresentation)
+        let outbound = shareLabel(model.shareState(for: member.id).presentation(at: Date()))
+        return "They share with you: \(inbound) · You share with them: \(outbound)"
+    }
+
+    private func shareLabel(_ presentation: SharePresentation?) -> String {
+        switch presentation {
+        case .off, nil: return "Off"
+        case .untilTheyLook: return TrustCopy.sealed
+        case .always: return TrustCopy.always
+        case .paused: return "Paused"
+        }
     }
 
     private func label(for visit: LocationVisit) -> String {

@@ -13,6 +13,7 @@
 		1D5998C920DF9A63255FA22A /* LookConfirmSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = D82E8777B7F80A59F2D53EFE /* LookConfirmSheet.swift */; };
 		2094D814F9A29D960ECE9EF2 /* HandleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F1E3DD239C74673D1C841A9 /* HandleView.swift */; };
 		2281C76EBA0BF930EB2E9E14 /* PhoneView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09A50789FA9420E08F581CBC /* PhoneView.swift */; };
+		2F3CB1F1EFAF7273473E217E /* ProfileAvatarPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = A144B075570E3EC71B3A9E9E /* ProfileAvatarPicker.swift */; };
 		36CD510268DA16335A9EAD0A /* TrustKeychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 706E76871CAC53B051985DCC /* TrustKeychain.swift */; };
 		3C26CE6415D9270C449CCEB9 /* TrustTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5980035418744C890C9440B9 /* TrustTheme.swift */; };
 		4CCCCC2A037ACB0296AA3895 /* MapScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE3BE1E107A89A8B8D4FDBD2 /* MapScreen.swift */; };
@@ -79,6 +80,7 @@
 		8863CE33D489634538BAC18E /* TrustComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrustComponents.swift; sourceTree = "<group>"; };
 		913C99EC0D7E0E081DA468B0 /* TrustApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrustApp.swift; sourceTree = "<group>"; };
 		93DD05E4CE1F61BF819BD58D /* SharingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharingView.swift; sourceTree = "<group>"; };
+		A144B075570E3EC71B3A9E9E /* ProfileAvatarPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileAvatarPicker.swift; sourceTree = "<group>"; };
 		A5FADBF71283343C63339724 /* trust-ios */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "trust-ios"; path = .; sourceTree = SOURCE_ROOT; };
 		A764AB895F51BD53D38551D7 /* StoreManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreManager.swift; sourceTree = "<group>"; };
 		AE3763646FBA2DF7BEE36D79 /* AppConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfiguration.swift; sourceTree = "<group>"; };
@@ -187,6 +189,7 @@
 				BE3BE1E107A89A8B8D4FDBD2 /* MapScreen.swift */,
 				09A50789FA9420E08F581CBC /* PhoneView.swift */,
 				536A9B0B5FFE1F350CE3E140 /* PlusPaywall.swift */,
+				A144B075570E3EC71B3A9E9E /* ProfileAvatarPicker.swift */,
 				3DD39690718850F57B59DFBA /* RootView.swift */,
 				93DD05E4CE1F61BF819BD58D /* SharingView.swift */,
 				A764AB895F51BD53D38551D7 /* StoreManager.swift */,
@@ -388,6 +391,7 @@
 				4CCCCC2A037ACB0296AA3895 /* MapScreen.swift in Sources */,
 				2281C76EBA0BF930EB2E9E14 /* PhoneView.swift in Sources */,
 				998C3D952BFB8E194461E822 /* PlusPaywall.swift in Sources */,
+				2F3CB1F1EFAF7273473E217E /* ProfileAvatarPicker.swift in Sources */,
 				8EBFAA09C67AE6703DF64EE5 /* RootView.swift in Sources */,
 				7CB75B07FEA94DC19C75750C /* SharingView.swift in Sources */,
 				8D923C0A5271D91381623F02 /* StoreManager.swift in Sources */,
@@ -501,10 +505,11 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = Trust.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 18;
+				CURRENT_PROJECT_VERSION = 22;
 				DEVELOPMENT_TEAM = 3S529795M9;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				INFOPLIST_FILE = Info.plist;
+				INFOPLIST_KEY_NSCameraUsageDescription = "Trust uses the camera only when you choose Take Photo to set your profile picture.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Trust uses your location while the app is open so you can see yourself on the map and look at people who share with you. Trust does not sell your location.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -576,10 +581,11 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = Trust.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 18;
+				CURRENT_PROJECT_VERSION = 22;
 				DEVELOPMENT_TEAM = 3S529795M9;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				INFOPLIST_FILE = Info.plist;
+				INFOPLIST_KEY_NSCameraUsageDescription = "Trust uses the camera only when you choose Take Photo to set your profile picture.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Trust uses your location while the app is open so you can see yourself on the map and look at people who share with you. Trust does not sell your location.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -650,7 +656,7 @@
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				TRUST_BASE_URL = "https://trust.collapsetechnologies.com";
+				TRUST_BASE_URL = "https://trust-api-u0ft.onrender.com";
 			};
 			name = Release;
 		};
