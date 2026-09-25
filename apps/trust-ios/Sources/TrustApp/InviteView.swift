@@ -48,6 +48,7 @@ struct AddSomeoneSection: View {
                                 .onSubmit { model.addPersonByPhone() }
                                 .accessibilityLabel(TrustCopy.phoneNumber)
                                 .accessibilityIdentifier("add-phone")
+                                .simultaneousGesture(TapGesture().onEnded { phoneFocused = true })
                             Button {
                                 phoneFocused = false
                                 model.addPersonByPhone()
@@ -103,6 +104,7 @@ struct AddSomeoneSection: View {
                                 .onSubmit { model.joinInvite() }
                                 .accessibilityLabel(TrustCopy.enterACode)
                                 .accessibilityIdentifier("invite-code")
+                                .simultaneousGesture(TapGesture().onEnded { codeFocused = true })
                             Button {
                                 codeFocused = false
                                 model.joinInvite()

@@ -74,6 +74,9 @@ public sealed record HomePromise(
 
 public sealed record LookResult(LookSession Session, bool IsNew);
 
+/// <summary>Public metadata for the account's one current profile image.</summary>
+public sealed record ProfileAvatar(string Kind, string? PresetId = null, Guid? Version = null);
+
 public static class AccountIdentity
 {
     public const int DisplayNameMinLength = 2;
@@ -152,7 +155,8 @@ public sealed record Account(
     DateTimeOffset CreatedAt,
     string? PhoneE164 = null,
     DateTimeOffset? PhoneVerifiedAt = null,
-    string? Handle = null)
+    string? Handle = null,
+    ProfileAvatar? Avatar = null)
 {
     public bool HasChosenDisplayName => AccountIdentity.IsChosenDisplayName(DisplayName);
 
@@ -487,6 +491,10 @@ public interface ITrustStore
     Task<Account?> FindByProviderAsync(string provider, string subject, CancellationToken cancellationToken);
     Task<Account> UpsertAccountAsync(Account account, CancellationToken cancellationToken);
     Task UpdateAccountAsync(Account account, CancellationToken cancellationToken);
+    Task<ProfileAvatar> SetAvatarPresetAsync(Guid accountId, string presetId, CancellationToken cancellationToken);
+    Task<ProfileAvatar> SetAvatarPhotoAsync(Guid accountId, Guid version, byte[] jpeg, CancellationToken cancellationToken);
+    Task ClearAvatarAsync(Guid accountId, CancellationToken cancellationToken);
+    Task<byte[]?> GetAvatarPhotoAsync(Guid accountId, Guid version, CancellationToken cancellationToken);
     Task<IReadOnlyList<Account>> ListConnectedAsync(Guid accountId, CancellationToken cancellationToken);
     Task<int> ActiveMembershipCountAsync(Guid accountId, CancellationToken cancellationToken);
     Task<bool> AreConnectedAsync(Guid a, Guid b, CancellationToken cancellationToken);

@@ -45,6 +45,9 @@ Phone verification uses `POST /api/v1/me/phone/send` and `/verify`. Development 
 | `POST /api/v1/session/google` | Verify Google identity token |
 | `POST /api/v1/session/development` | Development-only session endpoint |
 | `GET /api/v1/circle` | Circle members and currently permitted presence/location |
+| `PUT /api/v1/me/avatar/preset` | Choose an allowlisted profile icon (`fern`, `ember`, `sky`, `ocean`, `sunrise`, or `lavender`) |
+| `PUT /api/v1/me/avatar/photo` and `DELETE /api/v1/me/avatar` | Set or remove a profile photo |
+| `GET /api/v1/people/{id}/avatar/{version}` | Fetch the current photo for yourself or an active circle member |
 | `POST /api/v1/invites` and `/invites/accept` | Create and accept an invite |
 | `POST /api/v1/looks` | Confirmed sealed snapshot and Look event |
 | `POST /api/v1/views` | Always read and View event |
@@ -54,6 +57,8 @@ Phone verification uses `POST /api/v1/me/phone/send` and `/verify`. Development 
 | `DELETE /api/v1/account` | Delete the signed-in account |
 
 `/Privacy`, `/Terms`, and `/Support` redirect to the canonical pages on `https://jointrust.app`.
+
+Profile photos are uploaded as raw `image/jpeg` bodies up to 1 MiB and must be 64–1024 pixels on each side. Preset and photo PUTs return the saved avatar descriptor immediately (`{kind: "preset", presetId}` or `{kind: "photo", version}`); DELETE returns 204. The iOS client crops and re-encodes selected images to 512×512 JPEG; the API also decodes and re-encodes uploads, which removes EXIF, GPS, XMP, and other source metadata before storage. Only the current photo is retained. Its opaque UUID version appears in nullable `PersonDto.avatar` metadata, and the authenticated photo route returns 404 for stale versions, missing photos, and viewers without an active membership. Photo bytes and fetch URLs are not included in Circle responses. Presets and photo metadata are account-scoped; deleting an account cascades photo storage.
 
 ## Production operations
 

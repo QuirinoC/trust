@@ -6,6 +6,7 @@ namespace TrustApi.Infrastructure;
 public sealed class MemoryTrustStore : ITrustStore
 {
     private readonly ConcurrentDictionary<Guid, Account> _accounts = new();
+    private readonly ConcurrentDictionary<Guid, byte[]> _avatarPhotos = new();
     private readonly ConcurrentDictionary<(string Provider, string Subject), Guid> _byProvider = new();
     private readonly ConcurrentDictionary<(Guid A, Guid B), string> _memberships = new();
     private readonly ConcurrentDictionary<(Guid Grantor, Guid Grantee), ShareState> _shares = new();
@@ -47,6 +48,62 @@ public sealed class MemoryTrustStore : ITrustStore
 
     public Task UpdateAccountAsync(Account account, CancellationToken cancellationToken) =>
         UpsertAccountAsync(account, cancellationToken);
+
+    public Task<ProfileAvatar> SetAvatarPresetAsync(Guid accountId, string presetId, CancellationToken cancellationToken)
+    {
+        lock (_gate)
+        {
+            var avatar = new ProfileAvatar("preset", presetId);
+            if (_accounts.TryGetValue(accountId, out var account))
+            {
+                _accounts[accountId] = account with { Avatar = avatar };
+            }
+            _avatarPhotos.TryRemove(accountId, out _);
+            return Task.FromResult(avatar);
+        }
+    }
+
+    public Task<ProfileAvatar> SetAvatarPhotoAsync(Guid accountId, Guid version, byte[] jpeg, CancellationToken cancellationToken)
+    {
+        lock (_gate)
+        {
+            var avatar = new ProfileAvatar("photo", Version: version);
+            if (_accounts.TryGetValue(accountId, out var account))
+            {
+                _accounts[accountId] = account with { Avatar = avatar };
+            }
+            _avatarPhotos[accountId] = jpeg;
+            return Task.FromResult(avatar);
+        }
+    }
+
+    public Task ClearAvatarAsync(Guid accountId, CancellationToken cancellationToken)
+    {
+        lock (_gate)
+        {
+            if (_accounts.TryGetValue(accountId, out var account))
+            {
+                _accounts[accountId] = account with { Avatar = null };
+            }
+            _avatarPhotos.TryRemove(accountId, out _);
+            return Task.CompletedTask;
+        }
+    }
+
+    public Task<byte[]?> GetAvatarPhotoAsync(Guid accountId, Guid version, CancellationToken cancellationToken)
+    {
+        lock (_gate)
+        {
+            if (_accounts.TryGetValue(accountId, out var account)
+                && account.Avatar is { Kind: "photo", Version: { } current } && current == version
+                && _avatarPhotos.TryGetValue(accountId, out var jpeg))
+            {
+                return Task.FromResult<byte[]?>(jpeg);
+            }
+
+            return Task.FromResult<byte[]?>(null);
+        }
+    }
 
     public Task<IReadOnlyList<Account>> ListConnectedAsync(Guid accountId, CancellationToken cancellationToken)
     {
@@ -307,6 +364,7 @@ public sealed class MemoryTrustStore : ITrustStore
 
             if (_accounts.TryRemove(accountId, out var account))
             {
+                _avatarPhotos.TryRemove(accountId, out _);
                 _byProvider.TryRemove((account.Provider, account.ProviderSubject), out _);
             }
 

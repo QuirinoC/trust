@@ -81,7 +81,7 @@ struct ViewScreen: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 HStack(alignment: .center, spacing: 14) {
-                    TrustAvatar(name: member.person.displayName, seed: seed, size: 70)
+                    TrustAvatar(name: member.person.displayName, seed: seed, size: 70, avatar: member.person.avatar, personID: member.id)
                     VStack(alignment: .leading, spacing: 7) {
                         TrustPageTitle(text: member.firstName, size: 32)
                         Text(isAvailable ? TrustCopy.liveShare : TrustCopy.oneTimeLook)
@@ -141,6 +141,7 @@ struct ViewScreen: View {
                         Label(TrustCopy.circleMap, systemImage: "map")
                     }
                     .buttonStyle(TrustOutlineButtonStyle(compact: true))
+                    .accessibilityIdentifier("view-open-map")
                     Button {
                         model.circlePath = []
                     } label: {

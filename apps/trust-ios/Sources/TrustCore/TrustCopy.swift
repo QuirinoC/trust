@@ -55,8 +55,9 @@ public enum TrustCopy {
     // MARK: Login (A1)
 
     public static var loginPromise: String {
-        value("login_promise", defaultValue: "Sharing stays off until each person chooses a mode.")
+        value("login_promise", defaultValue: "Sharing stays off until you choose a mode for each person.")
     }
+    public static var signInTitle: String { value("sign_in_title", defaultValue: "Sign in to Trust") }
     public static var signInWithApple: String { value("sign_in_with_apple", defaultValue: "Sign in with Apple") }
     public static var signingIn: String { value("signing_in", defaultValue: "Signing in…") }
     public static var signingInShort: String { value("signing_in_short", defaultValue: "Signing in") }
@@ -132,9 +133,9 @@ public enum TrustCopy {
     public static func choseOff(name: String) -> String {
         format("chose_off", defaultValue: "%@ chose off", name)
     }
-    public static var circleEmptyTitle: String { value("circle_empty_title", defaultValue: "Nobody shares with you yet.") }
+    public static var circleEmptyTitle: String { value("circle_empty_title", defaultValue: "Your people will appear here") }
     public static var circleEmptyBody: String {
-        value("circle_empty_body", defaultValue: "Add someone. Sharing stays off until each of you chooses a mode.")
+        value("circle_empty_body", defaultValue: "Invite someone or choose what to share. Location stays off until you choose a mode for that person.")
     }
     public static var mapSealedHint: String {
         value(

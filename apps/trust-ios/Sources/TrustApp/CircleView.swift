@@ -16,40 +16,38 @@ struct CircleView: View {
     private var pins: [AppModel.MapPin] { model.homeMapPins }
 
     var body: some View {
-        NavigationStack(path: $model.circlePath) {
-            GeometryReader { geo in
-                let width = geo.size.width
-                let fullHeight = max(geo.size.height, 1)
-                let sheetHeight = fullHeight * liveSheetFraction(containerHeight: fullHeight)
-                ZStack(alignment: .bottom) {
-                    homeMap
-                        .ignoresSafeArea(edges: .top)
-                    mapTitle
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                    peopleSheet(
-                        height: sheetHeight,
-                        containerHeight: fullHeight,
-                        listInset: 20
-                    )
+        GeometryReader { geo in
+            let width = geo.size.width
+            let fullHeight = max(geo.size.height, 1)
+            let isWide = width >= 760
+            let panelWidth = min(390, max(330, width * 0.36))
+
+            ZStack(alignment: .topLeading) {
+                if isWide {
+                    wideMap
+                        .frame(width: width - panelWidth, height: fullHeight)
+                        .overlay(alignment: .trailing) { palette.line.frame(width: 1) }
                 }
-                .frame(width: width, height: fullHeight, alignment: .bottom)
-                .overlay(alignment: .bottomTrailing) {
-                    recenterButton
-                        .padding(.trailing, 16)
-                        .padding(.bottom, sheetHeight + 16)
+
+                NavigationStack(path: $model.circlePath) {
+                    Group {
+                        if isWide {
+                            widePeoplePanel
+                        } else {
+                            compactRoot(width: width, height: fullHeight)
+                        }
+                    }
+                    .toolbar(.hidden, for: .navigationBar)
+                    .navigationDestination(for: CircleRoute.self, destination: routeDestination)
                 }
+                .frame(width: isWide ? panelWidth : width, height: fullHeight)
+                .frame(
+                    maxWidth: .infinity,
+                    maxHeight: .infinity,
+                    alignment: isWide ? .trailing : .leading
+                )
             }
-            .toolbar(.hidden, for: .navigationBar)
-            .navigationDestination(for: CircleRoute.self) { route in
-                switch route {
-                case .person(let id):
-                    PersonScreen(personID: id)
-                case .view(let id):
-                    ViewScreen(personID: id)
-                case .map:
-                    MapScreen()
-                }
-            }
+            .frame(width: width, height: fullHeight)
         }
         .onAppear {
             model.prepareMapLocation()
@@ -69,7 +67,81 @@ struct CircleView: View {
         .onDisappear { model.releaseMapLocation() }
     }
 
+    private func compactRoot(width: CGFloat, height: CGFloat) -> some View {
+        let sheetHeight = height * liveSheetFraction(containerHeight: height)
+        return ZStack(alignment: .bottom) {
+            homeMap
+                .ignoresSafeArea(edges: .top)
+            mapTitle
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            peopleSheet(
+                height: sheetHeight,
+                containerHeight: height,
+                listInset: 20
+            )
+        }
+        .frame(width: width, height: height, alignment: .bottom)
+        .overlay(alignment: .bottomTrailing) {
+            recenterButton
+                .padding(.trailing, 16)
+                .padding(.bottom, sheetHeight + 16)
+        }
+    }
+
+    @ViewBuilder
+    private func routeDestination(_ route: CircleRoute) -> some View {
+        switch route {
+        case .person(let id):
+            PersonScreen(personID: id)
+        case .view(let id):
+            ViewScreen(personID: id)
+        case .map:
+            MapScreen()
+        }
+    }
+
     // MARK: Map
+
+    /// The wide People layout keeps the map and its controls in a stable leading pane.
+    /// A width threshold lets fold and Stage Manager changes adapt to the space actually
+    /// available instead of relying on a particular device's size class.
+    private var wideMap: some View {
+        ZStack(alignment: .topLeading) {
+            homeMap
+                .ignoresSafeArea(edges: .top)
+            wideMapStatus
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 8)
+            recenterButton
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                .padding(16)
+        }
+        .clipped()
+    }
+
+    private var widePeoplePanel: some View {
+        VStack(spacing: 0) {
+            HStack {
+                TrustPageTitle(text: TrustCopy.people)
+                Spacer(minLength: 8)
+                Text("\(model.circle.count)")
+                    .trustFont(13, weight: .semibold)
+                    .foregroundStyle(palette.muted)
+                    .padding(.horizontal, 10)
+                    .frame(minHeight: 30)
+                    .background(Capsule().fill(palette.surface))
+                    .accessibilityLabel("\(model.circle.count) people")
+            }
+            .padding(.horizontal, TrustTheme.gutter)
+            .padding(.top, 20)
+            .padding(.bottom, 14)
+
+            TrustRowDivider()
+            sheetBody(listInset: 20)
+        }
+        .background(palette.paper)
+        .accessibilityElement(children: .contain)
+    }
 
     private var homeMap: some View {
         Map(position: $position) {
@@ -87,7 +159,7 @@ struct CircleView: View {
                 }
             }
         }
-        .mapStyle(.standard(pointsOfInterest: .excludingAll))
+        .mapStyle(.standard(elevation: .flat, emphasis: .muted, pointsOfInterest: .excludingAll))
         .mapControls {}
         .accessibilityLabel(TrustCopy.mapAccessibility)
     }
@@ -108,6 +180,19 @@ struct CircleView: View {
         .padding(.horizontal, TrustTheme.gutter)
         .padding(.top, 8)
         .allowsHitTesting(false)
+    }
+
+    private var wideMapStatus: some View {
+        Text(TrustCopy.onMap(count: pins.count, sealed: max(0, model.circle.count - pins.count)))
+            .trustFont(12, weight: .medium)
+            .foregroundStyle(palette.chromeMuted)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(.ultraThinMaterial)
+            .clipShape(Capsule())
+            .padding(.horizontal, TrustTheme.gutter)
+            .padding(.top, 8)
+            .allowsHitTesting(false)
     }
 
     private var recenterButton: some View {
@@ -164,10 +249,10 @@ struct CircleView: View {
             if model.circle.isEmpty {
                 ScrollView {
                     TrustEmptyState(
-                        glyph: "lock",
+                        glyph: "person.2.wave.2",
                         title: TrustCopy.circleEmptyTitle,
                         message: TrustCopy.circleEmptyBody,
-                        actionTitle: TrustCopy.addSomeone
+                        actionTitle: "Go to Sharing"
                     ) {
                         model.selectedTab = .sharing
                     }
@@ -178,12 +263,29 @@ struct CircleView: View {
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
-                        TrustSectionHeading(TrustCopy.sharedWithYou)
-                            .padding(.top, 2)
-
-                        ForEach(sharing) { member in
-                            CirclePersonRow(member: member, seed: seed(member))
-                            TrustRowDivider()
+                        if sharing.isEmpty {
+                            VStack(alignment: .leading, spacing: 10) {
+                                Text("No one is sharing with you yet")
+                                    .trustFont(17, weight: .semibold)
+                                    .foregroundStyle(palette.ink)
+                                Text("You can invite someone or choose what to share with them.")
+                                    .trustFont(13)
+                                    .foregroundStyle(palette.muted)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                Button("Go to Sharing") { model.selectedTab = .sharing }
+                                    .buttonStyle(TrustOutlineButtonStyle(compact: true))
+                            }
+                            .padding(16)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(palette.surface))
+                            .padding(.top, 4)
+                        } else {
+                            TrustSectionHeading(TrustCopy.sharedWithYou)
+                                .padding(.top, 2)
+                            ForEach(sharing) { member in
+                                CirclePersonRow(member: member, seed: seed(member))
+                                TrustRowDivider()
+                            }
                         }
 
                         if !notSharing.isEmpty {
@@ -393,7 +495,7 @@ struct CirclePersonRow: View {
             model.openPerson(member)
         } label: {
             HStack(alignment: .center, spacing: 12) {
-                TrustAvatar(name: member.person.displayName, seed: seed, size: 44)
+                TrustAvatar(name: member.person.displayName, seed: seed, size: 44, avatar: member.person.avatar, personID: member.id)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(member.person.displayName)
                         .trustFont(16, weight: .semibold)
@@ -515,7 +617,7 @@ struct PersonScreen: View {
 
     private func historyProgress(_ member: TrustedPerson) -> some View {
         VStack(spacing: 14) {
-            TrustAvatar(name: member.person.displayName, seed: seed, size: 72)
+            TrustAvatar(name: member.person.displayName, seed: seed, size: 72, avatar: member.person.avatar, personID: member.id)
             Text(member.person.displayName).font(TrustTheme.display(28)).foregroundStyle(palette.ink)
             ProgressView().tint(palette.accent)
             Text("Loading recent places")
@@ -553,7 +655,7 @@ struct PersonScreen: View {
     private func empty(_ member: TrustedPerson) -> some View {
         VStack(spacing: 16) {
             Spacer(minLength: 12)
-            TrustAvatar(name: member.person.displayName, seed: seed, size: 88)
+            TrustAvatar(name: member.person.displayName, seed: seed, size: 88, avatar: member.person.avatar, personID: member.id)
             TrustPageTitle(text: member.person.displayName, size: 32)
                 .multilineTextAlignment(.center)
             Text(statusText(member))
@@ -587,7 +689,7 @@ struct PersonScreen: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 HStack(alignment: .center, spacing: 14) {
-                    TrustAvatar(name: member.person.displayName, seed: seed, size: 64)
+                    TrustAvatar(name: member.person.displayName, seed: seed, size: 64, avatar: member.person.avatar, personID: member.id)
                     VStack(alignment: .leading, spacing: 4) {
                         TrustPageTitle(text: member.person.displayName, size: 30)
                         Text(statusText(member))

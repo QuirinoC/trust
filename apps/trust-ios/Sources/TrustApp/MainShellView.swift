@@ -43,7 +43,11 @@ struct MainShellView: View {
             }
         }
         .animation(.easeOut(duration: 0.22), value: model.toast?.id)
-        .onAppear { Task { await model.refresh() } }
+        // Authentication and app startup already refresh before entering the home shell.
+        // A second unconditional request here races that first call; when the API is
+        // waking up, one request can fail and briefly show the offline banner while
+        // the queued request succeeds. Keep the shell lifecycle path freshness-gated.
+        .onAppear { Task { await model.refreshIfStale() } }
         .onChange(of: model.selectedTab) { _, _ in
             Task { await model.refreshIfStale() }
         }

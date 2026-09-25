@@ -13,7 +13,7 @@ struct LookConfirmSheet: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 HStack(alignment: .top) {
-                    TrustAvatar(name: subject.person.displayName, seed: seed, size: 70)
+                    TrustAvatar(name: subject.person.displayName, seed: seed, size: 70, avatar: subject.person.avatar, personID: subject.id)
                     Spacer()
                     Button {
                         model.cancelLook()

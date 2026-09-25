@@ -1,17 +1,65 @@
 import SwiftUI
 import TrustCore
+import UIKit
 
-/// Paper-toned initials disc (`.avatar`). Fill is stable per person.
+enum ProfileAvatarArtwork {
+    static func assetName(for preset: String) -> String {
+        switch preset {
+        case "fern": "AvatarFern"
+        case "ember": "AvatarEmber"
+        case "sky": "AvatarSky"
+        case "ocean": "AvatarOcean"
+        case "sunrise": "AvatarSunrise"
+        case "lavender": "AvatarLavender"
+        default: "AvatarFern"
+        }
+    }
+
+    static func title(for preset: String) -> String {
+        preset.prefix(1).uppercased() + preset.dropFirst()
+    }
+}
+
+/// Profile picture disc with initials fallback (`.avatar`). Fill is stable per person.
 struct TrustAvatar: View {
     let name: String
     var seed: Int = 0
     var size: CGFloat = 44
+    var avatar: AvatarDescriptor? = nil
+    var personID: UUID? = nil
+    @EnvironmentObject private var model: AppModel
     @Environment(\.trustPalette) private var palette
+    @State private var photo: UIImage?
 
     var body: some View {
+        ZStack {
+            Circle().fill(avatarFill)
+            if let preset = avatar?.knownPresetID {
+                presetGlyph(preset)
+            } else if let photo {
+                Image(uiImage: photo)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: size, height: size)
+                    .clipped()
+            } else {
+                initials
+            }
+        }
+            .frame(width: size, height: size)
+            .clipShape(Circle())
+            .overlay(Circle().stroke(palette.ink.opacity(0.03), lineWidth: 1))
+            .accessibilityHidden(true)
+            .task(id: photoTaskKey) {
+                photo = nil
+                guard avatar?.photoVersion != nil else { return }
+                photo = try? await model.client.avatarImage(personID: resolvedPersonID, descriptor: avatar)
+            }
+    }
+
+    private var initials: some View {
         Text(name.trustInitials)
             // Initials are decorative; full names remain available to VoiceOver nearby.
-            // Keep this glyph inside the fixed avatar even at the largest Dynamic Type size.
             .font(.system(size: size * 0.40, weight: .semibold, design: .rounded))
             .tracking(-0.5)
             .lineLimit(1)
@@ -19,11 +67,19 @@ struct TrustAvatar: View {
             .allowsTightening(true)
             .foregroundStyle(palette.ink)
             .frame(width: size * 0.78, height: size * 0.78)
+    }
+
+    private var resolvedPersonID: UUID { personID ?? model.you.id }
+
+    private var photoTaskKey: String {
+        "\(resolvedPersonID.uuidString)-\(avatar?.version ?? "")"
+    }
+
+    private func presetGlyph(_ preset: String) -> some View {
+        return Image(ProfileAvatarArtwork.assetName(for: preset))
+            .resizable()
+            .scaledToFill()
             .frame(width: size, height: size)
-            .background(avatarFill)
-            .clipShape(Circle())
-            .overlay(Circle().stroke(palette.ink.opacity(0.03), lineWidth: 1))
-            .accessibilityHidden(true)
     }
 
     private var avatarFill: Color {

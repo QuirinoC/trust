@@ -82,6 +82,10 @@ builder.Services.AddRateLimiter(options =>
     options.AddPolicy(RateLimitPolicies.Look, context => RateLimitPartition.GetFixedWindowLimiter(
         PartitionKey(context),
         _ => new FixedWindowRateLimiterOptions { Window = TimeSpan.FromMinutes(1), PermitLimit = 60, QueueLimit = 0 }));
+
+    options.AddPolicy(RateLimitPolicies.Avatar, context => RateLimitPartition.GetFixedWindowLimiter(
+        PartitionKey(context),
+        _ => new FixedWindowRateLimiterOptions { Window = TimeSpan.FromMinutes(1), PermitLimit = 15, QueueLimit = 0 }));
 });
 builder.Services.ConfigureHttpJsonOptions(options =>
 {

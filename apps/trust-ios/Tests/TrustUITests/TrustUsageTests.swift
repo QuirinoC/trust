@@ -24,7 +24,14 @@ final class TrustUsageTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["person-sharing-directions"].waitForExistence(timeout: 8), "Look should return to its single snapshot view.")
         XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "One snapshot")).firstMatch.exists)
 
-        app.buttons["circle-back"].tap()
+        let openMap = app.buttons["view-open-map"]
+        XCTAssertTrue(openMap.waitForExistence(timeout: 5))
+        openMap.tap()
+        let mapCanvas = app.descendants(matching: .any)["map-screen-canvas"]
+        XCTAssertTrue(mapCanvas.waitForExistence(timeout: 5))
+        XCTAssertGreaterThan(mapCanvas.frame.width, 200, "The Map route should keep a useful map canvas inside the wide People detail pane.")
+
+        app.buttons["map-back-to-people"].tap()
         XCTAssertTrue(app.buttons["person-row-maya"].waitForExistence(timeout: 5), "Look should return to the People list.")
     }
 
@@ -33,28 +40,64 @@ final class TrustUsageTests: XCTestCase {
         XCTAssertTrue(app.buttons["tab-sharing"].waitForExistence(timeout: 20))
         app.buttons["tab-sharing"].tap()
 
+        app.buttons["sharing-actions-maya"].tap()
         let pause = app.buttons["pause-sharing-maya"]
         XCTAssertTrue(pause.waitForExistence(timeout: 5))
         pause.tap()
         let oneHour = app.buttons["pause-duration-3600"]
         XCTAssertTrue(oneHour.waitForExistence(timeout: 5))
         oneHour.tap()
-        XCTAssertTrue(app.staticTexts["sharing-summary-maya"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["sharing-summary-maya"].label.contains("Paused"))
+        let pauseSheetDismissed = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == false"),
+            object: oneHour
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [pauseSheetDismissed], timeout: 5), .completed)
+        let sharingSummary = app.staticTexts["sharing-summary-maya"]
+        XCTAssertTrue(sharingSummary.waitForExistence(timeout: 5))
+        XCTAssertTrue(sharingSummary.label.contains("Paused"))
 
         app.buttons["sharing-mode-sealed-maya"].tap()
-        XCTAssertTrue(app.staticTexts["sharing-summary-maya"].label.contains("Sealed"))
-        app.buttons["sharing-mode-off-maya"].tap()
+        let later = app.buttons["always-explainer-later"]
+        if later.waitForExistence(timeout: 5) {
+            later.tap()
+            let explainerDismissed = XCTNSPredicateExpectation(
+                predicate: NSPredicate(format: "exists == false"),
+                object: later
+            )
+            XCTAssertEqual(XCTWaiter.wait(for: [explainerDismissed], timeout: 5), .completed)
+        }
+        XCTAssertTrue(app.buttons["sharing-mode-sealed-maya"].isSelected)
+        let off = app.buttons["sharing-mode-off-maya"]
+        XCTAssertTrue(off.waitForExistence(timeout: 5))
+        let offBecameHittable = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "hittable == true"),
+            object: off
+        )
+        let hittabilityResult = XCTWaiter.wait(for: [offBecameHittable], timeout: 5)
+        if hittabilityResult != .completed {
+            let screenshot = XCTAttachment(screenshot: app.screenshot())
+            screenshot.name = "Off mode not hittable"
+            add(screenshot)
+            let hierarchy = XCTAttachment(string: app.debugDescription)
+            hierarchy.name = "Off mode accessibility hierarchy"
+            add(hierarchy)
+            XCTFail("Off should become tappable after dismissing the Always explainer.")
+        }
+        off.tap()
+        XCTAssertTrue(app.buttons["stop-sharing-confirm"].waitForExistence(timeout: 5))
         tapConfirmationAction("stop-sharing-confirm", in: app)
-        XCTAssertTrue(app.staticTexts["sharing-summary-maya"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["sharing-summary-maya"].label.contains("Not sharing"))
+        let offSelected = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "selected == true"),
+            object: app.buttons["sharing-mode-off-maya"]
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [offSelected], timeout: 5), .completed)
 
         app.buttons["sharing-actions-maya"].tap()
         let remove = app.buttons["remove-person-action-maya"]
         XCTAssertTrue(remove.waitForExistence(timeout: 5))
         remove.tap()
         tapConfirmationAction("remove-person-confirm", in: app)
-        XCTAssertFalse(app.staticTexts["sharing-summary-maya"].waitForExistence(timeout: 2))
+        XCTAssertFalse(app.descendants(matching: .any)["sharing-mode-group-maya"].waitForExistence(timeout: 2))
     }
 
     func testInviteActivityYouAndDarkAppearance() {
@@ -62,12 +105,16 @@ final class TrustUsageTests: XCTestCase {
         XCTAssertTrue(app.buttons["tab-circle"].waitForExistence(timeout: 20))
         app.buttons["tab-sharing"].tap()
         XCTAssertTrue(app.staticTexts["sharing-intro"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["mode-option-home"].exists)
 
         app.buttons["add-someone-button"].tap()
         let phone = app.textFields["add-phone"]
         XCTAssertTrue(phone.waitForExistence(timeout: 5))
         phone.tap()
+        // The Duo simulator does not always report keyboard focus to XCUI even when its
+        // text field accepts input. Verify the actual editable value instead.
         phone.typeText("4155550100")
+        XCTAssertEqual(phone.value as? String, "4155550100")
         app.buttons["add-phone-button"].tap()
         XCTAssertTrue(app.staticTexts["invite-notice"].waitForExistence(timeout: 5), "The demo reports its invite limitation without sending a real text.")
         XCTAssertTrue(app.textFields["invite-code"].exists, "Joining an invite remains a separate explicit action.")
@@ -80,8 +127,16 @@ final class TrustUsageTests: XCTestCase {
         XCTAssertTrue(event.waitForExistence(timeout: 5), "Activity should show dated event receipts.")
 
         app.buttons["tab-you"].tap()
-        XCTAssertTrue(app.buttons["mode-option-home"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["my-location"].waitForExistence(timeout: 5))
+        app.buttons["my-location"].tap()
         XCTAssertTrue(app.staticTexts["location-permission-status"].exists)
+        app.buttons["Done"].tap()
+        app.buttons["edit-profile-picture"].tap()
+        XCTAssertTrue(app.buttons["avatar-choose-photo"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["avatar-take-photo"].exists)
+        app.buttons["Fern icon"].tap()
+        XCTAssertTrue(app.buttons["avatar-save"].isEnabled)
+        app.buttons["Cancel"].tap()
         XCTAssertTrue(app.descendants(matching: .any)["support-link"].exists)
     }
 

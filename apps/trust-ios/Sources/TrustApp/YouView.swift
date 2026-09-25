@@ -1,28 +1,25 @@
 import SwiftUI
 import TrustCore
 
-/// You — account, presence, Plus, delete.
+/// You — profile, membership, personal location settings, and account.
 struct YouView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.trustPalette) private var palette
     @State private var showingDeleteAccount = false
+    @State private var showingAvatarPicker = false
+    @State private var showingLocation = false
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 TrustPageTitle(text: TrustCopy.you)
-                    .padding(.top, 4)
+                    .padding(.top, 20)
 
                 profileCard
                     .padding(.top, 22)
 
-                presenceSection
-                    .padding(.bottom, 22)
-
-                locationPermissionSection
-                    .padding(.bottom, 18)
-
-                homePlaceSection
+                myLocationRow
+                    .padding(.top, 20)
                     .padding(.bottom, 22)
 
                 plusCard
@@ -65,6 +62,16 @@ struct YouView: View {
             }
             Button(TrustCopy.cancel, role: .cancel) {}
         }
+        .sheet(isPresented: $showingAvatarPicker) {
+            ProfileAvatarPicker()
+                .environmentObject(model)
+                .presentationDetents([.large])
+        }
+        .sheet(isPresented: $showingLocation) {
+            locationSheet
+                .environmentObject(model)
+                .presentationDetents([.large])
+        }
         .task {
             guard !model.isDemoMode else { return }
             if let signed = await model.store.refreshEntitlement() {
@@ -73,34 +80,79 @@ struct YouView: View {
         }
     }
 
-    // MARK: Profile / status
+    // MARK: Profile and personal settings
 
     private var profileCard: some View {
-        HStack(spacing: 14) {
-            TrustAvatar(name: model.you.displayName, seed: 0, size: 70)
-            VStack(alignment: .leading, spacing: 6) {
-                Text(model.you.displayName)
-                    .font(TrustTheme.display(24))
-                    .tracking(-0.6)
-                    .foregroundStyle(palette.ink)
-                Text([model.you.handle.map { "@\($0)" }, model.coverage.planLabel].compactMap { $0 }.joined(separator: " · "))
-                    .font(TrustTheme.ui(13))
-                    .foregroundStyle(palette.muted)
+        TrustCard(fill: palette.surface) {
+            HStack(spacing: 14) {
+                TrustAvatar(name: model.you.displayName, seed: 0, size: 70, avatar: model.you.avatar, personID: model.you.id)
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(model.you.displayName)
+                        .font(TrustTheme.display(23))
+                        .tracking(-0.6)
+                        .foregroundStyle(palette.ink)
+                    if let handle = model.you.handle {
+                        Text("@\(handle)")
+                            .font(TrustTheme.ui(13))
+                            .foregroundStyle(palette.muted)
+                    }
+                    Button("Edit picture") { showingAvatarPicker = true }
+                        .buttonStyle(TrustTextButtonStyle(color: palette.accent))
+                        .accessibilityIdentifier("edit-profile-picture")
+                }
+                Spacer(minLength: 0)
             }
         }
-        .accessibilityElement(children: .combine)
     }
 
-    // MARK: Presence triad (free, manual, global)
+    private var myLocationRow: some View {
+        Button { showingLocation = true } label: {
+            HStack(spacing: 13) {
+                Image(systemName: "location.circle.fill")
+                    .font(.system(size: 25))
+                    .foregroundStyle(palette.accent)
+                    .frame(width: 34)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("My location")
+                        .trustFont(16, weight: .semibold)
+                        .foregroundStyle(palette.ink)
+                    Text(model.location.homeIsSet ? "Home set on this phone" : "Location access: \(model.location.statusLabel)")
+                        .trustFont(12)
+                        .foregroundStyle(palette.muted)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(palette.muted)
+            }
+            .padding(16)
+            .background(RoundedRectangle(cornerRadius: TrustTheme.radius, style: .continuous).fill(palette.surface))
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("my-location")
+    }
 
-    private var presenceSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            TrustSectionHeading(TrustCopy.status)
-            TrustModeControl<HomePresenceKind>(
-                items: HomePresenceKind.triad.map { .init(id: $0, label: $0.label) },
-                selection: model.myPresence == .unknown ? nil : model.myPresence
-            ) { kind in
-                model.setPresence(kind)
+    private var locationSheet: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 25) {
+                    Text("Your Home place stays on this phone. In Sharing, choose each person's location mode and your Home, Away, or Hidden status.")
+                        .trustFont(13)
+                        .foregroundStyle(palette.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                    locationPermissionSection
+                    homePlaceSection
+                }
+                .padding(TrustTheme.gutter)
+                .trustReadableWidth()
+            }
+            .background(palette.paper.ignoresSafeArea())
+            .navigationTitle("My location")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(TrustCopy.done) { showingLocation = false }
+                }
             }
         }
     }
@@ -165,24 +217,32 @@ struct YouView: View {
     }
 
     private var plusCard: some View {
-        TrustCard(fill: palette.paper) {
-            VStack(alignment: .leading, spacing: 10) {
-                TrustEyebrow(text: TrustCopy.trustPlus, color: palette.accent, size: 10)
-                if model.coverage.isCovered {
-                    Text(TrustCopy.youHavePlus)
-                        .font(TrustTheme.ui(16, weight: .semibold))
+        TrustCard(padding: 14, fill: palette.paper) {
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    TrustEyebrow(text: TrustCopy.trustPlus, color: palette.accent, size: 10)
+                    Text(model.coverage.isCovered ? TrustCopy.youHavePlus : TrustCopy.plusHeadline)
+                        .trustFont(13, weight: .medium)
                         .foregroundStyle(palette.ink)
-                    Link(TrustCopy.manageSubscription, destination: StoreManager.manageSubscriptionsURL)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 4)
+                if model.coverage.isCovered {
+                    Link("Manage", destination: StoreManager.manageSubscriptionsURL)
                         .font(TrustTheme.ui(13, weight: .medium))
                         .foregroundStyle(palette.accent)
                         .frame(minHeight: 44)
+                        .accessibilityLabel(TrustCopy.manageSubscription)
                 } else {
-                    Text(TrustCopy.plusHeadline)
-                        .font(TrustTheme.display(22))
-                        .tracking(-0.5)
-                        .foregroundStyle(palette.ink)
-                    Button(TrustCopy.seePlus) { model.showingPaywall = true }
-                        .buttonStyle(TrustOutlineButtonStyle(compact: true))
+                    Button { model.showingPaywall = true } label: {
+                        HStack(spacing: 4) {
+                            Text(TrustCopy.seePlus)
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 10, weight: .semibold))
+                                .accessibilityHidden(true)
+                        }
+                    }
+                        .buttonStyle(TrustTextButtonStyle(color: palette.accent))
                         .accessibilityIdentifier("plus-cta")
                 }
             }
@@ -228,7 +288,7 @@ struct ViewLogView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 TrustPageTitle(text: asTab ? TrustCopy.log : TrustCopy.viewLog)
-                    .padding(.top, 4)
+                    .padding(.top, asTab ? 20 : 4)
                 if !asTab {
                     Text(TrustCopy.viewLogIntro)
                         .font(TrustTheme.ui(13))

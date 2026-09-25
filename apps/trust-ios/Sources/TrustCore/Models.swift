@@ -16,6 +16,7 @@ public struct Person: Identifiable, Hashable, Codable, Sendable {
     public var onboardingComplete: Bool
     public var phoneVerified: Bool
     public var handle: String?
+    public var avatar: AvatarDescriptor?
 
     public var identity: String {
         if let handle, !handle.isEmpty {
@@ -30,7 +31,8 @@ public struct Person: Identifiable, Hashable, Codable, Sendable {
         hasPro: Bool = false,
         onboardingComplete: Bool = true,
         phoneVerified: Bool = false,
-        handle: String? = nil
+        handle: String? = nil,
+        avatar: AvatarDescriptor? = nil
     ) {
         self.id = id
         self.displayName = displayName
@@ -38,6 +40,40 @@ public struct Person: Identifiable, Hashable, Codable, Sendable {
         self.onboardingComplete = onboardingComplete
         self.phoneVerified = phoneVerified
         self.handle = handle
+        self.avatar = avatar
+    }
+}
+
+/// Optional profile image descriptor returned by the API. Unknown values are retained
+/// for forward compatibility and rendered as initials by the app.
+public struct AvatarDescriptor: Hashable, Codable, Sendable {
+    public var kind: String
+    public var presetId: String?
+    public var version: String?
+
+    public init(kind: String, presetId: String? = nil, version: String? = nil) {
+        self.kind = kind
+        self.presetId = presetId
+        self.version = version
+    }
+
+    public static func preset(_ id: String) -> AvatarDescriptor {
+        AvatarDescriptor(kind: "preset", presetId: id)
+    }
+
+    public static func photo(version: UUID) -> AvatarDescriptor {
+        AvatarDescriptor(kind: "photo", version: version.uuidString)
+    }
+
+    public var knownPresetID: String? {
+        guard kind == "preset", let presetId,
+              ["fern", "ember", "sky", "ocean", "sunrise", "lavender"].contains(presetId) else { return nil }
+        return presetId
+    }
+
+    public var photoVersion: UUID? {
+        guard kind == "photo", let version else { return nil }
+        return UUID(uuidString: version)
     }
 }
 

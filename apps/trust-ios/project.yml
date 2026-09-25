@@ -39,13 +39,14 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.collapsetechnologies.trust
         PRODUCT_NAME: Trust
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        CURRENT_PROJECT_VERSION: 19
+        CURRENT_PROJECT_VERSION: 22
         MARKETING_VERSION: 1.0
         ENABLE_USER_SCRIPT_SANDBOXING: YES
         SWIFT_STRICT_CONCURRENCY: targeted
         CODE_SIGN_ENTITLEMENTS: Trust.entitlements
         DEVELOPMENT_TEAM: 3S529795M9
         INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: Trust uses your location while the app is open so you can see yourself on the map and look at people who share with you. Trust does not sell your location.
+        INFOPLIST_KEY_NSCameraUsageDescription: Trust uses the camera only when you choose Take Photo to set your profile picture.
     info:
       path: Info.plist
       properties:
@@ -84,6 +85,7 @@ targets:
           - location
         ITSAppUsesNonExemptEncryption: false
         NSLocationWhenInUseUsageDescription: Trust uses your location while the app is open so you can see yourself on the map and look at people who share with you. Trust does not sell your location.
+        NSCameraUsageDescription: Trust uses the camera only when you choose Take Photo to set your profile picture.
         NSLocationAlwaysAndWhenInUseUsageDescription: Trust uses your location in the background so a Look still works when the app is closed. A confirmed Look is recorded and requests a notification. Trust does not sell your location.
         NSLocationAlwaysUsageDescription: Trust uses your location in the background so a Look still works when the app is closed. A confirmed Look is recorded and requests a notification. Trust does not sell your location.
         NSLocationTemporaryUsageDescriptionDictionary:

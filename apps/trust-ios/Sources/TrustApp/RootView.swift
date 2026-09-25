@@ -25,7 +25,7 @@ struct RootView: View {
         .onChange(of: scenePhase) { _, phase in
             model.location.setAppActive(phase == .active)
             if phase == .active, model.phase == .home {
-                Task { await model.refresh() }
+                Task { await model.refreshIfStale() }
             }
         }
     }

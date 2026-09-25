@@ -343,10 +343,21 @@ final class AppModel: ObservableObject {
             selectedTab = .you
         case "map":
             guard auth.isAuthenticated else { return }
+            // Show a real one-time pin in the offline listing fixture. A fresh
+            // Free demo has no live pins until a person is explicitly looked at.
+            if let demo,
+               let sealed = circle.first(where: \.isSealed),
+               let session = try? demo.look(confirmed: true, subjectID: sealed.id) {
+                openedSnapshots[sealed.id] = session
+                publishDemoSnapshot()
+            }
             openMap()
         case "invite":
             guard auth.isAuthenticated else { return }
             selectedTab = .sharing
+            // Listing captures need the code and share action visible. Only seed
+            // the offline fixture; screenshot launches must never call the live API.
+            if isDemoMode { createInvite() }
         default:
             break
         }
@@ -560,6 +571,34 @@ final class AppModel: ObservableObject {
         } catch {
             showToast(plainMessage(for: error))
         }
+    }
+
+    func saveAvatar(presetID: String) async throws {
+        guard !isDemoMode else { throw TrustClientError.server("Profile pictures are unavailable in demo mode.") }
+        let avatar = try await client.setAvatarPreset(presetID)
+        updateLocalAvatar(avatar)
+        await refresh()
+    }
+
+    func saveAvatarPhoto(_ jpeg: Data) async throws {
+        guard !isDemoMode else { throw TrustClientError.server("Profile pictures are unavailable in demo mode.") }
+        let avatar = try await client.setAvatarPhoto(jpeg)
+        updateLocalAvatar(avatar)
+        await refresh()
+    }
+
+    func removeAvatar() async throws {
+        guard !isDemoMode else { throw TrustClientError.server("Profile pictures are unavailable in demo mode.") }
+        try await client.removeAvatar()
+        updateLocalAvatar(nil)
+        await refresh()
+    }
+
+    private func updateLocalAvatar(_ avatar: AvatarDescriptor?) {
+        guard var current = snapshot else { return }
+        current.you.avatar = avatar
+        snapshot = current
+        client.snapshot = current
     }
 
     // MARK: Refresh / offline

@@ -31,6 +31,17 @@ public sealed class TwoAccountPostgresTests
         Assert.Equal(ShareResting.Off, samRow.InboundShare.Effective(time.UtcNow));
         Assert.Null(samRow.Live);
 
+        var presetAvatar = await store.SetAvatarPresetAsync(sam.Id, "fern", CancellationToken.None);
+        Assert.Equal("fern", presetAvatar.PresetId);
+        Assert.Equal("fern", (await store.FindAccountAsync(sam.Id, CancellationToken.None))!.Avatar!.PresetId);
+        var initialPhotoVersion = Guid.NewGuid();
+        var initialPhoto = new byte[] { 0xff, 0xd8, 0xff, 0xd9 };
+        await store.SetAvatarPhotoAsync(sam.Id, initialPhotoVersion, initialPhoto, CancellationToken.None);
+        Assert.Equal(initialPhoto, await store.GetAvatarPhotoAsync(sam.Id, initialPhotoVersion, CancellationToken.None));
+        Assert.Null(await store.GetAvatarPhotoAsync(sam.Id, Guid.NewGuid(), CancellationToken.None));
+        await store.SetAvatarPresetAsync(sam.Id, "ocean", CancellationToken.None);
+        Assert.Null(await store.GetAvatarPhotoAsync(sam.Id, initialPhotoVersion, CancellationToken.None));
+
         await engine.SetShareAsync(sam.Id, jordan.Id, ShareResting.UntilTheyLook, null, CancellationToken.None);
         await engine.IngestAsync(
             sam.Id,
@@ -137,9 +148,12 @@ public sealed class TwoAccountPostgresTests
         await engine.SetHomePlaceAsync(sam.Id, Guid.NewGuid(), "Home", CancellationToken.None);
         await engine.PostHomePresenceAsync(sam.Id, HomePresenceState.Away, null, CancellationToken.None);
         Assert.NotNull(await store.GetCurrentHomePresenceAsync(sam.Id, CancellationToken.None));
+        var deletionPhotoVersion = Guid.NewGuid();
+        await store.SetAvatarPhotoAsync(sam.Id, deletionPhotoVersion, initialPhoto, CancellationToken.None);
         await engine.DeleteAccountAsync(sam.Id, CancellationToken.None);
         Assert.Null(await store.FindAccountAsync(sam.Id, CancellationToken.None));
         Assert.Null(await store.GetCurrentHomePresenceAsync(sam.Id, CancellationToken.None));
+        Assert.Null(await store.GetAvatarPhotoAsync(sam.Id, deletionPhotoVersion, CancellationToken.None));
 
         await engine.DeleteAccountAsync(jordan.Id, CancellationToken.None);
         await engine.DeleteAccountAsync(ada.Id, CancellationToken.None);

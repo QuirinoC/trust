@@ -1,6 +1,6 @@
 # Trust release runbook
 
-This runbook covers the API, canonical website, and iOS TestFlight build. As of 2026-09-24, the API is deployed, but no signed app archive has been uploaded or verified on a physical phone. Keep production secrets in their service secret stores; the names below are configuration keys only.
+This runbook covers the API, canonical website, and iOS TestFlight build. As of 2026-09-24, API and website deployments are verified. iOS build 21 is the older pre-redesign TestFlight build; the redesign is on the current branch and not yet deployed. Source is now version 1.0 build 22, intended for internal TestFlight, and has not been archived or uploaded. The redesign's M6 iPhone/iPad screenshots were recaptured on 2026-09-24 and have not been uploaded to App Store Connect. Installed Xcode 27.1 beta can build internal TestFlight build 22; stable public Xcode 27 is required for App Review. Keep production secrets in their service secret stores; the names below are configuration keys only.
 
 ## Before a release
 
@@ -15,7 +15,7 @@ This runbook covers the API, canonical website, and iOS TestFlight build. As of 
    ```
 
    In another terminal, run `python3 apps/trust-api/scripts/e2e_two_account_http.py`. It creates temporary accounts in the local database and mutates test rows; do not point it at production.
-3. If needed, generate `apps/trust-ios/Trust.xcodeproj` from `project.yml` by running `xcodegen generate` in `apps/trust-ios`. The current recorded local evidence is 26 core tests and 4 UI tests passing on the iPhone 17 Pro simulator; this does not replace re-running checks on the exact release commit. Build and archive the same commit intended for TestFlight. Review the archive and signing identity in Xcode Organizer before upload.
+3. If needed, generate `apps/trust-ios/Trust.xcodeproj` from `project.yml` by running `xcodegen generate` in `apps/trust-ios`. The local redesign passed API tests 106/106, Swift core tests 26/26, Duo UI tests 4/4, and web tests 3/3. Build 21 is the older TestFlight build; current source version 1.0 build 22 is intended for internal TestFlight and can be archived with installed Xcode 27.1 beta. Deploy the reviewed API and website changes before testing the release app against production. Stable public Xcode 27 is required when preparing the App Review build.
 4. Confirm the website's legal pages and `sms-opt-in.png` are present in `apps/jointrust-web/public`; use the repository's authenticated Wrangler setup for deployment.
 
 ## API deployment
@@ -30,13 +30,23 @@ If readiness fails, stop the release and inspect Render logs and the database mi
 
 ## Website deployment
 
-The canonical site is the Cloudflare Worker in `apps/jointrust-web` with config `wrangler.jsonc`. Deployment commit `65fa48a` (Cloudflare version `7d90d280-a37f-42f4-b198-215e016069cd`) is live as verified on 2026-09-24. Deploy from the repository root after reviewing later site changes:
+The canonical site is the Cloudflare Worker in `apps/jointrust-web` with config `wrangler.jsonc`. The current live Cloudflare version is `5c1d221f-4e07-4adb-9b4d-9c1844de332b`, deployed from the working tree on 2026-09-24 with the corrected support copy. Deploy from the repository root after reviewing later site changes:
 
 ```bash
 npx wrangler deploy --config apps/jointrust-web/wrangler.jsonc
 ```
 
-After a deployment, check `https://jointrust.app`, `/privacy`, `/terms`, `/support`, `/sms`, `/sms-opt-in.png`, `/i/ABC234`, and `/apple-app-site-association`. On 2026-09-24 these paths all returned 200 on the live site; `/i/ABC234` and the AASA response were included. The API legal routes also returned successful redirects to canonical website pages. If the Worker update fails verification, use Cloudflare's deployment/version history to restore the prior working version, then repeat the URL checks.
+After a deployment, check `https://jointrust.app`, `/privacy`, `/terms`, `/support`, `/sms`, `/sms-opt-in.png`, `/i/ABC234`, and `/.well-known/apple-app-site-association`. On 2026-09-24 these paths all returned 200 on the live site, including the invite landing and AASA response. The API legal routes previously returned successful redirects to canonical website pages. If the Worker update fails verification, use Cloudflare's deployment/version history to restore the prior working version, then repeat the URL checks.
+
+## Release order
+
+1. Review the local redesign and complete the intended source changes; commit and push before preparing distribution.
+2. Archive version 1.0 build 22 with installed Xcode 27.1 beta, validate and upload it for internal TestFlight, then complete physical-device checks. Build 21 remains the older uploaded TestFlight build.
+3. Upload the recaptured M6 screenshots to ASC and verify the listing assets; reconcile privacy disclosures and remaining listing metadata.
+4. Before App Review, install stable public Xcode 27 (27A266a), create a new compliant release archive/build, select it for version 1.0, and submit the app and subscription group together when all review blockers are resolved.
+5. Deploy API or website changes only when their reviewed source is ready; verify the live health/routes after each deployment.
+
+Build 21 is the older uploaded TestFlight build and is distinct from intended internal build 22. Neither the redesigned source nor its screenshots have been uploaded. Since stable Xcode 27 is required for App Review, build 22's beta-built archive is for internal testing; prepare a stable-Xcode release build for submission. See `docs/STATUS.md` and `apps/trust-ios/AppStore/REVIEW-READINESS.md` for current evidence and blockers.
 
 ## TestFlight upload
 

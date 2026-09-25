@@ -529,6 +529,7 @@ public sealed class TrustEngineTests
     {
         var engine = NewEngine(out _);
         var (sam, jordan) = await PairAsync(engine);
+        await engine.SetShareAsync(sam.Id, jordan.Id, ShareResting.UntilTheyLook, null, CancellationToken.None);
         await engine.IngestAsync(
             sam.Id,
             new LocationFix(DateTimeOffset.UtcNow, 37.76, -122.42),
@@ -557,6 +558,7 @@ public sealed class TrustEngineTests
         var placeId = Guid.NewGuid();
         await engine.SetHomePlaceAsync(sam.Id, placeId, "Home", CancellationToken.None);
         await engine.SetPresenceGrantAsync(sam.Id, jordan.Id, true, CancellationToken.None);
+        await engine.SetShareAsync(sam.Id, jordan.Id, ShareResting.UntilTheyLook, null, CancellationToken.None);
         await engine.PostHomePresenceAsync(sam.Id, HomePresenceState.Away, null, CancellationToken.None);
 
         var jordanView = await engine.GetCircleAsync(jordan.Id, CancellationToken.None);
@@ -804,11 +806,48 @@ public sealed class TrustEngineTests
     }
 
     [Fact]
+    public async Task HomePresenceFollowsEffectiveOutboundShareMode()
+    {
+        var time = new MutableTimeProvider { UtcNow = new DateTimeOffset(2026, 9, 24, 12, 0, 0, TimeSpan.Zero) };
+        var engine = NewEngine(out _, time);
+        var (sam, jordan) = await PairAsync(engine);
+        await engine.SetPresenceGrantAsync(sam.Id, jordan.Id, true, CancellationToken.None);
+        await engine.PostHomePresenceAsync(sam.Id, HomePresenceState.Home, null, CancellationToken.None);
+
+        async Task<CircleMember> GetSamMemberAsync() =>
+            (await engine.GetCircleAsync(jordan.Id, CancellationToken.None)).Members
+                .Single(member => member.Person.Id == sam.Id);
+
+        var offMember = await GetSamMemberAsync();
+        Assert.Equal(ShareResting.Off, offMember.InboundShare.Effective(time.UtcNow));
+        Assert.Null(offMember.HomePresence);
+        Assert.True(offMember.InboundPresenceGranted);
+
+        await engine.SetShareAsync(sam.Id, jordan.Id, ShareResting.UntilTheyLook, null, CancellationToken.None);
+        var sealedMember = await GetSamMemberAsync();
+        Assert.Equal(ShareResting.UntilTheyLook, sealedMember.InboundShare.Effective(time.UtcNow));
+        Assert.Equal(HomePresenceState.Home, sealedMember.HomePresence!.State);
+
+        await engine.SetShareAsync(sam.Id, jordan.Id, null, PauseDuration.OneHour, CancellationToken.None);
+        var pausedMember = await GetSamMemberAsync();
+        Assert.Equal(ShareResting.Paused, pausedMember.InboundShare.Effective(time.UtcNow));
+        Assert.Null(pausedMember.HomePresence);
+        Assert.True(pausedMember.InboundPresenceGranted);
+
+        await engine.GrantCircleAsync(sam.Id, "test", CancellationToken.None);
+        await engine.SetShareAsync(sam.Id, jordan.Id, ShareResting.Always, null, CancellationToken.None);
+        var alwaysMember = await GetSamMemberAsync();
+        Assert.Equal(ShareResting.Always, alwaysMember.InboundShare.Effective(time.UtcNow));
+        Assert.Equal(HomePresenceState.Home, alwaysMember.HomePresence!.State);
+    }
+
+    [Fact]
     public async Task PresenceCanBeSetManuallyWithoutAHomePlace()
     {
         var engine = NewEngine(out _);
         var (sam, jordan) = await PairAsync(engine);
         await engine.SetPresenceGrantAsync(sam.Id, jordan.Id, true, CancellationToken.None);
+        await engine.SetShareAsync(sam.Id, jordan.Id, ShareResting.UntilTheyLook, null, CancellationToken.None);
 
         // No SetHomePlaceAsync call at all — the triad doesn't require Home to be set.
         await engine.PostHomePresenceAsync(sam.Id, HomePresenceState.Away, null, CancellationToken.None);

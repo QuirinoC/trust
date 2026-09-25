@@ -362,6 +362,7 @@ struct TrustTextFieldStyle: TextFieldStyle {
             .padding(14)
             .background(palette.surface)
             .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(palette.line, lineWidth: 1))
+            .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 }
 
