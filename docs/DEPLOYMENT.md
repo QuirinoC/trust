@@ -1,6 +1,6 @@
 # Trust release runbook
 
-This runbook covers the API, canonical website, and iOS TestFlight build. PR #2 merged to `main` at `31db6cc`; API, iOS, and web checks passed, including hosted iOS 26 core tests and 4 UI tests. The Remove-alert fix moves Remove into the parent alert. Render deployment `dep-dar1gnm0tbcc73cingv0` was verified live for merge commit `31db6cc`; `/health/ready` returned `200 Healthy`. The API preset allowlist is deployed. Cloudflare version `387f20df-6ce6-46f0-bf55-5b32f1771e67` remains live; the documented public routes returned 200, and no newer site changes are deployed. Build 22 is the latest uploaded build, though ASC processing and group assignment are unverified while signed out. Build 23 passed archive validation but was not uploaded. Build 24’s optimized archive and code signature are verified for team `3S529795M9`; `xcodebuild -exportArchive` validation is blocked until Xcode App Store Connect account access is restored while the Mac is locked. Build 24 is not uploaded. M6 screenshots, privacy answers, age-policy choice, physical-device checks, and carousel visual sign-off remain open. Stable public Xcode 27 is required for App Review. Keep production secrets in their service secret stores; the names below are configuration keys only.
+This runbook covers the API, canonical website, and iOS TestFlight build. PR #4 merged the website alignment to `main` at `50715c0`; API, iOS, and web checks passed. Render deployment `dep-dar1gnm0tbcc73cingv0` remains the last verified API deployment; `/health/ready` returned `200 Healthy`, and the preset allowlist is deployed. Cloudflare version `0b61e45a-0391-42e6-9e44-d3a473921469` is live with the Together Lines site, and the documented public routes returned 200. Build 24’s optimized archive passed Xcode Organizer validation for team `3S529795M9` and uploaded for internal TestFlight on 2026-09-25. ASC processing and group assignment are unverified while Chrome is signed out. M6 screenshots, privacy answers, age-policy choice, physical-device checks, and carousel visual sign-off remain open. Stable public Xcode 27 is required for App Review. Keep production secrets in their service secret stores; the names below are configuration keys only.
 
 ## Before a release
 
@@ -15,7 +15,7 @@ This runbook covers the API, canonical website, and iOS TestFlight build. PR #2 
    ```
 
    In another terminal, run `python3 apps/trust-api/scripts/e2e_two_account_http.py`. It creates temporary accounts in the local database and mutates test rows; do not point it at production.
-3. If needed, generate `apps/trust-ios/Trust.xcodeproj` from `project.yml` by running `xcodegen generate` in `apps/trust-ios`. PR #2 merged at `31db6cc`; API/iOS/web checks passed, including hosted iOS 26 core and 4 UI tests. Build 24’s optimized archive and signature are verified, but export validation is blocked by Xcode account access while the Mac is locked; it is not uploaded. Build 22 remains the latest uploaded build, with ASC processing/group assignment unverified. Stable public Xcode 27 is required for the App Review build.
+3. If needed, generate `apps/trust-ios/Trust.xcodeproj` from `project.yml` by running `xcodegen generate` in `apps/trust-ios`. Build 24 was validated and uploaded for internal TestFlight; verify ASC processing and tester-group availability before physical-device checks. Stable public Xcode 27 is required for the App Review build.
 4. Confirm the website's legal pages and `sms-opt-in.png` are present in `apps/jointrust-web/public`; use the repository's authenticated Wrangler setup for deployment.
 
 ## API deployment
@@ -30,23 +30,23 @@ If readiness fails, stop the release and inspect Render logs and the database mi
 
 ## Website deployment
 
-The canonical site is the Cloudflare Worker in `apps/jointrust-web` with config `wrangler.jsonc`. The current live Cloudflare version is `387f20df-6ce6-46f0-bf55-5b32f1771e67`. Its `/`, `/privacy`, `/terms`, `/support`, `/sms`, `/sms-opt-in.png`, `/i/ABC234`, and `/.well-known/apple-app-site-association` routes all returned 200. The live privacy page includes the photo information and support describes push as best-effort. Deploy from the repository root after reviewing later site changes:
+The canonical site is the Cloudflare Worker in `apps/jointrust-web` with config `wrangler.jsonc`. The current live Cloudflare version is `0b61e45a-0391-42e6-9e44-d3a473921469`, merged in PR #4. Its `/`, `/privacy`, `/terms`, `/support`, `/sms`, `/sms-opt-in.png`, `/i/ABC234`, and `/.well-known/apple-app-site-association` routes all returned 200. The live privacy page includes the photo information and support describes push as best-effort. Deploy from the repository root after reviewing later site changes:
 
 ```bash
 npx wrangler deploy --config apps/jointrust-web/wrangler.jsonc
 ```
 
-After a deployment, check `https://jointrust.app`, `/privacy`, `/terms`, `/support`, `/sms`, `/sms-opt-in.png`, `/i/ABC234`, and `/.well-known/apple-app-site-association`. All returned 200 for the current version. The app-configured `jointrust.app/privacy`, `/terms`, and `/support` URLs also returned 200; no site change accompanied PR #2. If the Worker update fails verification, use Cloudflare's deployment/version history to restore the prior working version, then repeat the URL checks.
+After a deployment, check `https://jointrust.app`, `/privacy`, `/terms`, `/support`, `/sms`, `/sms-opt-in.png`, `/i/ABC234`, and `/.well-known/apple-app-site-association`. All returned 200 for the current version. The app-configured `jointrust.app/privacy`, `/terms`, and `/support` URLs also returned 200. If the Worker update fails verification, use Cloudflare's deployment/version history to restore the prior working version, then repeat the URL checks.
 
 ## Release order
 
-1. Restore Xcode App Store Connect account access, run `xcodebuild -exportArchive`, and complete Organizer checks for build 24; visually sign off the open Duo and far end of the profile carousel.
-2. Upload build 24 when Organizer validation succeeds. Build 22 remains the latest uploaded build; restore ASC access to verify its processing/group status, then install an available build for physical-device checks.
+1. Visually sign off the open Duo and far end of the profile carousel on build 24.
+2. Build 24 was validated and uploaded for internal TestFlight. Restore ASC browser access to verify processing/group status, then install it for physical-device checks.
 3. Upload the refreshed M6 screenshots to ASC and verify the listing assets; reconcile privacy disclosures and the age-policy conflict with the live legal pages.
 4. Before App Review, install stable public Xcode 27 (27A266a), create a compliant release archive/build, select it for version 1.0, and submit the app and subscription group together when all review blockers are resolved.
 5. Deploy API or website changes only when their reviewed source is ready; verify the live health/routes after each deployment.
 
-Build 22 is the latest uploaded TestFlight build; ASC processing and group assignment remain unverified. Build 24 is locally archived and codesign verified; export validation is blocked pending Xcode App Store Connect access while the Mac is locked, and it is not uploaded. Screenshots, privacy answers, and age-policy alignment remain pending in ASC, whose browser session is signed out. Since stable Xcode 27 is required for App Review, prepare a stable-Xcode release build for submission. See `docs/STATUS.md` and `apps/trust-ios/AppStore/REVIEW-READINESS.md` for current evidence and blockers.
+Build 24 is the latest uploaded TestFlight build; ASC processing and group assignment remain unverified. Screenshots, privacy answers, and age-policy alignment remain pending in ASC, whose browser session is signed out. Since stable Xcode 27 is required for App Review, prepare a stable-Xcode release build for submission. See `docs/STATUS.md` and `apps/trust-ios/AppStore/REVIEW-READINESS.md` for current evidence and blockers.
 
 ## TestFlight upload
 
