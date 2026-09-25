@@ -3,37 +3,26 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Trust — Where they are, and where they’ve been</title>
-    <meta
-      name="description"
-      content="People you choose, including family. Home, Away, or Hidden. Look when they are sharing. Open someone to see where they are and where they have been."
-    />
+    <title>Trust — Peace of mind, with permission</title>
+    <meta name="description" content="Trust helps you stay connected with people you choose. Sharing stays off until you choose a mode for each person." />
     <link rel="canonical" href="https://jointrust.app/" />
-    <meta name="theme-color" content="#FFFEFA" />
-    <meta name="color-scheme" content="light" />
+    <meta name="theme-color" content="#F6F8FC" />
+    <meta name="color-scheme" content="light dark" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Trust" />
-    <meta property="og:title" content="Trust — Where they are, and where they’ve been" />
-    <meta
-      property="og:description"
-      content="People you choose, including family. Look when they are sharing. See where they are and where they have been."
-    />
+    <meta property="og:title" content="Trust — Peace of mind, with permission" />
+    <meta property="og:description" content="Stay connected with people you choose. Sharing stays off until you choose a mode for each person." />
     <meta property="og:url" content="https://jointrust.app/" />
     <meta name="twitter:card" content="summary" />
-    <meta name="twitter:title" content="Trust — Where they are, and where they’ve been" />
-    <meta
-      name="twitter:description"
-      content="People you choose, including family. Look when they are sharing. See where they are and where they have been."
-    />
+    <meta name="twitter:title" content="Trust — Peace of mind, with permission" />
+    <meta name="twitter:description" content="Stay connected with people you choose. Sharing stays off until you choose a mode for each person." />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <link rel="preload" href="/fonts/bodoni-moda-latin-400-italic.woff2" as="font" type="font/woff2" crossorigin />
-    <link rel="preload" href="/fonts/space-grotesk-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin />
-    <link rel="stylesheet" href="/styles.css?v=legal" />
+    <link rel="stylesheet" href="/styles.css?v=together-lines" />
   </head>
-  <body>
+  <body class="home">
     <header class="top">
-      <p class="wordmark">Collapse Technologies</p>
-      <nav class="legal" aria-label="Legal">
+      <p class="wordmark"><a href="/" aria-label="Trust home"><svg class="brand-mark" viewBox="0 0 30 30" aria-hidden="true" focusable="false"><path class="mark-ink" d="M2.4 22.2 C9 18.3 12 7.2 21 5.1"/><path class="mark-blue" d="M9.6 26.4 C14.7 21.6 20.1 11.7 27.9 9.9"/></svg><span>Trust</span></a><span class="publisher">by Collapse Technologies</span></p>
+      <nav class="legal" aria-label="Trust links">
         <a href="/terms">Terms</a>
         <a href="/privacy">Privacy</a>
         <a href="/sms">Texts</a>
@@ -41,20 +30,43 @@
       </nav>
     </header>
 
-    <main>
-      <h1>Trust</h1>
-      <div class="rule" aria-hidden="true"></div>
-      <p class="lede">Where they are, and where they’ve been.</p>
-      <ul>
-        <li>People you choose, including family.</li>
-        <li>Home, Away, or Hidden.</li>
-        <li>Look is one place. Open someone for the trail.</li>
-        <li>Sealed, Always, or Pause. Stop means they cannot see you.</li>
-      </ul>
+    <main class="home-main">
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <p class="eyebrow">A more thoughtful way to stay connected</p>
+          <h1 id="hero-title">Peace of mind,<br /><span>with permission.</span></h1>
+          <p class="lede">Know where someone is when they choose to share. Trust keeps that choice with each person.</p>
+          <p class="privacy-promise"><span class="promise-dot" aria-hidden="true"></span>Sharing stays off until you choose a mode for each person.</p>
+          <a class="invite-action" href="mailto:hello@collapsetechnologies.com?subject=Trust%20TestFlight">Request TestFlight <span aria-hidden="true">↗</span></a>
+          <p class="availability">Made for iPhone.</p>
+        </div>
+        <div class="hero-art" aria-hidden="true">
+          <div class="art-glow"></div>
+          <svg class="together-lines" viewBox="0 0 320 190" focusable="false">
+            <path class="mark-ink" d="M32 146.3 C76.8 93.1 156.8 38 224 24.7" />
+            <path class="mark-blue" d="M86.4 165.3 C128 117.8 201.6 76 281.6 57" />
+            <path class="mark-teal" d="M169.6 163.4 Q214.4 119.7 268.8 115.9" />
+          </svg>
+          <div class="art-caption">Together, on your own terms.</div>
+        </div>
+      </section>
+
+      <section class="feature-section" aria-labelledby="how-title">
+        <div class="section-heading">
+          <p class="eyebrow">The way Trust works</p>
+          <h2 id="how-title">Connection starts with a choice.</h2>
+        </div>
+        <div class="feature-grid">
+          <article class="feature-card"><span class="feature-index">01</span><h3>Choose your people</h3><p>Invite someone you know. Accepting a connection never turns location sharing on.</p></article>
+          <article class="feature-card"><span class="feature-index">02</span><h3>Choose how to share</h3><p>Sealed records each confirmed look. With Plus, Always offers live location and history. Pause or stop when you want.</p></article>
+          <article class="feature-card"><span class="feature-index">03</span><h3>Stay in the know</h3><p>See people who share with you in one place. Activity keeps the record of confirmed looks.</p></article>
+        </div>
+      </section>
     </main>
 
-    <footer>
-      <p>iPhone. <a href="mailto:hello@collapsetechnologies.com?subject=Trust%20TestFlight">Request TestFlight</a>.</p>
+    <footer class="site-footer">
+      <p>Trust by Collapse Technologies</p>
+      <p><a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> · <a href="/support">Support</a></p>
     </footer>
   </body>
 </html>

@@ -1,9 +1,9 @@
 # jointrust.app
 
 Public landing for **Trust** at [jointrust.app](https://jointrust.app).
-Paper page matching the app: Bodoni italic for **Trust**, Space Grotesk for Collapse Technologies, system UI for the rest. No map drawing behind the name.
+The site follows the iOS app's current Together Lines direction in `docs/DESIGN.md`: rounded system typography, cool porcelain and navy surfaces, blue and teal paths, and matching light/dark palettes. The landing page leads with the app's consent-first promise. Sharing is off until a person chooses a mode for each connection.
 
-Privacy, terms, support, and the verification-text opt-in live on this host: `/privacy`, `/terms`, `/support`, `/sms`.
+Privacy, terms, support, and the verification-text opt-in live on this host: `/privacy`, `/terms`, `/support`, `/sms`. Invitation links (`/i/:code`) and the Apple association file are served by the Worker; keep those routes intact when updating the design.
 
 ## Deploy
 
