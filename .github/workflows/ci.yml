@@ -52,12 +52,12 @@ jobs:
           xcode-version: "26.6"
       - name: Install and boot iPhone 17 Pro simulator
         run: |
-          xcodebuild -downloadPlatform iOS -buildVersion 26.5
+          xcodebuild -downloadPlatform iOS
 
-          runtime_id=$(xcrun simctl list runtimes -j | jq -r '.runtimes[] | select(.name == "iOS 26.5") | .identifier' | head -n 1)
+          runtime_id=$(xcrun simctl list runtimes -j | jq -r '[.runtimes[] | select(.isAvailable and (.identifier | startswith("com.apple.CoreSimulator.SimRuntime.iOS-")))] | sort_by(.version | split(".") | map(tonumber)) | last | .identifier // empty')
           device_type_id=$(xcrun simctl list devicetypes -j | jq -r '.devicetypes[] | select(.name == "iPhone 17 Pro") | .identifier' | head -n 1)
           if [[ -z "$runtime_id" || -z "$device_type_id" ]]; then
-            echo "Could not find the iOS 26.5 runtime or iPhone 17 Pro simulator device type."
+            echo "Could not find an available iOS simulator runtime or iPhone 17 Pro device type."
             xcrun simctl list runtimes
             xcrun simctl list devicetypes | grep -F 'iPhone 17 Pro' || true
             exit 1
