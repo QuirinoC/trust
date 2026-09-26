@@ -2,7 +2,7 @@
 
 Trust is a native SwiftUI app for adults who choose to share location with each other. Its visual direction and screen intent are maintained in [DESIGN.md](../../docs/DESIGN.md). The main tabs are **People**, **Sharing**, **Activity**, and **You**; see [SCREENS.md](SCREENS.md) for the screen map.
 
-A connection never starts sharing. An invitation recipient reviews the code and explicitly taps **Join** to accept; both directions remain Off until each person chooses a mode. A Look requires confirmation and returns one current-location snapshot. That share stays Sealed, and its location history is unavailable. Location history is available only while the person shares Always. Activity contains Look, View, and removal events, not a GPS trail.
+A connection never starts sharing. Add someone automatically searches an exact handle or full phone number. Phone discovery is opt-in; when a phone search has no eligible match, the person can share an invite link through iOS. Accepting an invitation creates the connection with both directions Off until each person chooses a mode. A Look requires confirmation and returns one current-location snapshot. That share stays Sealed, and its location history is unavailable. Location history is available only while the person shares Always. Activity contains Look, View, and removal events, not a GPS trail.
 
 ## Build and run
 

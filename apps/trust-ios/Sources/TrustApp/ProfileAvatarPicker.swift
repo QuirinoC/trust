@@ -33,7 +33,9 @@ struct ProfileAvatarPicker: View {
                         VStack(spacing: 22) {
                             VStack(spacing: 10) {
                                 avatarActionMenu
-                                Text(TrustCopy.avatarVisibleToConnections)
+                                Text(model.you.discoveryEnabled == true
+                                     ? TrustCopy.avatarVisibleToDiscoverablePeople
+                                     : TrustCopy.avatarVisibleToConnectionsOnly)
                                     .trustFont(12)
                                     .foregroundStyle(palette.muted)
                                     .multilineTextAlignment(.center)

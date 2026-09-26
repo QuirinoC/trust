@@ -2,7 +2,9 @@
 "accept_request" = "Aceitar solicitação";
 "account" = "Conta";
 "add" = "Adicionar";
-"add_person_explanation" = "Encontre alguém pelo identificador exato. A conexão não ativa o compartilhamento.";
+"add_person_explanation" = "Conecte-se primeiro. O compartilhamento fica desativado até você escolher.";
+"add_person_lookup_helper" = "Digite um nome de usuário do Trust ou um número de telefone completo.";
+"add_person_lookup_placeholder" = "Nome de usuário ou telefone";
 "add_picture" = "Adicionar uma foto";
 "add_profile_picture" = "Adicionar foto de perfil";
 "add_someone" = "Adicionar alguém";
@@ -78,6 +80,8 @@
 "avatar_siamese" = "Gato Siamês";
 "avatar_turtle" = "Tartaruga";
 "avatar_visible_to_connections" = "Visível para as pessoas conectadas a você.";
+"avatar_visible_to_connections_only" = "Quando a busca por telefone está desativada, sua foto fica visível apenas para pessoas conectadas a você.";
+"avatar_visible_to_discoverable_people" = "Quando a busca por telefone está ativada, sua foto pode aparecer em correspondências exatas por nome de usuário ou telefone.";
 "back" = "Voltar";
 "back_to_circle" = "Voltar para Pessoas";
 "camera_permission" = "O Trust só usa a câmera quando você escolhe Tirar foto para definir sua foto de perfil.";
@@ -95,6 +99,7 @@
 "circle_empty_body" = "Convide alguém ou escolha o que compartilhar. A localização fica desativada até você escolher um modo para essa pessoa.";
 "circle_empty_title" = "As pessoas aparecerão aqui";
 "circle_map" = "Mapa de pessoas";
+"clear_field" = "Limpar";
 "clear_home" = "Remover Casa";
 "close" = "Fechar";
 "code_placeholder" = "ABC123";
@@ -128,6 +133,8 @@
 "desc_timed" = "Pausado até %@. Depois, o modo anterior volta.";
 "desc_until" = "Lacrado. Um Olhar mostra um instantâneo e solicita uma notificação.";
 "development_phone_code" = "Código %@.";
+"discovery_enabled_explanation" = "Quando ativada, pessoas que têm seu número de telefone completo podem encontrar seu nome de usuário, e sua foto pode aparecer em correspondências exatas por nome de usuário ou telefone.";
+"discovery_enabled_label" = "Permitir que me encontrem";
 "distance_from_you" = "%@ de você";
 "done" = "Concluído";
 "edit_phone" = "Editar";
@@ -137,6 +144,7 @@
 "enter_phone" = "Digite um número de telefone.";
 "enter_phone_code" = "Digite o código.";
 "export_log" = "Exportar registro";
+"find_your_person" = "Encontre sua pessoa";
 "follow_iphone_language" = "Seguir o idioma do iPhone";
 "free_plan" = "Plano gratuito";
 "go_to_sharing" = "Ir para Compartilhamento";
@@ -181,6 +189,7 @@
 "invite_someone" = "Convidar alguém";
 "invite_sub" = "Adicione alguém.";
 "invite_text_sent" = "Convite enviado por mensagem.";
+"invite_to_trust" = "Compartilhar link de convite";
 "join" = "Entrar";
 "joined" = "Você entrou. O compartilhamento está desativado nos dois sentidos.";
 "kept_while_using" = "A localização só atualiza enquanto o Trust está aberto. Defina o acesso à localização em segundo plano nos Ajustes.";
@@ -225,6 +234,7 @@
 "look_notified_short" = "Um instantâneo · notificação solicitada";
 "look_notify" = "Olhar · notificar %@";
 "look_saved" = "Olhar registrado · notificação solicitada para %@.";
+"lookup_no_match" = "Nenhuma correspondência encontrada";
 "manage" = "Gerenciar";
 "manage_sharing" = "Gerenciar compartilhamento";
 "manage_subscription" = "Gerenciar assinatura";
@@ -280,6 +290,7 @@
 "phone_consent_details" = "Ao tocar em Enviar código, você concorda em receber mensagens de verificação do Trust neste número. Podem ser cobradas as tarifas padrão de mensagens e dados. Até 8 por dia. Responda STOP para cancelar ou HELP para obter ajuda.";
 "phone_intro" = "A verificação do telefone é obrigatória.";
 "phone_invite_message_body" = "O Trust prepara uma mensagem com seu link. Ela só é enviada se você tocar em Enviar no Mensagens.";
+"phone_lookup_country_code_hint" = "Digite um número de telefone completo, incluindo o código do país.";
 "phone_number" = "Número de telefone";
 "phone_placeholder" = "(415) 555-0100";
 "photo_options" = "Opções de foto";

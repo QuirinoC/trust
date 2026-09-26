@@ -411,7 +411,7 @@
   "handle_placeholder": "jordan",
   "accept_invitation": "Accepter l’invitation",
   "accept_request": "Accepter la demande",
-  "add_person_explanation": "Trouvez une personne avec son identifiant exact. La connexion n’active jamais le partage.",
+  "add_person_explanation": "Connectez-vous d’abord. Le partage reste désactivé jusqu’à votre choix.",
   "api_handle_not_found": "Aucun compte Trust trouvé pour cet identifiant.",
   "api_request_declined_recently": "Cette personne a récemment refusé une demande. Réessayez plus tard.",
   "api_request_expired": "Cette demande a expiré ou n’est plus disponible.",
@@ -428,6 +428,7 @@
   "copy_handle": "Copier l’identifiant",
   "copy_invite_link": "Copier le lien d’invitation",
   "decline_request": "Refuser",
+  "find_your_person": "Trouvez la personne",
   "follow_iphone_language": "Suivre la langue de l’iPhone",
   "handle_copied": "Identifiant copié",
   "handle_initials_accessibility": "Initiales de @%@",
@@ -457,5 +458,15 @@
   "sent_requests": "Envoyées",
   "sharing_requests_accessibility": "%@, %d demandes reçues",
   "their_handle": "Son identifiant",
-  "verify_number": "Vérifier le numéro"
+  "verify_number": "Vérifier le numéro",
+  "add_person_lookup_placeholder": "Identifiant ou numéro de téléphone",
+  "add_person_lookup_helper": "Saisissez un identifiant Trust ou un numéro de téléphone complet.",
+  "lookup_no_match": "Aucun résultat",
+  "invite_to_trust": "Partager le lien d’invitation",
+  "discovery_enabled_label": "Permettre aux autres de me trouver",
+  "discovery_enabled_explanation": "Si cette option est activée, les personnes qui connaissent votre numéro complet peuvent trouver votre identifiant. Votre photo peut aussi apparaître pour une correspondance exacte avec un identifiant ou un numéro.",
+  "avatar_visible_to_discoverable_people": "Lorsque la recherche par téléphone est activée, votre photo peut apparaître lors d’une correspondance exacte avec un identifiant ou un numéro.",
+  "avatar_visible_to_connections_only": "Lorsque la recherche par téléphone est désactivée, seules les personnes avec qui vous êtes connecté·e voient votre photo.",
+  "clear_field": "Effacer",
+  "phone_lookup_country_code_hint": "Saisissez un numéro de téléphone complet avec l’indicatif du pays."
 }

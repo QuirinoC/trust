@@ -2,7 +2,9 @@
 "accept_request" = "接受请求";
 "account" = "账户";
 "add" = "添加";
-"add_person_explanation" = "通过对方的准确账号名查找。建立连接不会开启共享。";
+"add_person_explanation" = "先建立连接。共享会保持关闭，直到你主动选择开启。";
+"add_person_lookup_helper" = "输入 Trust 用户名或完整电话号码。";
+"add_person_lookup_placeholder" = "用户名或电话号码";
 "add_picture" = "添加图片";
 "add_profile_picture" = "添加头像";
 "add_someone" = "添加某人";
@@ -78,6 +80,8 @@
 "avatar_siamese" = "暹罗猫";
 "avatar_turtle" = "乌龟";
 "avatar_visible_to_connections" = "与你连接的人都能看到。";
+"avatar_visible_to_connections_only" = "关闭电话发现后，只有与你建立连接的人能看到你的头像。";
+"avatar_visible_to_discoverable_people" = "开启电话发现后，你的头像可能会出现在用户名或电话号码的精确匹配结果中。";
 "back" = "后退";
 "back_to_circle" = "回到人物";
 "camera_permission" = "只有当你选择“拍照”来设置头像时，Trust 才会使用相机。";
@@ -95,6 +99,7 @@
 "circle_empty_body" = "邀请某人或选择分享内容。在您为该人选择模式之前，位置信息将保持关闭状态。";
 "circle_empty_title" = "你的人会出现在这里";
 "circle_map" = "人物地图";
+"clear_field" = "清除";
 "clear_home" = "清除主页";
 "close" = "关闭";
 "code_placeholder" = "ABC123";
@@ -128,6 +133,8 @@
 "desc_timed" = "暂停直到 %@。然后返回之前的模式。";
 "desc_until" = "密封。外观显示一个快照并请求通知。";
 "development_phone_code" = "代码%@。";
+"discovery_enabled_explanation" = "开启后，知道你完整电话号码的人可以找到你的用户名；在用户名或电话号码的精确匹配结果中也会显示你的头像。";
+"discovery_enabled_label" = "允许别人找到我";
 "distance_from_you" = "%@ 来自你";
 "done" = "完毕";
 "edit_phone" = "编辑";
@@ -137,6 +144,7 @@
 "enter_phone" = "输入电话号码。";
 "enter_phone_code" = "输入代码。";
 "export_log" = "导出日志";
+"find_your_person" = "查找联系人";
 "follow_iphone_language" = "跟随 iPhone";
 "free_plan" = "免费计划";
 "go_to_sharing" = "前往共享设置";
@@ -181,6 +189,7 @@
 "invite_someone" = "邀请某人";
 "invite_sub" = "添加某人。";
 "invite_text_sent" = "邀请短信已发送。";
+"invite_to_trust" = "分享邀请链接";
 "join" = "加入";
 "joined" = "加入了。共享是双向的。";
 "kept_while_using" = "仅当信任打开时位置才会更新。在“设置”中设置背景位置。";
@@ -225,6 +234,7 @@
 "look_notified_short" = "一张快照 · 要求通知";
 "look_notify" = "看·通知%@";
 "look_saved" = "查看记录·%@ 请求的通知。";
+"lookup_no_match" = "未找到匹配的人";
 "manage" = "管理";
 "manage_sharing" = "管理共享";
 "manage_subscription" = "管理订阅";
@@ -280,6 +290,7 @@
 "phone_consent_details" = "点击“发送代码”即表示您同意通过该号码接收Trust验证短信。可能适用标准消息和数据速率。最多 8 个/天。回复 STOP 可选择退出，回复 HELP 寻求帮助。";
 "phone_intro" = "需要电话验证。";
 "phone_invite_message_body" = "Trust 会准备一条含邀请链接的短信。只有你在“信息”中点按发送后才会发送。";
+"phone_lookup_country_code_hint" = "请输入包含国家/地区代码的完整电话号码。";
 "phone_number" = "电话号码";
 "phone_placeholder" = "(415) 555-0100";
 "photo_options" = "照片选项";

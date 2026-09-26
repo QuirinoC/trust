@@ -46,6 +46,7 @@ public enum TrustCopy {
     public static var cancel: String { value("cancel", defaultValue: "Cancel") }
     public static var close: String { value("close", defaultValue: "Close") }
     public static var done: String { value("done", defaultValue: "Done") }
+    public static var clearField: String { value("clear_field", defaultValue: "Clear") }
     public static var back: String { value("back", defaultValue: "Back") }
     public static var later: String { value("later", defaultValue: "Later") }
     public static var continueAction: String { value("continue", defaultValue: "Continue") }
@@ -90,6 +91,8 @@ public enum TrustCopy {
     public static func plusFeatureSummary(_ log: String) -> String { format("plus_feature_summary", defaultValue: "Live pins · %@", log) }
     public static func subscriptionError(_ message: String) -> String { format("subscription_error", defaultValue: "Subscription error. %@", message) }
     public static var avatarVisibleToConnections: String { value("avatar_visible_to_connections", defaultValue: "Visible to people connected with you.") }
+    public static var avatarVisibleToDiscoverablePeople: String { value("avatar_visible_to_discoverable_people", defaultValue: "When phone discovery is on, your picture can appear in exact handle or phone matches.") }
+    public static var avatarVisibleToConnectionsOnly: String { value("avatar_visible_to_connections_only", defaultValue: "When phone discovery is off, your picture is visible only to people you connect with.") }
     public static var demoAvatarNotice: String { value("demo_avatar_notice", defaultValue: "Photos and camera need an account. Animal icons work in this demo and stay on this device.") }
     public static var save: String { value("save", defaultValue: "Save") }
     public static var chooseFromPhotos: String { value("choose_from_photos", defaultValue: "Choose from Photos") }
@@ -411,10 +414,18 @@ public enum TrustCopy {
     }
     public static var addSomeone: String { value("add_someone", defaultValue: "Add someone") }
     public static var add: String { value("add", defaultValue: "Add") }
-    public static var addPersonExplanation: String { value("add_person_explanation", defaultValue: "Find someone by their exact handle. Connecting never turns sharing on.") }
+    public static var addPersonExplanation: String { value("add_person_explanation", defaultValue: "Connect first. Sharing stays off until you choose.") }
+    public static var findYourPerson: String { value("find_your_person", defaultValue: "Find your person") }
     public static var theirHandle: String { value("their_handle", defaultValue: "Their handle") }
     public static var handleLookupHelper: String { value("handle_lookup_helper", defaultValue: "Ask them for the handle in their You tab.") }
     public static var search: String { value("search", defaultValue: "Search") }
+    public static var addPersonLookupPlaceholder: String { value("add_person_lookup_placeholder", defaultValue: "Handle or phone number") }
+    public static var addPersonLookupHelper: String { value("add_person_lookup_helper", defaultValue: "Enter a Trust handle or a complete phone number.") }
+    public static var phoneLookupCountryCodeHint: String { value("phone_lookup_country_code_hint", defaultValue: "Enter a complete phone number, including the country code.") }
+    public static var lookupNoMatch: String { value("lookup_no_match", defaultValue: "No match found") }
+    public static var inviteToTrust: String { value("invite_to_trust", defaultValue: "Share invite link") }
+    public static var discoveryEnabledLabel: String { value("discovery_enabled_label", defaultValue: "Help people find me") }
+    public static var discoveryEnabledExplanation: String { value("discovery_enabled_explanation", defaultValue: "Let people with your complete phone number find your handle, and show your picture in exact handle or phone matches.") }
     public static var connectionLookupCaption: String { value("connection_lookup_caption", defaultValue: "Public handle") }
     public static var connected: String { value("connected", defaultValue: "Connected") }
     public static var requestSent: String { value("request_sent", defaultValue: "Request sent") }

@@ -158,7 +158,8 @@ public sealed record Account(
     string? PhoneE164 = null,
     DateTimeOffset? PhoneVerifiedAt = null,
     string? Handle = null,
-    ProfileAvatar? Avatar = null)
+    ProfileAvatar? Avatar = null,
+    int? DiscoveryConsentVersion = null)
 {
     public bool HasChosenDisplayName => AccountIdentity.IsChosenDisplayName(DisplayName);
 
@@ -168,6 +169,8 @@ public sealed record Account(
     public bool HasHandle => AccountHandle.IsChosen(Handle);
 
     public bool OnboardingComplete => HasHandle && HasVerifiedPhone;
+
+    public bool DiscoveryEnabled => DiscoveryConsentVersion == 1;
 
     public string PublicName => HasHandle ? $"@{Handle}" : DisplayName;
 }
@@ -190,6 +193,12 @@ public sealed record ConnectionRequestLists(
 public enum ConnectionRelationship { None, Connected, Sent, Incoming }
 public sealed record ConnectionRelationshipMatch(ConnectionRelationship Relationship, Guid? RequestId = null);
 public sealed record PersonLookup(Guid AccountId, string Handle, ConnectionRelationship Relationship, Guid? RequestId);
+public sealed record PersonSearchResult(
+    Guid AccountId,
+    string Handle,
+    ConnectionRelationship Relationship,
+    Guid? RequestId,
+    ProfileAvatar? Avatar);
 
 public sealed record PhoneChallenge(
     Guid AccountId,
@@ -500,6 +509,9 @@ public sealed class TrustException : Exception
     public static TrustException InvalidHandle() =>
         new("invalid_handle", "That handle isn’t valid.");
 
+    public static TrustException InvalidSearchQuery() =>
+        new("invalid_search_query", "Provide one valid handle or complete phone number.");
+
     public static TrustException ReservedHandle() =>
         new("reserved_handle", "That handle is reserved.");
 
@@ -569,6 +581,7 @@ public interface ITrustStore
     Task<Account?> FindByVerifiedPhoneAsync(string phoneE164, CancellationToken cancellationToken);
     Task SetVerifiedPhoneAsync(Guid accountId, string phoneE164, DateTimeOffset verifiedAt, CancellationToken cancellationToken);
     Task<Account?> FindByHandleAsync(string handle, CancellationToken cancellationToken);
+    Task SetDiscoveryConsentAsync(Guid accountId, bool enabled, int consentVersion, CancellationToken cancellationToken);
     Task<ConnectionRelationshipMatch> GetConnectionRelationshipAsync(Guid accountId, Guid otherId, DateTimeOffset now, CancellationToken cancellationToken);
     Task<ConnectionRequestLists> ListConnectionRequestsAsync(Guid accountId, DateTimeOffset now, CancellationToken cancellationToken);
     Task ExpireConnectionRequestsAsync(DateTimeOffset now, CancellationToken cancellationToken);
@@ -577,7 +590,7 @@ public interface ITrustStore
     Task AcceptConnectionRequestAsync(Guid requestId, Guid recipientId, DateTimeOffset now, CancellationToken cancellationToken);
     Task DeclineConnectionRequestAsync(Guid requestId, Guid recipientId, DateTimeOffset now, CancellationToken cancellationToken);
     Task CancelConnectionRequestAsync(Guid requestId, Guid senderId, DateTimeOffset now, CancellationToken cancellationToken);
-    Task SetHandleAsync(Guid accountId, string handle, string displayName, CancellationToken cancellationToken);
+    Task SetHandleAsync(Guid accountId, string handle, string displayName, int? discoveryConsentVersion, CancellationToken cancellationToken);
     Task<PhoneChallenge?> GetPhoneChallengeAsync(Guid accountId, CancellationToken cancellationToken);
     Task UpsertPhoneChallengeAsync(PhoneChallenge challenge, CancellationToken cancellationToken);
     Task ClearPhoneChallengeAsync(Guid accountId, CancellationToken cancellationToken);

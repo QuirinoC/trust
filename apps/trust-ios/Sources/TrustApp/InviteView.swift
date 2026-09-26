@@ -1,8 +1,9 @@
 import SwiftUI
 import TrustCore
+import UIKit
 
-/// The regular add flow begins with an exact public handle lookup. No private Apple
-/// profile data is returned or shown before the two people connect.
+/// Add by exact public handle or complete phone number. The phone is used only for
+/// this lookup and is never included in an invitation.
 struct AddSomeoneSection: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.trustPalette) private var palette
@@ -12,10 +13,10 @@ struct AddSomeoneSection: View {
             Button {
                 model.showingAddPersonSheet = true
             } label: {
-                Label(TrustCopy.addSomeone, systemImage: "plus")
+                Label(TrustCopy.addSomeone, systemImage: "person.crop.circle.badge.plus")
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .buttonStyle(TrustOutlineButtonStyle(compact: true))
+            .buttonStyle(TrustFilledButtonStyle())
             .accessibilityIdentifier("add-someone-button")
 
             // Old invitation links still open a direct, explicit accept card. The
@@ -66,50 +67,69 @@ struct AddPersonSheet: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    Text(TrustCopy.addPersonExplanation)
-                        .trustFont(14)
-                        .foregroundStyle(palette.muted)
-                        .fixedSize(horizontal: false, vertical: true)
+                VStack(alignment: .leading, spacing: 20) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(TrustCopy.findYourPerson)
+                            .trustFont(27, weight: .semibold)
+                            .foregroundStyle(palette.ink)
+                            .accessibilityIdentifier("add-person-heading")
+                        Text(TrustCopy.addPersonExplanation)
+                            .trustFont(15)
+                            .foregroundStyle(palette.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityIdentifier("add-person-explanation")
+                    }
 
                     VStack(alignment: .leading, spacing: 8) {
                         HStack(spacing: 9) {
-                            TextField(TrustCopy.theirHandle, text: Binding(
+                            Image(systemName: "magnifyingglass")
+                                .font(.system(size: 18, weight: .medium))
+                                .foregroundStyle(palette.accent)
+                                .accessibilityHidden(true)
+                            TextField(TrustCopy.addPersonLookupPlaceholder, text: Binding(
                                 get: { model.connectionHandleDraft },
                                 set: { model.setConnectionHandleDraft($0) }
                             ))
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
-                            .keyboardType(.asciiCapable)
-                        .submitLabel(.search)
-                        .focused($handleFocused)
-                        .onSubmit {
-                            handleFocused = false
-                            model.lookupConnectionHandle()
-                        }
-                        .accessibilityIdentifier("connection-handle")
-                            Button {
+                            .keyboardType(.default)
+                            .submitLabel(.done)
+                            .onSubmit {
+                                model.submitConnectionLookup()
                                 handleFocused = false
-                                model.lookupConnectionHandle()
-                            } label: {
-                                if model.isLookingUpConnection {
-                                    ProgressView().tint(palette.accentOn)
-                                } else {
-                                    Text(TrustCopy.search)
-                                }
                             }
-                            .buttonStyle(TrustFilledButtonStyle(expand: false))
-                            .disabled(model.isLookingUpConnection || model.connectionHandleDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                            .accessibilityIdentifier("lookup-connection-handle")
+                            .focused($handleFocused)
+                            .accessibilityIdentifier("connection-handle")
+                            if model.isLookingUpConnection {
+                                ProgressView()
+                                    .tint(palette.accent)
+                                    .accessibilityHidden(true)
+                            }
+                            if !model.connectionHandleDraft.isEmpty {
+                                Button {
+                                    model.setConnectionHandleDraft("")
+                                    handleFocused = true
+                                } label: {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .foregroundStyle(palette.muted)
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel(TrustCopy.clearField)
+                                .accessibilityIdentifier("clear-connection-lookup")
+                            }
                         }
-                        .padding(12)
-                        .frame(minHeight: 54)
-                        .background(palette.canvas, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(palette.line, lineWidth: 1))
-                        Text(TrustCopy.handleLookupHelper)
-                            .trustFont(12)
-                            .foregroundStyle(palette.muted)
-                            .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 18)
+                        .frame(height: 56)
+                        .background(palette.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(palette.line, lineWidth: 1))
+                        if let hint = model.connectionLookupHint {
+                            Text(hint)
+                                .trustFont(13)
+                                .foregroundStyle(palette.muted)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .padding(.horizontal, 4)
+                                .accessibilityIdentifier("connection-lookup-hint")
+                        }
                     }
 
                     if let notice = model.connectionLookupNotice {
@@ -129,9 +149,40 @@ struct AddPersonSheet: View {
                     if let result = model.connectionLookup {
                         lookupResult(result)
                     }
+                    if model.connectionLookupIsNoMatch {
+                        VStack(alignment: .leading, spacing: 16) {
+                            HStack(spacing: 10) {
+                                Image(systemName: "person.crop.circle.badge.questionmark")
+                                    .font(.system(size: 19, weight: .regular))
+                                    .foregroundStyle(palette.muted)
+                                    .accessibilityHidden(true)
+                                Text(TrustCopy.lookupNoMatch)
+                                    .trustFont(17, weight: .semibold)
+                                    .foregroundStyle(palette.ink)
+                                    .accessibilityIdentifier("connection-lookup-no-match")
+                            }
+                            if model.connectionLookupCanInvite {
+                                Button {
+                                    model.prepareConnectionInvite()
+                                } label: {
+                                    HStack(spacing: 8) {
+                                        if model.isPreparingConnectionInvite {
+                                            ProgressView().tint(palette.accentOn)
+                                        }
+                                        Text(TrustCopy.inviteToTrust)
+                                    }
+                                    .frame(maxWidth: .infinity)
+                                }
+                                .buttonStyle(TrustFilledButtonStyle())
+                                .accessibilityIdentifier("invite-to-trust")
+                                .disabled(model.isPreparingConnectionInvite)
+                            }
+                        }
+                        .padding(.top, 4)
+                    }
                 }
                 .padding(.horizontal, TrustTheme.gutter)
-                .padding(.top, 24)
+                .padding(.top, 16)
                 .padding(.bottom, 32)
                 .frame(maxWidth: TrustTheme.readableWidth, alignment: .leading)
                 .frame(maxWidth: .infinity, alignment: .center)
@@ -139,47 +190,59 @@ struct AddPersonSheet: View {
             .background(palette.paper.ignoresSafeArea())
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button(TrustCopy.cancel) { model.showingAddPersonSheet = false }
+                ToolbarItem(placement: .cancellationAction) {
+                    Button { model.showingAddPersonSheet = false } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(palette.ink)
+                            .frame(width: 36, height: 36)
+                            .background(palette.surface, in: Circle())
+                    }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(TrustCopy.cancel)
                         .accessibilityIdentifier("cancel-add-person")
-                }
-                ToolbarItem(placement: .principal) {
-                    Text(TrustCopy.addSomeone)
-                        .trustFont(16, weight: .semibold)
-                        .foregroundStyle(palette.ink)
                 }
             }
         }
         .task {
+            guard !model.isScreenshotLaunch else { return }
             model.setConnectionHandleDraft("")
             try? await Task.sleep(for: .milliseconds(350))
             guard !Task.isCancelled else { return }
             handleFocused = true
             Task { await model.refreshConnectionRequests() }
         }
+        .sheet(isPresented: Binding(
+            get: { model.inviteShareText != nil },
+            set: { if !$0 { model.dismissConnectionInviteShare() } }
+        )) {
+            if let text = model.inviteShareText {
+                ActivityShareSheet(items: [text]) {
+                    model.dismissConnectionInviteShare()
+                }
+            }
+        }
     }
 
     @ViewBuilder
     private func lookupResult(_ result: PersonLookupPayload) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 12) {
-                HandleInitials(handle: result.handle, size: 44)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("@\(result.handle)")
-                        .trustFont(16, weight: .semibold)
-                        .foregroundStyle(palette.ink)
-                        .accessibilityIdentifier("connection-lookup-handle")
-                    Text(TrustCopy.connectionLookupCaption)
-                        .trustFont(12)
-                        .foregroundStyle(palette.muted)
-                }
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 14) {
+                LookupAvatar(result: result, size: 52)
+                Text("@\(result.handle)")
+                    .trustFont(19, weight: .semibold)
+                    .foregroundStyle(palette.ink)
+                    .accessibilityIdentifier("connection-lookup-handle")
                 Spacer(minLength: 4)
             }
+            .padding(.horizontal, 4)
+
+            TrustHairline()
+
             action(for: result)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(14)
-        .background(palette.surface, in: RoundedRectangle(cornerRadius: TrustTheme.radius, style: .continuous))
+        .padding(.top, 4)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("connection-lookup-result")
     }
@@ -219,6 +282,74 @@ struct AddPersonSheet: View {
             .disabled(model.isSendingConnectionRequest)
             .accessibilityIdentifier("send-connection-request")
         }
+    }
+}
+
+private struct LookupAvatar: View {
+    let result: PersonLookupPayload
+    let size: CGFloat
+    @Environment(\.trustPalette) private var palette
+
+    private var photo: UIImage? {
+        guard let encoded = result.photoThumbnailBase64,
+              let data = Data(base64Encoded: encoded),
+              data.count <= 20 * 1024 else { return nil }
+        return UIImage(data: data)
+    }
+
+    var body: some View {
+        Group {
+            if let photo {
+                ZStack {
+                    Circle().fill(palette.paper)
+                    Image(uiImage: photo)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: size, height: size)
+                        .clipped()
+                }
+            } else if let avatar = result.avatar, avatar.knownPresetID != nil {
+                TrustAvatar(name: result.handle, size: size, avatar: avatar, personID: result.accountId)
+            } else {
+                ZStack {
+                    Circle().fill(palette.accent)
+                    HandleInitials(handle: result.handle, size: size)
+                }
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(Circle())
+        .accessibilityLabel(TrustCopy.profilePicture)
+        .accessibilityIdentifier("connection-lookup-avatar")
+    }
+}
+
+private struct ActivityShareSheet: UIViewControllerRepresentable {
+    let items: [Any]
+    let onDismiss: () -> Void
+
+    final class Coordinator {
+        var onDismiss: () -> Void
+
+        init(onDismiss: @escaping () -> Void) {
+            self.onDismiss = onDismiss
+        }
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onDismiss: onDismiss)
+    }
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        let controller = UIActivityViewController(activityItems: items, applicationActivities: nil)
+        controller.completionWithItemsHandler = { [weak coordinator = context.coordinator] _, _, _, _ in
+            Task { @MainActor in coordinator?.onDismiss() }
+        }
+        return controller
+    }
+
+    func updateUIViewController(_ controller: UIActivityViewController, context: Context) {
+        context.coordinator.onDismiss = onDismiss
     }
 }
 

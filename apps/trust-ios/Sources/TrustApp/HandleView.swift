@@ -85,6 +85,16 @@ struct HandleView: View {
                             .foregroundStyle(palette.muted)
                             .fixedSize(horizontal: false, vertical: true)
 
+                        VStack(alignment: .leading, spacing: 5) {
+                            Toggle(TrustCopy.discoveryEnabledLabel, isOn: $model.onboardingDiscoveryEnabled)
+                                .tint(palette.accent)
+                                .accessibilityIdentifier("onboarding-discovery-toggle")
+                            Text(TrustCopy.discoveryEnabledExplanation)
+                                .trustFont(12)
+                                .foregroundStyle(palette.muted)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+
                         Button {
                             Task { await model.completeOnboarding() }
                         } label: {

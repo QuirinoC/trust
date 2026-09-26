@@ -411,7 +411,7 @@
   "handle_placeholder": "jordan",
   "accept_invitation": "接受邀请",
   "accept_request": "接受请求",
-  "add_person_explanation": "通过对方的准确账号名查找。建立连接不会开启共享。",
+  "add_person_explanation": "先建立连接。共享会保持关闭，直到你主动选择开启。",
   "api_handle_not_found": "找不到使用此账号名的 Trust 账户。",
   "api_request_declined_recently": "对方最近拒绝了请求，请稍后再试。",
   "api_request_expired": "此请求已过期或不再可用。",
@@ -428,6 +428,7 @@
   "copy_handle": "复制账号名",
   "copy_invite_link": "复制邀请链接",
   "decline_request": "拒绝",
+  "find_your_person": "查找联系人",
   "follow_iphone_language": "跟随 iPhone",
   "handle_copied": "账号名已复制",
   "handle_initials_accessibility": "@%@ 的首字母",
@@ -457,5 +458,15 @@
   "sent_requests": "已发送",
   "sharing_requests_accessibility": "%@，收到 %d 个请求",
   "their_handle": "对方的账号名",
-  "verify_number": "验证手机号"
+  "verify_number": "验证手机号",
+  "add_person_lookup_placeholder": "用户名或电话号码",
+  "add_person_lookup_helper": "输入 Trust 用户名或完整电话号码。",
+  "lookup_no_match": "未找到匹配的人",
+  "invite_to_trust": "分享邀请链接",
+  "discovery_enabled_label": "允许别人找到我",
+  "discovery_enabled_explanation": "开启后，知道你完整电话号码的人可以找到你的用户名；在用户名或电话号码的精确匹配结果中也会显示你的头像。",
+  "avatar_visible_to_discoverable_people": "开启电话发现后，你的头像可能会出现在用户名或电话号码的精确匹配结果中。",
+  "avatar_visible_to_connections_only": "关闭电话发现后，只有与你建立连接的人能看到你的头像。",
+  "clear_field": "清除",
+  "phone_lookup_country_code_hint": "请输入包含国家/地区代码的完整电话号码。"
 }

@@ -34,6 +34,8 @@ final class TrustRealAPIFeatureTests: XCTestCase {
         let peerHandle = "peer\(suffix.prefix(8))"
         XCTAssertEqual(api.putHandle(peerHandle, token: peerSession.token), 204)
         XCTAssertTrue(api.verifyPhone(phone: "+1\(peerPhoneDigits)", token: peerSession.token), "The target must be phone-verified before handle discovery.")
+        XCTAssertEqual(api.putAvatarPreset("fox", token: peerSession.token), 200)
+        XCTAssertEqual(api.setPhoneDiscovery(true, token: peerSession.token), 204)
 
         let app = XCUIApplication()
         app.launchEnvironment["TRUST_BASE_URL"] = LocalTrustAPI.baseURL
@@ -52,6 +54,9 @@ final class TrustRealAPIFeatureTests: XCTestCase {
         let continueButton = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] %@", "Continue")).firstMatch
         XCTAssertTrue(continueButton.waitForExistence(timeout: 5))
         XCTAssertTrue(waitUntil(timeout: 8) { continueButton.isEnabled }, "The locally checked handle should become available.")
+        let discoveryToggle = app.switches["onboarding-discovery-toggle"]
+        XCTAssertTrue(discoveryToggle.waitForExistence(timeout: 5))
+        discoveryToggle.tap()
         continueButton.tap()
 
         let phone = app.textFields["phone-number"]
@@ -76,6 +81,7 @@ final class TrustRealAPIFeatureTests: XCTestCase {
         let onboarded = api.circle(token: mainSession.token)
         XCTAssertEqual((onboarded?["you"] as? [String: Any])?["handle"] as? String, chosenHandle)
         XCTAssertEqual((onboarded?["you"] as? [String: Any])?["phoneVerified"] as? Bool, true)
+        XCTAssertEqual((onboarded?["you"] as? [String: Any])?["discoveryEnabled"] as? Bool, true)
 
         app.buttons["tab-sharing"].tap()
         let addSomeone = app.buttons["add-someone-button"]
@@ -84,11 +90,41 @@ final class TrustRealAPIFeatureTests: XCTestCase {
         let lookupField = app.textFields["connection-handle"]
         XCTAssertTrue(lookupField.waitForExistence(timeout: 10))
         attachScreenshot(of: app, named: "Requests - Add someone empty")
-        lookupField.typeText(peerHandle)
-        app.buttons["lookup-connection-handle"].tap()
-        XCTAssertTrue(app.staticTexts["connection-lookup-handle"].waitForExistence(timeout: 10), "The exact public handle should resolve without exposing the private name.")
+        lookupField.typeText("+1 (\(peerPhoneDigits.prefix(3))) \(peerPhoneDigits.dropFirst(3).prefix(3))-\(peerPhoneDigits.suffix(4))")
+        XCTAssertTrue(app.staticTexts["connection-lookup-handle"].waitForExistence(timeout: 10), "Typing a complete phone number should resolve the exact public handle.")
         XCTAssertEqual(app.staticTexts["connection-lookup-handle"].label, "@\(peerHandle)")
-        attachScreenshot(of: app, named: "Requests - Exact handle result")
+        XCTAssertTrue(app.descendants(matching: .any)["connection-lookup-avatar"].waitForExistence(timeout: 5), "An exact phone match should show the saved picture descriptor.")
+        attachScreenshot(of: app, named: "Requests - Phone match and picture")
+        lookupField.tap()
+        lookupField.typeText(XCUIKeyboardKey.delete.rawValue)
+        XCTAssertFalse(app.staticTexts["connection-lookup-handle"].exists, "Editing the query should clear the prior match immediately.")
+        app.buttons["clear-connection-lookup"].tap()
+        XCTAssertEqual(lookupField.value as? String, "Handle or phone number", "The clear control should empty the entire previous query.")
+        lookupField.typeText("+1 202 555 0199")
+        let noMatch = app.staticTexts["connection-lookup-no-match"]
+        XCTAssertTrue(noMatch.waitForExistence(timeout: 10), "An unmatched complete phone number should show a no-match state.")
+        XCTAssertEqual(app.buttons["invite-to-trust"].label, "Share invite link", "The action should describe the native share sheet, without claiming the number is unregistered.")
+        attachScreenshot(of: app, named: "Requests - No match invite")
+        let outgoingBeforeInvite = (api.connectionRequests(token: mainSession.token)?["sent"] as? [[String: Any]])?.count ?? 0
+        app.buttons["invite-to-trust"].tap()
+        let nativeShareSheet = app.otherElements["ActivityListView"]
+        XCTAssertTrue(nativeShareSheet.waitForExistence(timeout: 10), "Tapping Invite should open the native share sheet.")
+        let copyAction = app.cells.matching(identifier: "actionGroupCell")
+            .matching(NSPredicate(format: "label == %@", "Copy")).firstMatch
+        XCTAssertTrue(copyAction.waitForExistence(timeout: 5), "The native share sheet should offer its Copy action.")
+        attachScreenshot(of: app, named: "Requests - Native invite share sheet")
+        app.buttons["header.closeButton"].tap()
+        let clearLookup = app.buttons["clear-connection-lookup"]
+        // The iOS 27.1 simulator beta currently ignores a tap on the system close
+        // control; retain coverage of the native sheet's supported swipe dismissal.
+        if !waitUntil(timeout: 2, condition: { clearLookup.isHittable }) {
+            nativeShareSheet.swipeDown()
+        }
+        XCTAssertTrue(waitUntil(timeout: 5) { clearLookup.isHittable && app.staticTexts["connection-lookup-no-match"].exists }, "Closing the native share sheet should return to the no-match Add state.")
+        XCTAssertEqual((api.connectionRequests(token: mainSession.token)?["sent"] as? [[String: Any]])?.count ?? 0, outgoingBeforeInvite, "Looking up or sharing an invite must not create a connection request.")
+        app.buttons["clear-connection-lookup"].tap()
+        lookupField.typeText(peerHandle)
+        XCTAssertTrue(app.staticTexts["connection-lookup-handle"].waitForExistence(timeout: 10))
         app.buttons["send-connection-request"].tap()
         XCTAssertTrue(waitUntil(timeout: 10) {
             self.api.connectionRequests(token: mainSession.token)?["sent"] is [[String: Any]]
@@ -101,7 +137,7 @@ final class TrustRealAPIFeatureTests: XCTestCase {
         XCTAssertTrue(addSomeone.waitForExistence(timeout: 5))
         addSomeone.tap()
         XCTAssertTrue(lookupField.waitForExistence(timeout: 5), "The add sheet should reopen after cancellation.")
-        XCTAssertEqual(lookupField.value as? String, "Their handle", "Reopening should start with a fresh handle search.")
+        XCTAssertEqual(lookupField.value as? String, "Handle or phone number", "Reopening should start with a fresh lookup.")
         app.buttons["cancel-add-person"].tap()
 
         // Reverse the first outgoing request through the peer API so the UI account
@@ -141,7 +177,15 @@ final class TrustRealAPIFeatureTests: XCTestCase {
         if later.waitForExistence(timeout: 2) { later.tap() }
         let off = app.buttons["sharing-mode-off-\(peerName.lowercased())"]
         XCTAssertTrue(off.waitForExistence(timeout: 5))
-        XCTAssertTrue(waitUntil(timeout: 5) { off.isHittable }, "Off should be tappable after the sharing explainer closes.")
+        let offBecameHittable = waitUntil(timeout: 5) { off.isHittable }
+        if !offBecameHittable {
+            let accessibility = XCTAttachment(string: app.debugDescription)
+            accessibility.name = "Diagnostics - Off unavailable after explainer"
+            accessibility.lifetime = .keepAlways
+            add(accessibility)
+            attachScreenshot(of: app, named: "Diagnostics - Off unavailable after explainer")
+        }
+        XCTAssertTrue(offBecameHittable, "Off should be tappable after the sharing explainer closes.")
         off.tap()
         let confirmStop = app.buttons.matching(identifier: "stop-sharing-confirm")
         XCTAssertTrue(confirmStop.firstMatch.waitForExistence(timeout: 5))
@@ -209,6 +253,14 @@ private final class LocalTrustAPI {
         request("PUT", "/api/v1/me/handle", token: token, body: ["handle": handle]).status
     }
 
+    func putAvatarPreset(_ presetID: String, token: String) -> Int {
+        request("PUT", "/api/v1/me/avatar/preset", token: token, body: ["presetId": presetID]).status
+    }
+
+    func setPhoneDiscovery(_ enabled: Bool, token: String) -> Int {
+        request("PUT", "/api/v1/me/discovery", token: token, body: ["enabled": enabled, "consentVersion": 1]).status
+    }
+
     func verifyPhone(phone: String, token: String) -> Bool {
         let sent = request("POST", "/api/v1/me/phone/send", token: token, body: ["phone": phone])
         guard (200..<300).contains(sent.status),
@@ -239,7 +291,7 @@ private final class LocalTrustAPI {
         assert(result.status == 204 || result.status == 404, "Failed to delete disposable local API test account.")
     }
 
-    func request(_ method: String, _ path: String, token: String? = nil, body: [String: String]? = nil) -> (status: Int, json: Any?) {
+    func request(_ method: String, _ path: String, token: String? = nil, body: [String: Any]? = nil) -> (status: Int, json: Any?) {
         var request = URLRequest(url: URL(string: path, relativeTo: base)!)
         request.httpMethod = method
         request.timeoutInterval = 10

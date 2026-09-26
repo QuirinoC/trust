@@ -18,7 +18,7 @@ The canonical website lives in `apps/jointrust-web`; deploy using `apps/jointrus
 npx wrangler deploy --config apps/jointrust-web/wrangler.jsonc
 ```
 
-Verify the landing, `/privacy`, `/terms`, `/support`, `/sms`, `/sms-opt-in.png`, invite route, and `/.well-known/apple-app-site-association` after deployment. Compare legal/SMS consent text with actual app behavior and the registered Twilio campaign.
+Verify the landing, `/privacy`, `/terms`, `/support`, `/sms`, `/sms-opt-in.png`, invite route, and `/.well-known/apple-app-site-association` after deployment. Compare legal/SMS consent text with actual app behavior and the registered Twilio campaign; the updated campaign registration has not yet been verified.
 
 ## iOS archive and TestFlight
 

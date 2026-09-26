@@ -590,7 +590,11 @@ public sealed class TrustEngine(ITrustStore store, TimeProvider time)
     }
 
     public async Task SetHandleAsync(Guid accountId, string? raw, CancellationToken cancellationToken)
+        => await SetHandleAsync(accountId, raw, null, cancellationToken);
+
+    public async Task SetHandleAsync(Guid accountId, string? raw, int? discoveryConsentVersion, CancellationToken cancellationToken)
     {
+        if (discoveryConsentVersion is not null and not 1) throw TrustException.InvalidSearchQuery();
         if (!AccountHandle.TryValidate(raw, out var normalized, out var errorCode))
         {
             throw errorCode == "reserved_handle"
@@ -606,7 +610,14 @@ public sealed class TrustEngine(ITrustStore store, TimeProvider time)
         }
 
         var displayName = you.HasChosenDisplayName ? you.DisplayName : normalized;
-        await store.SetHandleAsync(accountId, normalized, displayName, cancellationToken);
+        await store.SetHandleAsync(accountId, normalized, displayName, discoveryConsentVersion, cancellationToken);
+    }
+
+    public async Task SetDiscoveryConsentAsync(Guid accountId, bool enabled, int consentVersion, CancellationToken cancellationToken)
+    {
+        _ = await RequireAccount(accountId, cancellationToken);
+        if (consentVersion != 1) throw TrustException.InvalidSearchQuery();
+        await store.SetDiscoveryConsentAsync(accountId, enabled, consentVersion, cancellationToken);
     }
 
     public async Task<PersonLookup?> LookupPersonAsync(Guid accountId, string? rawHandle, CancellationToken cancellationToken)
@@ -620,6 +631,31 @@ public sealed class TrustEngine(ITrustStore store, TimeProvider time)
         if (other is null || other.Id == accountId || !other.OnboardingComplete) return null;
         var match = await store.GetConnectionRelationshipAsync(accountId, other.Id, time.GetUtcNow(), cancellationToken);
         return new PersonLookup(other.Id, other.Handle!, match.Relationship, match.RequestId);
+    }
+
+    public async Task<PersonSearchResult?> SearchPersonAsync(
+        Guid accountId,
+        string? normalizedHandle,
+        string? phoneE164,
+        CancellationToken cancellationToken)
+    {
+        var caller = await RequireAccount(accountId, cancellationToken);
+        RequireConnectionRequestEligibility(caller);
+        var byPhone = phoneE164 is not null;
+        var other = byPhone
+            ? await store.FindByVerifiedPhoneAsync(phoneE164!, cancellationToken)
+            : await store.FindByHandleAsync(normalizedHandle!, cancellationToken);
+        if (other is null || other.Id == accountId || !other.OnboardingComplete) return null;
+        if (byPhone && !other.DiscoveryEnabled) return null;
+
+        var match = await store.GetConnectionRelationshipAsync(accountId, other.Id, time.GetUtcNow(), cancellationToken);
+        var canShowAvatar = other.DiscoveryEnabled || match.Relationship == ConnectionRelationship.Connected;
+        return new PersonSearchResult(
+            other.Id,
+            other.Handle!,
+            match.Relationship,
+            match.RequestId,
+            canShowAvatar ? other.Avatar : null);
     }
 
     public async Task<ConnectionRequestLists> ListConnectionRequestsAsync(Guid accountId, CancellationToken cancellationToken)

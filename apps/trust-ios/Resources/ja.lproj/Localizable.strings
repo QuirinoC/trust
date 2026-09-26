@@ -2,7 +2,9 @@
 "accept_request" = "リクエストを承認";
 "account" = "アカウント";
 "add" = "追加";
-"add_person_explanation" = "正確なハンドルで相手を探します。つながっても共有は自動で始まりません。";
+"add_person_explanation" = "先につながります。共有は選ぶまでオフのままです。";
+"add_person_lookup_helper" = "Trustのユーザー名または完全な電話番号を入力してください。";
+"add_person_lookup_placeholder" = "ユーザー名または電話番号";
 "add_picture" = "写真を追加";
 "add_profile_picture" = "プロフィール写真を追加";
 "add_someone" = "人を追加";
@@ -78,6 +80,8 @@
 "avatar_siamese" = "シャムネコ";
 "avatar_turtle" = "カメ";
 "avatar_visible_to_connections" = "つながっている人に表示されます。";
+"avatar_visible_to_connections_only" = "電話番号での検索をオフにすると、あなたとつながっている人だけに写真が表示されます。";
+"avatar_visible_to_discoverable_people" = "電話番号での検索をオンにすると、ユーザー名または電話番号の完全一致に写真が表示されることがあります。";
 "back" = "戻る";
 "back_to_circle" = "Peopleに戻る";
 "camera_permission" = "プロフィール写真を設定するために「写真を撮る」を選んだときだけ、Trustはカメラを使用します。";
@@ -95,6 +99,7 @@
 "circle_empty_body" = "招待するか、共有する内容を選んでください。その人のモードを選ぶまで位置情報はオフです。";
 "circle_empty_title" = "ここに知り合いが表示されます";
 "circle_map" = "Peopleの地図";
+"clear_field" = "消去";
 "clear_home" = "自宅を解除";
 "close" = "閉じる";
 "code_placeholder" = "ABC123";
@@ -128,6 +133,8 @@
 "desc_timed" = "%@まで一時停止中。その後、前のモードに戻ります。";
 "desc_until" = "Sealed。Lookでスナップショットを1回表示し、通知をリクエストします。";
 "development_phone_code" = "コード %@。";
+"discovery_enabled_explanation" = "オンにすると、完全な電話番号を知っている人があなたのユーザー名を検索でき、ユーザー名または電話番号の完全一致にあなたの写真が表示されます。";
+"discovery_enabled_label" = "自分を見つけてもらう";
 "distance_from_you" = "あなたから%@";
 "done" = "完了";
 "edit_phone" = "編集";
@@ -137,6 +144,7 @@
 "enter_phone" = "電話番号を入力してください。";
 "enter_phone_code" = "コードを入力してください。";
 "export_log" = "記録を書き出す";
+"find_your_person" = "相手を探す";
 "follow_iphone_language" = "iPhone の設定に従う";
 "free_plan" = "無料プラン";
 "go_to_sharing" = "共有設定へ";
@@ -181,6 +189,7 @@
 "invite_someone" = "だれかを招待";
 "invite_sub" = "人を追加します。";
 "invite_text_sent" = "招待SMSを送信しました。";
+"invite_to_trust" = "招待リンクを共有";
 "join" = "参加";
 "joined" = "参加しました。双方の共有はオフです。";
 "kept_while_using" = "「使用中」のままです。預かりと常時共有は、Trustを開いている間だけ更新されます。アプリを閉じても見る操作が動くよう、iOSの設定で「常に」に変えてください。";
@@ -225,6 +234,7 @@
 "look_notified_short" = "スナップショット1回 · 通知をリクエスト済み";
 "look_notify" = "Look · %@さんに通知";
 "look_saved" = "Lookを記録しました · %@さんへの通知をリクエストしました。";
+"lookup_no_match" = "一致する人が見つかりません";
 "manage" = "管理";
 "manage_sharing" = "共有を管理";
 "manage_subscription" = "サブスクリプションを管理";
@@ -280,6 +290,7 @@
 "phone_consent_details" = "「コードを送信」をタップすると、この番号にTrustの確認SMSを受信することに同意したものとみなされます。標準のメッセージ・データ料金がかかる場合があります。1日最大8通です。配信停止はSTOP、ヘルプはHELPと返信してください。";
 "phone_intro" = "電話番号の確認が必要です。";
 "phone_invite_message_body" = "Trust が招待リンク付きのメッセージを準備します。「メッセージ」で送信をタップした場合のみ送信されます。";
+"phone_lookup_country_code_hint" = "国番号を含む完全な電話番号を入力してください。";
 "phone_number" = "電話番号";
 "phone_placeholder" = "(415) 555-0100";
 "photo_options" = "写真のオプション";
