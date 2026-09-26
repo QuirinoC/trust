@@ -168,6 +168,19 @@ def make_panel(source: Path, output: Path, index: int, story: tuple[str, str, st
     print(f"{output}: {width}×{height}, RGB")
 
 
+def make_iphone_65_panels() -> None:
+    """Create the accepted 6.5-inch listing size from the finished 6.9-inch panels."""
+    source_dir = SET / "iphone-69"
+    output_dir = SET / "iphone-65"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    for source in sorted(source_dir.glob("*.png")):
+        image = Image.open(source).convert("RGB")
+        image = image.resize((1242, 2688), Image.Resampling.LANCZOS)
+        output = output_dir / source.name
+        image.save(output, format="PNG", optimize=True)
+        print(f"{output}: 1242×2688, RGB")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--device", choices=("iphone", "ipad", "all"), default="all")
@@ -187,6 +200,8 @@ def main() -> None:
         for index, story in enumerate(STORY, 1):
             route = story[0]
             make_panel(raw / f"{route}.png", out / f"{index:02d}-{route}.png", index, story, expected)
+    if "iphone" in selected:
+        make_iphone_65_panels()
 
 
 if __name__ == "__main__":

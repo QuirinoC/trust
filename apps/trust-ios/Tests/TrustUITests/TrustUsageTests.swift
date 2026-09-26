@@ -160,9 +160,10 @@ final class TrustUsageTests: XCTestCase {
     }
 
     func testAppearancePreferencePersistsAcrossRelaunch() {
-        let app = launchDemo()
+        // Start directly on You so this persistence test does not race the demo's
+        // first-launch toast and initial tab transition.
+        let app = launchDemo(route: "you")
         XCTAssertTrue(app.buttons["tab-you"].waitForExistence(timeout: 20))
-        app.buttons["tab-you"].tap()
 
         for option in ["System", "Light", "Dark"] {
             let picker = app.descendants(matching: .any)["appearance-preference"]
@@ -203,7 +204,6 @@ final class TrustUsageTests: XCTestCase {
             app.terminate()
             app.launch()
             XCTAssertTrue(app.buttons["tab-you"].waitForExistence(timeout: 20))
-            app.buttons["tab-you"].tap()
             let relaunchedPicker = app.descendants(matching: .any)["appearance-preference"]
             XCTAssertTrue(relaunchedPicker.waitForExistence(timeout: 5))
             let preferenceRestored = XCTNSPredicateExpectation(
