@@ -57,9 +57,16 @@ jobs:
           xcode-version: "26.6"
       - name: Install and boot iPhone 17 Pro simulator
         run: |
-          xcodebuild -downloadPlatform iOS
+          find_available_runtime() {
+            xcrun simctl list runtimes -j | jq -r '[.runtimes[] | select(.isAvailable and (.identifier | startswith("com.apple.CoreSimulator.SimRuntime.iOS-")))] | sort_by(.version | split(".") | map(tonumber)) | last | .identifier // empty'
+          }
 
-          runtime_id=$(xcrun simctl list runtimes -j | jq -r '[.runtimes[] | select(.isAvailable and (.identifier | startswith("com.apple.CoreSimulator.SimRuntime.iOS-")))] | sort_by(.version | split(".") | map(tonumber)) | last | .identifier // empty')
+          runtime_id=$(find_available_runtime)
+          if [[ -z "$runtime_id" ]]; then
+            xcodebuild -downloadPlatform iOS
+            runtime_id=$(find_available_runtime)
+          fi
+
           device_type_id=$(xcrun simctl list devicetypes -j | jq -r '.devicetypes[] | select(.name == "iPhone 17 Pro") | .identifier' | head -n 1)
           if [[ -z "$runtime_id" || -z "$device_type_id" ]]; then
             echo "Could not find an available iOS simulator runtime or iPhone 17 Pro device type."
@@ -81,6 +88,14 @@ jobs:
           -derivedDataPath "$RUNNER_TEMP/trust-derived-data"
           CODE_SIGNING_ALLOWED=NO
           test
+      - name: Upload iOS test result bundle
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trust-ios-xcresult
+          path: ${{ runner.temp }}/trust-derived-data/Logs/Test/*.xcresult
+          if-no-files-found: warn
+          retention-days: 7
 
   web:
     runs-on: ubuntu-24.04

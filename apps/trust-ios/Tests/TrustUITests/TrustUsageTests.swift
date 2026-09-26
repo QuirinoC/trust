@@ -155,14 +155,35 @@ final class TrustUsageTests: XCTestCase {
             picker.tap()
             let choice = app.buttons[option]
             XCTAssertTrue(choice.waitForExistence(timeout: 5), "The picker should offer the \(option) appearance.")
+            let choiceHittable = XCTNSPredicateExpectation(
+                predicate: NSPredicate(format: "hittable == true"),
+                object: choice)
+            XCTAssertEqual(
+                XCTWaiter.wait(for: [choiceHittable], timeout: 5),
+                .completed,
+                "The \(option) appearance choice should be hittable before selection. \(app.debugDescription)")
             choice.tap()
+            let menuDismissed = XCTNSPredicateExpectation(
+                predicate: NSPredicate(format: "exists == false"),
+                object: choice)
+            XCTAssertEqual(
+                XCTWaiter.wait(for: [menuDismissed], timeout: 5),
+                .completed,
+                "The \(option) appearance choice should close the picker menu.")
+
+            // Changing the color scheme can recreate the SwiftUI hierarchy. Reacquire the
+            // accessibility element after the menu closes instead of polling its old snapshot.
+            let updatedPicker = app.descendants(matching: .any)["appearance-preference"]
             let selectionApplied = XCTNSPredicateExpectation(
                 predicate: NSPredicate(format: "value == %@", option),
-                object: picker)
-            XCTAssertEqual(
-                XCTWaiter.wait(for: [selectionApplied], timeout: 5),
-                .completed,
-                "The picker should reflect the selected appearance.")
+                object: updatedPicker)
+            let selectionResult = XCTWaiter.wait(for: [selectionApplied], timeout: 10)
+            if selectionResult != .completed {
+                XCTFail(
+                    "The picker should reflect the selected appearance. " +
+                    "Expected=\(option), actual label=\(updatedPicker.label), value=\(String(describing: updatedPicker.value)). " +
+                    "Picker=\(updatedPicker.debugDescription)\nApp hierarchy=\(app.debugDescription)")
+            }
 
             app.terminate()
             app.launch()
