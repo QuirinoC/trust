@@ -13,6 +13,14 @@ struct PhoneView: View {
         VStack(spacing: 0) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
+                    if model.canReturnFromPhoneVerification {
+                        HStack {
+                            Spacer()
+                            Button(TrustCopy.later) { model.returnFromConnectionPhoneVerification() }
+                                .buttonStyle(TrustTextButtonStyle(color: palette.muted))
+                                .accessibilityIdentifier("return-to-app-from-phone-verification")
+                        }
+                    }
                     TrustWordmark().padding(.bottom, model.phoneCodeSent ? 14 : 30)
 
                     if model.phoneCodeSent {
@@ -199,7 +207,9 @@ struct PhoneView: View {
     private var legalLinks: some View {
         HStack(spacing: 18) {
             Link(TrustCopy.privacy, destination: AppConfiguration.privacyURL)
+                .accessibilityIdentifier("privacy-link")
             Link(TrustCopy.terms, destination: AppConfiguration.termsURL)
+                .accessibilityIdentifier("terms-link")
         }
         .trustFont(13, weight: .medium)
         .tint(palette.accent)

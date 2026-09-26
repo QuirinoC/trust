@@ -167,18 +167,8 @@ public sealed class TrustEngine(ITrustStore store, TimeProvider time)
             throw new TrustException("own_invite", "You cannot join your own invite.");
         }
 
-        if (await store.AreConnectedAsync(you.Id, invite.CreatorId, cancellationToken))
-        {
-            await store.MarkInviteConsumedAsync(invite.Id, cancellationToken);
-            return;
-        }
-
-        var creator = await RequireAccount(invite.CreatorId, cancellationToken);
-        await EnsureSeatAsync(you, creator, cancellationToken);
-        await store.InsertMembershipAsync(you.Id, creator.Id, cancellationToken);
-        await store.UpsertShareAsync(you.Id, creator.Id, ShareState.Default, cancellationToken);
-        await store.UpsertShareAsync(creator.Id, you.Id, ShareState.Default, cancellationToken);
-        await store.MarkInviteConsumedAsync(invite.Id, cancellationToken);
+        _ = await RequireAccount(invite.CreatorId, cancellationToken);
+        await store.AcceptInviteConnectionAsync(invite.Id, you.Id, time.GetUtcNow(), cancellationToken);
     }
 
     /// Same membership as an accepted invite. Does not send SMS.
@@ -194,16 +184,7 @@ public sealed class TrustEngine(ITrustStore store, TimeProvider time)
             throw TrustException.OwnPhone();
         }
 
-        if (await store.AreConnectedAsync(you.Id, other.Id, cancellationToken))
-        {
-            return false;
-        }
-
-        await EnsureSeatAsync(you, other, cancellationToken);
-        await store.InsertMembershipAsync(you.Id, other.Id, cancellationToken);
-        await store.UpsertShareAsync(you.Id, other.Id, ShareState.Default, cancellationToken);
-        await store.UpsertShareAsync(other.Id, you.Id, ShareState.Default, cancellationToken);
-        return true;
+        return await store.ConnectAccountsWithOffSharesAsync(you.Id, other.Id, time.GetUtcNow(), cancellationToken);
     }
 
     public async Task SetShareAsync(
@@ -626,6 +607,58 @@ public sealed class TrustEngine(ITrustStore store, TimeProvider time)
 
         var displayName = you.HasChosenDisplayName ? you.DisplayName : normalized;
         await store.SetHandleAsync(accountId, normalized, displayName, cancellationToken);
+    }
+
+    public async Task<PersonLookup?> LookupPersonAsync(Guid accountId, string? rawHandle, CancellationToken cancellationToken)
+    {
+        var you = await RequireAccount(accountId, cancellationToken);
+        RequireConnectionRequestEligibility(you);
+        if (!AccountHandle.TryValidate(rawHandle, out var handle, out var code))
+            throw code == "reserved_handle" ? TrustException.ReservedHandle() : TrustException.InvalidHandle();
+        var other = await store.FindByHandleAsync(handle, cancellationToken);
+        // Keep missing, self, and not-yet-discoverable accounts indistinguishable.
+        if (other is null || other.Id == accountId || !other.OnboardingComplete) return null;
+        var match = await store.GetConnectionRelationshipAsync(accountId, other.Id, time.GetUtcNow(), cancellationToken);
+        return new PersonLookup(other.Id, other.Handle!, match.Relationship, match.RequestId);
+    }
+
+    public async Task<ConnectionRequestLists> ListConnectionRequestsAsync(Guid accountId, CancellationToken cancellationToken)
+    {
+        _ = await RequireAccount(accountId, cancellationToken);
+        return await store.ListConnectionRequestsAsync(accountId, time.GetUtcNow(), cancellationToken);
+    }
+
+    public async Task<ConnectionRequest> CreateConnectionRequestAsync(Guid accountId, Guid recipientId, CancellationToken cancellationToken)
+    {
+        var you = await RequireAccount(accountId, cancellationToken);
+        RequireConnectionRequestEligibility(you);
+        var recipient = await store.FindAccountAsync(recipientId, cancellationToken);
+        if (recipient is null || !recipient.OnboardingComplete || recipientId == accountId) throw TrustException.RequestNotFound();
+        return await store.CreateConnectionRequestAsync(accountId, recipientId, time.GetUtcNow(), cancellationToken);
+    }
+
+    public async Task AcceptConnectionRequestAsync(Guid accountId, Guid requestId, CancellationToken cancellationToken)
+    {
+        var you = await RequireAccount(accountId, cancellationToken);
+        RequireConnectionRequestEligibility(you);
+        await store.AcceptConnectionRequestAsync(requestId, accountId, time.GetUtcNow(), cancellationToken);
+    }
+
+    public async Task DeclineConnectionRequestAsync(Guid accountId, Guid requestId, CancellationToken cancellationToken)
+    {
+        _ = await RequireAccount(accountId, cancellationToken);
+        await store.DeclineConnectionRequestAsync(requestId, accountId, time.GetUtcNow(), cancellationToken);
+    }
+
+    public async Task CancelConnectionRequestAsync(Guid accountId, Guid requestId, CancellationToken cancellationToken)
+    {
+        _ = await RequireAccount(accountId, cancellationToken);
+        await store.CancelConnectionRequestAsync(requestId, accountId, time.GetUtcNow(), cancellationToken);
+    }
+
+    private static void RequireConnectionRequestEligibility(Account account)
+    {
+        if (!account.OnboardingComplete) throw TrustException.PhoneVerificationRequired();
     }
 
     public async Task<int> LooksTodayAsync(Guid viewerId, CancellationToken cancellationToken)

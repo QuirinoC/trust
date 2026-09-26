@@ -6,6 +6,7 @@ struct SharingView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.trustPalette) private var palette
     @State private var activeConfirmation: SharingConfirmation?
+    @State private var showingHomeStatus = false
 
     private enum SharingConfirmation: Equatable {
         case stopSharing(personID: UUID, name: String)
@@ -49,6 +50,15 @@ struct SharingView: View {
                     AddSomeoneSection()
                         .padding(.top, 20)
 
+                    if !model.connectionRequests.incoming.isEmpty
+                        || !model.connectionRequests.sent.isEmpty
+                        || model.isLoadingConnectionRequests
+                        || model.connectionRequestsNotice != nil
+                        || model.connectionRequiresPhoneVerification {
+                        ConnectionRequestsSection()
+                            .padding(.top, 24)
+                    }
+
                     if !model.circle.isEmpty {
                         TrustSectionHeading(TrustCopy.people)
                             .padding(.top, 30)
@@ -87,7 +97,10 @@ struct SharingView: View {
                 .frame(maxWidth: .infinity, alignment: .center)
             }
             .background(palette.paper.ignoresSafeArea())
-            .refreshable { await model.refresh() }
+            .refreshable {
+                await model.refresh()
+                await model.refreshConnectionRequests()
+            }
             .sheet(isPresented: Binding(
                 get: { model.pauseSheetPersonID != nil },
                 set: { if !$0 { model.pauseSheetPersonID = nil } }
@@ -129,6 +142,15 @@ struct SharingView: View {
         } message: {
             Text(confirmationMessage)
         }
+        .confirmationDialog(TrustCopy.homeStatus, isPresented: $showingHomeStatus, titleVisibility: .visible) {
+            ForEach(HomePresenceKind.triad, id: \.rawValue) { kind in
+                Button(kind.label) { model.setPresence(kind) }
+                    .accessibilityIdentifier("set-home-status-\(kind.rawValue)")
+            }
+            Button(TrustCopy.cancel, role: .cancel) {}
+        } message: {
+            Text(TrustCopy.sharingPresenceExplanation)
+        }
         }
     }
 
@@ -137,21 +159,30 @@ struct SharingView: View {
     }
 
     private var presenceSection: some View {
-        TrustCard(fill: palette.surface) {
-            VStack(alignment: .leading, spacing: 10) {
-                TrustSectionHeading(TrustCopy.yourStatus)
-                Text(TrustCopy.sharingPresenceExplanation)
-                    .trustFont(12)
+        Button {
+            showingHomeStatus = true
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "house")
+                    .foregroundStyle(palette.accent)
+                    .accessibilityHidden(true)
+                Text(TrustCopy.homeStatus)
+                    .trustFont(14, weight: .medium)
+                    .foregroundStyle(palette.ink)
+                Spacer()
+                Text(model.myPresence.label)
+                    .trustFont(13)
                     .foregroundStyle(palette.muted)
-                    .fixedSize(horizontal: false, vertical: true)
-                TrustModeControl<HomePresenceKind>(
-                    items: HomePresenceKind.triad.map { .init(id: $0, label: $0.label) },
-                    selection: model.myPresence == .unknown ? nil : model.myPresence
-                ) { kind in
-                    model.setPresence(kind)
-                }
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(palette.muted)
             }
+            .padding(.horizontal, 14)
+            .frame(minHeight: 52)
+            .background(RoundedRectangle(cornerRadius: TrustTheme.controlRadius, style: .continuous).fill(palette.surface))
         }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("home-status-control")
     }
 }
 

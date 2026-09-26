@@ -51,6 +51,8 @@ public sealed class TrustSweepService(
         var now = time.GetUtcNow();
         await store.RestoreExpiredPausesAsync(now, cancellationToken);
         await store.PruneAllLocationsAsync(now - TrustRules.LocationRetention, cancellationToken);
+        await store.ExpireConnectionRequestsAsync(now, cancellationToken);
+        await store.PruneConnectionRequestsAsync(now.AddDays(-30), cancellationToken);
         await engine.EvaluateDuePromisesAsync(cancellationToken);
         await storeKit.RefreshExpiredCoveragesAsync(cancellationToken);
     }

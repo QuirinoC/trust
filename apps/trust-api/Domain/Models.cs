@@ -24,6 +24,8 @@ public static class TrustRules
     public static readonly TimeSpan ViewDedupeWindow = TimeSpan.FromMinutes(30);
     /// Invite codes are single-use-ish but also time-boxed for hygiene.
     public static readonly TimeSpan InviteValidity = TimeSpan.FromDays(7);
+    public static readonly TimeSpan ConnectionRequestValidity = TimeSpan.FromDays(7);
+    public static readonly TimeSpan ConnectionRequestDeclineCooldown = TimeSpan.FromDays(7);
 }
 
 public enum HomePresenceState
@@ -171,6 +173,23 @@ public sealed record Account(
 }
 
 public sealed record HandleAvailability(string Handle, bool Available, string? Code);
+
+public enum ConnectionRequestStatus { Pending, Accepted, Declined, Cancelled, Expired }
+
+public sealed record ConnectionRequest(
+    Guid Id, Guid SenderId, Guid RecipientId, ConnectionRequestStatus Status,
+    DateTimeOffset CreatedAt, DateTimeOffset ExpiresAt, DateTimeOffset UpdatedAt);
+
+/// Internal request row joined to the other party. API contracts deliberately map only ID/handle.
+public sealed record ConnectionRequestEntry(ConnectionRequest Request, Account OtherParty);
+
+public sealed record ConnectionRequestLists(
+    IReadOnlyList<ConnectionRequestEntry> Incoming,
+    IReadOnlyList<ConnectionRequestEntry> Sent);
+
+public enum ConnectionRelationship { None, Connected, Sent, Incoming }
+public sealed record ConnectionRelationshipMatch(ConnectionRelationship Relationship, Guid? RequestId = null);
+public sealed record PersonLookup(Guid AccountId, string Handle, ConnectionRelationship Relationship, Guid? RequestId);
 
 public sealed record PhoneChallenge(
     Guid AccountId,
@@ -486,6 +505,21 @@ public sealed class TrustException : Exception
 
     public static TrustException HandleInUse() =>
         new("handle_in_use", "That handle is taken.");
+
+    public static TrustException RequestNotFound() =>
+        new("request_not_found", "That request is no longer available.");
+
+    public static TrustException RequestExpired() =>
+        new("request_expired", "That request has expired.");
+
+    public static TrustException RequestDeclinedRecently() =>
+        new("request_declined_recently", "Wait before sending another request to this person.");
+
+    public static TrustException RequestLimit() =>
+        new("request_limit", "You have reached the current request limit. Try again later.");
+
+    public static TrustException PhoneVerificationRequired() =>
+        new("verification_required", "Verify your phone before finding people and sending connection requests.");
 }
 
 public interface ITrustStore
@@ -502,6 +536,7 @@ public interface ITrustStore
     Task<int> ActiveMembershipCountAsync(Guid accountId, CancellationToken cancellationToken);
     Task<bool> AreConnectedAsync(Guid a, Guid b, CancellationToken cancellationToken);
     Task InsertMembershipAsync(Guid a, Guid b, CancellationToken cancellationToken);
+    Task<bool> ConnectAccountsWithOffSharesAsync(Guid a, Guid b, DateTimeOffset now, CancellationToken cancellationToken);
     Task RevokeMembershipAsync(Guid a, Guid b, CancellationToken cancellationToken);
     Task<ShareState> GetShareAsync(Guid grantor, Guid grantee, CancellationToken cancellationToken);
     Task UpsertShareAsync(Guid grantor, Guid grantee, ShareState state, CancellationToken cancellationToken);
@@ -529,10 +564,19 @@ public interface ITrustStore
     Task<Invite?> FindPendingInviteAsync(Guid creatorId, CancellationToken cancellationToken);
     Task InsertInviteAsync(Invite invite, CancellationToken cancellationToken);
     Task MarkInviteConsumedAsync(Guid inviteId, CancellationToken cancellationToken);
+    Task AcceptInviteConnectionAsync(Guid inviteId, Guid joiningAccountId, DateTimeOffset now, CancellationToken cancellationToken);
     Task DeleteAccountAsync(Guid accountId, CancellationToken cancellationToken);
     Task<Account?> FindByVerifiedPhoneAsync(string phoneE164, CancellationToken cancellationToken);
     Task SetVerifiedPhoneAsync(Guid accountId, string phoneE164, DateTimeOffset verifiedAt, CancellationToken cancellationToken);
     Task<Account?> FindByHandleAsync(string handle, CancellationToken cancellationToken);
+    Task<ConnectionRelationshipMatch> GetConnectionRelationshipAsync(Guid accountId, Guid otherId, DateTimeOffset now, CancellationToken cancellationToken);
+    Task<ConnectionRequestLists> ListConnectionRequestsAsync(Guid accountId, DateTimeOffset now, CancellationToken cancellationToken);
+    Task ExpireConnectionRequestsAsync(DateTimeOffset now, CancellationToken cancellationToken);
+    Task PruneConnectionRequestsAsync(DateTimeOffset terminalBefore, CancellationToken cancellationToken);
+    Task<ConnectionRequest> CreateConnectionRequestAsync(Guid senderId, Guid recipientId, DateTimeOffset now, CancellationToken cancellationToken);
+    Task AcceptConnectionRequestAsync(Guid requestId, Guid recipientId, DateTimeOffset now, CancellationToken cancellationToken);
+    Task DeclineConnectionRequestAsync(Guid requestId, Guid recipientId, DateTimeOffset now, CancellationToken cancellationToken);
+    Task CancelConnectionRequestAsync(Guid requestId, Guid senderId, DateTimeOffset now, CancellationToken cancellationToken);
     Task SetHandleAsync(Guid accountId, string handle, string displayName, CancellationToken cancellationToken);
     Task<PhoneChallenge?> GetPhoneChallengeAsync(Guid accountId, CancellationToken cancellationToken);
     Task UpsertPhoneChallengeAsync(PhoneChallenge challenge, CancellationToken cancellationToken);

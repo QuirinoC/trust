@@ -16,6 +16,13 @@ enum AppConfiguration {
     static let supportURL = URL(string: "https://jointrust.app/support")!
     static let marketingURL = URL(string: "https://jointrust.app")!
 
+    /// The InternalTestFlight Xcode configuration is exported with Apple's
+    /// `testFlightInternalTestingOnly` restriction. All other configurations default off.
+    static var skipsPhoneVerification: Bool {
+        let value = Bundle.main.object(forInfoDictionaryKey: "TRUST_SKIP_PHONE_VERIFICATION")
+        return (value as? Bool) == true || (value as? String)?.uppercased() == "YES"
+    }
+
     static let requestTimeout: TimeInterval = 15
     static let healthProbeTimeout: TimeInterval = 3
 

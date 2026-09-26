@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import re
+import json
 import sys
 from pathlib import Path
 
@@ -11,6 +12,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "Sources/TrustCore/TrustCopy.swift"
 PROJECT = ROOT / "project.yml"
+BASELINE = Path(__file__).with_name("localization_source_baseline.json")
 LOCALES = (
     "zh-Hans.lproj",
     "ja.lproj",
@@ -74,6 +76,20 @@ def main() -> int:
 
     expected, defaults = source_keys()
     errors: list[str] = []
+
+    try:
+        baseline = json.loads(BASELINE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        baseline = {}
+        errors.append(f"missing or invalid English localization baseline: {error}")
+    for key in sorted(expected):
+        if key not in baseline:
+            errors.append(f"English baseline is missing {key!r}; review translations, then refresh the baseline")
+        elif defaults.get(key) != baseline[key]:
+            errors.append(f"English source changed for {key!r}; update every locale overlay, then run update_localization_baseline.py {key}")
+    stale = set(baseline) - expected
+    for key in sorted(stale):
+        errors.append(f"English baseline has removed key {key!r}; remove it from every overlay, then refresh the baseline")
 
     for locale in sorted(active_locales):
         path = ROOT / "Resources" / f"{locale}.lproj" / "Localizable.strings"

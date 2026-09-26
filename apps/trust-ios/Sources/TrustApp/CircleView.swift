@@ -252,14 +252,21 @@ struct CircleView: View {
                         glyph: "person.2.wave.2",
                         title: TrustCopy.circleEmptyTitle,
                         message: TrustCopy.circleEmptyBody,
-                        actionTitle: "Go to Sharing"
+                        actionTitle: model.connectionRequests.incoming.isEmpty ? TrustCopy.addSomeone : TrustCopy.reviewRequests
                     ) {
-                        model.selectedTab = .sharing
+                        if model.connectionRequests.incoming.isEmpty {
+                            model.showingAddPersonSheet = true
+                        } else {
+                            model.selectedTab = .sharing
+                        }
                     }
                     .padding(.horizontal, TrustTheme.gutter)
                     .padding(.bottom, listInset)
                 }
-                .refreshable { await model.refresh() }
+                .refreshable {
+                    await model.refresh()
+                    await model.refreshConnectionRequests()
+                }
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
@@ -272,7 +279,13 @@ struct CircleView: View {
                                     .trustFont(13)
                                     .foregroundStyle(palette.muted)
                                     .fixedSize(horizontal: false, vertical: true)
-                                Button(TrustCopy.goToSharing) { model.selectedTab = .sharing }
+                                Button(model.connectionRequests.incoming.isEmpty ? TrustCopy.addSomeone : TrustCopy.reviewRequests) {
+                                    if model.connectionRequests.incoming.isEmpty {
+                                        model.showingAddPersonSheet = true
+                                    } else {
+                                        model.selectedTab = .sharing
+                                    }
+                                }
                                     .buttonStyle(TrustOutlineButtonStyle(compact: true))
                             }
                             .padding(16)
@@ -301,7 +314,10 @@ struct CircleView: View {
                     .padding(.bottom, listInset)
                     .trustReadableWidth()
                 }
-                .refreshable { await model.refresh() }
+                    .refreshable {
+                        await model.refresh()
+                        await model.refreshConnectionRequests()
+                    }
             }
         }
     }

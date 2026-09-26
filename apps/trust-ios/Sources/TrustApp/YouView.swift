@@ -6,6 +6,7 @@ struct YouView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.trustPalette) private var palette
     @AppStorage(TrustAppearance.storageKey) private var appearance = TrustAppearance.system.rawValue
+    @AppStorage(TrustAppLanguage.storageKey) private var appLanguage = TrustAppLanguage.system.rawValue
     @State private var showingDeleteAccount = false
     @State private var showingAvatarPicker = false
     @State private var showingLocation = false
@@ -30,6 +31,8 @@ struct YouView: View {
                     TrustSectionHeading(TrustCopy.preferences)
                         .padding(.bottom, 4)
                     appearanceRow
+                        .padding(.bottom, 18)
+                    languageRow
                         .padding(.bottom, 18)
 
                     TrustSectionHeading(TrustCopy.account)
@@ -114,7 +117,7 @@ struct YouView: View {
                 .trustFont(15, weight: .medium)
                 .foregroundStyle(palette.ink)
             Spacer(minLength: 8)
-            Picker("Appearance", selection: $appearance) {
+            Picker(TrustCopy.appearance, selection: $appearance) {
                 ForEach(TrustAppearance.allCases) { option in
                     Text(option.title).tag(option.rawValue)
                 }
@@ -124,6 +127,33 @@ struct YouView: View {
             .accessibilityLabel(TrustCopy.appearance)
             .accessibilityValue((TrustAppearance(rawValue: appearance) ?? .system).title)
             .accessibilityIdentifier("appearance-preference")
+        }
+        .padding(.horizontal, 14)
+        .frame(minHeight: 52)
+        .background(RoundedRectangle(cornerRadius: TrustTheme.controlRadius, style: .continuous).fill(palette.surface))
+    }
+
+    private var languageRow: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "globe")
+                .font(.system(size: 18))
+                .foregroundStyle(palette.accent)
+                .frame(width: 28)
+                .accessibilityHidden(true)
+            Text(TrustCopy.language)
+                .trustFont(15, weight: .medium)
+                .foregroundStyle(palette.ink)
+            Spacer(minLength: 8)
+            Picker(TrustCopy.language, selection: $appLanguage) {
+                ForEach(TrustAppLanguage.allCases) { option in
+                    Text(option.title).tag(option.rawValue)
+                }
+            }
+            .pickerStyle(.menu)
+            .tint(palette.muted)
+            .accessibilityLabel(TrustCopy.language)
+            .accessibilityValue((TrustAppLanguage(rawValue: appLanguage) ?? .system).title)
+            .accessibilityIdentifier("language-preference")
         }
         .padding(.horizontal, 14)
         .frame(minHeight: 52)
@@ -152,9 +182,17 @@ struct YouView: View {
                     .tracking(-0.6)
                     .foregroundStyle(palette.ink)
                 if let handle = model.you.handle {
-                    Text("@\(handle)")
-                        .font(TrustTheme.ui(13))
-                        .foregroundStyle(palette.muted)
+                    Button {
+                        model.copyOwnHandle()
+                    } label: {
+                        Label("@\(handle)", systemImage: "doc.on.doc")
+                            .labelStyle(.titleAndIcon)
+                            .font(TrustTheme.ui(13))
+                            .foregroundStyle(palette.muted)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(TrustCopy.copyHandle)
+                    .accessibilityIdentifier("copy-own-handle")
                 }
                 Text(TrustCopy.changePictureTip)
                     .trustFont(12)

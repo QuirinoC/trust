@@ -14,6 +14,7 @@ public sealed class MemoryTrustStore : ITrustStore
     private readonly ConcurrentDictionary<Guid, List<LocationFix>> _locations = new();
     private readonly List<LookEvent> _looks = [];
     private readonly ConcurrentDictionary<string, Invite> _invites = new();
+    private readonly Dictionary<Guid, ConnectionRequest> _connectionRequests = new();
     private readonly ConcurrentDictionary<Guid, PhoneChallenge> _phoneChallenges = new();
     private readonly ConcurrentDictionary<string, SmsSendBudget> _smsBudgets = new();
     private readonly SemaphoreSlim _smsGate = new(1, 1);
@@ -132,9 +133,29 @@ public sealed class MemoryTrustStore : ITrustStore
         return Task.CompletedTask;
     }
 
+    public Task<bool> ConnectAccountsWithOffSharesAsync(Guid a, Guid b, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        lock (_gate)
+        {
+            if (!_accounts.TryGetValue(a, out var first) || !_accounts.TryGetValue(b, out var second)) throw TrustException.RequestNotFound();
+            if (_memberships.TryGetValue(Order(a, b), out var status) && status == "active")
+            {
+                ResolvePendingRequests(a, b, now);
+                return Task.FromResult(false);
+            }
+            if (ActiveMembershipCount(a) >= (first.HasCircle ? TrustRules.ProSeats : TrustRules.FreeSeats)
+                || ActiveMembershipCount(b) >= (second.HasCircle ? TrustRules.ProSeats : TrustRules.FreeSeats)) throw TrustException.SeatLimit();
+            _memberships[Order(a, b)] = "active";
+            _shares[(a, b)] = ShareState.Default;
+            _shares[(b, a)] = ShareState.Default;
+            ResolvePendingRequests(a, b, now);
+            return Task.FromResult(true);
+        }
+    }
+
     public Task RevokeMembershipAsync(Guid a, Guid b, CancellationToken cancellationToken)
     {
-        _memberships[Order(a, b)] = "revoked";
+        lock (_gate) _memberships[Order(a, b)] = "revoked";
         return Task.CompletedTask;
     }
 
@@ -340,6 +361,29 @@ public sealed class MemoryTrustStore : ITrustStore
         return Task.CompletedTask;
     }
 
+    public Task AcceptInviteConnectionAsync(Guid inviteId, Guid joiningAccountId, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        lock (_gate)
+        {
+            var invite = _invites.Values.FirstOrDefault(item => item.Id == inviteId);
+            if (invite is null || invite.Status != "pending" || invite.ExpiresAt is null || invite.ExpiresAt <= now) throw TrustException.InvalidCode();
+            if (invite.CreatorId == joiningAccountId) throw new TrustException("own_invite", "You cannot join your own invite.");
+            if (!_accounts.TryGetValue(invite.CreatorId, out var creator) || !_accounts.TryGetValue(joiningAccountId, out var joiner)) throw TrustException.InvalidCode();
+            var pair = Order(joiningAccountId, creator.Id);
+            if (!_memberships.TryGetValue(pair, out var status) || status != "active")
+            {
+                if (ActiveMembershipCount(joiningAccountId) >= (joiner.HasCircle ? TrustRules.ProSeats : TrustRules.FreeSeats)
+                    || ActiveMembershipCount(creator.Id) >= (creator.HasCircle ? TrustRules.ProSeats : TrustRules.FreeSeats)) throw TrustException.SeatLimit();
+                _memberships[pair] = "active";
+                _shares[(joiningAccountId, creator.Id)] = ShareState.Default;
+                _shares[(creator.Id, joiningAccountId)] = ShareState.Default;
+            }
+            ResolvePendingRequests(joiningAccountId, creator.Id, now);
+            _invites[invite.Code] = invite with { Status = "consumed" };
+            return Task.CompletedTask;
+        }
+    }
+
     public Task DeleteAccountAsync(Guid accountId, CancellationToken cancellationToken)
     {
         lock (_gate)
@@ -361,6 +405,8 @@ public sealed class MemoryTrustStore : ITrustStore
             {
                 _invites.TryRemove(invite.Code, out _);
             }
+            foreach (var request in _connectionRequests.Values.Where(r => r.SenderId == accountId || r.RecipientId == accountId).ToList())
+                _connectionRequests.Remove(request.Id);
 
             if (_accounts.TryRemove(accountId, out var account))
             {
@@ -534,6 +580,152 @@ public sealed class MemoryTrustStore : ITrustStore
             && string.Equals(account.Handle, handle, StringComparison.OrdinalIgnoreCase));
         return Task.FromResult(match);
     }
+
+    public Task<ConnectionRelationshipMatch> GetConnectionRelationshipAsync(Guid accountId, Guid otherId, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        lock (_gate)
+        {
+            if (_memberships.TryGetValue(Order(accountId, otherId), out var membership) && membership == "active")
+                return Task.FromResult(new ConnectionRelationshipMatch(ConnectionRelationship.Connected));
+            ExpireRequests(now);
+            var pending = _connectionRequests.Values.FirstOrDefault(r => r.Status == ConnectionRequestStatus.Pending
+                && Order(r.SenderId, r.RecipientId) == Order(accountId, otherId));
+            if (pending is null) return Task.FromResult(new ConnectionRelationshipMatch(ConnectionRelationship.None));
+            return Task.FromResult(new ConnectionRelationshipMatch(
+                pending.SenderId == accountId ? ConnectionRelationship.Sent : ConnectionRelationship.Incoming, pending.Id));
+        }
+    }
+
+    public Task<ConnectionRequestLists> ListConnectionRequestsAsync(Guid accountId, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        lock (_gate)
+        {
+            ExpireRequests(now);
+            var incoming = _connectionRequests.Values.Where(r => r.RecipientId == accountId && r.Status == ConnectionRequestStatus.Pending)
+                .OrderByDescending(r => r.CreatedAt).Select(r => new ConnectionRequestEntry(r, _accounts[r.SenderId])).ToList();
+            var sent = _connectionRequests.Values.Where(r => r.SenderId == accountId && r.Status == ConnectionRequestStatus.Pending)
+                .OrderByDescending(r => r.CreatedAt).Select(r => new ConnectionRequestEntry(r, _accounts[r.RecipientId])).ToList();
+            return Task.FromResult(new ConnectionRequestLists(incoming, sent));
+        }
+    }
+
+    public Task PruneConnectionRequestsAsync(DateTimeOffset terminalBefore, CancellationToken cancellationToken)
+    {
+        lock (_gate)
+            foreach (var request in _connectionRequests.Values.Where(r => r.Status != ConnectionRequestStatus.Pending && r.UpdatedAt < terminalBefore).ToArray())
+                _connectionRequests.Remove(request.Id);
+        return Task.CompletedTask;
+    }
+
+    public Task ExpireConnectionRequestsAsync(DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        lock (_gate) ExpireRequests(now);
+        return Task.CompletedTask;
+    }
+
+    public Task<ConnectionRequest> CreateConnectionRequestAsync(Guid senderId, Guid recipientId, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        lock (_gate)
+        {
+            if (!_accounts.TryGetValue(senderId, out var sender) || !_accounts.TryGetValue(recipientId, out var recipient)) throw TrustException.RequestNotFound();
+            if (!sender.OnboardingComplete || !recipient.OnboardingComplete) throw TrustException.RequestNotFound();
+            if (senderId == recipientId) throw TrustException.RequestNotFound();
+            ExpireRequests(now);
+            if (_memberships.TryGetValue(Order(senderId, recipientId), out var status) && status == "active") throw TrustException.RequestNotFound();
+            var existing = _connectionRequests.Values.FirstOrDefault(r => Order(r.SenderId, r.RecipientId) == Order(senderId, recipientId)
+                && r.Status == ConnectionRequestStatus.Pending);
+            if (existing is not null) return Task.FromResult(existing);
+            if (_connectionRequests.Values.Any(r => r.SenderId == senderId && r.RecipientId == recipientId
+                && r.Status == ConnectionRequestStatus.Declined && r.UpdatedAt > now - TrustRules.ConnectionRequestDeclineCooldown))
+                throw TrustException.RequestDeclinedRecently();
+            if (_connectionRequests.Values.Count(r => r.SenderId == senderId && r.CreatedAt > now.AddDays(-1)) >= 20
+                || _connectionRequests.Values.Count(r => r.SenderId == senderId && r.Status == ConnectionRequestStatus.Pending) >= 20
+                || _connectionRequests.Values.Count(r => r.RecipientId == recipientId && r.Status == ConnectionRequestStatus.Pending) >= 20)
+                throw TrustException.RequestLimit();
+            var request = new ConnectionRequest(Guid.NewGuid(), senderId, recipientId, ConnectionRequestStatus.Pending,
+                now, now.Add(TrustRules.ConnectionRequestValidity), now);
+            _connectionRequests.Add(request.Id, request);
+            return Task.FromResult(request);
+        }
+    }
+
+    public Task AcceptConnectionRequestAsync(Guid requestId, Guid recipientId, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        lock (_gate)
+        {
+            var request = RequireRequest(requestId, recipientId, sender: false, now);
+            if (request.Status == ConnectionRequestStatus.Accepted) return Task.CompletedTask;
+            if (request.Status != ConnectionRequestStatus.Pending) throw TrustException.RequestNotFound();
+            var first = _accounts[request.SenderId]; var second = _accounts[request.RecipientId];
+            if (!first.OnboardingComplete || !second.OnboardingComplete) throw TrustException.PhoneVerificationRequired();
+            if (!_memberships.TryGetValue(Order(first.Id, second.Id), out var active) || active != "active")
+            {
+                if (ActiveMembershipCount(first.Id) >= (first.HasCircle ? TrustRules.ProSeats : TrustRules.FreeSeats)
+                    || ActiveMembershipCount(second.Id) >= (second.HasCircle ? TrustRules.ProSeats : TrustRules.FreeSeats)) throw TrustException.SeatLimit();
+                _memberships[Order(first.Id, second.Id)] = "active";
+                _shares[(first.Id, second.Id)] = ShareState.Default;
+                _shares[(second.Id, first.Id)] = ShareState.Default;
+            }
+            _connectionRequests[request.Id] = request with { Status = ConnectionRequestStatus.Accepted, UpdatedAt = now };
+            return Task.CompletedTask;
+        }
+    }
+
+    public Task DeclineConnectionRequestAsync(Guid requestId, Guid recipientId, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        lock (_gate)
+        {
+            var request = RequireRequest(requestId, recipientId, sender: false, now);
+            if (request.Status == ConnectionRequestStatus.Declined) return Task.CompletedTask;
+            if (request.Status != ConnectionRequestStatus.Pending) throw TrustException.RequestNotFound();
+            _connectionRequests[request.Id] = request with { Status = ConnectionRequestStatus.Declined, UpdatedAt = now };
+            return Task.CompletedTask;
+        }
+    }
+
+    public Task CancelConnectionRequestAsync(Guid requestId, Guid senderId, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        lock (_gate)
+        {
+            var request = RequireRequest(requestId, senderId, sender: true, now);
+            if (request.Status == ConnectionRequestStatus.Cancelled) return Task.CompletedTask;
+            if (request.Status != ConnectionRequestStatus.Pending) throw TrustException.RequestNotFound();
+            _connectionRequests[request.Id] = request with { Status = ConnectionRequestStatus.Cancelled, UpdatedAt = now };
+            return Task.CompletedTask;
+        }
+    }
+
+    private ConnectionRequest RequireRequest(Guid id, Guid actor, bool sender, DateTimeOffset now)
+    {
+        if (!_connectionRequests.TryGetValue(id, out var request)
+            || (sender ? request.SenderId != actor : request.RecipientId != actor)) throw TrustException.RequestNotFound();
+        if (request.Status == ConnectionRequestStatus.Pending && request.ExpiresAt <= now)
+        {
+            _connectionRequests[id] = request with { Status = ConnectionRequestStatus.Expired, UpdatedAt = now };
+            throw TrustException.RequestExpired();
+        }
+        return request;
+    }
+
+    private void ExpireRequests(DateTimeOffset now)
+    {
+        foreach (var request in _connectionRequests.Values.Where(r => r.Status == ConnectionRequestStatus.Pending && r.ExpiresAt <= now).ToArray())
+            _connectionRequests[request.Id] = request with { Status = ConnectionRequestStatus.Expired, UpdatedAt = now };
+    }
+
+    private void ResolvePendingRequests(Guid a, Guid b, DateTimeOffset now)
+    {
+        var pair = Order(a, b);
+        foreach (var request in _connectionRequests.Values.Where(r => r.Status == ConnectionRequestStatus.Pending
+            && Order(r.SenderId, r.RecipientId) == pair).ToArray())
+            _connectionRequests[request.Id] = request with
+            {
+                Status = request.ExpiresAt <= now ? ConnectionRequestStatus.Expired : ConnectionRequestStatus.Accepted,
+                UpdatedAt = now
+            };
+    }
+
+    private int ActiveMembershipCount(Guid accountId) => _memberships.Count(pair => pair.Value == "active" && (pair.Key.A == accountId || pair.Key.B == accountId));
 
     public Task SetHandleAsync(
         Guid accountId,

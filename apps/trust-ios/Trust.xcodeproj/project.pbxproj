@@ -12,49 +12,94 @@
 		0A2BDB08D8BE78D54C86926F /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 482B3013C3B6C0C8532F5DE6 /* LoginView.swift */; };
 		0A872DF45F12B026110B1128 /* TrustCore in Frameworks */ = {isa = PBXBuildFile; productRef = 26D261D4D2888B2D50331783 /* TrustCore */; };
 		0B084813F08FF4C2C2135AC1 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 5508C24A56E81A67A0FC1D03 /* InfoPlist.strings */; };
+		0E72ABED245CB14527B66739 /* InviteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD364338836BC73381136435 /* InviteView.swift */; };
 		127C565893C1515E163CA5D2 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = B2063F803335BC6D0150423D /* InfoPlist.strings */; };
+		13E2A161E66349EECDEABC52 /* StoreManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A764AB895F51BD53D38551D7 /* StoreManager.swift */; };
+		178B7A55AD6CCE0921F4718D /* YouView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A8356A446C938EFA37466BE /* YouView.swift */; };
+		187663D82E2A11219A0F304B /* AuthSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FD7594384721372A16D9E19 /* AuthSession.swift */; };
 		193D0475C68E66AF65A7DFD7 /* TrustCoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10CA18C94885D409ED3D7B7 /* TrustCoreTests.swift */; };
+		19BE34C70451CFF5A92EE689 /* CircleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D99492A6161FC4D64E0C386 /* CircleView.swift */; };
 		1D5998C920DF9A63255FA22A /* LookConfirmSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = D82E8777B7F80A59F2D53EFE /* LookConfirmSheet.swift */; };
 		20624BD70DED7D4BF2F8F2C3 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 5BDC5D2F3934AD105418EDE7 /* InfoPlist.strings */; };
 		2094D814F9A29D960ECE9EF2 /* HandleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F1E3DD239C74673D1C841A9 /* HandleView.swift */; };
 		2281C76EBA0BF930EB2E9E14 /* PhoneView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09A50789FA9420E08F581CBC /* PhoneView.swift */; };
+		246152EF83A0646E77282322 /* LocationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47B487800F3DADB918917BA8 /* LocationCoordinator.swift */; };
+		2B59C363D0E89485B2FA6536 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 4C8229953A6861B1EAF998E1 /* Localizable.strings */; };
 		2F3CB1F1EFAF7273473E217E /* ProfileAvatarPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = A144B075570E3EC71B3A9E9E /* ProfileAvatarPicker.swift */; };
 		32D9A6ABCEC1A4215D80BC3E /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = CC2380F09F1CF772604EADCB /* Localizable.strings */; };
+		354041B2EFE230A68D8027BE /* MapScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE3BE1E107A89A8B8D4FDBD2 /* MapScreen.swift */; };
 		36CD510268DA16335A9EAD0A /* TrustKeychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 706E76871CAC53B051985DCC /* TrustKeychain.swift */; };
+		373F339637D3D5870BB2CA6C /* LookConfirmSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = D82E8777B7F80A59F2D53EFE /* LookConfirmSheet.swift */; };
 		3C26CE6415D9270C449CCEB9 /* TrustTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5980035418744C890C9440B9 /* TrustTheme.swift */; };
+		427A81CC58EC6AE2E97AA9E5 /* SpaceGrotesk-Variable.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 6BCC3CAB70FB747A74A2A255 /* SpaceGrotesk-Variable.ttf */; };
+		42D582439AE244465775A887 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DD39690718850F57B59DFBA /* RootView.swift */; };
+		4393758321BEDD27F92398FA /* HomePlaceStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6AEC0BF1A6640B58DEED252 /* HomePlaceStore.swift */; };
+		462B3BC1214901472FF28E08 /* Syne-Variable.ttf in Resources */ = {isa = PBXBuildFile; fileRef = CDAFEB434DDE7B2096119E2F /* Syne-Variable.ttf */; };
 		4739F0C7171B14DA02E1E454 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = D08EA0C8184116A2084F89DF /* InfoPlist.strings */; };
+		475BAE7872E77E7A785D709A /* SharingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93DD05E4CE1F61BF819BD58D /* SharingView.swift */; };
 		49510C5034BE08BB9B662B51 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 4C8229953A6861B1EAF998E1 /* Localizable.strings */; };
 		4CCCCC2A037ACB0296AA3895 /* MapScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE3BE1E107A89A8B8D4FDBD2 /* MapScreen.swift */; };
+		4D7E4979F75F43BD52F9FA7A /* TrustKeychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 706E76871CAC53B051985DCC /* TrustKeychain.swift */; };
+		589BFF4023D7D97E102AC521 /* PhoneView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09A50789FA9420E08F581CBC /* PhoneView.swift */; };
 		591032D036F1CFD94E6CA3F4 /* Syne-Variable.ttf in Resources */ = {isa = PBXBuildFile; fileRef = CDAFEB434DDE7B2096119E2F /* Syne-Variable.ttf */; };
+		5AB3AA0A940E3CCA67C9E4A1 /* HandleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F1E3DD239C74673D1C841A9 /* HandleView.swift */; };
 		5ED0A8636725D0867AAB4F2C /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 66B76ABCAC45B392F6A35D09 /* PrivacyInfo.xcprivacy */; };
+		5F79DFCB903C5F40ED84A31F /* TrustClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C0D44DBC8538A89711936F4 /* TrustClient.swift */; };
+		67217F4E367E03AC88AFF7D7 /* MapKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0D907524021AC2732B10CC12 /* MapKit.framework */; };
 		681EDD0BAF595CBD804C6090 /* MapKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0D907524021AC2732B10CC12 /* MapKit.framework */; };
+		6A5FBBCB79681D56E3B98DFE /* TrustTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5980035418744C890C9440B9 /* TrustTheme.swift */; };
+		6A892FDA221785F31F67CDD9 /* LocationIngestStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EC0AFA3E5CFC1D9047DE372 /* LocationIngestStore.swift */; };
 		6B26BDB753D5451C9B9FB8DB /* TrustApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 913C99EC0D7E0E081DA468B0 /* TrustApp.swift */; };
 		6B6B1D78FCA327FF3C9D1B06 /* MainShellView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74231FF47EE26FCD87F0BE18 /* MainShellView.swift */; };
 		6FC27E68E657E2CE7C543470 /* AuthenticationServices.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B9D76A913BE410AB908D7AB0 /* AuthenticationServices.framework */; };
 		7420B5E2CC729280CA5F7B2A /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B07B3706D2CCD8A7AC80B91D /* Assets.xcassets */; };
+		7741DAD6C809D8CB47ABE90F /* AuthenticationServices.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B9D76A913BE410AB908D7AB0 /* AuthenticationServices.framework */; };
 		782D4136776A2EC066ADCDC6 /* LocationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47B487800F3DADB918917BA8 /* LocationCoordinator.swift */; };
 		7841602D93EE1A9F61026567 /* HomePlaceStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6AEC0BF1A6640B58DEED252 /* HomePlaceStore.swift */; };
+		78BBDD0445054AB429F6766E /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = CC2380F09F1CF772604EADCB /* Localizable.strings */; };
 		7CB75B07FEA94DC19C75750C /* SharingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93DD05E4CE1F61BF819BD58D /* SharingView.swift */; };
 		8429423DCAF6058479671748 /* TrustUsageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5A777201D5537C1D7D029F3 /* TrustUsageTests.swift */; };
 		863B5887EB707AD2B4A82126 /* YouView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A8356A446C938EFA37466BE /* YouView.swift */; };
 		86AF23F721D59EF2A6C0BCCB /* IBMPlexMono-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 1A43013E81099AA3717EC066 /* IBMPlexMono-Medium.ttf */; };
+		89382677C827E997231126DE /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 63242874F15C117B93D74C2D /* InfoPlist.strings */; };
 		8ABAC708AFCFF13717C9F880 /* TrustRealAPIFeatureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0929D5A5788EE4C0AB1DF23 /* TrustRealAPIFeatureTests.swift */; };
+		8CB775A757CC7C8EF6DE0A2E /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B07B3706D2CCD8A7AC80B91D /* Assets.xcassets */; };
 		8D923C0A5271D91381623F02 /* StoreManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A764AB895F51BD53D38551D7 /* StoreManager.swift */; };
 		8EBFAA09C67AE6703DF64EE5 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DD39690718850F57B59DFBA /* RootView.swift */; };
+		97E605EA1CADA01C0A8D1B94 /* IBMPlexMono-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 1A43013E81099AA3717EC066 /* IBMPlexMono-Medium.ttf */; };
 		998C3D952BFB8E194461E822 /* PlusPaywall.swift in Sources */ = {isa = PBXBuildFile; fileRef = 536A9B0B5FFE1F350CE3E140 /* PlusPaywall.swift */; };
+		9B21E0BECA136CCADA4150DE /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = D08EA0C8184116A2084F89DF /* InfoPlist.strings */; };
+		9B3BC2CDC57D376500E9B698 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 5BDC5D2F3934AD105418EDE7 /* InfoPlist.strings */; };
 		A13CE8F38B1CD3B9DACB8E2E /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED1688A0F63E95BC3BD349AD /* AppModel.swift */; };
+		A1E928DF92CDC40F7B07952E /* LookReceiptNotifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = F84BA6FBFFF34D5A92798BF4 /* LookReceiptNotifier.swift */; };
+		A2B2EDD696A928FBEFF041C2 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 6A37121DEAA99065100C6667 /* Localizable.strings */; };
+		A2B4D18C8D2BFC1698AA4307 /* PlusPaywall.swift in Sources */ = {isa = PBXBuildFile; fileRef = 536A9B0B5FFE1F350CE3E140 /* PlusPaywall.swift */; };
 		A3B85FA87D3F11B02F7A4B0C /* TrustCore in Frameworks */ = {isa = PBXBuildFile; productRef = C0333FDFA631E42B914FD748 /* TrustCore */; };
 		A8BC08E8C79CE43694921C35 /* ViewScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDAA41799C1A974BBE1DF210 /* ViewScreen.swift */; };
 		A94B6401AD264CF3FFD212E6 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 4C699BBDA4EB0CC57ED36887 /* Localizable.strings */; };
+		AB1369C7286F2EAD6C9E6E79 /* TrustCore in Frameworks */ = {isa = PBXBuildFile; productRef = 6F0F2223F70D2E4CB8AABFF1 /* TrustCore */; };
+		AB72B73FF8BA53E9B1936171 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = BF4B0475D551D63F000821DA /* Localizable.strings */; };
+		AEB82731796BB364BA081E6C /* TrustComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8863CE33D489634538BAC18E /* TrustComponents.swift */; };
 		B19D2AB1C4FC8FFE2598C835 /* InviteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD364338836BC73381136435 /* InviteView.swift */; };
 		B54974F68A38E7221D995E39 /* AuthSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FD7594384721372A16D9E19 /* AuthSession.swift */; };
+		B558CE36A3BD455267334253 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 66B76ABCAC45B392F6A35D09 /* PrivacyInfo.xcprivacy */; };
+		B8F11E617B00F06C1B266714 /* TrustApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 913C99EC0D7E0E081DA468B0 /* TrustApp.swift */; };
 		B99BB21E8FCC580EC3BD59BA /* SpaceGrotesk-Variable.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 6BCC3CAB70FB747A74A2A255 /* SpaceGrotesk-Variable.ttf */; };
 		BFBCEE93CC8B3321A0924D53 /* CircleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D99492A6161FC4D64E0C386 /* CircleView.swift */; };
 		C266183870E6F2B71B0911BC /* TrustClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C0D44DBC8538A89711936F4 /* TrustClient.swift */; };
 		C3DEFFEAE8A59482D694BA95 /* TrustComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8863CE33D489634538BAC18E /* TrustComponents.swift */; };
+		C66C2CA89604A2D5F1B526B9 /* AppConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE3763646FBA2DF7BEE36D79 /* AppConfiguration.swift */; };
+		C6AFF30070B015B573D250EC /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = B2063F803335BC6D0150423D /* InfoPlist.strings */; };
 		C9DAE176C7A0161EEC13548E /* LookReceiptNotifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = F84BA6FBFFF34D5A92798BF4 /* LookReceiptNotifier.swift */; };
+		CE01EB4E572A9DEEB10D7C54 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED1688A0F63E95BC3BD349AD /* AppModel.swift */; };
 		D2459321066E8DAE7317DAC6 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 6A37121DEAA99065100C6667 /* Localizable.strings */; };
+		D3BF88D7D129945278E04638 /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 482B3013C3B6C0C8532F5DE6 /* LoginView.swift */; };
+		D3C213AB13032F840DEB0B8C /* ProfileAvatarPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = A144B075570E3EC71B3A9E9E /* ProfileAvatarPicker.swift */; };
+		D84B6840C62B0F8AAA3F4435 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 4C699BBDA4EB0CC57ED36887 /* Localizable.strings */; };
+		DAA3141A7D1F052C736060A3 /* ViewScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDAA41799C1A974BBE1DF210 /* ViewScreen.swift */; };
 		E1F12F6A594D0140C2929F41 /* LocationIngestStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EC0AFA3E5CFC1D9047DE372 /* LocationIngestStore.swift */; };
+		F073EE1FC303C57F678D770D /* MainShellView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74231FF47EE26FCD87F0BE18 /* MainShellView.swift */; };
+		F42C31560334B370446854B3 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 5508C24A56E81A67A0FC1D03 /* InfoPlist.strings */; };
 		FB5A039144351F60575D8744 /* AppConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE3763646FBA2DF7BEE36D79 /* AppConfiguration.swift */; };
 /* End PBXBuildFile section */
 
@@ -69,6 +114,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		08790634D294CA76972CD49E /* TrustInternal.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = TrustInternal.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		09A50789FA9420E08F581CBC /* PhoneView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneView.swift; sourceTree = "<group>"; };
 		0D907524021AC2732B10CC12 /* MapKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MapKit.framework; path = System/Library/Frameworks/MapKit.framework; sourceTree = SDKROOT; };
 		0F1E3DD239C74673D1C841A9 /* HandleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HandleView.swift; sourceTree = "<group>"; };
@@ -128,6 +174,16 @@
 			buildActionMask = 2147483647;
 			files = (
 				0A872DF45F12B026110B1128 /* TrustCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		36C56F75E218863B2A4B40F5 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AB1369C7286F2EAD6C9E6E79 /* TrustCore in Frameworks */,
+				7741DAD6C809D8CB47ABE90F /* AuthenticationServices.framework in Frameworks */,
+				67217F4E367E03AC88AFF7D7 /* MapKit.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -268,6 +324,7 @@
 			children = (
 				E0E16CA26F45FCA3514EB874 /* Trust.app */,
 				B23A5C764E9E313CD90E6EB0 /* TrustCoreTests.xctest */,
+				08790634D294CA76972CD49E /* TrustInternal.app */,
 				56F2274E2243FEC94CADC02A /* TrustUITests.xctest */,
 			);
 			name = Products;
@@ -322,6 +379,26 @@
 			productReference = 56F2274E2243FEC94CADC02A /* TrustUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		470681601E41134BCAD20008 /* TrustInternal */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 06D96C7F4EA0714AD469F8F6 /* Build configuration list for PBXNativeTarget "TrustInternal" */;
+			buildPhases = (
+				2E59E887079424B3BD917BAD /* Sources */,
+				918475D0B3753E718F5F118C /* Resources */,
+				36C56F75E218863B2A4B40F5 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = TrustInternal;
+			packageProductDependencies = (
+				6F0F2223F70D2E4CB8AABFF1 /* TrustCore */,
+			);
+			productName = TrustInternal;
+			productReference = 08790634D294CA76972CD49E /* TrustInternal.app */;
+			productType = "com.apple.product-type.application";
+		};
 		B6D7371633099E2C204153CD /* TrustCoreTests */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 972AA62607C1DBF6061DD323 /* Build configuration list for PBXNativeTarget "TrustCoreTests" */;
@@ -359,6 +436,10 @@
 						ProvisioningStyle = Automatic;
 						TestTargetID = 18755F391E6B12E3A5CFD401;
 					};
+					470681601E41134BCAD20008 = {
+						DevelopmentTeam = 3S529795M9;
+						ProvisioningStyle = Automatic;
+					};
 					B6D7371633099E2C204153CD = {
 						ProvisioningStyle = Automatic;
 					};
@@ -388,12 +469,35 @@
 			targets = (
 				18755F391E6B12E3A5CFD401 /* Trust */,
 				B6D7371633099E2C204153CD /* TrustCoreTests */,
+				470681601E41134BCAD20008 /* TrustInternal */,
 				33753F0B8DE2D72C33BB08C5 /* TrustUITests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		918475D0B3753E718F5F118C /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8CB775A757CC7C8EF6DE0A2E /* Assets.xcassets in Resources */,
+				97E605EA1CADA01C0A8D1B94 /* IBMPlexMono-Medium.ttf in Resources */,
+				F42C31560334B370446854B3 /* InfoPlist.strings in Resources */,
+				89382677C827E997231126DE /* InfoPlist.strings in Resources */,
+				9B3BC2CDC57D376500E9B698 /* InfoPlist.strings in Resources */,
+				C6AFF30070B015B573D250EC /* InfoPlist.strings in Resources */,
+				9B21E0BECA136CCADA4150DE /* InfoPlist.strings in Resources */,
+				D84B6840C62B0F8AAA3F4435 /* Localizable.strings in Resources */,
+				2B59C363D0E89485B2FA6536 /* Localizable.strings in Resources */,
+				78BBDD0445054AB429F6766E /* Localizable.strings in Resources */,
+				A2B2EDD696A928FBEFF041C2 /* Localizable.strings in Resources */,
+				AB72B73FF8BA53E9B1936171 /* Localizable.strings in Resources */,
+				B558CE36A3BD455267334253 /* PrivacyInfo.xcprivacy in Resources */,
+				427A81CC58EC6AE2E97AA9E5 /* SpaceGrotesk-Variable.ttf in Resources */,
+				462B3BC1214901472FF28E08 /* Syne-Variable.ttf in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		F4FA1350345FF7B047ED4C34 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -462,6 +566,40 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		2E59E887079424B3BD917BAD /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C66C2CA89604A2D5F1B526B9 /* AppConfiguration.swift in Sources */,
+				CE01EB4E572A9DEEB10D7C54 /* AppModel.swift in Sources */,
+				187663D82E2A11219A0F304B /* AuthSession.swift in Sources */,
+				19BE34C70451CFF5A92EE689 /* CircleView.swift in Sources */,
+				5AB3AA0A940E3CCA67C9E4A1 /* HandleView.swift in Sources */,
+				4393758321BEDD27F92398FA /* HomePlaceStore.swift in Sources */,
+				0E72ABED245CB14527B66739 /* InviteView.swift in Sources */,
+				246152EF83A0646E77282322 /* LocationCoordinator.swift in Sources */,
+				6A892FDA221785F31F67CDD9 /* LocationIngestStore.swift in Sources */,
+				D3BF88D7D129945278E04638 /* LoginView.swift in Sources */,
+				373F339637D3D5870BB2CA6C /* LookConfirmSheet.swift in Sources */,
+				A1E928DF92CDC40F7B07952E /* LookReceiptNotifier.swift in Sources */,
+				F073EE1FC303C57F678D770D /* MainShellView.swift in Sources */,
+				354041B2EFE230A68D8027BE /* MapScreen.swift in Sources */,
+				589BFF4023D7D97E102AC521 /* PhoneView.swift in Sources */,
+				A2B4D18C8D2BFC1698AA4307 /* PlusPaywall.swift in Sources */,
+				D3C213AB13032F840DEB0B8C /* ProfileAvatarPicker.swift in Sources */,
+				42D582439AE244465775A887 /* RootView.swift in Sources */,
+				475BAE7872E77E7A785D709A /* SharingView.swift in Sources */,
+				13E2A161E66349EECDEABC52 /* StoreManager.swift in Sources */,
+				B8F11E617B00F06C1B266714 /* TrustApp.swift in Sources */,
+				5F79DFCB903C5F40ED84A31F /* TrustClient.swift in Sources */,
+				AEB82731796BB364BA081E6C /* TrustComponents.swift in Sources */,
+				4D7E4979F75F43BD52F9FA7A /* TrustKeychain.swift in Sources */,
+				6A5FBBCB79681D56E3B98DFE /* TrustTheme.swift in Sources */,
+				DAA3141A7D1F052C736060A3 /* ViewScreen.swift in Sources */,
+				178B7A55AD6CCE0921F4718D /* YouView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		9E3C8AAFE1CF0E8E302D8378 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -481,6 +619,32 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		0DF005B154728FF14012DC97 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Trust.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 29;
+				DEVELOPMENT_TEAM = 3S529795M9;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				INFOPLIST_FILE = "Internal-Info.plist";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Trust uses the camera only when you choose Take Photo to set your profile picture.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Trust uses your location while the app is open so you can see yourself on the map and look at people who share with you. Trust does not sell your location.";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.collapsetechnologies.trust;
+				PRODUCT_NAME = Trust;
+				SDKROOT = iphoneos;
+				SWIFT_STRICT_CONCURRENCY = targeted;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 		3FD876C620AAEE781D4044A4 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -554,7 +718,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = Trust.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 27;
+				CURRENT_PROJECT_VERSION = 29;
 				DEVELOPMENT_TEAM = 3S529795M9;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				INFOPLIST_FILE = Info.plist;
@@ -630,7 +794,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = Trust.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 27;
+				CURRENT_PROJECT_VERSION = 29;
 				DEVELOPMENT_TEAM = 3S529795M9;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				INFOPLIST_FILE = Info.plist;
@@ -648,6 +812,32 @@
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Release;
+		};
+		96F5F1EE25AFAC773CFA0AF8 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Trust.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 29;
+				DEVELOPMENT_TEAM = 3S529795M9;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				INFOPLIST_FILE = "Internal-Info.plist";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Trust uses the camera only when you choose Take Photo to set your profile picture.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Trust uses your location while the app is open so you can see yourself on the map and look at people who share with you. Trust does not sell your location.";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.collapsetechnologies.trust;
+				PRODUCT_NAME = Trust;
+				SDKROOT = iphoneos;
+				SWIFT_STRICT_CONCURRENCY = targeted;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
 		};
 		C8E832A3A6D22424CE4561F2 /* Release */ = {
 			isa = XCBuildConfiguration;
@@ -731,6 +921,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		06D96C7F4EA0714AD469F8F6 /* Build configuration list for PBXNativeTarget "TrustInternal" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				96F5F1EE25AFAC773CFA0AF8 /* Debug */,
+				0DF005B154728FF14012DC97 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
 		36CFA129704795B76E2CDB1A /* Build configuration list for PBXNativeTarget "Trust" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -778,6 +977,10 @@
 
 /* Begin XCSwiftPackageProductDependency section */
 		26D261D4D2888B2D50331783 /* TrustCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = TrustCore;
+		};
+		6F0F2223F70D2E4CB8AABFF1 /* TrustCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = TrustCore;
 		};
