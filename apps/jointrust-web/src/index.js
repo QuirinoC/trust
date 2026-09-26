@@ -44,11 +44,6 @@ function inviteLanding(code) {
       <p>Review the invitation in Trust. Accepting connects your accounts; sharing stays off until you choose a mode.</p>
       <p><a class="invite-action" href="trust://invite/${escapedCode}">Open Trust</a></p>
       <p class="invite-note">Opening the app does not accept the invitation. If Trust isn’t installed, use your TestFlight invitation to install it, then open this link again.</p>
-      <details class="invite-fallback">
-        <summary>Need a fallback code?</summary>
-        <p class="invite-code" aria-label="Invite code ${escapedCode}">${escapedCode}</p>
-        <p class="invite-note">If Trust isn’t installed yet, save this code and enter it after installing the app.</p>
-      </details>
       <p class="back"><a href="/">About Trust</a></p>
     </main>
   </body>

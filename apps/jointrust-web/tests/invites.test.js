@@ -10,7 +10,7 @@ function environment() {
   };
 }
 
-test("invite landing makes acceptance explicit and keeps the code as a fallback", async () => {
+test("invite landing makes acceptance explicit and links to the app", async () => {
   const response = await worker.fetch(
     new Request("https://jointrust.app/i/ABC234"),
     environment(),
@@ -25,8 +25,7 @@ test("invite landing makes acceptance explicit and keeps the code as a fallback"
   assert.match(html, /Invitation to connect/);
   assert.match(html, /sharing stays off until you choose a mode/);
   assert.match(html, /use your TestFlight invitation to install it/);
-  assert.match(html, /<details class="invite-fallback">/);
-  assert.match(html, /class="invite-code"[^>]*>ABC234<\/p>/);
+  assert.doesNotMatch(html, /invite-fallback|invite-code|Need a fallback code|save this code/i);
   assert.doesNotMatch(html, /Join your circle/);
   assert.match(html, /does not accept the invitation/);
   assert.doesNotMatch(html, /http-equiv="refresh"|<script\b/i);
