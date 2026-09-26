@@ -16,6 +16,17 @@ struct CircleView: View {
     private var pins: [AppModel.MapPin] { model.homeMapPins }
 
     var body: some View {
+        Group {
+            if model.selectedTab == .circle {
+                activeCircleContent
+            } else {
+                Color.clear
+                    .accessibilityHidden(true)
+            }
+        }
+    }
+
+    private var activeCircleContent: some View {
         GeometryReader { geo in
             let width = geo.size.width
             let fullHeight = max(geo.size.height, 1)
@@ -51,7 +62,7 @@ struct CircleView: View {
         }
         .onAppear {
             model.prepareMapLocation()
-            fitAll()
+            if !userMovedMap { fitAll() }
         }
         .onChange(of: pins.map(\.id)) { _, _ in
             if !userMovedMap { fitAll() }

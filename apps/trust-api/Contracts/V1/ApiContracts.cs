@@ -24,6 +24,8 @@ public sealed record PersonDto(
     bool PhoneVerified,
     string? Handle,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    bool? DiscoveryEnabled,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     AvatarDto? Avatar = null);
 
 public sealed record AvatarDto(
@@ -157,7 +159,9 @@ public sealed record InviteAcceptRequest(string Code);
 
 public sealed record RenameRequest(string DisplayName);
 
-public sealed record SetHandleRequest(string Handle);
+public sealed record SetHandleRequest(string Handle, int? DiscoveryConsentVersion = null);
+public sealed record SetDiscoveryRequest(bool Enabled, int ConsentVersion);
+public sealed record PersonLookupRequest(string? Handle = null, string? Phone = null, string? Region = null);
 
 public sealed record HandleAvailabilityResponse(
     string Handle,
@@ -177,8 +181,16 @@ public sealed record AddPersonByPhoneResponse(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     string? DevelopmentCode);
 
-/// Discovery deliberately returns no display name, avatar, phone, presence, or sharing data.
-public sealed record PersonLookupResponse(Guid AccountId, string Handle, string Relationship, Guid? RequestId = null);
+/// Discovery returns no display name, phone, presence, or sharing data. New-search avatar fields are consent-gated.
+public sealed record PersonLookupResponse(
+    Guid AccountId,
+    string Handle,
+    string Relationship,
+    Guid? RequestId = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    AvatarDto? Avatar = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? PhotoThumbnailBase64 = null);
 public sealed record ConnectionRequestCreateRequest(Guid RecipientId);
 public sealed record ConnectionRequestCreateResponse(Guid Id, string Status, DateTimeOffset CreatedAt, DateTimeOffset ExpiresAt);
 public sealed record ConnectionRequestPartyDto(Guid AccountId, string Handle);
@@ -213,8 +225,9 @@ public sealed record ApiError(string Code, string Message);
 
 public static class ContractMap
 {
-    public static PersonDto Person(Account account) =>
+    public static PersonDto Person(Account account, bool includeDiscoveryEnabled = false) =>
         new(account.Id, account.DisplayName, account.HasCircle, account.OnboardingComplete, account.HasVerifiedPhone, account.Handle,
+            includeDiscoveryEnabled ? account.DiscoveryEnabled : null,
             account.Avatar is null ? null : new AvatarDto(account.Avatar.Kind, account.Avatar.PresetId, account.Avatar.Version));
 
     public static PresenceDto? Presence(Presence? presence) =>
@@ -321,7 +334,7 @@ public static class ContractMap
         bool allowsReviewUnlock,
         DateTimeOffset now) =>
         new(
-            Person(snapshot.You),
+            Person(snapshot.You, includeDiscoveryEnabled: true),
             snapshot.Members.Select(member => new MemberDto(
                 Person(member.Person),
                 Presence(member.Presence),

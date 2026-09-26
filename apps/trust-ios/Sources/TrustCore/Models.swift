@@ -17,6 +17,8 @@ public struct Person: Identifiable, Hashable, Codable, Sendable {
     public var phoneVerified: Bool
     public var handle: String?
     public var avatar: AvatarDescriptor?
+    /// Optional for decoding older on-device circle caches; absent means disabled.
+    public var discoveryEnabled: Bool?
 
     public var identity: String {
         if let handle, !handle.isEmpty {
@@ -32,7 +34,8 @@ public struct Person: Identifiable, Hashable, Codable, Sendable {
         onboardingComplete: Bool = true,
         phoneVerified: Bool = false,
         handle: String? = nil,
-        avatar: AvatarDescriptor? = nil
+        avatar: AvatarDescriptor? = nil,
+        discoveryEnabled: Bool? = false
     ) {
         self.id = id
         self.displayName = displayName
@@ -41,6 +44,7 @@ public struct Person: Identifiable, Hashable, Codable, Sendable {
         self.phoneVerified = phoneVerified
         self.handle = handle
         self.avatar = avatar
+        self.discoveryEnabled = discoveryEnabled
     }
 }
 

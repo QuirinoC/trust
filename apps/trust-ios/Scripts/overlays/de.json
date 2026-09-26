@@ -411,7 +411,7 @@
   "handle_placeholder": "jordan",
   "accept_invitation": "Einladung annehmen",
   "accept_request": "Anfrage annehmen",
-  "add_person_explanation": "Finde jemanden über den genauen Handle. Eine Verbindung aktiviert das Teilen nicht.",
+  "add_person_explanation": "Verbinde dich zuerst. Teilen bleibt aus, bis du es auswählst.",
   "api_handle_not_found": "Kein Trust-Konto mit diesem Handle gefunden.",
   "api_request_declined_recently": "Diese Person hat eine Anfrage kürzlich abgelehnt. Versuche es später erneut.",
   "api_request_expired": "Diese Anfrage ist abgelaufen oder nicht mehr verfügbar.",
@@ -428,6 +428,7 @@
   "copy_handle": "Handle kopieren",
   "copy_invite_link": "Einladungslink kopieren",
   "decline_request": "Ablehnen",
+  "find_your_person": "Finde deine Person",
   "follow_iphone_language": "iPhone-Sprache übernehmen",
   "handle_copied": "Handle kopiert",
   "handle_initials_accessibility": "Initialen für @%@",
@@ -457,5 +458,15 @@
   "sent_requests": "Gesendet",
   "sharing_requests_accessibility": "%@, %d eingehende Anfragen",
   "their_handle": "Handle der Person",
-  "verify_number": "Nummer bestätigen"
+  "verify_number": "Nummer bestätigen",
+  "add_person_lookup_placeholder": "Handle oder Telefonnummer",
+  "add_person_lookup_helper": "Gib einen Trust-Handle oder eine vollständige Telefonnummer ein.",
+  "lookup_no_match": "Keine Übereinstimmung gefunden",
+  "invite_to_trust": "Einladungslink teilen",
+  "discovery_enabled_label": "Anderen erlauben, mich zu finden",
+  "discovery_enabled_explanation": "Wenn diese Option aktiviert ist, können Personen mit deiner vollständigen Telefonnummer deinen Handle finden. Dein Bild erscheint dann auch bei exakten Treffern für Handle oder Telefonnummer.",
+  "avatar_visible_to_discoverable_people": "Wenn die Telefonsuche aktiviert ist, kann dein Bild bei exakten Treffern für Handle oder Telefonnummer erscheinen.",
+  "avatar_visible_to_connections_only": "Wenn die Telefonsuche deaktiviert ist, sehen nur Personen, mit denen du verbunden bist, dein Bild.",
+  "clear_field": "Löschen",
+  "phone_lookup_country_code_hint": "Gib eine vollständige Telefonnummer mit Ländervorwahl ein."
 }

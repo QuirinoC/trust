@@ -16,6 +16,7 @@ struct PersonDTO: Decodable {
     var phoneVerified: Bool?
     var handle: String?
     var avatar: AvatarDescriptor?
+    var discoveryEnabled: Bool?
 }
 
 struct HandleAvailabilityPayload: Decodable {
@@ -41,6 +42,8 @@ struct PersonLookupPayload: Decodable, Equatable {
     var handle: String
     var relationship: String
     var requestId: UUID?
+    var avatar: AvatarDescriptor?
+    var photoThumbnailBase64: String?
 }
 
 struct ConnectionRequestPartyDTO: Decodable, Equatable {
@@ -655,8 +658,26 @@ final class TrustClient {
     }
 
     func setHandle(_ handle: String) async throws {
-        struct Body: Encodable { var handle: String }
-        try await putEmpty(path: "/api/v1/me/handle", body: Body(handle: handle))
+        try await setHandle(handle, discoveryConsentVersion: nil)
+    }
+
+    func setHandle(_ handle: String, discoveryConsentVersion: Int?) async throws {
+        struct Body: Encodable {
+            var handle: String
+            var discoveryConsentVersion: Int?
+        }
+        try await putEmpty(
+            path: "/api/v1/me/handle",
+            body: Body(handle: handle, discoveryConsentVersion: discoveryConsentVersion)
+        )
+    }
+
+    func setDiscoveryEnabled(_ enabled: Bool) async throws {
+        struct Body: Encodable { var enabled: Bool; var consentVersion: Int }
+        try await putEmpty(
+            path: "/api/v1/me/discovery",
+            body: Body(enabled: enabled, consentVersion: 1)
+        )
     }
 
     func sendPhoneCode(phone: String) async throws -> SendPhoneCodePayload {
@@ -685,12 +706,8 @@ final class TrustClient {
         )
     }
 
-    func lookupPerson(handle: String) async throws -> PersonLookupPayload {
-        var components = URLComponents()
-        components.path = "/api/v1/people/lookup"
-        components.queryItems = [URLQueryItem(name: "handle", value: handle)]
-        guard let path = components.string else { throw TrustClientError.decoding }
-        return try await get(path: path)
+    func lookupPerson(_ query: PersonLookupQuery) async throws -> PersonLookupPayload {
+        try await post(path: "/api/v1/people/lookup", body: query, authorized: true)
     }
 
     func connectionRequests() async throws -> ConnectionRequestsPayload {
@@ -942,7 +959,8 @@ extension PersonDTO {
             onboardingComplete: onboardingComplete ?? (handle != nil),
             phoneVerified: phoneVerified ?? false,
             handle: handle,
-            avatar: avatar
+            avatar: avatar,
+            discoveryEnabled: discoveryEnabled
         )
     }
 }

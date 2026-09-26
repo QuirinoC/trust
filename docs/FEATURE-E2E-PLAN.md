@@ -20,7 +20,7 @@ The real-API UI test requires strict API mode and does not use demo fallback. Ru
 
 ## Real-API simulator lane
 
-The current test is `TrustRealAPIFeatureTests.testRealOnboardingHandleRequestAcceptAndStopSharing`. It creates two disposable identities, completes handle and Development phone verification, searches an exact handle, sends a connection request, observes the reverse incoming request, accepts it, and verifies the new connection and Sealed/Off sharing behavior. The test deletes both accounts afterward. It uses `TRUST_BASE_URL=http://127.0.0.1:5088` and `TRUST_STRICT_API=1`; do not set `TRUST_DEMO`.
+The current test is `TrustRealAPIFeatureTests.testRealOnboardingHandleRequestAcceptAndStopSharing`. It creates two disposable identities, explicitly opts in through the disclosed onboarding choice, completes Development phone verification, saves a profile icon, exercises automatic exact phone lookup and clearing the query, then opens native sharing for an unmatched number and confirms cancelling it does not create a sent request. It then searches an exact handle, sends a connection request, observes the reverse incoming request, accepts it, and verifies the new connection and Sealed/Off sharing behavior. The test deletes both accounts afterward. A fixture-backed UI test also checks submit-only feedback for malformed handles and incomplete phone numbers, verifies the initial search state stays uncluttered, and captures that screen. It uses `TRUST_BASE_URL=http://127.0.0.1:5088` and `TRUST_STRICT_API=1`; do not set `TRUST_DEMO`.
 
 Use the Xcode installation that matches the simulator. The stable iPhone 17 Pro uses `/Applications/Xcode.app` and simulator `61DC2501-3A93-4123-A6D5-D3512AF07464`. The Duo uses `/Applications/Xcode-27.1-beta.app` and simulator `C6495E9A-B165-46E1-97F9-0B92ABBDDC0D`. Run one at a time.
 
@@ -32,12 +32,13 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -project app
 
 For Duo, use `DEVELOPER_DIR=/Applications/Xcode-27.1-beta.app/Contents/Developer` and destination `platform=iOS Simulator,id=C6495E9A-B165-46E1-97F9-0B92ABBDDC0D`. Keep the focused test selector and other arguments the same. To run the full suite instead, remove `-only-testing:TrustUITests/TrustRealAPIFeatureTests/testRealOnboardingHandleRequestAcceptAndStopSharing`.
 
-## Current evidence
+## Current discovery milestone evidence
 
-- API tests passed **125/125**.
-- The full iOS scheme passed **37/37**, with no skips, on both the stable iPhone 17 Pro and the Duo simulator. The focused real-API case passed **1/1** on each simulator.
-- Swift package tests passed **29/29**; website tests passed **3/3**; localization checks passed for **459 keys across 5 translated locales**.
-- XCTest screenshots are in the ignored `test-results/sharing-2026-09-26` directory.
+- API tests passed **132/132** with no skips, including Postgres coverage for discovery consent, exact phone matching, verified callers, consent-gated picture previews, opt-out, and throttling. Swift package tests passed **33/33**.
+- The full stable iPhone 17 Pro Xcode suite passed **41/41** with no skips (**33 core + 8 UI**). The real-API onboarding, phone lookup, share-link dismissal, request/accept, sharing-Off, and stop-sharing flow passed **1/1** on both stable iOS 26.5 and iOS 27.1 beta Duo.
+- Website tests passed **3/3**. Localization validation passed for **470 keys across five locales**.
+- Astra reviewed the final Add Someone sheet; Sol's independent review of the share-sheet completion callback, Duo dismissal fallback, and discovery privacy integration found no actionable issues.
+- On the iOS 27.1 beta simulator, Apple’s native share sheet ignores an accessibility tap on its close control; swiping it down closes it and the remaining real-API flow passes. Stable iOS closes it with the control. This simulator difference is recorded in the UI test and is not treated as evidence of APNs or physical-device behavior.
 
 Simulator tests use Development identities and a local service. They do not verify physical Sign in with Apple, carrier SMS delivery, APNs token registration or notification delivery/display, background location behavior, or TestFlight behavior. No physical APNs delivery has been verified. A successful server publish attempt is not evidence that Apple delivered a notification.
 

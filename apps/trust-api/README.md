@@ -37,6 +37,8 @@ This script writes test records and uses local Postgres for a few assertions. Ne
 
 Phone verification uses `POST /api/v1/me/phone/send` and `/verify`. Development may return a verification code when SMS is unconfigured. Production does not bypass verification. Postgres serializes hourly/daily SMS budget reservations and challenge attempts across API instances; per-IP route throttles add an extra request limit. The configured limits are eight sends per account per hour/day, eight per phone per hour, and 40 globally per day.
 
+People discovery is explicit opt-in. Existing accounts have no discovery consent until they choose it. `PUT /api/v1/me/discovery` sets `{ "enabled": true|false, "consentVersion": 1 }`; `You.discoveryEnabled` reports the current choice. The onboarding handle save accepts an optional `discoveryConsentVersion: 1` when the user has chosen the disclosed opt-in; clients that omit it preserve the existing choice. `POST /api/v1/people/lookup` accepts exactly one of `{ "handle": "name" }` or `{ "phone": "...", "region": "US" }`. Phone input must be a complete number parsed with the supplied ISO region for national format, or include `+` and its country code. Phone lookup matches only the verified number index and only accounts that completed onboarding and opted in. Handle lookup remains available for eligible accounts without opt-in, but their avatar is hidden unless the caller is already connected. Results include no display name or phone number, are marked `private, no-store`, and photos are returned only as a bounded 128-pixel thumbnail when discovery consent or an existing connection permits it. New lookup requests are limited to 60 per account and 120 per IP per minute; the legacy GET handle lookup retains its 20 per-account limit.
+
 ## Key endpoints
 
 | Endpoint | Purpose |
@@ -47,6 +49,8 @@ Phone verification uses `POST /api/v1/me/phone/send` and `/verify`. Development 
 | `GET /api/v1/circle` | Circle members and currently permitted presence/location |
 | `PUT /api/v1/me/avatar/preset` | Choose an allowlisted profile icon from the avatar catalog |
 | `PUT /api/v1/me/avatar/photo` and `DELETE /api/v1/me/avatar` | Set or remove a profile photo |
+| `PUT /api/v1/me/discovery` | Explicitly enable or disable people discovery |
+| `GET` or `POST /api/v1/people/lookup` | Legacy handle lookup or exact handle/verified-phone discovery |
 | `GET /api/v1/people/{id}/avatar/{version}` | Fetch the current photo for yourself or an active circle member |
 | `POST /api/v1/invites` and `/invites/accept` | Create and accept an invite |
 | `POST /api/v1/looks` | Confirmed sealed snapshot and Look event |

@@ -117,20 +117,32 @@ final class AppModel: ObservableObject {
     @Published var addPhoneDraft = ""
     @Published private(set) var isAddingByPhone = false
 
-    @Published var showingAddPersonSheet = false
+    @Published var showingAddPersonSheet = false {
+        didSet {
+            if !showingAddPersonSheet { clearConnectionLookup() }
+        }
+    }
     @Published var connectionHandleDraft = ""
     @Published private(set) var connectionLookup: PersonLookupPayload?
     @Published private(set) var isLookingUpConnection = false
     @Published private(set) var isSendingConnectionRequest = false
     @Published private(set) var connectionLookupNotice: String?
+    @Published private(set) var connectionLookupHint: String?
+    @Published private(set) var connectionLookupIsNoMatch = false
+    @Published private(set) var connectionLookupCanInvite = false
     @Published private(set) var connectionRequiresPhoneVerification = false
     @Published private(set) var connectionRequests = ConnectionRequestsPayload(incoming: [], sent: [])
     @Published private(set) var isLoadingConnectionRequests = false
     @Published private(set) var connectionRequestsNotice: String?
     @Published private(set) var actingOnConnectionRequestIDs: Set<UUID> = []
+    @Published private(set) var inviteShareText: String?
+    @Published private(set) var isPreparingConnectionInvite = false
+    @Published private(set) var isUpdatingDiscovery = false
     @Published var canReturnFromPhoneVerification = false
     private var accountGeneration: UInt64 = 0
     private var connectionLookupGeneration: UInt64 = 0
+    private var connectionLookupDebounceTask: Task<Void, Never>?
+    private var connectionLookupTask: Task<Void, Never>?
 
     private func isCurrentAccount(generation: UInt64, token: String) -> Bool {
         generation == accountGeneration && auth.sessionToken == token
@@ -159,6 +171,12 @@ final class AppModel: ObservableObject {
         isLookingUpConnection = false
         isSendingConnectionRequest = false
         connectionLookupNotice = nil
+        connectionLookupHint = nil
+        connectionLookupIsNoMatch = false
+        connectionLookupCanInvite = false
+        inviteShareText = nil
+        isPreparingConnectionInvite = false
+        isUpdatingDiscovery = false
         connectionRequiresPhoneVerification = false
         connectionRequests = ConnectionRequestsPayload(incoming: [], sent: [])
         isLoadingConnectionRequests = false
@@ -174,6 +192,7 @@ final class AppModel: ObservableObject {
     }
 
     @Published var onboardingHandle = ""
+    @Published var onboardingDiscoveryEnabled = false
     @Published var onboardingNotice: String?
     @Published var handleAvailability: Bool?
     @Published var isOnboardingBusy = false
@@ -1183,33 +1202,68 @@ final class AppModel: ObservableObject {
     func setConnectionHandleDraft(_ raw: String) {
         guard raw != connectionHandleDraft else { return }
         connectionHandleDraft = raw
-        connectionLookupGeneration &+= 1
-        connectionLookup = nil
-        connectionLookupNotice = nil
-        connectionRequiresPhoneVerification = false
-        isLookingUpConnection = false
+        clearConnectionLookup(keepDraft: true)
+        guard let query = PersonLookupQuery.parse(raw) else { return }
+        connectionLookupCanInvite = ifPhoneQuery(query)
+        let generation = connectionLookupGeneration
+        connectionLookupDebounceTask = Task { [weak self] in
+            do {
+                try await Task.sleep(for: .milliseconds(350))
+            } catch {
+                return
+            }
+            guard !Task.isCancelled else { return }
+            await self?.performConnectionLookup(query, generation: generation)
+        }
     }
 
-    func lookupConnectionHandle() {
-        let handle = TrustHandle.normalize(connectionHandleDraft)
-        guard case .valid(let normalized) = TrustHandle.status(of: handle) else {
-            connectionLookup = nil
+    func submitConnectionLookup() {
+        let value = connectionHandleDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty, PersonLookupQuery.parse(value) == nil else { return }
+        if value.first?.isNumber == true || value.first == "+" {
+            connectionLookupHint = TrustCopy.phoneLookupCountryCodeHint
+        } else {
             connectionLookupNotice = TrustCopy.handleInvalid
-            return
         }
-        guard requireOnline(), !isLookingUpConnection else { return }
+    }
+
+    private func ifPhoneQuery(_ query: PersonLookupQuery) -> Bool {
+        if case .phone = query { return true }
+        return false
+    }
+
+    private func clearConnectionLookup(keepDraft: Bool = false) {
+        connectionLookupGeneration &+= 1
+        connectionLookupDebounceTask?.cancel()
+        connectionLookupTask?.cancel()
+        connectionLookupDebounceTask = nil
+        connectionLookupTask = nil
+        connectionLookup = nil
+        connectionLookupNotice = nil
+        connectionLookupHint = nil
+        connectionLookupIsNoMatch = false
+        connectionLookupCanInvite = false
+        connectionRequiresPhoneVerification = false
+        isLookingUpConnection = false
+        isPreparingConnectionInvite = false
+        inviteShareText = nil
+        if !keepDraft { connectionHandleDraft = "" }
+    }
+
+    private func performConnectionLookup(_ query: PersonLookupQuery, generation: UInt64) async {
+        guard generation == connectionLookupGeneration, showingAddPersonSheet else { return }
+        guard requireOnline() else { return }
         if isDemoMode {
             connectionLookupNotice = TrustCopy.connectionRequestsNeedAccount
             return
         }
         guard let sessionToken = auth.sessionToken else { return }
-        connectionLookupGeneration &+= 1
-        let generation = connectionLookupGeneration
         let currentAccountGeneration = accountGeneration
         isLookingUpConnection = true
         connectionLookup = nil
         connectionLookupNotice = nil
-        Task {
+        connectionLookupIsNoMatch = false
+        connectionLookupTask = Task {
             defer {
                 if generation == connectionLookupGeneration,
                    isCurrentAccount(generation: currentAccountGeneration, token: sessionToken) {
@@ -1219,7 +1273,7 @@ final class AppModel: ObservableObject {
             do {
                 guard isCurrentAccount(generation: currentAccountGeneration, token: sessionToken) else { return }
                 client.token = sessionToken
-                let result = try await client.lookupPerson(handle: normalized)
+                let result = try await client.lookupPerson(query)
                 guard generation == connectionLookupGeneration,
                       isCurrentAccount(generation: currentAccountGeneration, token: sessionToken) else { return }
                 connectionLookup = result
@@ -1228,6 +1282,17 @@ final class AppModel: ObservableObject {
                       isCurrentAccount(generation: currentAccountGeneration, token: sessionToken) else { return }
                 if (error as? TrustClientError)?.apiCode == "verification_required" {
                     connectionRequiresPhoneVerification = true
+                    return
+                }
+                if let apiCode = (error as? TrustClientError)?.apiCode,
+                   ["not_found", "person_not_found", "lookup_not_found"].contains(apiCode) {
+                    connectionLookupIsNoMatch = true
+                    return
+                }
+                if let apiCode = (error as? TrustClientError)?.apiCode,
+                   ["invalid_phone", "invalid_phone_number", "invalid_search_query"].contains(apiCode),
+                   ifPhoneQuery(query) {
+                    connectionLookupHint = TrustCopy.phoneLookupCountryCodeHint
                     return
                 }
                 connectionLookupNotice = plainMessage(for: error)
@@ -1357,7 +1422,7 @@ final class AppModel: ObservableObject {
     ) async {
         guard case .valid(let normalized) = TrustHandle.status(of: handle) else { return }
         do {
-            let result = try await client.lookupPerson(handle: normalized)
+            let result = try await client.lookupPerson(.handle(normalized))
             guard lookupGeneration == connectionLookupGeneration,
                   isCurrentAccount(generation: accountGeneration, token: token) else { return }
             connectionLookup = result
@@ -1496,6 +1561,85 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// Creates or reuses the short-lived invite only after the person taps Invite.
+    func prepareConnectionInvite() {
+        guard connectionLookupIsNoMatch, connectionLookupCanInvite,
+              !isPreparingConnectionInvite else { return }
+        guard requireOnline() else { return }
+        guard !isDemoMode, let sessionToken = auth.sessionToken else {
+            connectionLookupNotice = TrustCopy.connectionRequestsNeedAccount
+            return
+        }
+        let lookupGeneration = connectionLookupGeneration
+        let currentAccountGeneration = accountGeneration
+        isPreparingConnectionInvite = true
+        Task {
+            defer {
+                if isCurrentAccount(generation: currentAccountGeneration, token: sessionToken) {
+                    isPreparingConnectionInvite = false
+                }
+            }
+            do {
+                guard isCurrentAccount(generation: currentAccountGeneration, token: sessionToken) else { return }
+                client.token = sessionToken
+                let invite = try await client.createInvite()
+                guard lookupGeneration == connectionLookupGeneration,
+                      isCurrentAccount(generation: currentAccountGeneration, token: sessionToken) else { return }
+                inviteShareText = TrustCopy.inviteMessage(code: invite)
+            } catch {
+                guard lookupGeneration == connectionLookupGeneration,
+                      isCurrentAccount(generation: currentAccountGeneration, token: sessionToken) else { return }
+                if (error as? TrustClientError)?.apiCode == "verification_required" {
+                    connectionRequiresPhoneVerification = true
+                    return
+                }
+                connectionLookupNotice = plainMessage(for: error)
+            }
+        }
+    }
+
+    func dismissConnectionInviteShare() {
+        inviteShareText = nil
+    }
+
+    func setDiscoveryEnabled(_ enabled: Bool) {
+        let previous = snapshot?.you.discoveryEnabled ?? false
+        guard enabled != previous, !isUpdatingDiscovery else { return }
+        guard requireOnline() else { return }
+        guard !isDemoMode, let sessionToken = auth.sessionToken else {
+            showToast(TrustCopy.connectionRequestsNeedAccount)
+            return
+        }
+        guard var optimistic = snapshot else { return }
+        let currentAccountGeneration = accountGeneration
+        optimistic.you.discoveryEnabled = enabled
+        snapshot = optimistic
+        client.snapshot = optimistic
+        isUpdatingDiscovery = true
+        Task {
+            defer {
+                if isCurrentAccount(generation: currentAccountGeneration, token: sessionToken) {
+                    isUpdatingDiscovery = false
+                }
+            }
+            do {
+                guard isCurrentAccount(generation: currentAccountGeneration, token: sessionToken) else { return }
+                client.token = sessionToken
+                try await client.setDiscoveryEnabled(enabled)
+                guard isCurrentAccount(generation: currentAccountGeneration, token: sessionToken) else { return }
+                await refresh()
+            } catch {
+                guard isCurrentAccount(generation: currentAccountGeneration, token: sessionToken) else { return }
+                if var current = snapshot {
+                    current.you.discoveryEnabled = previous
+                    snapshot = current
+                    client.snapshot = current
+                }
+                showToast(plainMessage(for: error))
+            }
+        }
+    }
+
     func joinInvite() {
         let code = linkedInviteCode ?? inviteCodeDraft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !code.isEmpty, !isJoining else { return }
@@ -1610,7 +1754,10 @@ final class AppModel: ObservableObject {
             isOnboardingBusy = true
             defer { isOnboardingBusy = false }
             do {
-                try await client.setHandle(handle)
+                try await client.setHandle(
+                    handle,
+                    discoveryConsentVersion: onboardingDiscoveryEnabled ? 1 : nil
+                )
                 await finishOnboardingIfComplete()
                 if phase != .home {
                     onboardingNotice = TrustCopy.enterHandle
@@ -1764,6 +1911,7 @@ final class AppModel: ObservableObject {
     }
 
     private func beginOnboarding() {
+        onboardingDiscoveryEnabled = snapshot?.you.discoveryEnabled ?? false
         if let existing = snapshot?.you.handle, case .valid(let handle) = TrustHandle.status(of: existing) {
             onboardingHandle = handle
         } else if let suggestion = TrustHandle.suggest(from: snapshot?.you.displayName ?? auth.account?.displayName ?? "") {
@@ -1776,6 +1924,7 @@ final class AppModel: ObservableObject {
     private func resetOnboardingDraft() {
         handleCheckTask?.cancel()
         onboardingHandle = ""
+        onboardingDiscoveryEnabled = false
         onboardingNotice = nil
         handleAvailability = nil
         isOnboardingBusy = false

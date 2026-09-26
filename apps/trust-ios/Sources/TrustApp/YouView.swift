@@ -194,6 +194,21 @@ struct YouView: View {
                     .accessibilityLabel(TrustCopy.copyHandle)
                     .accessibilityIdentifier("copy-own-handle")
                 }
+                VStack(alignment: .leading, spacing: 5) {
+                    Toggle(TrustCopy.discoveryEnabledLabel, isOn: Binding(
+                        get: { model.you.discoveryEnabled == true },
+                        set: { model.setDiscoveryEnabled($0) }
+                    ))
+                    .tint(palette.accent)
+                    .disabled(model.isUpdatingDiscovery || model.isDemoMode)
+                    .accessibilityIdentifier("phone-discovery-toggle")
+                    Text(TrustCopy.discoveryEnabledExplanation)
+                        .trustFont(12)
+                        .foregroundStyle(palette.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, 12)
                 Text(TrustCopy.changePictureTip)
                     .trustFont(12)
                     .foregroundStyle(palette.muted)

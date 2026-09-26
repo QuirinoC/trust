@@ -411,7 +411,7 @@
   "handle_placeholder": "jordan",
   "accept_invitation": "Aceitar convite",
   "accept_request": "Aceitar solicitação",
-  "add_person_explanation": "Encontre alguém pelo identificador exato. A conexão não ativa o compartilhamento.",
+  "add_person_explanation": "Conecte-se primeiro. O compartilhamento fica desativado até você escolher.",
   "api_handle_not_found": "Nenhuma conta Trust foi encontrada para esse identificador.",
   "api_request_declined_recently": "Essa pessoa recusou uma solicitação recentemente. Tente novamente mais tarde.",
   "api_request_expired": "Essa solicitação expirou ou não está mais disponível.",
@@ -428,6 +428,7 @@
   "copy_handle": "Copiar identificador",
   "copy_invite_link": "Copiar link de convite",
   "decline_request": "Recusar",
+  "find_your_person": "Encontre sua pessoa",
   "follow_iphone_language": "Seguir o idioma do iPhone",
   "handle_copied": "Identificador copiado",
   "handle_initials_accessibility": "Iniciais de @%@",
@@ -457,5 +458,15 @@
   "sent_requests": "Enviadas",
   "sharing_requests_accessibility": "%@, %d solicitações recebidas",
   "their_handle": "Identificador da pessoa",
-  "verify_number": "Verificar número"
+  "verify_number": "Verificar número",
+  "add_person_lookup_placeholder": "Nome de usuário ou telefone",
+  "add_person_lookup_helper": "Digite um nome de usuário do Trust ou um número de telefone completo.",
+  "lookup_no_match": "Nenhuma correspondência encontrada",
+  "invite_to_trust": "Compartilhar link de convite",
+  "discovery_enabled_label": "Permitir que me encontrem",
+  "discovery_enabled_explanation": "Quando ativada, pessoas que têm seu número de telefone completo podem encontrar seu nome de usuário, e sua foto pode aparecer em correspondências exatas por nome de usuário ou telefone.",
+  "avatar_visible_to_discoverable_people": "Quando a busca por telefone está ativada, sua foto pode aparecer em correspondências exatas por nome de usuário ou telefone.",
+  "avatar_visible_to_connections_only": "Quando a busca por telefone está desativada, sua foto fica visível apenas para pessoas conectadas a você.",
+  "clear_field": "Limpar",
+  "phone_lookup_country_code_hint": "Digite um número de telefone completo, incluindo o código do país."
 }

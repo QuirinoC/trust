@@ -113,14 +113,29 @@ final class TrustUsageTests: XCTestCase {
         app.buttons["set-home-status-home"].firstMatch.tap()
 
         app.buttons["add-someone-button"].tap()
+        XCTAssertTrue(app.staticTexts["add-person-heading"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["add-person-explanation"].exists, "Explain that connecting does not start sharing, without repeating phone-format guidance.")
         let handle = app.textFields["connection-handle"]
         XCTAssertTrue(handle.waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "handle in their You tab")).firstMatch.exists)
+        XCTAssertEqual(handle.placeholderValue as? String, "Handle or phone number")
+        let addScreenshot = XCTAttachment(screenshot: app.screenshot())
+        addScreenshot.name = "Add someone - redesigned empty state"
+        addScreenshot.lifetime = .keepAlways
+        add(addScreenshot)
+        XCTAssertFalse(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "complete phone number")).firstMatch.exists, "Do not repeat the identifier guidance below the field.")
+        XCTAssertFalse(app.buttons["lookup-connection-handle"].exists, "Lookup should happen automatically as the person types.")
         handle.typeText("jordan")
-        app.buttons["lookup-connection-handle"].tap()
         XCTAssertTrue(app.staticTexts["connection-lookup-notice"].waitForExistence(timeout: 5), "The demo should not fabricate handle lookup results.")
         XCTAssertFalse(app.textFields["invite-code"].exists)
         XCTAssertFalse(app.textFields["add-phone"].exists)
+        app.buttons["clear-connection-lookup"].tap()
+        handle.typeText("jo!\n")
+        XCTAssertTrue(app.staticTexts["connection-lookup-notice"].waitForExistence(timeout: 3), "Submitting an invalid handle should explain the problem instead of leaving the sheet blank.")
+        XCTAssertTrue(app.staticTexts["connection-lookup-notice"].label.contains("valid"))
+        app.buttons["clear-connection-lookup"].tap()
+        handle.typeText("415-555\n")
+        XCTAssertTrue(app.staticTexts["connection-lookup-hint"].waitForExistence(timeout: 3), "Submitting an incomplete phone number should explain the required format without showing guidance on the initial screen.")
+        XCTAssertTrue(app.staticTexts["connection-lookup-hint"].label.contains("complete phone number"))
         app.buttons["cancel-add-person"].tap()
 
         app.buttons["tab-log"].tap()
@@ -268,6 +283,10 @@ final class TrustUsageTests: XCTestCase {
         let send = app.buttons["send-phone-code"]
         XCTAssertTrue(send.exists)
         XCTAssertFalse(send.isEnabled, "A code cannot be sent without a phone number.")
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Phone verification - Disclosed Send code action"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
     }
 
     private func launchDemo(dark: Bool = false, route: String? = nil) -> XCUIApplication {

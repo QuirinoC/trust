@@ -15,16 +15,17 @@ Current screen inventory for the app in `Sources/TrustApp`. The home navigation 
 | Tab or destination | View | Behavior |
 | --- | --- | --- |
 | People | `CircleView` | Map and people sheet. A Sealed person can receive a confirmed Look; an Always person can be Viewed. |
-| Sharing | `SharingView` | Manage each connection's outbound mode, add by phone, create an invitation, or accept an invitation code. |
+| Sharing | `SharingView` | Manage per-person sharing, incoming and sent connection requests, and add someone by exact handle or phone number. |
 | Activity | `ViewLogView` | Chronological Look, View, and removal events in both directions. This is not location history. |
 | You | `YouView` | Profile, presence, on-device Home place, Plus, account, and policy controls. |
 | Person | `PersonScreen` in `CircleView.swift` | Presence and recent places only while that person shares Always. |
 | View | `ViewScreen` | One snapshot from a confirmed Look or current location while Available. A Sealed snapshot is not a history grant. |
 | Map | `MapScreen` | Available people and snapshots opened in the current session. Sealed people without a Look snapshot are not pins. |
 
-## Invitation and sharing rules
+## Add someone and sharing rules
 
-- Creating or sending an invitation does not connect accounts. The recipient reviews the code and taps **Join** to explicitly accept it.
+- Add someone automatically searches an exact handle or complete phone number as the person types. Phone discovery requires the other person to opt in. A no-match phone search can open the native share sheet with an invitation link; Trust does not send an automatic text or include the searched number in the invitation.
+- Legacy invitation links still open an explicit accept or dismiss screen. Accepting creates the connection; sharing is not implied.
 - Accepting adds the connection with both directions Off. Neither person can Look until the other chooses a share mode.
 - **Until they look** is Sealed. A confirmed Look returns one current-location snapshot, leaves the share Sealed, and may trigger a best-effort APNs receipt. The app cannot guarantee push delivery.
 - **Always** is Available. View is logged and does not send a Look receipt. Location history is available only while the subject shares Always.

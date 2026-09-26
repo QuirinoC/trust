@@ -19,6 +19,36 @@ final class AvatarDescriptorTests: XCTestCase {
     }
 }
 
+final class PersonLookupQueryTests: XCTestCase {
+    func testHandleAndDomesticPhoneAreNormalized() {
+        XCTAssertEqual(PersonLookupQuery.parse(" @Riley_7 "), .handle("riley_7"))
+        XCTAssertEqual(PersonLookupQuery.parse("(415) 555-0198", region: "us"), .phone("4155550198", region: "US"))
+    }
+
+    func testInternationalPhoneDoesNotReceiveDomesticRegion() throws {
+        XCTAssertEqual(PersonLookupQuery.parse("+44 20 7946 0958", region: "US"), .phone("+442079460958", region: nil))
+        let encoded = try JSONEncoder().encode(PersonLookupQuery.phone("+442079460958", region: nil))
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        XCTAssertEqual(body.count, 1)
+        XCTAssertEqual(body["phone"] as? String, "+442079460958")
+        XCTAssertNil(body["region"])
+    }
+
+    func testLookupBodyEncodesExactlyOneHandleField() throws {
+        let encoded = try JSONEncoder().encode(PersonLookupQuery.handle("riley"))
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        XCTAssertEqual(body.count, 1)
+        XCTAssertEqual(body["handle"] as? String, "riley")
+    }
+
+    func testIncompleteOrMixedInputIsNotEligibleForLookup() {
+        XCTAssertNil(PersonLookupQuery.parse("415-555"))
+        XCTAssertNil(PersonLookupQuery.parse("415-555-0198x12"))
+        XCTAssertNil(PersonLookupQuery.parse("+1+4155550198"))
+        XCTAssertNil(PersonLookupQuery.parse("1234567890123456"))
+    }
+}
+
 final class EscrowVaultTests: XCTestCase {
     func testPeekNeverReturnsCoordinates() {
         let vault = EscrowVault()

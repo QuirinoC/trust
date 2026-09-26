@@ -2,7 +2,9 @@
 "accept_request" = "Anfrage annehmen";
 "account" = "Konto";
 "add" = "Hinzufügen";
-"add_person_explanation" = "Finde jemanden über den genauen Handle. Eine Verbindung aktiviert das Teilen nicht.";
+"add_person_explanation" = "Verbinde dich zuerst. Teilen bleibt aus, bis du es auswählst.";
+"add_person_lookup_helper" = "Gib einen Trust-Handle oder eine vollständige Telefonnummer ein.";
+"add_person_lookup_placeholder" = "Handle oder Telefonnummer";
 "add_picture" = "Bild hinzufügen";
 "add_profile_picture" = "Profilbild hinzufügen";
 "add_someone" = "Jemanden hinzufügen";
@@ -78,6 +80,8 @@
 "avatar_siamese" = "Siamkatze";
 "avatar_turtle" = "Schildkröte";
 "avatar_visible_to_connections" = "Für verbundene Personen sichtbar.";
+"avatar_visible_to_connections_only" = "Wenn die Telefonsuche deaktiviert ist, sehen nur Personen, mit denen du verbunden bist, dein Bild.";
+"avatar_visible_to_discoverable_people" = "Wenn die Telefonsuche aktiviert ist, kann dein Bild bei exakten Treffern für Handle oder Telefonnummer erscheinen.";
 "back" = "Zurück";
 "back_to_circle" = "Zurück zu Menschen";
 "camera_permission" = "Trust verwendet die Kamera nur, wenn du „Foto aufnehmen“ auswählst, um dein Profilbild festzulegen.";
@@ -95,6 +99,7 @@
 "circle_empty_body" = "Laden Sie jemanden ein oder wählen Sie aus, was Sie teilen möchten. Der Standort bleibt deaktiviert, bis Sie einen Modus für diese Person auswählen.";
 "circle_empty_title" = "Ihre Leute werden hier erscheinen";
 "circle_map" = "Personenkarte";
+"clear_field" = "Löschen";
 "clear_home" = "Zuhause löschen";
 "close" = "Schließen";
 "code_placeholder" = "ABC123";
@@ -128,6 +133,8 @@
 "desc_timed" = "Pausiert bis %@. Dann kehrt der vorherige Modus zurück.";
 "desc_until" = "Versiegelt. Ein Look zeigt einen Schnappschuss und fordert eine Benachrichtigung an.";
 "development_phone_code" = "Code %@.";
+"discovery_enabled_explanation" = "Wenn diese Option aktiviert ist, können Personen mit deiner vollständigen Telefonnummer deinen Handle finden. Dein Bild erscheint dann auch bei exakten Treffern für Handle oder Telefonnummer.";
+"discovery_enabled_label" = "Anderen erlauben, mich zu finden";
 "distance_from_you" = "%@ von Ihnen";
 "done" = "Erledigt";
 "edit_phone" = "Bearbeiten";
@@ -137,6 +144,7 @@
 "enter_phone" = "Geben Sie eine Telefonnummer ein.";
 "enter_phone_code" = "Code eingeben.";
 "export_log" = "Protokoll exportieren";
+"find_your_person" = "Finde deine Person";
 "follow_iphone_language" = "iPhone-Sprache übernehmen";
 "free_plan" = "Kostenloser Plan";
 "go_to_sharing" = "Zu „Teilen“";
@@ -181,6 +189,7 @@
 "invite_someone" = "Jemanden einladen";
 "invite_sub" = "Jemanden hinzufügen.";
 "invite_text_sent" = "Einladungstext gesendet.";
+"invite_to_trust" = "Einladungslink teilen";
 "join" = "Verbinden";
 "joined" = "Beigetreten. Das Teilen ist in beide Richtungen deaktiviert.";
 "kept_while_using" = "Standortaktualisierungen nur, solange Trust geöffnet ist. Legen Sie den Hintergrundspeicherort in den Einstellungen fest.";
@@ -225,6 +234,7 @@
 "look_notified_short" = "Ein Schnappschuss · Benachrichtigung angefordert";
 "look_notify" = "Schauen Sie · benachrichtigen Sie %@";
 "look_saved" = "Schauen Sie aufgezeichnet · Benachrichtigung für %@ angefordert.";
+"lookup_no_match" = "Keine Übereinstimmung gefunden";
 "manage" = "Verwalten";
 "manage_sharing" = "Teilen verwalten";
 "manage_subscription" = "Abonnement verwalten";
@@ -280,6 +290,7 @@
 "phone_consent_details" = "Indem Sie auf „Code senden“ tippen, stimmen Sie dem Empfang von Trust-Bestätigungstexten unter dieser Nummer zu. Es können Standard-Nachrichten- und Datentarife anfallen. Bis zu 8/Tag. Antworten Sie mit „STOP“, um sich abzumelden, und mit „HELP“, um Hilfe zu erhalten.";
 "phone_intro" = "Eine telefonische Bestätigung ist erforderlich.";
 "phone_invite_message_body" = "Trust bereitet eine Nachricht mit deinem Link vor. Gesendet wird sie erst, wenn du in Nachrichten auf „Senden“ tippst.";
+"phone_lookup_country_code_hint" = "Gib eine vollständige Telefonnummer mit Ländervorwahl ein.";
 "phone_number" = "Telefonnummer";
 "phone_placeholder" = "(415) 555-0100";
 "photo_options" = "Fotooptionen";

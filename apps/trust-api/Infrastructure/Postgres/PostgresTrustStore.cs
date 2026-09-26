@@ -7,7 +7,7 @@ namespace TrustApi.Infrastructure.Postgres;
 public sealed class PostgresTrustStore(string connectionString) : ITrustStore
 {
     private const string AccountColumns =
-        "account_id, provider, provider_subject, display_name, has_circle, circle_source, created_at, phone_e164, phone_verified_at, handle, avatar_kind, avatar_preset_id, avatar_version";
+        "account_id, provider, provider_subject, display_name, has_circle, circle_source, created_at, phone_e164, phone_verified_at, handle, avatar_kind, avatar_preset_id, avatar_version, discovery_consent_version";
 
     private readonly string _connectionString = PostgresConnectionString.Normalize(connectionString);
 
@@ -39,7 +39,7 @@ public sealed class PostgresTrustStore(string connectionString) : ITrustStore
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             ON CONFLICT (provider, provider_subject) DO UPDATE
                 SET display_name = EXCLUDED.display_name
-            RETURNING account_id, provider, provider_subject, display_name, has_circle, circle_source, created_at, phone_e164, phone_verified_at, handle, avatar_kind, avatar_preset_id, avatar_version;
+            RETURNING account_id, provider, provider_subject, display_name, has_circle, circle_source, created_at, phone_e164, phone_verified_at, handle, avatar_kind, avatar_preset_id, avatar_version, discovery_consent_version;
             """,
             connection);
         command.Parameters.AddWithValue(account.Id);
@@ -161,7 +161,7 @@ public sealed class PostgresTrustStore(string connectionString) : ITrustStore
         await using var connection = await OpenAsync(cancellationToken);
         await using var command = new NpgsqlCommand(
             """
-            SELECT a.account_id, a.provider, a.provider_subject, a.display_name, a.has_circle, a.circle_source, a.created_at, a.phone_e164, a.phone_verified_at, a.handle, a.avatar_kind, a.avatar_preset_id, a.avatar_version
+            SELECT a.account_id, a.provider, a.provider_subject, a.display_name, a.has_circle, a.circle_source, a.created_at, a.phone_e164, a.phone_verified_at, a.handle, a.avatar_kind, a.avatar_preset_id, a.avatar_version, a.discovery_consent_version
             FROM trust.memberships m
             JOIN trust.accounts a ON a.account_id = CASE WHEN m.person_a = $1 THEN m.person_b ELSE m.person_a END
             WHERE m.status = 'active' AND (m.person_a = $1 OR m.person_b = $1);
@@ -742,6 +742,19 @@ public sealed class PostgresTrustStore(string connectionString) : ITrustStore
             cmd => cmd.Parameters.AddWithValue(handle),
             cancellationToken);
 
+    public async Task SetDiscoveryConsentAsync(Guid accountId, bool enabled, int consentVersion, CancellationToken cancellationToken)
+    {
+        if (consentVersion != 1) throw new ArgumentOutOfRangeException(nameof(consentVersion));
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(
+            "UPDATE trust.accounts SET discovery_consent_version = CASE WHEN $2 THEN $3 ELSE NULL END WHERE account_id = $1;",
+            connection);
+        command.Parameters.AddWithValue(accountId);
+        command.Parameters.AddWithValue(enabled);
+        command.Parameters.AddWithValue(consentVersion);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
     public async Task<ConnectionRelationshipMatch> GetConnectionRelationshipAsync(Guid accountId, Guid otherId, DateTimeOffset now, CancellationToken cancellationToken)
     {
         if (await AreConnectedAsync(accountId, otherId, cancellationToken)) return new ConnectionRelationshipMatch(ConnectionRelationship.Connected);
@@ -791,7 +804,7 @@ public sealed class PostgresTrustStore(string connectionString) : ITrustStore
     {
         var participant = incoming ? "r.recipient_id" : "r.sender_id";
         var joinId = incoming ? "r.sender_id" : "r.recipient_id";
-        await using var command = new NpgsqlCommand($"SELECT r.request_id,r.sender_id,r.recipient_id,r.status,r.created_at,r.expires_at,r.updated_at,a.account_id,a.provider,a.provider_subject,a.display_name,a.has_circle,a.circle_source,a.created_at,a.phone_e164,a.phone_verified_at,a.handle,a.avatar_kind,a.avatar_preset_id,a.avatar_version FROM trust.connection_requests r JOIN trust.accounts a ON a.account_id={joinId} WHERE {participant}=$1 AND r.status='pending' ORDER BY r.created_at DESC;", connection);
+        await using var command = new NpgsqlCommand($"SELECT r.request_id,r.sender_id,r.recipient_id,r.status,r.created_at,r.expires_at,r.updated_at,a.account_id,a.provider,a.provider_subject,a.display_name,a.has_circle,a.circle_source,a.created_at,a.phone_e164,a.phone_verified_at,a.handle,a.avatar_kind,a.avatar_preset_id,a.avatar_version,a.discovery_consent_version FROM trust.connection_requests r JOIN trust.accounts a ON a.account_id={joinId} WHERE {participant}=$1 AND r.status='pending' ORDER BY r.created_at DESC;", connection);
         command.Parameters.AddWithValue(accountId);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         var result = new List<ConnectionRequestEntry>();
@@ -993,19 +1006,21 @@ public sealed class PostgresTrustStore(string connectionString) : ITrustStore
         Guid accountId,
         string handle,
         string displayName,
+        int? discoveryConsentVersion,
         CancellationToken cancellationToken)
     {
         await using var connection = await OpenAsync(cancellationToken);
         await using var command = new NpgsqlCommand(
             """
             UPDATE trust.accounts
-            SET handle = $2, display_name = $3
+            SET handle = $2, display_name = $3, discovery_consent_version = COALESCE($4, discovery_consent_version)
             WHERE account_id = $1;
             """,
             connection);
         command.Parameters.AddWithValue(accountId);
         command.Parameters.AddWithValue(handle);
         command.Parameters.AddWithValue(displayName);
+        command.Parameters.AddWithValue((object?)discoveryConsentVersion ?? DBNull.Value);
         try
         {
             await command.ExecuteNonQueryAsync(cancellationToken);
@@ -1696,7 +1711,8 @@ public sealed class PostgresTrustStore(string connectionString) : ITrustStore
             reader.IsDBNull(offset + 10) ? null : new ProfileAvatar(
                 reader.GetString(offset + 10),
                 reader.IsDBNull(offset + 11) ? null : reader.GetString(offset + 11),
-                reader.IsDBNull(offset + 12) ? null : reader.GetGuid(offset + 12)));
+                reader.IsDBNull(offset + 12) ? null : reader.GetGuid(offset + 12)),
+            reader.IsDBNull(offset + 13) ? null : reader.GetInt32(offset + 13));
 
     private static PhoneChallenge ReadChallenge(NpgsqlDataReader reader) =>
         new(

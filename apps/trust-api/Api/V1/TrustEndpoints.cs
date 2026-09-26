@@ -13,6 +13,7 @@ using TrustApi.Infrastructure.Identity;
 using TrustApi.Infrastructure.Notifications;
 using TrustApi.Infrastructure.StoreKit;
 using SkiaSharp;
+using PhoneNumbers;
 
 namespace TrustApi.Api.V1;
 
@@ -46,10 +47,12 @@ public static class TrustEndpoints
         auth.MapPatch("/me", RenameAsync);
         auth.MapGet("/handles/available", CheckHandleAvailableAsync);
         auth.MapPut("/me/handle", SetHandleAsync);
+        auth.MapPut("/me/discovery", SetDiscoveryAsync);
         auth.MapPost("/me/phone/send", SendPhoneCodeAsync).RequireRateLimiting(RateLimitPolicies.PhoneSend);
         auth.MapPost("/me/phone/verify", VerifyPhoneCodeAsync).RequireRateLimiting(RateLimitPolicies.PhoneVerify);
         auth.MapPost("/people/phone", AddPersonByPhoneAsync).RequireRateLimiting(RateLimitPolicies.Invite);
         auth.MapGet("/people/lookup", LookupPersonAsync);
+        auth.MapPost("/people/lookup", SearchPersonAsync);
         auth.MapGet("/connection-requests", ListConnectionRequestsAsync);
         auth.MapPost("/connection-requests", CreateConnectionRequestAsync);
         auth.MapPost("/connection-requests/{requestId:guid}/accept", AcceptConnectionRequestAsync);
@@ -491,13 +494,33 @@ public static class TrustEndpoints
 
         try
         {
-            await engine.SetHandleAsync(accountId.Value, request.Handle, cancellationToken);
+            if (request.DiscoveryConsentVersion is not null and not 1)
+                return Results.BadRequest(new ApiError("invalid_consent_version", "Unsupported discovery consent version."));
+            await engine.SetHandleAsync(accountId.Value, request.Handle, request.DiscoveryConsentVersion, cancellationToken);
             return Results.NoContent();
         }
         catch (TrustException exception)
         {
             return Map(exception);
         }
+    }
+
+    public static async Task<IResult> SetDiscoveryAsync(
+        SetDiscoveryRequest request,
+        ClaimsPrincipal principal,
+        TrustEngine engine,
+        CancellationToken cancellationToken)
+    {
+        var accountId = AccountClaims.AccountId(principal);
+        if (accountId is null) return Results.Unauthorized();
+        if (request.ConsentVersion != 1)
+            return Results.BadRequest(new ApiError("invalid_consent_version", "Unsupported discovery consent version."));
+        try
+        {
+            await engine.SetDiscoveryConsentAsync(accountId.Value, request.Enabled, request.ConsentVersion, cancellationToken);
+            return Results.NoContent();
+        }
+        catch (TrustException exception) { return Map(exception); }
     }
 
     public static async Task<IResult> SendPhoneCodeAsync(
@@ -639,6 +662,109 @@ public static class TrustEndpoints
                 match.RequestId));
         }
         catch (TrustException exception) { return Map(exception); }
+    }
+
+    public static async Task<IResult> SearchPersonAsync(
+        PersonLookupRequest request,
+        ClaimsPrincipal principal,
+        TrustEngine engine,
+        ITrustStore store,
+        HttpContext context,
+        CancellationToken cancellationToken)
+    {
+        context.Response.Headers.CacheControl = "private, no-store";
+        var accountId = AccountClaims.AccountId(principal);
+        if (accountId is null) return Results.Unauthorized();
+
+        string? handle = null;
+        string? phoneE164 = null;
+        if (!string.IsNullOrWhiteSpace(request.Handle) && request.Phone is null && request.Region is null)
+        {
+            if (!AccountHandle.TryValidate(request.Handle, out handle, out _))
+                return Results.BadRequest(new ApiError("invalid_search_query", "Enter a valid handle."));
+        }
+        else if (request.Handle is null && !string.IsNullOrWhiteSpace(request.Phone))
+        {
+            if (!TryNormalizeDiscoveryPhone(request.Phone, request.Region, out phoneE164))
+                return Results.BadRequest(new ApiError("invalid_search_query", "Enter a complete phone number and region."));
+        }
+        else
+        {
+            return Results.BadRequest(new ApiError("invalid_search_query", "Provide exactly one handle or phone number."));
+        }
+
+        try
+        {
+            var match = await engine.SearchPersonAsync(accountId.Value, handle, phoneE164, cancellationToken);
+            if (match is null)
+                return Results.NotFound(new ApiError("person_not_found", "No eligible person was found on Trust."));
+
+            string? thumbnail = null;
+            if (match.Avatar is { Kind: "photo", Version: { } version })
+            {
+                var photo = await store.GetAvatarPhotoAsync(match.AccountId, version, cancellationToken);
+                if (photo is not null && TryCreateDiscoveryThumbnail(photo, out var jpeg))
+                    thumbnail = Convert.ToBase64String(jpeg);
+            }
+
+            return Results.Ok(new PersonLookupResponse(
+                match.AccountId,
+                match.Handle,
+                RelationshipName(match.Relationship),
+                match.RequestId,
+                match.Avatar is null ? null : new AvatarDto(match.Avatar.Kind, match.Avatar.PresetId, match.Avatar.Version),
+                thumbnail));
+        }
+        catch (TrustException exception) { return Map(exception); }
+    }
+
+    private static bool TryNormalizeDiscoveryPhone(string phone, string? region, out string e164)
+    {
+        e164 = "";
+        if (phone.Length > 64 || phone.Length == 0 || phone.Any(c => !(c is >= '0' and <= '9' or '+' or ' ' or '-' or '(' or ')' or '.')))
+            return false;
+        var phoneUtil = PhoneNumberUtil.GetInstance();
+        var plusCount = phone.Count(c => c == '+');
+        if (plusCount > 1 || (plusCount == 1 && phone.TrimStart().FirstOrDefault() != '+')) return false;
+        var international = phone.TrimStart().StartsWith('+');
+        if (region is not null && (region.Length != 2
+            || !region.All(c => c is >= 'A' and <= 'Z' or >= 'a' and <= 'z')
+            || !phoneUtil.GetSupportedRegions().Contains(region.ToUpperInvariant())))
+            return false;
+        if (!international && region is null)
+            return false;
+        try
+        {
+            var parsed = PhoneNumberUtil.GetInstance().Parse(phone, international ? null : region!.ToUpperInvariant());
+            if (phoneUtil.IsPossibleNumberWithReason(parsed) != PhoneNumberUtil.ValidationResult.IS_POSSIBLE) return false;
+            e164 = phoneUtil.Format(parsed, PhoneNumberFormat.E164);
+            return e164.Length is >= 8 and <= 16;
+        }
+        catch (NumberParseException) { return false; }
+    }
+
+    private static bool TryCreateDiscoveryThumbnail(byte[] photo, out byte[] jpeg)
+    {
+        jpeg = [];
+        try
+        {
+            using var decoded = SKBitmap.Decode(photo);
+            if (decoded is null) return false;
+            var ratio = Math.Min(128f / decoded.Width, 128f / decoded.Height);
+            var width = Math.Max(1, (int)Math.Round(decoded.Width * ratio));
+            var height = Math.Max(1, (int)Math.Round(decoded.Height * ratio));
+            using var resized = decoded.Resize(new SKImageInfo(width, height), new SKSamplingOptions(SKFilterMode.Linear));
+            if (resized is null) return false;
+            using var image = SKImage.FromBitmap(resized);
+            using var encoded = image.Encode(SKEncodedImageFormat.Jpeg, 65);
+            if (encoded is null || encoded.Size == 0 || encoded.Size > 20 * 1024) return false;
+            jpeg = encoded.ToArray();
+            return true;
+        }
+        catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
+        {
+            return false;
+        }
     }
 
     public static async Task<IResult> ListConnectionRequestsAsync(
@@ -1250,7 +1376,7 @@ public static class TrustEndpoints
         }
 
         var token = sessions.Issue(account.Id, account.DisplayName, provider);
-        return Results.Ok(new SessionResponse(token, ContractMap.Person(account)));
+        return Results.Ok(new SessionResponse(token, ContractMap.Person(account, includeDiscoveryEnabled: true)));
     }
 
     private static async Task<IResult> RunAsync(

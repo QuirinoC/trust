@@ -581,6 +581,17 @@ public sealed class MemoryTrustStore : ITrustStore
         return Task.FromResult(match);
     }
 
+    public Task SetDiscoveryConsentAsync(Guid accountId, bool enabled, int consentVersion, CancellationToken cancellationToken)
+    {
+        if (consentVersion != 1) throw new ArgumentOutOfRangeException(nameof(consentVersion));
+        lock (_gate)
+        {
+            if (_accounts.TryGetValue(accountId, out var account))
+                _accounts[accountId] = account with { DiscoveryConsentVersion = enabled ? consentVersion : null };
+        }
+        return Task.CompletedTask;
+    }
+
     public Task<ConnectionRelationshipMatch> GetConnectionRelationshipAsync(Guid accountId, Guid otherId, DateTimeOffset now, CancellationToken cancellationToken)
     {
         lock (_gate)
@@ -731,6 +742,7 @@ public sealed class MemoryTrustStore : ITrustStore
         Guid accountId,
         string handle,
         string displayName,
+        int? discoveryConsentVersion,
         CancellationToken cancellationToken)
     {
         lock (_gate)
@@ -749,7 +761,12 @@ public sealed class MemoryTrustStore : ITrustStore
                 throw TrustException.HandleInUse();
             }
 
-            _accounts[accountId] = account with { Handle = handle, DisplayName = displayName };
+            _accounts[accountId] = account with
+            {
+                Handle = handle,
+                DisplayName = displayName,
+                DiscoveryConsentVersion = discoveryConsentVersion == 1 ? 1 : account.DiscoveryConsentVersion
+            };
         }
 
         return Task.CompletedTask;

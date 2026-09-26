@@ -139,6 +139,23 @@ public sealed class PhoneVerificationTests
     }
 
     [Fact]
+    public async Task DevelopmentBypassDoesNotConsumeGlobalSmsBudget()
+    {
+        var clock = new MutableTimeProvider { UtcNow = new DateTimeOffset(2026, 9, 21, 12, 0, 0, TimeSpan.Zero) };
+        var store = new MemoryTrustStore();
+        var engine = new TrustEngine(store, clock);
+        var account = await engine.SignInAsync("development", "otp-budget-bypass", "Sam", CancellationToken.None);
+        var global = new SmsSendBudget(SmsSendBudget.GlobalDayKey(), clock.GetUtcNow(), 40, clock.GetUtcNow());
+        await store.UpsertSmsSendBudgetAsync(global, CancellationToken.None);
+        var phones = NewPhones(store, new UnconfiguredSms(), NullLogger<PhoneVerificationService>.Instance, Environments.Development, clock);
+
+        var sent = await phones.SendAsync(account.Id, "+15555550198", CancellationToken.None);
+
+        Assert.False(string.IsNullOrWhiteSpace(sent.DevelopmentCode));
+        Assert.Equal(global, await store.GetSmsSendBudgetAsync(SmsSendBudget.GlobalDayKey(), CancellationToken.None));
+    }
+
+    [Fact]
     public async Task ConfiguredSmsDoesNotReturnDevelopmentCode()
     {
         var store = new MemoryTrustStore();
@@ -428,7 +445,7 @@ public sealed class PhoneVerificationTests
         var clock = new MutableTimeProvider { UtcNow = new DateTimeOffset(2026, 9, 21, 12, 0, 0, TimeSpan.Zero) };
         var store = new MemoryTrustStore();
         var engine = new TrustEngine(store, clock);
-        var phones = NewPhones(store, new UnconfiguredSms(), NullLogger<PhoneVerificationService>.Instance, Environments.Development, clock);
+        var phones = NewPhones(store, new RecordingSms(), NullLogger<PhoneVerificationService>.Instance, Environments.Development, clock);
 
         for (var i = 0; i < PhoneVerificationService.MaxGlobalSendsPerDay; i++)
         {

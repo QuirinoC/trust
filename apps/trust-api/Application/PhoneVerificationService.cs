@@ -209,6 +209,7 @@ public sealed class PhoneVerificationService(
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
+        var bypass = environment.IsDevelopment() && !sms.IsConfigured;
         var account = NormalizeBudget(
             await store.GetSmsSendBudgetAsync(SmsSendBudget.AccountKey(accountId), cancellationToken),
             SmsSendBudget.AccountKey(accountId),
@@ -224,15 +225,17 @@ public sealed class PhoneVerificationService(
             SmsSendBudget.AccountDayKey(accountId),
             now,
             TimeSpan.FromHours(24));
-        var globalDay = NormalizeBudget(
-            await store.GetSmsSendBudgetAsync(SmsSendBudget.GlobalDayKey(), cancellationToken),
-            SmsSendBudget.GlobalDayKey(),
-            now,
-            TimeSpan.FromHours(24));
+        var globalDay = bypass
+            ? new SmsSendBudget(SmsSendBudget.GlobalDayKey(), now, 0, null)
+            : NormalizeBudget(
+                await store.GetSmsSendBudgetAsync(SmsSendBudget.GlobalDayKey(), cancellationToken),
+                SmsSendBudget.GlobalDayKey(),
+                now,
+                TimeSpan.FromHours(24));
         if (account.SendCount >= MaxSendsPerHour
             || phone.SendCount >= MaxSendsPerHour
             || accountDay.SendCount >= MaxSendsPerDay
-            || globalDay.SendCount >= MaxGlobalSendsPerDay)
+            || (!bypass && globalDay.SendCount >= MaxGlobalSendsPerDay))
         {
             throw TrustException.OtpCooldown();
         }
@@ -242,7 +245,6 @@ public sealed class PhoneVerificationService(
             throw TrustException.OtpCooldown();
         }
 
-        var bypass = environment.IsDevelopment() && !sms.IsConfigured;
         if (!sms.IsConfigured && !bypass)
         {
             throw TrustException.OtpNotConfigured();
@@ -253,8 +255,11 @@ public sealed class PhoneVerificationService(
 
     private async Task CommitSmsAsync(SmsGate gate, CancellationToken cancellationToken)
     {
+        IReadOnlyList<SmsSendBudget> budgets = gate.Bypass
+            ? [gate.Account, gate.Phone, gate.AccountDay]
+            : [gate.Account, gate.Phone, gate.AccountDay, gate.GlobalDay];
         if (!await store.TryReserveSmsAsync(
-            [gate.Account, gate.Phone, gate.AccountDay, gate.GlobalDay],
+            budgets,
             gate.Now,
             cancellationToken))
         {

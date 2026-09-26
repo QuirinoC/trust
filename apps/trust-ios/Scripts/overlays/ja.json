@@ -411,7 +411,7 @@
   "handle_placeholder": "jordan",
   "accept_invitation": "招待を承諾",
   "accept_request": "リクエストを承認",
-  "add_person_explanation": "正確なハンドルで相手を探します。つながっても共有は自動で始まりません。",
+  "add_person_explanation": "先につながります。共有は選ぶまでオフのままです。",
   "api_handle_not_found": "そのハンドルのTrustアカウントが見つかりません。",
   "api_request_declined_recently": "相手は最近リクエストを辞退しました。後でもう一度お試しください。",
   "api_request_expired": "リクエストの期限が切れたか、利用できません。",
@@ -428,6 +428,7 @@
   "copy_handle": "ハンドルをコピー",
   "copy_invite_link": "招待リンクをコピー",
   "decline_request": "辞退",
+  "find_your_person": "相手を探す",
   "follow_iphone_language": "iPhone の設定に従う",
   "handle_copied": "ハンドルをコピーしました",
   "handle_initials_accessibility": "@%@ のイニシャル",
@@ -457,5 +458,15 @@
   "sent_requests": "送信済み",
   "sharing_requests_accessibility": "%@、受信リクエスト%d件",
   "their_handle": "相手のハンドル",
-  "verify_number": "電話番号を確認"
+  "verify_number": "電話番号を確認",
+  "add_person_lookup_placeholder": "ユーザー名または電話番号",
+  "add_person_lookup_helper": "Trustのユーザー名または完全な電話番号を入力してください。",
+  "lookup_no_match": "一致する人が見つかりません",
+  "invite_to_trust": "招待リンクを共有",
+  "discovery_enabled_label": "自分を見つけてもらう",
+  "discovery_enabled_explanation": "オンにすると、完全な電話番号を知っている人があなたのユーザー名を検索でき、ユーザー名または電話番号の完全一致にあなたの写真が表示されます。",
+  "avatar_visible_to_discoverable_people": "電話番号での検索をオンにすると、ユーザー名または電話番号の完全一致に写真が表示されることがあります。",
+  "avatar_visible_to_connections_only": "電話番号での検索をオフにすると、あなたとつながっている人だけに写真が表示されます。",
+  "clear_field": "消去",
+  "phone_lookup_country_code_hint": "国番号を含む完全な電話番号を入力してください。"
 }

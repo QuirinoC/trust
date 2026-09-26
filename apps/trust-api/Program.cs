@@ -83,8 +83,16 @@ builder.Services.AddRateLimiter(options =>
             !UsesAccountDiscoveryBudget(context)
                 ? RateLimitPartition.GetNoLimiter("not-discovery")
                 : RateLimitPartition.GetFixedWindowLimiter(
-                    AccountClaims.AccountId(context.User)?.ToString("N") ?? "anonymous",
-                    _ => new FixedWindowRateLimiterOptions { Window = TimeSpan.FromMinutes(1), PermitLimit = 20, QueueLimit = 0 })));
+                    (AccountClaims.AccountId(context.User)?.ToString("N") ?? "anonymous")
+                        + (context.Request.Path.Equals("/api/v1/people/lookup", StringComparison.OrdinalIgnoreCase)
+                            && HttpMethods.IsPost(context.Request.Method) ? ":search" : ":legacy"),
+                    _ => new FixedWindowRateLimiterOptions
+                    {
+                        Window = TimeSpan.FromMinutes(1),
+                        PermitLimit = context.Request.Path.Equals("/api/v1/people/lookup", StringComparison.OrdinalIgnoreCase)
+                            && HttpMethods.IsPost(context.Request.Method) ? 60 : 20,
+                        QueueLimit = 0
+                    })));
 
     options.AddPolicy(RateLimitPolicies.Auth, context => RateLimitPartition.GetFixedWindowLimiter(
         PartitionKey(context),

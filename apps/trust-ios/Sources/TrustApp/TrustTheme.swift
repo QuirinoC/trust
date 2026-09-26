@@ -25,24 +25,24 @@ struct TrustPalette: Equatable {
     var sheet: Color
 
     static let paper = TrustPalette(
-        paper: adaptive(0xF6F8FC, 0x101A2B),
-        canvas: adaptive(0xEEF2F8, 0x0B1423),
-        ink: adaptive(0x14233B, 0xF1F5FC),
-        muted: adaptive(0x617089, 0xA9B7CE),
-        line: adaptive(0xDCE3EF, 0x2A3850),
-        surface: adaptive(0xFFFFFF, 0x19263A),
-        accent: adaptive(0x245CE7, 0x6F95FF),
-        accentSoft: adaptive(0xE8EFFF, 0x22375F),
-        accentOn: adaptive(0xFFFFFF, 0x101A2B),
-        sage: adaptive(0xDDF3EC, 0x193D3A),
-        positive: adaptive(0x168879, 0x51C8B3),
-        danger: adaptive(0xB42318, 0xFF8F85),
-        chrome: adaptive(0xFFFFFF, 0x19263A),
-        chromeInk: adaptive(0x14233B, 0xF1F5FC),
-        chromeMuted: adaptive(0x52627C, 0xA9B7CE),
-        pinLive: adaptive(0x168879, 0x51C8B3),
-        pinLook: adaptive(0x245CE7, 0x6F95FF),
-        sheet: adaptive(0xF6F8FC, 0x101A2B)
+        paper: adaptive(0xFAF7F1, 0x101A2B),
+        canvas: adaptive(0xF1EBE2, 0x0B1423),
+        ink: adaptive(0x292B35, 0xF1F5FC),
+        muted: adaptive(0x716F74, 0xA9B7CE),
+        line: adaptive(0xE2D9CE, 0x2A3850),
+        surface: adaptive(0xFFFDFA, 0x19263A),
+        accent: adaptive(0xA94333, 0x6F95FF),
+        accentSoft: adaptive(0xF3E3DC, 0x22375F),
+        accentOn: adaptive(0xFFFAF6, 0x101A2B),
+        sage: adaptive(0xE4E8DB, 0x193D3A),
+        positive: adaptive(0x397768, 0x51C8B3),
+        danger: adaptive(0xA4332C, 0xFF8F85),
+        chrome: adaptive(0xFFFDFA, 0x19263A),
+        chromeInk: adaptive(0x292B35, 0xF1F5FC),
+        chromeMuted: adaptive(0x716F74, 0xA9B7CE),
+        pinLive: adaptive(0x397768, 0x51C8B3),
+        pinLook: adaptive(0xA94333, 0x6F95FF),
+        sheet: adaptive(0xFAF7F1, 0x101A2B)
     )
 }
 
@@ -81,9 +81,9 @@ extension EnvironmentValues {
 
 enum TrustTheme {
     static let accent = TrustPalette.paper.accent
-    static let radius: CGFloat = 20
-    static let controlRadius: CGFloat = 16
-    static let gutter: CGFloat = 22
+    static let radius: CGFloat = 24
+    static let controlRadius: CGFloat = 18
+    static let gutter: CGFloat = 24
     static let readableWidth: CGFloat = 640
 
     static func chrome(_ size: CGFloat, weight: Font.Weight = .semibold) -> Font {

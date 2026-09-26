@@ -8,12 +8,14 @@ Sharing owns the audience and per-person location modes. Home status is a second
 
 ## Current milestone
 
-- Add someone opens one large native sheet with a focused handle field, brief instructions to get a handle from You, exact search, and one result row with generated initials and Send request.
+- Add someone opens one native sheet with a clear “Find your person” heading, one privacy reassurance (“Connect first. Sharing stays off until you choose.”), and a focused “Handle or phone number” field. A 350 ms debounce runs one exact handle or complete-phone search; national numbers use device region metadata, and international numbers can include `+` and their country code. There is no Search button. Keep the sheet visually light: one compact bordered field, no decorative card shadows, and a simple result row with the opted-in profile picture and `@handle`; Send request is the full-width action below it. Done dismisses the keyboard and gives submit-only feedback for malformed handles or incomplete phone numbers, while the initial screen stays uncluttered.
+- If a complete phone lookup returns no eligible match, show a plain “No match found” state and a “Share invite link” action. Phone discovery is opt-in, so the copy must not claim the searched number is not registered. Only tapping Share invite link creates the legacy invite URL and opens native sharing. Dismissing the share sheet does not mean it was sent. Never send an automatic SMS or include the typed phone number in an invite.
 - Incoming requests are visible in Sharing with Accept and Decline. Sent requests show Pending and Cancel. Connected People retain the compact per-person sharing controls.
-- Request lists and lookup show only handles and request metadata. Before acceptance, they do not expose display names, photos, phone numbers, presence, location, or sharing state.
-- Phone numbers remain private account verification data. Handle discovery and connection request creation require completed onboarding; a client-side or TestFlight verification skip does not establish phone ownership.
+- Discovery starts off for existing accounts. An explicit “Help people find me” choice allows people with the complete verified number to find the handle; the phone itself is never returned. Handle search remains available to verified, onboarded people even when discovery is off.
+- Before acceptance, results never expose display names, phone numbers, presence, location, or sharing state. A small picture preview appears only when the searched person has opted in or is already connected to the caller. Turning discovery off prevents future phone matches and unconnected picture previews; an existing connection continues to authorize the usual picture view.
+- Handle discovery, phone discovery, and connection request creation require completed onboarding; a client-side or TestFlight verification skip does not establish phone ownership.
 - Home / Away / Hidden stays behind the secondary Home status control. Adding or accepting someone never starts location sharing.
-- Legacy invite URLs and the existing code API remain compatible. Only when an old invite URL is opened does the app show a separate direct Accept / Later card; that flow does not change the handle-based Add someone sheet.
+- Legacy invite URLs and the existing code API remain compatible. Opening a link shows an explicit Accept / Later card; accepting still starts both sharing directions Off. If the app is not installed, do not invent a public store URL; after a TestFlight install and reopen, acceptance still requires the person's choice. This flow does not replace the Add someone sheet.
 
 ## Request lifecycle
 
@@ -23,7 +25,7 @@ The API does not send SMS or push notifications for a connection request. The re
 
 ## Release and privacy
 
-Phone discovery, contact-book upload, automatic Trust-sent SMS, QR codes, and deferred-install attribution are out of scope. Profile photos remain visible only to active connected people and are not part of a pre-connection preview. Verified phone numbers are collected for account verification, remain private, and are not used to discover people.
+Contact-book upload, automatic Trust-sent SMS, QR codes, and deferred-install attribution are out of scope. Phone discovery is an explicit opt-in using one complete verified phone number at a time; Trust does not upload contacts or send invitations by text. Profile photos can appear as small inline previews for opted-in discovery and remain fully available to active connections. No public photo URL is returned.
 
 ## Known adjacent issue
 
