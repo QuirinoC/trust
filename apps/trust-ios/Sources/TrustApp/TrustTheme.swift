@@ -131,6 +131,32 @@ enum TrustTheme {
     }
 }
 
+enum TrustAppearance: String, CaseIterable, Identifiable {
+    case system
+    case light
+    case dark
+
+    static let storageKey = "appearancePreference"
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .system: TrustCopy.systemAppearance
+        case .light: TrustCopy.lightAppearance
+        case .dark: TrustCopy.darkAppearance
+        }
+    }
+
+    var colorScheme: ColorScheme? {
+        switch self {
+        case .system: nil
+        case .light: .light
+        case .dark: .dark
+        }
+    }
+}
+
 private struct TrustScaledFont: ViewModifier {
     @ScaledMetric private var size: CGFloat
     private let weight: Font.Weight
@@ -318,6 +344,7 @@ struct TrustAppleButtonStyle: ButtonStyle {
 struct TrustFieldLabel<Content: View>: View {
     let title: String
     let hint: String?
+    var hintColor: Color? = nil
     @ViewBuilder var content: Content
     @Environment(\.trustPalette) private var palette
 
@@ -327,7 +354,7 @@ struct TrustFieldLabel<Content: View>: View {
                 TrustEyebrow(text: title, size: 11)
                 if let hint {
                     Spacer()
-                    TrustEyebrow(text: hint, color: palette.positive, size: 11)
+                    TrustEyebrow(text: hint, color: hintColor ?? palette.positive, size: 11)
                 }
             }
             content

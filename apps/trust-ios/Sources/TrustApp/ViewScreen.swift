@@ -210,7 +210,7 @@ struct ViewScreen: View {
     private func directionSummary(_ member: TrustedPerson) -> some View {
         let inbound = shareLabel(member.inboundPresentation)
         let outbound = shareLabel(model.shareState(for: member.id).presentation(at: Date()))
-        return Text("They share with you: \(inbound) · You share with them: \(outbound)")
+        return Text(TrustCopy.sharingDirections(inbound: inbound, outbound: outbound))
             .trustFont(11)
             .foregroundStyle(palette.muted)
             .fixedSize(horizontal: false, vertical: true)

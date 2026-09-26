@@ -47,13 +47,22 @@ struct MainShellView: View {
         // A second unconditional request here races that first call; when the API is
         // waking up, one request can fail and briefly show the offline banner while
         // the queued request succeeds. Keep the shell lifecycle path freshness-gated.
-        .onAppear { Task { await model.refreshIfStale() } }
-        .onChange(of: model.selectedTab) { _, _ in
+        .onAppear {
+            Task {
+                await model.refreshIfStale()
+                await model.refreshConnectionRequests()
+            }
+        }
+        .onChange(of: model.selectedTab) { _, tab in
             Task { await model.refreshIfStale() }
+            if tab == .sharing { Task { await model.refreshConnectionRequests() } }
         }
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }
-            Task { await model.refreshIfStale() }
+            Task {
+                await model.refreshIfStale()
+                await model.refreshConnectionRequests()
+            }
         }
         .task(id: scenePhase) {
             guard scenePhase == .active else { return }
@@ -70,6 +79,16 @@ struct MainShellView: View {
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
                 .presentationBackground(palette.sheet)
+                .presentationCornerRadius(28)
+                .trustFormSheet()
+        }
+        .sheet(isPresented: $model.showingAddPersonSheet) {
+            AddPersonSheet()
+                .environmentObject(model)
+                .environment(\.trustPalette, palette)
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+                .presentationBackground(palette.paper)
                 .presentationCornerRadius(28)
                 .trustFormSheet()
         }
@@ -104,6 +123,18 @@ struct MainShellView: View {
                         Image(systemName: tab.systemImage)
                             .font(.system(size: 19, weight: selected ? .semibold : .regular))
                             .frame(height: 21)
+                            .overlay(alignment: .topTrailing) {
+                                if tab == .sharing, model.connectionRequests.incoming.count > 0 {
+                                    Text(model.connectionRequests.incoming.count > 9 ? "9+" : "\(model.connectionRequests.incoming.count)")
+                                        .font(.system(size: 9, weight: .bold))
+                                        .foregroundStyle(.white)
+                                        .padding(.horizontal, 4)
+                                        .frame(minWidth: 15, minHeight: 15)
+                                        .background(Capsule().fill(palette.danger))
+                                        .offset(x: 9, y: -7)
+                                        .accessibilityHidden(true)
+                                }
+                            }
                         Text(tab.title)
                             .font(.system(size: 11, weight: selected ? .semibold : .medium))
                             .lineLimit(1)
@@ -121,7 +152,11 @@ struct MainShellView: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(tab.title)
+                .accessibilityLabel(
+                    tab == .sharing && !model.connectionRequests.incoming.isEmpty
+                        ? TrustCopy.sharingRequestsAccessibility(model.connectionRequests.incoming.count)
+                        : tab.title
+                )
                 .accessibilityIdentifier("tab-\(tab.rawValue)")
                 .accessibilityAddTraits(selected ? .isSelected : [])
             }

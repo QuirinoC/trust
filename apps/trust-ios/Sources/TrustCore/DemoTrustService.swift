@@ -237,6 +237,11 @@ public final class DemoTrustService: ObservableObject {
         you.hasPro = enabled
     }
 
+    /// Demo-only profile edits persist for the lifetime of this in-memory session.
+    public func setMyAvatar(_ avatar: AvatarDescriptor?) {
+        you.avatar = avatar
+    }
+
     public func setInboundForTesting(personID: UUID, _ state: PersonShareState) {
         inbound[personID] = state
     }

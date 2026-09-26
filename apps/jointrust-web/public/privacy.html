@@ -32,9 +32,10 @@
       <h2>What we collect</h2>
       <ul>
         <li>Sign in with Apple: the identifier and display name Apple provides. If Apple provides no name, its email claim may be used to form a display name. Trust does not store an email address as a separate profile field.</li>
-        <li>The handle you choose.</li>
+        <li>The unique handle you choose. People can enter that exact handle to find your Trust account and send a connection request. Before you accept, the lookup shows only your handle; it does not show your Apple name, profile picture, phone number, presence, location, or sharing settings.</li>
         <li>A profile icon you select, or a photo you choose from your camera or photo library. When you save a photo, the app crops and converts it to JPEG; the API processes it again and removes embedded image metadata, including GPS and EXIF metadata, before storing it.</li>
-        <li>A phone number you type to request account verification or create an invite. A verified phone number is stored on your account. Phone numbers entered for invites are used to create an ordinary invite and are not used to disclose whether the recipient has a Trust account.</li>
+        <li>A phone number you provide to verify account ownership. The verified number stays on your account and is not used to find people or shown in handle lookup or connection requests. Trust does not send SMS or push notifications for connection requests.</li>
+        <li>Connection requests you send or receive, including their status and timing. A request expires after seven days. Accepted, declined, cancelled, and expired request metadata is kept for 30 days.</li>
         <li>Precise location while you are sharing, presence such as last active time and battery, your Home or Away status, and the share mode you set for each person: Sealed, Always, Pause, or Off. Home and Away appear only to people you set to Sealed or Always. Off, Pause, and Hidden keep that status out of their view.</li>
         <li>Look receipts: who looked, when, and the history window. A receipt does not contain coordinates.</li>
         <li>An app installation ID and an Apple push token. The service attempts to send a receipt notification when someone looks; delivery can be delayed or may not occur.</li>
@@ -49,7 +50,7 @@
         <li>Location: GPS points are retained for up to 30 days while stored. A viewer can read history only while you share Always with them: up to 24 hours for a Free viewer or 30 days for a Plus viewer. If you have no one left you share with, your location is cleared.</li>
         <li>Profile photo: only your current photo is stored. Replacing it with another photo or a profile icon, or removing it, deletes the previous photo. It is removed when you delete your account.</li>
         <li>View log: the app shows the most recent 30 days on Free and up to one year with Plus. Look-event records are retained on the service until you delete your account; events outside the app's View log window are not shown in that log.</li>
-        <li>Handle, share modes, push tokens, and subscription records stay while your account exists.</li>
+        <li>Handle, share modes, push tokens, and subscription records stay while your account exists. Pending connection requests expire after seven days; terminal request metadata is kept for 30 days.</li>
       </ul>
 
       <h2>Profile pictures</h2>
@@ -66,7 +67,7 @@
       <p>The Trust API and its database run in the United States. Data is encrypted in transit with HTTPS.</p>
 
       <h2>Delete your account</h2>
-      <p>In the Trust iOS app, open You and choose Delete account. That removes your identity, handle, profile photo, location, the people you added, share settings, looks, push tokens, and Plus records on this service. Contact us if you need help.</p>
+      <p>In the Trust iOS app, open You and choose Delete account. That removes your identity, handle, profile photo, location, people and connection requests, share settings, looks, push tokens, and Plus records on this service. Contact us if you need help.</p>
 
       <h2>Age</h2>
       <p>Trust can be used by a household, including family. It is not a children’s app and is not directed at children under 13.</p>

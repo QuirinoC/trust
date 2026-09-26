@@ -8,7 +8,7 @@ Current screen inventory for the app in `Sources/TrustApp`. The home navigation 
 | --- | --- | --- |
 | Sign in | `LoginView` | Sign in with Apple, with Terms, Privacy, and Support links. The Debug demo is opt-in. |
 | Handle | `HandleView` | Choose a unique public handle after Apple sign-in. |
-| Phone | `PhoneView` | Choose SMS consent explicitly, send a verification code, then verify the number. Consent starts unchecked. |
+| Phone | `PhoneView` | Enter a number, review the one-time-text disclosure, tap Send code, then verify the number. The button is disabled without a number; keyboard submit does not send. |
 
 ## Main tabs and destinations
 

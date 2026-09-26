@@ -1,4 +1,4 @@
-/* Trust Circle — HIG shell interactions */
+/* Trust — HIG shell interactions */
 
 const CIRCLE = [
   {

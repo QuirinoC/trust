@@ -15,6 +15,11 @@
 	<key>CFBundleLocalizations</key>
 	<array>
 		<string>en</string>
+		<string>zh-Hans</string>
+		<string>ja</string>
+		<string>de</string>
+		<string>fr</string>
+		<string>pt-BR</string>
 	</array>
 	<key>CFBundleName</key>
 	<string>$(PRODUCT_NAME)</string>
@@ -74,6 +79,8 @@
 	<string>Trust uses your location while the app is open so you can see yourself on the map and look at people who share with you. Trust does not sell your location.</string>
 	<key>TRUST_BASE_URL</key>
 	<string>$(TRUST_BASE_URL)</string>
+	<key>TRUST_SKIP_PHONE_VERIFICATION</key>
+	<false/>
 	<key>UIAppFonts</key>
 	<array>
 		<string>SpaceGrotesk-Variable.ttf</string>

@@ -130,7 +130,7 @@ struct CircleView: View {
                     .padding(.horizontal, 10)
                     .frame(minHeight: 30)
                     .background(Capsule().fill(palette.surface))
-                    .accessibilityLabel("\(model.circle.count) people")
+                    .accessibilityLabel(TrustCopy.peopleCountAccessibility(model.circle.count))
             }
             .padding(.horizontal, TrustTheme.gutter)
             .padding(.top, 20)
@@ -226,9 +226,9 @@ struct CircleView: View {
             }
             .buttonStyle(.plain)
             .simultaneousGesture(sheetDrag(containerHeight: containerHeight))
-            .accessibilityLabel("People list size")
+            .accessibilityLabel(TrustCopy.peopleListSizeAccessibility)
             .accessibilityValue(PeopleSheetDetent.nearest(to: sheetFraction).accessibilityLabel)
-            .accessibilityHint("Swipe up or down to change the list size. Double-tap to expand or collapse.")
+            .accessibilityHint(TrustCopy.peopleListSizeHint)
             .accessibilityAddTraits(.isButton)
             .accessibilityAdjustableAction(adjustDetent)
             .accessibilityIdentifier("people-sheet-detent")
@@ -252,27 +252,40 @@ struct CircleView: View {
                         glyph: "person.2.wave.2",
                         title: TrustCopy.circleEmptyTitle,
                         message: TrustCopy.circleEmptyBody,
-                        actionTitle: "Go to Sharing"
+                        actionTitle: model.connectionRequests.incoming.isEmpty ? TrustCopy.addSomeone : TrustCopy.reviewRequests
                     ) {
-                        model.selectedTab = .sharing
+                        if model.connectionRequests.incoming.isEmpty {
+                            model.showingAddPersonSheet = true
+                        } else {
+                            model.selectedTab = .sharing
+                        }
                     }
                     .padding(.horizontal, TrustTheme.gutter)
                     .padding(.bottom, listInset)
                 }
-                .refreshable { await model.refresh() }
+                .refreshable {
+                    await model.refresh()
+                    await model.refreshConnectionRequests()
+                }
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
                         if sharing.isEmpty {
                             VStack(alignment: .leading, spacing: 10) {
-                                Text("No one is sharing with you yet")
+                                Text(TrustCopy.peopleEmptyTitle)
                                     .trustFont(17, weight: .semibold)
                                     .foregroundStyle(palette.ink)
-                                Text("You can invite someone or choose what to share with them.")
+                                Text(TrustCopy.peopleEmptyBody)
                                     .trustFont(13)
                                     .foregroundStyle(palette.muted)
                                     .fixedSize(horizontal: false, vertical: true)
-                                Button("Go to Sharing") { model.selectedTab = .sharing }
+                                Button(model.connectionRequests.incoming.isEmpty ? TrustCopy.addSomeone : TrustCopy.reviewRequests) {
+                                    if model.connectionRequests.incoming.isEmpty {
+                                        model.showingAddPersonSheet = true
+                                    } else {
+                                        model.selectedTab = .sharing
+                                    }
+                                }
                                     .buttonStyle(TrustOutlineButtonStyle(compact: true))
                             }
                             .padding(16)
@@ -301,7 +314,10 @@ struct CircleView: View {
                     .padding(.bottom, listInset)
                     .trustReadableWidth()
                 }
-                .refreshable { await model.refresh() }
+                    .refreshable {
+                        await model.refresh()
+                        await model.refreshConnectionRequests()
+                    }
             }
         }
     }
@@ -620,7 +636,7 @@ struct PersonScreen: View {
             TrustAvatar(name: member.person.displayName, seed: seed, size: 72, avatar: member.person.avatar, personID: member.id)
             Text(member.person.displayName).font(TrustTheme.display(28)).foregroundStyle(palette.ink)
             ProgressView().tint(palette.accent)
-            Text("Loading recent places")
+            Text(TrustCopy.loadingRecentPlaces)
                 .trustFont(14)
                 .foregroundStyle(palette.muted)
         }

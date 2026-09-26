@@ -8,6 +8,10 @@ final class LocationIngestStore {
 
     var points: [LocationPoint] { buffer.points }
 
+    func nextBatch() -> [LocationPoint] {
+        buffer.nextBatch()
+    }
+
     init() {
         if let data = UserDefaults.standard.data(forKey: Self.key),
            let decoded = try? JSONDecoder().decode(LocationIngestBuffer.self, from: data) {

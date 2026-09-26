@@ -219,16 +219,51 @@ public sealed class PostgresTrustStore(string connectionString) : ITrustStore
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
+    public async Task<bool> ConnectAccountsWithOffSharesAsync(Guid a, Guid b, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        if (a == b) throw TrustException.RequestNotFound();
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        await LockAccountsAsync(connection, transaction, a, b, cancellationToken);
+        await using (var connected = new NpgsqlCommand("SELECT 1 FROM trust.memberships WHERE person_a=LEAST($1,$2) AND person_b=GREATEST($1,$2) AND status='active';", connection, transaction))
+        {
+            connected.Parameters.AddWithValue(a); connected.Parameters.AddWithValue(b);
+            if (await connected.ExecuteScalarAsync(cancellationToken) is not null)
+            {
+                await ResolvePendingRequestsAsync(connection, transaction, a, b, now, cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+                return false;
+            }
+        }
+        var accounts = await LoadConnectionAccountsAsync(connection, transaction, a, b, cancellationToken);
+        if (await ActiveMembershipCountAsync(connection, transaction, a, cancellationToken) >= (accounts[a].HasCircle ? TrustRules.ProSeats : TrustRules.FreeSeats)
+            || await ActiveMembershipCountAsync(connection, transaction, b, cancellationToken) >= (accounts[b].HasCircle ? TrustRules.ProSeats : TrustRules.FreeSeats)) throw TrustException.SeatLimit();
+        await using (var membership = new NpgsqlCommand("INSERT INTO trust.memberships (membership_id,person_a,person_b,status,created_at) VALUES ($1,LEAST($2,$3),GREATEST($2,$3),'active',$4) ON CONFLICT (person_a,person_b) DO UPDATE SET status='active';", connection, transaction))
+        {
+            membership.Parameters.AddWithValue(Guid.NewGuid()); membership.Parameters.AddWithValue(a); membership.Parameters.AddWithValue(b); membership.Parameters.AddWithValue(now);
+            await membership.ExecuteNonQueryAsync(cancellationToken);
+        }
+        await UpsertOffShareAsync(connection, transaction, a, b, cancellationToken);
+        await UpsertOffShareAsync(connection, transaction, b, a, cancellationToken);
+        await ResolvePendingRequestsAsync(connection, transaction, a, b, now, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return true;
+    }
+
     public async Task RevokeMembershipAsync(Guid a, Guid b, CancellationToken cancellationToken)
     {
         var (left, right) = Order(a, b);
         await using var connection = await OpenAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        await LockAccountsAsync(connection, transaction, a, b, cancellationToken);
         await using var command = new NpgsqlCommand(
             "UPDATE trust.memberships SET status = 'revoked' WHERE person_a = $1 AND person_b = $2;",
-            connection);
+            connection,
+            transaction);
         command.Parameters.AddWithValue(left);
         command.Parameters.AddWithValue(right);
         await command.ExecuteNonQueryAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
     }
 
     public async Task<ShareState> GetShareAsync(Guid grantor, Guid grantee, CancellationToken cancellationToken)
@@ -552,6 +587,57 @@ public sealed class PostgresTrustStore(string connectionString) : ITrustStore
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
+    public async Task AcceptInviteConnectionAsync(Guid inviteId, Guid joiningAccountId, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        Guid creatorId;
+        await using (var lookup = new NpgsqlCommand("SELECT creator_id FROM trust.invites WHERE invite_id=$1;", connection))
+        {
+            lookup.Parameters.AddWithValue(inviteId);
+            var value = await lookup.ExecuteScalarAsync(cancellationToken);
+            if (value is not Guid found) throw TrustException.InvalidCode();
+            creatorId = found;
+        }
+        if (creatorId == joiningAccountId) throw new TrustException("own_invite", "You cannot join your own invite.");
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        await LockAccountsAsync(connection, transaction, creatorId, joiningAccountId, cancellationToken);
+        string status;
+        DateTimeOffset? expiresAt;
+        await using (var invite = new NpgsqlCommand("SELECT status,expires_at FROM trust.invites WHERE invite_id=$1 FOR UPDATE;", connection, transaction))
+        {
+            invite.Parameters.AddWithValue(inviteId);
+            await using var reader = await invite.ExecuteReaderAsync(cancellationToken);
+            if (!await reader.ReadAsync(cancellationToken)) throw TrustException.InvalidCode();
+            status = reader.GetString(0);
+            expiresAt = reader.IsDBNull(1) ? null : reader.GetFieldValue<DateTimeOffset>(1);
+        }
+        if (status != "pending" || expiresAt is null || expiresAt <= now) throw TrustException.InvalidCode();
+        await using (var connected = new NpgsqlCommand("SELECT 1 FROM trust.memberships WHERE person_a=LEAST($1,$2) AND person_b=GREATEST($1,$2) AND status='active';", connection, transaction))
+        {
+            connected.Parameters.AddWithValue(creatorId); connected.Parameters.AddWithValue(joiningAccountId);
+            if (await connected.ExecuteScalarAsync(cancellationToken) is null)
+            {
+                var accounts = await LoadConnectionAccountsAsync(connection, transaction, creatorId, joiningAccountId, cancellationToken);
+                if (await ActiveMembershipCountAsync(connection, transaction, creatorId, cancellationToken) >= (accounts[creatorId].HasCircle ? TrustRules.ProSeats : TrustRules.FreeSeats)
+                    || await ActiveMembershipCountAsync(connection, transaction, joiningAccountId, cancellationToken) >= (accounts[joiningAccountId].HasCircle ? TrustRules.ProSeats : TrustRules.FreeSeats)) throw TrustException.SeatLimit();
+                await using (var membership = new NpgsqlCommand("INSERT INTO trust.memberships (membership_id,person_a,person_b,status,created_at) VALUES ($1,LEAST($2,$3),GREATEST($2,$3),'active',$4) ON CONFLICT (person_a,person_b) DO UPDATE SET status='active';", connection, transaction))
+                {
+                    membership.Parameters.AddWithValue(Guid.NewGuid()); membership.Parameters.AddWithValue(creatorId); membership.Parameters.AddWithValue(joiningAccountId); membership.Parameters.AddWithValue(now);
+                    await membership.ExecuteNonQueryAsync(cancellationToken);
+                }
+                await UpsertOffShareAsync(connection, transaction, creatorId, joiningAccountId, cancellationToken);
+                await UpsertOffShareAsync(connection, transaction, joiningAccountId, creatorId, cancellationToken);
+            }
+        }
+        await using (var consume = new NpgsqlCommand("UPDATE trust.invites SET status='consumed' WHERE invite_id=$1 AND status='pending';", connection, transaction))
+        {
+            consume.Parameters.AddWithValue(inviteId);
+            await consume.ExecuteNonQueryAsync(cancellationToken);
+        }
+        await ResolvePendingRequestsAsync(connection, transaction, creatorId, joiningAccountId, now, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+    }
+
     public async Task DeleteAccountAsync(Guid accountId, CancellationToken cancellationToken)
     {
         await using var connection = await OpenAsync(cancellationToken);
@@ -655,6 +741,253 @@ public sealed class PostgresTrustStore(string connectionString) : ITrustStore
             $"SELECT {AccountColumns} FROM trust.accounts WHERE handle = $1",
             cmd => cmd.Parameters.AddWithValue(handle),
             cancellationToken);
+
+    public async Task<ConnectionRelationshipMatch> GetConnectionRelationshipAsync(Guid accountId, Guid otherId, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        if (await AreConnectedAsync(accountId, otherId, cancellationToken)) return new ConnectionRelationshipMatch(ConnectionRelationship.Connected);
+        await using var connection = await OpenAsync(cancellationToken);
+        await using (var expire = new NpgsqlCommand("UPDATE trust.connection_requests SET status='expired', updated_at=$3 WHERE status='pending' AND expires_at <= $3 AND LEAST(sender_id,recipient_id)=LEAST($1,$2) AND GREATEST(sender_id,recipient_id)=GREATEST($1,$2);", connection))
+        {
+            expire.Parameters.AddWithValue(accountId); expire.Parameters.AddWithValue(otherId); expire.Parameters.AddWithValue(now);
+            await expire.ExecuteNonQueryAsync(cancellationToken);
+        }
+        await using var command = new NpgsqlCommand("SELECT request_id,sender_id FROM trust.connection_requests WHERE status='pending' AND LEAST(sender_id,recipient_id)=LEAST($1,$2) AND GREATEST(sender_id,recipient_id)=GREATEST($1,$2) LIMIT 1;", connection);
+        command.Parameters.AddWithValue(accountId); command.Parameters.AddWithValue(otherId);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        if (!await reader.ReadAsync(cancellationToken)) return new ConnectionRelationshipMatch(ConnectionRelationship.None);
+        return new ConnectionRelationshipMatch(reader.GetGuid(1) == accountId ? ConnectionRelationship.Sent : ConnectionRelationship.Incoming, reader.GetGuid(0));
+    }
+
+    public async Task<ConnectionRequestLists> ListConnectionRequestsAsync(Guid accountId, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using (var expire = new NpgsqlCommand("UPDATE trust.connection_requests SET status='expired', updated_at=$2 WHERE status='pending' AND expires_at <= $2 AND (sender_id=$1 OR recipient_id=$1);", connection))
+        {
+            expire.Parameters.AddWithValue(accountId); expire.Parameters.AddWithValue(now);
+            await expire.ExecuteNonQueryAsync(cancellationToken);
+        }
+        var incoming = await ListConnectionRequestsAsync(connection, accountId, incoming: true, cancellationToken);
+        var sent = await ListConnectionRequestsAsync(connection, accountId, incoming: false, cancellationToken);
+        return new ConnectionRequestLists(incoming, sent);
+    }
+
+    public async Task PruneConnectionRequestsAsync(DateTimeOffset terminalBefore, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var command = new NpgsqlCommand("DELETE FROM trust.connection_requests WHERE status <> 'pending' AND updated_at < $1;", connection);
+        command.Parameters.AddWithValue(terminalBefore);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task ExpireConnectionRequestsAsync(DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var command = new NpgsqlCommand("UPDATE trust.connection_requests SET status='expired',updated_at=$1 WHERE status='pending' AND expires_at <= $1;", connection);
+        command.Parameters.AddWithValue(now);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private async Task<IReadOnlyList<ConnectionRequestEntry>> ListConnectionRequestsAsync(NpgsqlConnection connection, Guid accountId, bool incoming, CancellationToken cancellationToken)
+    {
+        var participant = incoming ? "r.recipient_id" : "r.sender_id";
+        var joinId = incoming ? "r.sender_id" : "r.recipient_id";
+        await using var command = new NpgsqlCommand($"SELECT r.request_id,r.sender_id,r.recipient_id,r.status,r.created_at,r.expires_at,r.updated_at,a.account_id,a.provider,a.provider_subject,a.display_name,a.has_circle,a.circle_source,a.created_at,a.phone_e164,a.phone_verified_at,a.handle,a.avatar_kind,a.avatar_preset_id,a.avatar_version FROM trust.connection_requests r JOIN trust.accounts a ON a.account_id={joinId} WHERE {participant}=$1 AND r.status='pending' ORDER BY r.created_at DESC;", connection);
+        command.Parameters.AddWithValue(accountId);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        var result = new List<ConnectionRequestEntry>();
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            var request = ReadConnectionRequest(reader);
+            result.Add(new ConnectionRequestEntry(request, ReadAccount(reader, 7)));
+        }
+        return result;
+    }
+
+    public async Task<ConnectionRequest> CreateConnectionRequestAsync(Guid senderId, Guid recipientId, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        if (senderId == recipientId) throw TrustException.RequestNotFound();
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        await LockAccountsAsync(connection, transaction, senderId, recipientId, cancellationToken);
+        await using (var eligibility = new NpgsqlCommand("SELECT COUNT(*) FROM trust.accounts WHERE account_id=ANY($1) AND handle IS NOT NULL AND phone_verified_at IS NOT NULL;", connection, transaction))
+        {
+            eligibility.Parameters.AddWithValue(new[] { senderId, recipientId });
+            if (Convert.ToInt32(await eligibility.ExecuteScalarAsync(cancellationToken)) != 2) throw TrustException.RequestNotFound();
+        }
+        await using (var expire = new NpgsqlCommand("UPDATE trust.connection_requests SET status='expired', updated_at=$2 WHERE status='pending' AND expires_at <= $2 AND (sender_id=ANY($1) OR recipient_id=ANY($1));", connection, transaction))
+        {
+            expire.Parameters.AddWithValue(new[] { senderId, recipientId }); expire.Parameters.AddWithValue(now);
+            await expire.ExecuteNonQueryAsync(cancellationToken);
+        }
+        await using (var connected = new NpgsqlCommand("SELECT 1 FROM trust.memberships WHERE person_a=LEAST($1,$2) AND person_b=GREATEST($1,$2) AND status='active';", connection, transaction))
+        {
+            connected.Parameters.AddWithValue(senderId); connected.Parameters.AddWithValue(recipientId);
+            if (await connected.ExecuteScalarAsync(cancellationToken) is not null) throw TrustException.RequestNotFound();
+        }
+        var existing = await GetPendingRequestForPairAsync(connection, transaction, senderId, recipientId, cancellationToken);
+        if (existing is not null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+            return existing;
+        }
+        await using (var cooldown = new NpgsqlCommand("SELECT 1 FROM trust.connection_requests WHERE sender_id=$1 AND recipient_id=$2 AND status='declined' AND updated_at > $3-$4::interval LIMIT 1;", connection, transaction))
+        {
+            cooldown.Parameters.AddWithValue(senderId); cooldown.Parameters.AddWithValue(recipientId); cooldown.Parameters.AddWithValue(now); cooldown.Parameters.AddWithValue($"{(int)TrustRules.ConnectionRequestDeclineCooldown.TotalDays} days");
+            if (await cooldown.ExecuteScalarAsync(cancellationToken) is not null) throw TrustException.RequestDeclinedRecently();
+        }
+        await using (var limits = new NpgsqlCommand("SELECT (SELECT COUNT(*) FROM trust.connection_requests WHERE sender_id=$1 AND created_at>$2-interval '24 hours'),(SELECT COUNT(*) FROM trust.connection_requests WHERE sender_id=$1 AND status='pending'),(SELECT COUNT(*) FROM trust.connection_requests WHERE recipient_id=$3 AND status='pending');", connection, transaction))
+        {
+            limits.Parameters.AddWithValue(senderId); limits.Parameters.AddWithValue(now); limits.Parameters.AddWithValue(recipientId);
+            await using var reader = await limits.ExecuteReaderAsync(cancellationToken);
+            await reader.ReadAsync(cancellationToken);
+            if (reader.GetInt64(0) >= 20 || reader.GetInt64(1) >= 20 || reader.GetInt64(2) >= 20)
+                throw TrustException.RequestLimit();
+        }
+        var request = new ConnectionRequest(Guid.NewGuid(), senderId, recipientId, ConnectionRequestStatus.Pending, now, now.Add(TrustRules.ConnectionRequestValidity), now);
+        await using (var insert = new NpgsqlCommand("INSERT INTO trust.connection_requests (request_id,sender_id,recipient_id,status,created_at,expires_at,updated_at) VALUES ($1,$2,$3,'pending',$4,$5,$4);", connection, transaction))
+        {
+            insert.Parameters.AddWithValue(request.Id); insert.Parameters.AddWithValue(senderId); insert.Parameters.AddWithValue(recipientId); insert.Parameters.AddWithValue(now); insert.Parameters.AddWithValue(request.ExpiresAt);
+            await insert.ExecuteNonQueryAsync(cancellationToken);
+        }
+        await transaction.CommitAsync(cancellationToken);
+        return request;
+    }
+
+    public Task AcceptConnectionRequestAsync(Guid requestId, Guid recipientId, DateTimeOffset now, CancellationToken cancellationToken) =>
+        TransitionConnectionRequestAsync(requestId, recipientId, now, ConnectionRequestStatus.Accepted, cancellationToken);
+
+    public Task DeclineConnectionRequestAsync(Guid requestId, Guid recipientId, DateTimeOffset now, CancellationToken cancellationToken) =>
+        TransitionConnectionRequestAsync(requestId, recipientId, now, ConnectionRequestStatus.Declined, cancellationToken);
+
+    public Task CancelConnectionRequestAsync(Guid requestId, Guid senderId, DateTimeOffset now, CancellationToken cancellationToken) =>
+        TransitionConnectionRequestAsync(requestId, senderId, now, ConnectionRequestStatus.Cancelled, cancellationToken);
+
+    private async Task TransitionConnectionRequestAsync(Guid requestId, Guid actorId, DateTimeOffset now, ConnectionRequestStatus target, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        Guid senderId, recipientId;
+        await using (var find = new NpgsqlCommand("SELECT sender_id,recipient_id FROM trust.connection_requests WHERE request_id=$1;", connection, transaction))
+        {
+            find.Parameters.AddWithValue(requestId);
+            await using var reader = await find.ExecuteReaderAsync(cancellationToken);
+            if (!await reader.ReadAsync(cancellationToken)) throw TrustException.RequestNotFound();
+            senderId = reader.GetGuid(0); recipientId = reader.GetGuid(1);
+        }
+        var recipientAction = target is ConnectionRequestStatus.Accepted or ConnectionRequestStatus.Declined;
+        if ((recipientAction && recipientId != actorId) || (!recipientAction && senderId != actorId)) throw TrustException.RequestNotFound();
+        await LockAccountsAsync(connection, transaction, senderId, recipientId, cancellationToken);
+        ConnectionRequest request;
+        await using (var read = new NpgsqlCommand("SELECT request_id,sender_id,recipient_id,status,created_at,expires_at,updated_at FROM trust.connection_requests WHERE request_id=$1 FOR UPDATE;", connection, transaction))
+        {
+            read.Parameters.AddWithValue(requestId);
+            await using var reader = await read.ExecuteReaderAsync(cancellationToken);
+            if (!await reader.ReadAsync(cancellationToken)) throw TrustException.RequestNotFound();
+            request = ReadConnectionRequest(reader);
+        }
+        if (request.Status == target)
+        {
+            await transaction.CommitAsync(cancellationToken);
+            return;
+        }
+        if (request.Status != ConnectionRequestStatus.Pending) throw TrustException.RequestNotFound();
+        if (request.ExpiresAt <= now)
+        {
+            await using var expire = new NpgsqlCommand("UPDATE trust.connection_requests SET status='expired',updated_at=$2 WHERE request_id=$1;", connection, transaction);
+            expire.Parameters.AddWithValue(requestId); expire.Parameters.AddWithValue(now);
+            await expire.ExecuteNonQueryAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            throw TrustException.RequestExpired();
+        }
+        if (target == ConnectionRequestStatus.Accepted)
+        {
+            var accounts = await LoadConnectionAccountsAsync(connection, transaction, senderId, recipientId, cancellationToken);
+            await using (var connected = new NpgsqlCommand("SELECT 1 FROM trust.memberships WHERE person_a=LEAST($1,$2) AND person_b=GREATEST($1,$2) AND status='active';", connection, transaction))
+            {
+                connected.Parameters.AddWithValue(senderId); connected.Parameters.AddWithValue(recipientId);
+                if (await connected.ExecuteScalarAsync(cancellationToken) is null)
+                {
+                    if (!accounts[senderId].Ready || !accounts[recipientId].Ready) throw TrustException.PhoneVerificationRequired();
+                    if (await ActiveMembershipCountAsync(connection, transaction, senderId, cancellationToken) >= (accounts[senderId].HasCircle ? TrustRules.ProSeats : TrustRules.FreeSeats)
+                        || await ActiveMembershipCountAsync(connection, transaction, recipientId, cancellationToken) >= (accounts[recipientId].HasCircle ? TrustRules.ProSeats : TrustRules.FreeSeats)) throw TrustException.SeatLimit();
+                    await using (var membership = new NpgsqlCommand("INSERT INTO trust.memberships (membership_id,person_a,person_b,status,created_at) VALUES ($1,LEAST($2,$3),GREATEST($2,$3),'active',$4) ON CONFLICT (person_a,person_b) DO UPDATE SET status='active';", connection, transaction))
+                    {
+                        membership.Parameters.AddWithValue(Guid.NewGuid()); membership.Parameters.AddWithValue(senderId); membership.Parameters.AddWithValue(recipientId); membership.Parameters.AddWithValue(now);
+                        await membership.ExecuteNonQueryAsync(cancellationToken);
+                    }
+                    await UpsertOffShareAsync(connection, transaction, senderId, recipientId, cancellationToken);
+                    await UpsertOffShareAsync(connection, transaction, recipientId, senderId, cancellationToken);
+                }
+            }
+        }
+        await using (var update = new NpgsqlCommand("UPDATE trust.connection_requests SET status=$2,updated_at=$3 WHERE request_id=$1 AND status='pending';", connection, transaction))
+        {
+            update.Parameters.AddWithValue(requestId); update.Parameters.AddWithValue(StatusName(target)); update.Parameters.AddWithValue(now);
+            await update.ExecuteNonQueryAsync(cancellationToken);
+        }
+        await transaction.CommitAsync(cancellationToken);
+    }
+
+    private async Task<ConnectionRequest?> GetPendingRequestForPairAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, Guid a, Guid b, CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand("SELECT request_id,sender_id,recipient_id,status,created_at,expires_at,updated_at FROM trust.connection_requests WHERE status='pending' AND LEAST(sender_id,recipient_id)=LEAST($1,$2) AND GREATEST(sender_id,recipient_id)=GREATEST($1,$2) FOR UPDATE;", connection, transaction);
+        command.Parameters.AddWithValue(a); command.Parameters.AddWithValue(b);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        return await reader.ReadAsync(cancellationToken) ? ReadConnectionRequest(reader) : null;
+    }
+
+    private static ConnectionRequest ReadConnectionRequest(NpgsqlDataReader reader) => new(
+        reader.GetGuid(0), reader.GetGuid(1), reader.GetGuid(2), ParseConnectionRequestStatus(reader.GetString(3)),
+        reader.GetFieldValue<DateTimeOffset>(4), reader.GetFieldValue<DateTimeOffset>(5), reader.GetFieldValue<DateTimeOffset>(6));
+
+    private static string StatusName(ConnectionRequestStatus status) => status.ToString().ToLowerInvariant();
+
+    private static ConnectionRequestStatus ParseConnectionRequestStatus(string status) => status switch
+    {
+        "accepted" => ConnectionRequestStatus.Accepted, "declined" => ConnectionRequestStatus.Declined,
+        "cancelled" => ConnectionRequestStatus.Cancelled, "expired" => ConnectionRequestStatus.Expired,
+        _ => ConnectionRequestStatus.Pending
+    };
+
+    private static async Task LockAccountsAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, Guid a, Guid b, CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand("SELECT account_id FROM trust.accounts WHERE account_id = ANY($1) ORDER BY account_id FOR UPDATE;", connection, transaction);
+        command.Parameters.AddWithValue(new[] { a, b });
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        var count = 0; while (await reader.ReadAsync(cancellationToken)) count++;
+        if (count != 2) throw TrustException.RequestNotFound();
+    }
+
+    private static async Task<Dictionary<Guid, (bool HasCircle, bool Ready)>> LoadConnectionAccountsAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, Guid a, Guid b, CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand("SELECT account_id,has_circle,(handle IS NOT NULL AND phone_verified_at IS NOT NULL) FROM trust.accounts WHERE account_id = ANY($1) ORDER BY account_id;", connection, transaction);
+        command.Parameters.AddWithValue(new[] { a, b });
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        var result = new Dictionary<Guid, (bool HasCircle, bool Ready)>(); while (await reader.ReadAsync(cancellationToken)) result[reader.GetGuid(0)] = (reader.GetBoolean(1), reader.GetBoolean(2));
+        if (result.Count != 2) throw TrustException.RequestNotFound();
+        return result;
+    }
+
+    private static async Task<int> ActiveMembershipCountAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, Guid id, CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand("SELECT COUNT(*) FROM trust.memberships WHERE status='active' AND (person_a=$1 OR person_b=$1);", connection, transaction);
+        command.Parameters.AddWithValue(id);
+        return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken));
+    }
+
+    private static async Task UpsertOffShareAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, Guid grantor, Guid grantee, CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand("INSERT INTO trust.shares (grantor_id,grantee_id,resting,pause_until,restores_to) VALUES ($1,$2,'off',NULL,NULL) ON CONFLICT (grantor_id,grantee_id) DO UPDATE SET resting='off',pause_until=NULL,restores_to=NULL;", connection, transaction);
+        command.Parameters.AddWithValue(grantor); command.Parameters.AddWithValue(grantee);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private static async Task ResolvePendingRequestsAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, Guid a, Guid b, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand("UPDATE trust.connection_requests SET status=CASE WHEN expires_at <= $3 THEN 'expired' ELSE 'accepted' END,updated_at=$3 WHERE status='pending' AND LEAST(sender_id,recipient_id)=LEAST($1,$2) AND GREATEST(sender_id,recipient_id)=GREATEST($1,$2);", connection, transaction);
+        command.Parameters.AddWithValue(a); command.Parameters.AddWithValue(b); command.Parameters.AddWithValue(now);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
 
     public async Task SetHandleAsync(
         Guid accountId,
@@ -1348,22 +1681,22 @@ public sealed class PostgresTrustStore(string connectionString) : ITrustStore
         return connection;
     }
 
-    private static Account ReadAccount(NpgsqlDataReader reader) =>
+    private static Account ReadAccount(NpgsqlDataReader reader, int offset = 0) =>
         new(
-            reader.GetGuid(0),
-            reader.GetString(1),
-            reader.GetString(2),
-            reader.GetString(3),
-            reader.GetBoolean(4),
-            reader.IsDBNull(5) ? null : reader.GetString(5),
-            reader.GetFieldValue<DateTimeOffset>(6),
-            reader.IsDBNull(7) ? null : reader.GetString(7),
-            reader.IsDBNull(8) ? null : reader.GetFieldValue<DateTimeOffset>(8),
-            reader.IsDBNull(9) ? null : reader.GetString(9),
-            reader.IsDBNull(10) ? null : new ProfileAvatar(
-                reader.GetString(10),
-                reader.IsDBNull(11) ? null : reader.GetString(11),
-                reader.IsDBNull(12) ? null : reader.GetGuid(12)));
+            reader.GetGuid(offset),
+            reader.GetString(offset + 1),
+            reader.GetString(offset + 2),
+            reader.GetString(offset + 3),
+            reader.GetBoolean(offset + 4),
+            reader.IsDBNull(offset + 5) ? null : reader.GetString(offset + 5),
+            reader.GetFieldValue<DateTimeOffset>(offset + 6),
+            reader.IsDBNull(offset + 7) ? null : reader.GetString(offset + 7),
+            reader.IsDBNull(offset + 8) ? null : reader.GetFieldValue<DateTimeOffset>(offset + 8),
+            reader.IsDBNull(offset + 9) ? null : reader.GetString(offset + 9),
+            reader.IsDBNull(offset + 10) ? null : new ProfileAvatar(
+                reader.GetString(offset + 10),
+                reader.IsDBNull(offset + 11) ? null : reader.GetString(offset + 11),
+                reader.IsDBNull(offset + 12) ? null : reader.GetGuid(offset + 12)));
 
     private static PhoneChallenge ReadChallenge(NpgsqlDataReader reader) =>
         new(

@@ -1,0 +1,6 @@
+"CFBundleDisplayName" = "Trust";
+"NSCameraUsageDescription" = "Trust utilise l’appareil photo uniquement lorsque vous choisissez « Prendre une photo » pour définir votre photo de profil.";
+"NSLocationAlwaysAndWhenInUseUsageDescription" = "Trust utilise votre position en arrière-plan afin qu'un Look fonctionne toujours lorsque l'application est fermée. Un Look confirmé est enregistré et demande une notification. Trust ne vend pas votre emplacement.";
+"NSLocationAlwaysUsageDescription" = "Trust utilise votre position en arrière-plan afin qu'un Look fonctionne toujours lorsque l'application est fermée. Un Look confirmé est enregistré et demande une notification. Trust ne vend pas votre emplacement.";
+"NSLocationWhenInUseUsageDescription" = "Trust utilise votre position lorsque l'application est ouverte afin que vous puissiez vous voir sur la carte et voir les personnes qui partagent avec vous. Trust ne vend pas votre emplacement.";
+"PreciseEscrow" = "La confiance a besoin d'un emplacement précis, donc un look montre l'endroit actuel. Une localisation approximative ne suffit pas.";

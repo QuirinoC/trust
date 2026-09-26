@@ -1,0 +1,6 @@
+"CFBundleDisplayName" = "Trust";
+"NSCameraUsageDescription" = "O Trust só usa a câmera quando você escolhe Tirar foto para definir sua foto de perfil.";
+"NSLocationAlwaysAndWhenInUseUsageDescription" = "O Trust usa sua localização em segundo plano para que um Olhar funcione mesmo com o app fechado. Um Olhar confirmado fica registrado e solicita uma notificação. O Trust não vende sua localização.";
+"NSLocationAlwaysUsageDescription" = "O Trust usa sua localização em segundo plano para que um Olhar funcione mesmo com o app fechado. Um Olhar confirmado fica registrado e solicita uma notificação. O Trust não vende sua localização.";
+"NSLocationWhenInUseUsageDescription" = "O Trust usa sua localização enquanto o app está aberto para você se ver no mapa e olhar a localização de quem compartilha com você. O Trust não vende sua localização.";
+"PreciseEscrow" = "O Trust precisa de localização precisa para que um Olhar mostre o lugar atual. A localização aproximada não é suficiente.";

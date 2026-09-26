@@ -177,6 +177,14 @@ public sealed record AddPersonByPhoneResponse(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     string? DevelopmentCode);
 
+/// Discovery deliberately returns no display name, avatar, phone, presence, or sharing data.
+public sealed record PersonLookupResponse(Guid AccountId, string Handle, string Relationship, Guid? RequestId = null);
+public sealed record ConnectionRequestCreateRequest(Guid RecipientId);
+public sealed record ConnectionRequestCreateResponse(Guid Id, string Status, DateTimeOffset CreatedAt, DateTimeOffset ExpiresAt);
+public sealed record ConnectionRequestPartyDto(Guid AccountId, string Handle);
+public sealed record ConnectionRequestDto(Guid Id, ConnectionRequestPartyDto OtherParty, DateTimeOffset CreatedAt, DateTimeOffset ExpiresAt);
+public sealed record ConnectionRequestListResponse(IReadOnlyList<ConnectionRequestDto> Incoming, IReadOnlyList<ConnectionRequestDto> Sent);
+
 public sealed record SendPhoneCodeResponse(
     DateTimeOffset ExpiresAt,
     int ResendAfterSeconds,

@@ -73,7 +73,7 @@ struct PlusPaywall: View {
                 .padding(.bottom, 7)
                 .accessibilityAddTraits(.isHeader)
 
-            Text("\(TrustCopy.plusFeatureSeats) · \(TrustCopy.plusFeatureModes)\nLive pins · \(TrustCopy.plusFeatureLog)")
+            Text("\(TrustCopy.plusFeatureSeats) · \(TrustCopy.plusFeatureModes)\n\(TrustCopy.plusFeatureSummary(TrustCopy.plusFeatureLog))")
                 .trustFont(13)
                 .lineSpacing(2)
                 .foregroundStyle(palette.ink)
@@ -99,7 +99,7 @@ struct PlusPaywall: View {
                     .foregroundStyle(palette.danger)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, 6)
-                    .accessibilityLabel("Subscription error. \(error)")
+                    .accessibilityLabel(TrustCopy.subscriptionError(error))
                     .accessibilityIdentifier("plus-store-error")
             }
 
@@ -141,7 +141,7 @@ struct PlusPaywall: View {
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.horizontal, TrustTheme.gutter)
                         .padding(.top, 12)
-                        .accessibilityLabel("Subscription error. \(error)")
+                        .accessibilityLabel(TrustCopy.subscriptionError(error))
                         .accessibilityIdentifier("plus-store-error")
                 }
                 Text(TrustCopy.plusCoveredBody)

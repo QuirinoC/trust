@@ -39,7 +39,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.collapsetechnologies.trust
         PRODUCT_NAME: Trust
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        CURRENT_PROJECT_VERSION: 24
+        CURRENT_PROJECT_VERSION: 29
         MARKETING_VERSION: 1.0
         ENABLE_USER_SCRIPT_SANDBOXING: YES
         SWIFT_STRICT_CONCURRENCY: targeted
@@ -52,11 +52,16 @@ targets:
       properties:
         CFBundleDisplayName: Trust
         CFBundleDevelopmentRegion: en
-        # English-only 1.0. Non-EN .lproj were removed in M0; regenerate later with
-        # Scripts/emit_localizations.py if localization returns post-1.0.
+        # In-app localization supported by the current release.
         CFBundleLocalizations:
           - en
+          - zh-Hans
+          - ja
+          - de
+          - fr
+          - pt-BR
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        TRUST_SKIP_PHONE_VERIFICATION: false
         LSApplicationCategoryType: public.app-category.lifestyle
         UIApplicationSupportsIndirectInputEvents: true
         UILaunchScreen:
@@ -99,6 +104,81 @@ targets:
       testTargets:
         - TrustCoreTests
         - TrustUITests
+  # This internal-only app artifact embeds the phone-verification skip flag.
+  # Always export it with testFlightInternalTestingOnly=true.
+  TrustInternal:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources/TrustApp
+      - path: Resources
+        buildPhase: resources
+        excludes:
+          - Trust.storekit
+          - Fonts/*.txt
+    dependencies:
+      - package: TrustCore
+        product: TrustCore
+      - sdk: AuthenticationServices.framework
+      - sdk: MapKit.framework
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.collapsetechnologies.trust
+        PRODUCT_NAME: Trust
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        CURRENT_PROJECT_VERSION: 29
+        MARKETING_VERSION: 1.0
+        ENABLE_USER_SCRIPT_SANDBOXING: YES
+        SWIFT_STRICT_CONCURRENCY: targeted
+        CODE_SIGN_ENTITLEMENTS: Trust.entitlements
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: 3S529795M9
+        INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: Trust uses your location while the app is open so you can see yourself on the map and look at people who share with you. Trust does not sell your location.
+        INFOPLIST_KEY_NSCameraUsageDescription: Trust uses the camera only when you choose Take Photo to set your profile picture.
+    info:
+      path: Internal-Info.plist
+      properties:
+        CFBundleDisplayName: Trust
+        CFBundleDevelopmentRegion: en
+        CFBundleLocalizations: [en, zh-Hans, ja, de, fr, pt-BR]
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        TRUST_SKIP_PHONE_VERIFICATION: YES
+        TRUST_BASE_URL: $(TRUST_BASE_URL)
+        LSApplicationCategoryType: public.app-category.lifestyle
+        UIApplicationSupportsIndirectInputEvents: true
+        UILaunchScreen:
+          UIColorName: Paper
+        UIAppFonts:
+          - SpaceGrotesk-Variable.ttf
+          - IBMPlexMono-Medium.ttf
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+          NSExceptionDomains:
+            localhost:
+              NSExceptionAllowsInsecureHTTPLoads: true
+              NSIncludesSubdomains: true
+            "127.0.0.1":
+              NSExceptionAllowsInsecureHTTPLoads: true
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        "UISupportedInterfaceOrientations~ipad":
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+          - UIInterfaceOrientationPortraitUpsideDown
+        UIBackgroundModes: [location]
+        ITSAppUsesNonExemptEncryption: false
+        NSLocationWhenInUseUsageDescription: Trust uses your location while the app is open so you can see yourself on the map and look at people who share with you. Trust does not sell your location.
+        NSCameraUsageDescription: Trust uses the camera only when you choose Take Photo to set your profile picture.
+        NSLocationAlwaysAndWhenInUseUsageDescription: Trust uses your location in the background so a Look still works when the app is closed. A confirmed Look is recorded and requests a notification. Trust does not sell your location.
+        NSLocationAlwaysUsageDescription: Trust uses your location in the background so a Look still works when the app is closed. A confirmed Look is recorded and requests a notification. Trust does not sell your location.
+        NSLocationTemporaryUsageDescriptionDictionary:
+          PreciseEscrow: Trust needs precise location so a Look shows the current place. Approximate location is not enough.
+        CFBundleURLTypes:
+          - CFBundleTypeRole: Editor
+            CFBundleURLSchemes: [trust]
+    scheme:
+      testTargets:
+        - TrustCoreTests
   TrustCoreTests:
     type: bundle.unit-test
     platform: iOS
@@ -126,6 +206,24 @@ targets:
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: 3S529795M9
 schemes:
+  Trust-Internal:
+    build:
+      targets:
+        TrustInternal: all
+    run:
+      config: Release
+    test:
+      config: Release
+      targets:
+        - TrustCoreTests
+    profile:
+      config: Release
+    analyze:
+      config: Release
+    archive:
+      config: Release
+    management:
+      shared: true
   # L2 sandbox verification (M3 plan §"Sandbox / TestFlight / StoreKit testing path").
   # Physical device only — Simulator cannot do App Store Sandbox purchases.
   #   - StoreKit Configuration: None (no `storeKitConfiguration:` key below) so purchases

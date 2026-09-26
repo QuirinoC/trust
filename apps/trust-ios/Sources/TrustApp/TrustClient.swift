@@ -36,6 +36,37 @@ struct AddPersonByPhonePayload: Decodable {
     var developmentCode: String?
 }
 
+struct PersonLookupPayload: Decodable, Equatable {
+    var accountId: UUID
+    var handle: String
+    var relationship: String
+    var requestId: UUID?
+}
+
+struct ConnectionRequestPartyDTO: Decodable, Equatable {
+    var accountId: UUID
+    var handle: String
+}
+
+struct ConnectionRequestDTO: Decodable, Identifiable, Equatable {
+    var id: UUID
+    var otherParty: ConnectionRequestPartyDTO
+    var createdAt: Date
+    var expiresAt: Date
+}
+
+struct ConnectionRequestResultDTO: Decodable {
+    var id: UUID
+    var status: String
+    var createdAt: Date
+    var expiresAt: Date
+}
+
+struct ConnectionRequestsPayload: Decodable, Equatable {
+    var incoming: [ConnectionRequestDTO]
+    var sent: [ConnectionRequestDTO]
+}
+
 struct PresenceDTO: Decodable {
     var lastActiveAt: Date
     var batteryPercent: Int
@@ -652,6 +683,39 @@ final class TrustClient {
             body: Body(phone: phone),
             authorized: true
         )
+    }
+
+    func lookupPerson(handle: String) async throws -> PersonLookupPayload {
+        var components = URLComponents()
+        components.path = "/api/v1/people/lookup"
+        components.queryItems = [URLQueryItem(name: "handle", value: handle)]
+        guard let path = components.string else { throw TrustClientError.decoding }
+        return try await get(path: path)
+    }
+
+    func connectionRequests() async throws -> ConnectionRequestsPayload {
+        try await get(path: "/api/v1/connection-requests")
+    }
+
+    func createConnectionRequest(recipientID: UUID) async throws -> ConnectionRequestResultDTO {
+        struct Body: Encodable { var recipientId: UUID }
+        return try await post(
+            path: "/api/v1/connection-requests",
+            body: Body(recipientId: recipientID),
+            authorized: true
+        )
+    }
+
+    func acceptConnectionRequest(id: UUID) async throws {
+        try await postEmpty(path: "/api/v1/connection-requests/\(id.uuidString)/accept", body: EmptyBody())
+    }
+
+    func declineConnectionRequest(id: UUID) async throws {
+        try await postEmpty(path: "/api/v1/connection-requests/\(id.uuidString)/decline", body: EmptyBody())
+    }
+
+    func cancelConnectionRequest(id: UUID) async throws {
+        try await deleteEmpty(path: "/api/v1/connection-requests/\(id.uuidString)")
     }
 
     private func get<T: Decodable>(path: String) async throws -> T {

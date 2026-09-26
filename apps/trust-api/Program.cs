@@ -59,6 +59,33 @@ builder.Services.AddRateLimiter(options =>
     static string PartitionKey(HttpContext context) =>
         context.Connection.RemoteIpAddress?.ToString() ?? "local";
 
+    static bool IsDiscoveryRoute(HttpContext context) =>
+        context.Request.Path.Equals("/api/v1/people/lookup", StringComparison.OrdinalIgnoreCase)
+        || context.Request.Path.StartsWithSegments("/api/v1/connection-requests");
+
+    static bool UsesAccountDiscoveryBudget(HttpContext context) =>
+        context.Request.Path.Equals("/api/v1/people/lookup", StringComparison.OrdinalIgnoreCase)
+        || (context.Request.Path.StartsWithSegments("/api/v1/connection-requests")
+            && HttpMethods.IsPost(context.Request.Method))
+        || (context.Request.Path.StartsWithSegments("/api/v1/connection-requests")
+            && HttpMethods.IsDelete(context.Request.Method));
+
+    // Apply independent account and IP budgets only to handle discovery and request
+    // lifecycle routes. Other API traffic keeps its existing endpoint-specific limits.
+    options.GlobalLimiter = PartitionedRateLimiter.CreateChained(
+        PartitionedRateLimiter.Create<HttpContext, string>(context =>
+            !IsDiscoveryRoute(context)
+                ? RateLimitPartition.GetNoLimiter("not-discovery")
+                : RateLimitPartition.GetFixedWindowLimiter(
+                    PartitionKey(context),
+                    _ => new FixedWindowRateLimiterOptions { Window = TimeSpan.FromMinutes(1), PermitLimit = 120, QueueLimit = 0 })),
+        PartitionedRateLimiter.Create<HttpContext, string>(context =>
+            !UsesAccountDiscoveryBudget(context)
+                ? RateLimitPartition.GetNoLimiter("not-discovery")
+                : RateLimitPartition.GetFixedWindowLimiter(
+                    AccountClaims.AccountId(context.User)?.ToString("N") ?? "anonymous",
+                    _ => new FixedWindowRateLimiterOptions { Window = TimeSpan.FromMinutes(1), PermitLimit = 20, QueueLimit = 0 })));
+
     options.AddPolicy(RateLimitPolicies.Auth, context => RateLimitPartition.GetFixedWindowLimiter(
         PartitionKey(context),
         _ => new FixedWindowRateLimiterOptions { Window = TimeSpan.FromMinutes(1), PermitLimit = 30, QueueLimit = 0 }));
@@ -182,7 +209,7 @@ builder.Services.AddAuthorization();
 var app = builder.Build();
 
 app.UseForwardedHeaders();
-app.UseRateLimiter();
+app.UseRouting();
 
 if (!string.Equals(storeMode, "memory", StringComparison.OrdinalIgnoreCase))
 {
@@ -193,6 +220,9 @@ if (!string.Equals(storeMode, "memory", StringComparison.OrdinalIgnoreCase))
 
 app.UseAuthentication();
 app.UseAuthorization();
+// Endpoint-specific policies include account partitions, so auth must run first.
+// The independent IP partitions still use forwarded client IP after proxy headers.
+app.UseRateLimiter();
 app.MapRazorPages();
 app.MapTrustApiV1();
 app.MapGet("/i/{code}", (string code) =>

@@ -45,7 +45,7 @@ Phone verification uses `POST /api/v1/me/phone/send` and `/verify`. Development 
 | `POST /api/v1/session/google` | Verify Google identity token |
 | `POST /api/v1/session/development` | Development-only session endpoint |
 | `GET /api/v1/circle` | Circle members and currently permitted presence/location |
-| `PUT /api/v1/me/avatar/preset` | Choose an allowlisted profile icon (`fern`, `ember`, `sky`, `ocean`, `sunrise`, or `lavender`) |
+| `PUT /api/v1/me/avatar/preset` | Choose an allowlisted profile icon from the avatar catalog |
 | `PUT /api/v1/me/avatar/photo` and `DELETE /api/v1/me/avatar` | Set or remove a profile photo |
 | `GET /api/v1/people/{id}/avatar/{version}` | Fetch the current photo for yourself or an active circle member |
 | `POST /api/v1/invites` and `/invites/accept` | Create and accept an invite |

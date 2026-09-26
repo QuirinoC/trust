@@ -3,6 +3,7 @@ using System.Buffers;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Hosting;
 using Microsoft.IdentityModel.Tokens;
 using TrustApi.Application;
 using TrustApi.Configuration;
@@ -23,9 +24,11 @@ public static class TrustEndpoints
     private static readonly HashSet<string> AvatarPresetIds = new(StringComparer.Ordinal)
     {
         "fern", "ember", "sky", "ocean", "sunrise", "lavender",
-        "moon", "star", "cloud", "raindrop", "rainbow", "mountain", "river", "meadow",
-        "clover", "bloom", "cherry", "lotus", "mushroom", "seashell", "coral", "butterfly",
-        "hummingbird", "fox", "whale", "koi"
+        "moon", "star", "cloud", "raindrop", "rainbow", "mountain",
+        "river", "meadow", "clover", "bloom", "cherry", "lotus",
+        "mushroom", "seashell", "coral", "butterfly", "hummingbird", "fox",
+        "whale", "koi", "rabbit", "bear", "cat", "dog",
+        "otter", "owl", "turtle", "siamese", "ragdoll", "british-shorthair"
     };
 
     public static IEndpointRouteBuilder MapTrustApiV1(this IEndpointRouteBuilder endpoints)
@@ -46,6 +49,12 @@ public static class TrustEndpoints
         auth.MapPost("/me/phone/send", SendPhoneCodeAsync).RequireRateLimiting(RateLimitPolicies.PhoneSend);
         auth.MapPost("/me/phone/verify", VerifyPhoneCodeAsync).RequireRateLimiting(RateLimitPolicies.PhoneVerify);
         auth.MapPost("/people/phone", AddPersonByPhoneAsync).RequireRateLimiting(RateLimitPolicies.Invite);
+        auth.MapGet("/people/lookup", LookupPersonAsync);
+        auth.MapGet("/connection-requests", ListConnectionRequestsAsync);
+        auth.MapPost("/connection-requests", CreateConnectionRequestAsync);
+        auth.MapPost("/connection-requests/{requestId:guid}/accept", AcceptConnectionRequestAsync);
+        auth.MapPost("/connection-requests/{requestId:guid}/decline", DeclineConnectionRequestAsync);
+        auth.MapDelete("/connection-requests/{requestId:guid}", CancelConnectionRequestAsync);
         auth.MapPost("/invites", CreateInviteAsync).RequireRateLimiting(RateLimitPolicies.Invite);
         auth.MapPost("/invites/accept", AcceptInviteAsync).RequireRateLimiting(RateLimitPolicies.Invite);
         auth.MapPatch("/people/{personId:guid}/share", SetShareAsync);
@@ -544,6 +553,8 @@ public static class TrustEndpoints
         AddPersonByPhoneRequest request,
         ClaimsPrincipal principal,
         PhoneVerificationService phones,
+        IHostEnvironment environment,
+        ITrustStore store,
         CancellationToken cancellationToken)
     {
         var accountId = AccountClaims.AccountId(principal);
@@ -551,6 +562,9 @@ public static class TrustEndpoints
         {
             return Results.Unauthorized();
         }
+
+        var onboardingError = await ProductionOnboardingErrorAsync(accountId.Value, environment, store, cancellationToken);
+        if (onboardingError is not null) return onboardingError;
 
         try
         {
@@ -566,6 +580,8 @@ public static class TrustEndpoints
     public static async Task<IResult> CreateInviteAsync(
         ClaimsPrincipal principal,
         TrustEngine engine,
+        IHostEnvironment environment,
+        ITrustStore store,
         CancellationToken cancellationToken)
     {
         var accountId = AccountClaims.AccountId(principal);
@@ -573,6 +589,9 @@ public static class TrustEndpoints
         {
             return Results.Unauthorized();
         }
+
+        var onboardingError = await ProductionOnboardingErrorAsync(accountId.Value, environment, store, cancellationToken);
+        if (onboardingError is not null) return onboardingError;
 
         var invite = await engine.CreateInviteAsync(accountId.Value, cancellationToken);
         return Results.Ok(new { code = invite.Code });
@@ -582,10 +601,103 @@ public static class TrustEndpoints
         InviteAcceptRequest request,
         ClaimsPrincipal principal,
         TrustEngine engine,
+        IHostEnvironment environment,
+        ITrustStore store,
         CancellationToken cancellationToken)
     {
+        var accountId = AccountClaims.AccountId(principal);
+        if (accountId is null) return Results.Unauthorized();
+        var onboardingError = await ProductionOnboardingErrorAsync(accountId.Value, environment, store, cancellationToken);
+        if (onboardingError is not null) return onboardingError;
         return await RunAsync(principal, engine, (id, ct) => engine.AcceptInviteAsync(id, request.Code, ct), cancellationToken);
     }
+
+    private static async Task<IResult?> ProductionOnboardingErrorAsync(
+        Guid accountId, IHostEnvironment environment, ITrustStore store, CancellationToken cancellationToken)
+    {
+        if (!environment.IsProduction()) return null;
+        var account = await store.FindAccountAsync(accountId, cancellationToken);
+        return account?.OnboardingComplete == true ? null : Map(TrustException.PhoneVerificationRequired());
+    }
+
+    public static async Task<IResult> LookupPersonAsync(
+        [FromQuery] string? handle,
+        ClaimsPrincipal principal,
+        TrustEngine engine,
+        CancellationToken cancellationToken)
+    {
+        var accountId = AccountClaims.AccountId(principal);
+        if (accountId is null) return Results.Unauthorized();
+        try
+        {
+            var match = await engine.LookupPersonAsync(accountId.Value, handle, cancellationToken);
+            if (match is null) return Results.NotFound(new ApiError("person_not_found", "No eligible person uses that handle."));
+            return Results.Ok(new PersonLookupResponse(
+                match.AccountId,
+                match.Handle,
+                RelationshipName(match.Relationship),
+                match.RequestId));
+        }
+        catch (TrustException exception) { return Map(exception); }
+    }
+
+    public static async Task<IResult> ListConnectionRequestsAsync(
+        ClaimsPrincipal principal,
+        TrustEngine engine,
+        CancellationToken cancellationToken)
+    {
+        var accountId = AccountClaims.AccountId(principal);
+        if (accountId is null) return Results.Unauthorized();
+        try
+        {
+            var lists = await engine.ListConnectionRequestsAsync(accountId.Value, cancellationToken);
+            static ConnectionRequestDto MapEntry(ConnectionRequestEntry entry) => new(
+                entry.Request.Id,
+                new ConnectionRequestPartyDto(entry.OtherParty.Id, entry.OtherParty.Handle ?? ""),
+                entry.Request.CreatedAt,
+                entry.Request.ExpiresAt);
+            return Results.Ok(new ConnectionRequestListResponse(
+                lists.Incoming.Select(MapEntry).ToList(),
+                lists.Sent.Select(MapEntry).ToList()));
+        }
+        catch (TrustException exception) { return Map(exception); }
+    }
+
+    public static async Task<IResult> CreateConnectionRequestAsync(
+        ConnectionRequestCreateRequest request,
+        ClaimsPrincipal principal,
+        TrustEngine engine,
+        CancellationToken cancellationToken)
+    {
+        var accountId = AccountClaims.AccountId(principal);
+        if (accountId is null) return Results.Unauthorized();
+        try
+        {
+            var created = await engine.CreateConnectionRequestAsync(accountId.Value, request.RecipientId, cancellationToken);
+            return Results.Ok(new ConnectionRequestCreateResponse(created.Id, "pending", created.CreatedAt, created.ExpiresAt));
+        }
+        catch (TrustException exception) { return Map(exception); }
+    }
+
+    public static async Task<IResult> AcceptConnectionRequestAsync(
+        Guid requestId, ClaimsPrincipal principal, TrustEngine engine, CancellationToken cancellationToken) =>
+        await RunAsync(principal, engine, (id, ct) => engine.AcceptConnectionRequestAsync(id, requestId, ct), cancellationToken);
+
+    public static async Task<IResult> DeclineConnectionRequestAsync(
+        Guid requestId, ClaimsPrincipal principal, TrustEngine engine, CancellationToken cancellationToken) =>
+        await RunAsync(principal, engine, (id, ct) => engine.DeclineConnectionRequestAsync(id, requestId, ct), cancellationToken);
+
+    public static async Task<IResult> CancelConnectionRequestAsync(
+        Guid requestId, ClaimsPrincipal principal, TrustEngine engine, CancellationToken cancellationToken) =>
+        await RunAsync(principal, engine, (id, ct) => engine.CancelConnectionRequestAsync(id, requestId, ct), cancellationToken);
+
+    private static string RelationshipName(ConnectionRelationship relationship) => relationship switch
+    {
+        ConnectionRelationship.Connected => "connected",
+        ConnectionRelationship.Sent => "sent",
+        ConnectionRelationship.Incoming => "incoming",
+        _ => "none"
+    };
 
     public static async Task<IResult> SetShareAsync(
         Guid personId,
@@ -784,8 +896,8 @@ public static class TrustEndpoints
 
         try
         {
-            await engine.PostHomePresenceAsync(accountId.Value, state.Value, request.SignaledAt, cancellationToken);
-            if (state == HomePresenceState.Home)
+            var arrivedHome = await engine.PostHomePresenceAsync(accountId.Value, state.Value, request.SignaledAt, cancellationToken);
+            if (arrivedHome)
             {
                 await receipts.NotifyHomeArrivalAsync(accountId.Value, cancellationToken);
             }
@@ -1182,9 +1294,13 @@ public static class TrustEndpoints
             or "otp_invalid" or "otp_expired"
             or "otp_exhausted" or "otp_cooldown" =>
             Results.BadRequest(new ApiError(exception.Code, exception.Message)),
+        "verification_required" => Results.Json(new ApiError(exception.Code, exception.Message), statusCode: StatusCodes.Status403Forbidden),
+        "request_not_found" => Results.NotFound(new ApiError(exception.Code, exception.Message)),
+        "request_expired" or "request_declined_recently" or "request_limit" =>
+            Results.Json(new ApiError(exception.Code, exception.Message), statusCode: StatusCodes.Status409Conflict),
         "otp_not_configured" or "otp_send_failed" =>
             Results.Json(new ApiError(exception.Code, exception.Message), statusCode: StatusCodes.Status503ServiceUnavailable),
-        "not_connected" or "pair_inactive" or "no_location" or "phone_in_use" or "handle_in_use"
+        "not_connected" or "pair_inactive" or "no_location" or "phone_in_use" or "phone_unavailable" or "handle_in_use"
             or "share_off" or "look_requires_sealed" or "view_requires_available" =>
             Results.Json(new ApiError(exception.Code, exception.Message), statusCode: StatusCodes.Status409Conflict),
         "seat_limit" or "pro_required" =>

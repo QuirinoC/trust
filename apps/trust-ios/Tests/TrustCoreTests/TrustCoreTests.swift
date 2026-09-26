@@ -2,6 +2,23 @@ import Foundation
 import TrustCore
 import XCTest
 
+final class AvatarDescriptorTests: XCTestCase {
+    func testNewAndLegacyPresetsRemainRecognized() {
+        let pickerIDs = [
+            "fox", "rabbit", "bear", "cat", "dog", "otter", "owl", "turtle", "siamese", "ragdoll", "british-shorthair"
+        ]
+        XCTAssertEqual(pickerIDs.count, 11)
+        XCTAssertEqual(Set(pickerIDs).count, 11)
+
+        for id in pickerIDs {
+            XCTAssertEqual(AvatarDescriptor.preset(id).knownPresetID, id)
+        }
+        for id in ["ember", "sky", "ocean", "sunrise", "lavender", "raindrop", "rainbow", "river", "meadow", "bloom", "cherry", "lotus", "coral"] {
+            XCTAssertEqual(AvatarDescriptor.preset(id).knownPresetID, id, "Legacy preset \(id) must remain displayable")
+        }
+    }
+}
+
 final class EscrowVaultTests: XCTestCase {
     func testPeekNeverReturnsCoordinates() {
         let vault = EscrowVault()
@@ -49,6 +66,39 @@ final class LocationIngestBufferTests: XCTestCase {
         XCTAssertEqual(buffer.points.map(\.latitude), [2, 3])
         buffer.removePrefix(1)
         XCTAssertEqual(buffer.points.map(\.latitude), [3])
+    }
+
+    func testNextBatchCapsAtAPIRequestLimitAndLeavesQueueUntouched() {
+        let now = Date()
+        var buffer = LocationIngestBuffer()
+        let points = (0...100).map {
+            LocationPoint(timestamp: now.addingTimeInterval(Double($0)), latitude: Double($0), longitude: 0)
+        }
+        buffer.append(points, now: now)
+
+        let firstBatch = buffer.nextBatch()
+        XCTAssertEqual(firstBatch.count, 100)
+        XCTAssertEqual(firstBatch.first?.latitude, 0)
+        XCTAssertEqual(firstBatch.last?.latitude, 99)
+        XCTAssertEqual(buffer.points.count, 101, "Selecting a batch must not dequeue unconfirmed points")
+
+        buffer.removePrefix(firstBatch.count)
+        XCTAssertEqual(buffer.nextBatch().map(\.latitude), [100])
+        XCTAssertEqual(buffer.points.count, 1)
+    }
+
+    func testUnconfirmedBatchRemainsQueued() {
+        let now = Date()
+        var buffer = LocationIngestBuffer()
+        let points = (0..<101).map {
+            LocationPoint(timestamp: now.addingTimeInterval(Double($0)), latitude: Double($0), longitude: 0)
+        }
+        buffer.append(points, now: now)
+
+        let attemptedBatch = buffer.nextBatch()
+        // A failed or cancelled request performs no removePrefix call.
+        XCTAssertEqual(attemptedBatch.count, 100)
+        XCTAssertEqual(buffer.points, points)
     }
 }
 

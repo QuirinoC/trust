@@ -6,12 +6,13 @@ struct HandleView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.trustPalette) private var palette
     @FocusState private var handleFocused: Bool
+    @State private var showingAvatarPicker = false
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 TrustWordmark().padding(.bottom, 30)
-                TrustEyebrow(text: "Your profile", color: palette.accent)
+                TrustEyebrow(text: TrustCopy.yourProfile, color: palette.accent)
                     .padding(.bottom, 8)
                 Text(TrustCopy.yourHandle)
                     .font(TrustTheme.display(32))
@@ -25,14 +26,44 @@ struct HandleView: View {
                     .padding(.top, 8)
                     .padding(.bottom, 22)
 
+                Button { showingAvatarPicker = true } label: {
+                    HStack(spacing: 13) {
+                        TrustAvatar(name: model.you.displayName, seed: 0, size: 52, avatar: model.you.avatar, personID: model.you.id)
+                            .overlay(alignment: .bottomTrailing) {
+                                Image(systemName: "plus.circle.fill")
+                                    .font(.system(size: 17, weight: .semibold))
+                                    .symbolRenderingMode(.palette)
+                                    .foregroundStyle(.white, palette.accent)
+                                    .background(Circle().fill(palette.canvas).padding(-2))
+                            }
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(model.you.avatar == nil ? TrustCopy.addProfilePicture : TrustCopy.changeProfilePicture)
+                                .trustFont(14, weight: .semibold)
+                                .foregroundStyle(palette.ink)
+                            Text(TrustCopy.optionalAvatarIntro)
+                                .trustFont(12)
+                                .foregroundStyle(palette.muted)
+                        }
+                        Spacer(minLength: 4)
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(palette.muted)
+                    }
+                    .padding(14)
+                    .background(palette.surface, in: RoundedRectangle(cornerRadius: TrustTheme.radius, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("onboarding-add-picture")
+                .padding(.bottom, 18)
+
                 TrustCard(padding: 20) {
                     VStack(alignment: .leading, spacing: 16) {
-                        TrustFieldLabel(title: TrustCopy.handle, hint: handleHint) {
+                        TrustFieldLabel(title: TrustCopy.handle, hint: handleHint, hintColor: handleHintColor) {
                             HStack(spacing: 8) {
                                 Text("@")
                                     .font(TrustTheme.ui(17, weight: .medium))
                                     .foregroundStyle(palette.muted)
-                                TextField("jordan", text: handleBinding)
+                                TextField(TrustCopy.handlePlaceholder, text: handleBinding)
                                     .textContentType(.username)
                                     .textInputAutocapitalization(.never)
                                     .autocorrectionDisabled()
@@ -87,7 +118,11 @@ struct HandleView: View {
         }
         .scrollDismissesKeyboard(.interactively)
         .background(palette.canvas.ignoresSafeArea())
-        .onAppear { handleFocused = true }
+        .sheet(isPresented: $showingAvatarPicker) {
+            ProfileAvatarPicker(onboarding: true)
+                .environmentObject(model)
+                .presentationDetents([.medium, .large])
+        }
     }
 
     private var handleBinding: Binding<String> {
@@ -103,5 +138,9 @@ struct HandleView: View {
             if model.handleAvailability == false { return TrustCopy.handleTaken }
             return nil
         }
+    }
+
+    private var handleHintColor: Color {
+        model.handleAvailability == false ? palette.danger : palette.positive
     }
 }

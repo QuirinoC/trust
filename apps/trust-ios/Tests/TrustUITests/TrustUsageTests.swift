@@ -105,20 +105,23 @@ final class TrustUsageTests: XCTestCase {
         XCTAssertTrue(app.buttons["tab-circle"].waitForExistence(timeout: 20))
         app.buttons["tab-sharing"].tap()
         XCTAssertTrue(app.staticTexts["sharing-intro"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.buttons["mode-option-home"].exists)
+        let homeStatus = app.buttons["home-status-control"]
+        XCTAssertTrue(homeStatus.exists, "Presence should be a secondary setting, not a segmented row beside per-person sharing controls.")
+        homeStatus.tap()
+        let setHidden = app.buttons["set-home-status-hidden"]
+        XCTAssertTrue(setHidden.waitForExistence(timeout: 5))
+        app.buttons["set-home-status-home"].firstMatch.tap()
 
         app.buttons["add-someone-button"].tap()
-        let phone = app.textFields["add-phone"]
-        XCTAssertTrue(phone.waitForExistence(timeout: 5))
-        phone.tap()
-        // The Duo simulator does not always report keyboard focus to XCUI even when its
-        // text field accepts input. Verify the actual editable value instead.
-        phone.typeText("4155550100")
-        XCTAssertEqual(phone.value as? String, "4155550100")
-        app.buttons["add-phone-button"].tap()
-        XCTAssertTrue(app.staticTexts["invite-notice"].waitForExistence(timeout: 5), "The demo reports its invite limitation without sending a real text.")
-        XCTAssertTrue(app.textFields["invite-code"].exists, "Joining an invite remains a separate explicit action.")
-        XCTAssertTrue(app.buttons["join-invite-button"].exists)
+        let handle = app.textFields["connection-handle"]
+        XCTAssertTrue(handle.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "handle in their You tab")).firstMatch.exists)
+        handle.typeText("jordan")
+        app.buttons["lookup-connection-handle"].tap()
+        XCTAssertTrue(app.staticTexts["connection-lookup-notice"].waitForExistence(timeout: 5), "The demo should not fabricate handle lookup results.")
+        XCTAssertFalse(app.textFields["invite-code"].exists)
+        XCTAssertFalse(app.textFields["add-phone"].exists)
+        app.buttons["cancel-add-person"].tap()
 
         app.buttons["tab-log"].tap()
         let event = app.descendants(matching: .any).matching(
@@ -128,21 +131,143 @@ final class TrustUsageTests: XCTestCase {
 
         app.buttons["tab-you"].tap()
         XCTAssertTrue(app.buttons["my-location"].waitForExistence(timeout: 5))
+        app.buttons["copy-own-handle"].tap()
+        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Handle copied")).firstMatch.waitForExistence(timeout: 3))
         app.buttons["my-location"].tap()
         XCTAssertTrue(app.staticTexts["location-permission-status"].exists)
         app.buttons["Done"].tap()
         app.buttons["edit-profile-picture"].tap()
-        XCTAssertTrue(app.buttons["avatar-choose-photo"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.buttons["avatar-take-photo"].exists)
-        app.buttons["Fern icon"].tap()
+        XCTAssertTrue(app.buttons["avatar-photo-options"].waitForExistence(timeout: 5))
+        app.buttons["Fox icon"].tap()
         XCTAssertTrue(app.buttons["avatar-save"].isEnabled)
-        app.buttons["Cancel"].tap()
-        XCTAssertTrue(app.descendants(matching: .any)["support-link"].exists)
+        app.buttons["avatar-save"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["support-link"].waitForExistence(timeout: 5))
+    }
+
+    func testAppearancePreferencePersistsAcrossRelaunch() {
+        let app = launchDemo()
+        XCTAssertTrue(app.buttons["tab-you"].waitForExistence(timeout: 20))
+        app.buttons["tab-you"].tap()
+
+        for option in ["System", "Light", "Dark"] {
+            let picker = app.descendants(matching: .any)["appearance-preference"]
+            XCTAssertTrue(picker.waitForExistence(timeout: 5), "The appearance picker should be available in You.")
+            picker.tap()
+            let choice = app.buttons[option]
+            XCTAssertTrue(choice.waitForExistence(timeout: 5), "The picker should offer the \(option) appearance.")
+            let choiceHittable = XCTNSPredicateExpectation(
+                predicate: NSPredicate(format: "hittable == true"),
+                object: choice)
+            XCTAssertEqual(
+                XCTWaiter.wait(for: [choiceHittable], timeout: 5),
+                .completed,
+                "The \(option) appearance choice should be hittable before selection. \(app.debugDescription)")
+            choice.tap()
+            let menuDismissed = XCTNSPredicateExpectation(
+                predicate: NSPredicate(format: "exists == false"),
+                object: choice)
+            XCTAssertEqual(
+                XCTWaiter.wait(for: [menuDismissed], timeout: 5),
+                .completed,
+                "The \(option) appearance choice should close the picker menu.")
+
+            // Changing the color scheme can recreate the SwiftUI hierarchy. Reacquire the
+            // accessibility element after the menu closes instead of polling its old snapshot.
+            let updatedPicker = app.descendants(matching: .any)["appearance-preference"]
+            let selectionApplied = XCTNSPredicateExpectation(
+                predicate: NSPredicate(format: "value == %@", option),
+                object: updatedPicker)
+            let selectionResult = XCTWaiter.wait(for: [selectionApplied], timeout: 10)
+            if selectionResult != .completed {
+                XCTFail(
+                    "The picker should reflect the selected appearance. " +
+                    "Expected=\(option), actual label=\(updatedPicker.label), value=\(String(describing: updatedPicker.value)). " +
+                    "Picker=\(updatedPicker.debugDescription)\nApp hierarchy=\(app.debugDescription)")
+            }
+
+            app.terminate()
+            app.launch()
+            XCTAssertTrue(app.buttons["tab-you"].waitForExistence(timeout: 20))
+            app.buttons["tab-you"].tap()
+            let relaunchedPicker = app.descendants(matching: .any)["appearance-preference"]
+            XCTAssertTrue(relaunchedPicker.waitForExistence(timeout: 5))
+            let preferenceRestored = XCTNSPredicateExpectation(
+                predicate: NSPredicate(format: "value == %@", option),
+                object: relaunchedPicker)
+            XCTAssertEqual(
+                XCTWaiter.wait(for: [preferenceRestored], timeout: 5),
+                .completed,
+                "\(option) should persist after restarting the app.")
+        }
+
+        let picker = app.descendants(matching: .any)["appearance-preference"]
+        picker.tap()
+        app.buttons["System"].tap()
+        let systemSelected = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "value == %@", "System"),
+            object: picker)
+        XCTAssertEqual(XCTWaiter.wait(for: [systemSelected], timeout: 5), .completed)
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(app.buttons["tab-you"].waitForExistence(timeout: 20))
+        app.buttons["tab-you"].tap()
+        let restoredPicker = app.descendants(matching: .any)["appearance-preference"]
+        XCTAssertTrue(restoredPicker.waitForExistence(timeout: 5))
+        let restoredToSystem = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "value == %@", "System"),
+            object: restoredPicker)
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [restoredToSystem], timeout: 5),
+            .completed,
+            "The simulator should be left using System appearance.")
+    }
+
+    func testLanguagePreferenceChangesCopyAndPersists() {
+        let app = launchDemo()
+        XCTAssertTrue(app.buttons["tab-you"].waitForExistence(timeout: 20))
+        app.buttons["tab-you"].tap()
+
+        let picker = app.descendants(matching: .any)["language-preference"]
+        XCTAssertTrue(picker.waitForExistence(timeout: 5))
+        picker.tap()
+        let french = app.buttons["Français"]
+        XCTAssertTrue(french.waitForExistence(timeout: 5))
+        french.tap()
+
+        let selected = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "value == %@", "Français"),
+            object: picker)
+        XCTAssertEqual(XCTWaiter.wait(for: [selected], timeout: 5), .completed)
+        XCTAssertEqual(app.buttons["tab-you"].label, "Toi", "Changing language should update visible copy immediately.")
+
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(app.buttons["tab-you"].waitForExistence(timeout: 20))
+        app.buttons["tab-you"].tap()
+        let restoredPicker = app.descendants(matching: .any)["language-preference"]
+        XCTAssertTrue(restoredPicker.waitForExistence(timeout: 5))
+        XCTAssertEqual(restoredPicker.value as? String, "Français")
+
+        restoredPicker.tap()
+        app.buttons["Suivre la langue de l’iPhone"].tap()
+        app.terminate()
     }
 
     func testPaywallScreenshotRouteIsReachable() {
         let app = launchDemo(route: "paywall")
         XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Plus")).firstMatch.waitForExistence(timeout: 10))
+    }
+
+    func testPhoneCodeRequiresTheDisclosedButtonAction() {
+        let app = launchDemo(route: "phone")
+        XCTAssertTrue(app.textFields["phone-number"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "By tapping Send code")).firstMatch.exists)
+        XCTAssertTrue(app.descendants(matching: .any)["privacy-link"].exists)
+        XCTAssertTrue(app.descendants(matching: .any)["terms-link"].exists)
+
+        let send = app.buttons["send-phone-code"]
+        XCTAssertTrue(send.exists)
+        XCTAssertFalse(send.isEnabled, "A code cannot be sent without a phone number.")
     }
 
     private func launchDemo(dark: Bool = false, route: String? = nil) -> XCUIApplication {

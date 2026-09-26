@@ -1,4 +1,4 @@
-/* Trust Circle — People I trust (outbound sharing only) */
+/* Trust — People I trust (outbound sharing only) */
 
 const OUTBOUND = [
   {

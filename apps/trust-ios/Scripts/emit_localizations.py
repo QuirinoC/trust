@@ -10,8 +10,18 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "Sources/TrustCore/TrustCopy.swift"
+PROJECT = ROOT / "project.yml"
 OVERLAY_DIR = Path(__file__).with_name("overlays")
-LOCALES = ("es", "ja", "zh-Hans", "de", "fr", "ko", "pt-BR")
+LOCALES = ("zh-Hans", "ja", "de", "fr", "pt-BR")
+
+
+def configured_locales() -> tuple[str, ...]:
+    project = PROJECT.read_text(encoding="utf-8")
+    block = re.search(r"CFBundleLocalizations:\s*\n((?:[ \t]+-[^\n]*\n)+)", project)
+    shipped = set(
+        re.findall(r"^[ \t]+-[ \t]+([^\s#]+)", block.group(1), re.MULTILINE)
+    ) if block else set()
+    return tuple(locale for locale in LOCALES if locale in shipped)
 
 
 def defaults() -> dict[str, str]:
@@ -45,15 +55,20 @@ def write_strings(path: Path, entries: dict[str, str]) -> None:
 
 def main() -> int:
     english = defaults()
+    locales = configured_locales()
+    if not locales:
+        print("Trust ships English only; dormant translation overlays were not emitted.")
+        return 0
+
     errors: list[str] = []
     overlays: dict[str, dict[str, str]] = {}
-    for locale in LOCALES:
+    for locale in locales:
         path = OVERLAY_DIR / f"{locale}.json"
         if not path.exists():
             errors.append(f"missing overlay {locale}")
             continue
         overlays[locale] = json.loads(path.read_text(encoding="utf-8"))
-    for locale in LOCALES:
+    for locale in locales:
         table = overlays.get(locale)
         if table is None:
             errors.append(f"missing overlay {locale}")
@@ -68,7 +83,8 @@ def main() -> int:
             continue
         write_strings(ROOT / "Resources" / f"{locale}.lproj" / "Localizable.strings", table)
         info = {
-            "CFBundleDisplayName": "Trust Circle",
+            "CFBundleDisplayName": "Trust",
+            "NSCameraUsageDescription": table["camera_permission"],
             "NSLocationWhenInUseUsageDescription": table["location_when_in_use"],
             "NSLocationAlwaysAndWhenInUseUsageDescription": table["location_always"],
             "NSLocationAlwaysUsageDescription": table["location_always"],

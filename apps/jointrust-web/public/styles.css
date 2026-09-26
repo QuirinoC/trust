@@ -203,6 +203,17 @@ h1 {
   line-height: 1.5;
 }
 
+.invite-fallback {
+  margin-top: 22px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.invite-fallback summary {
+  width: fit-content;
+  cursor: pointer;
+}
+
 ul {
   margin: 28px 0 0;
   padding: 0;

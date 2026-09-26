@@ -12,23 +12,30 @@
     <p>Trust is operated by Collapse Technologies. Contact <a href="mailto:hello@collapsetechnologies.com">hello@collapsetechnologies.com</a>.</p>
     <h2>What we collect</h2>
     <ul>
-        <li>Account identifiers from Sign in with Apple or Google (subject, and a display name when you provide one).</li>
-        <li>A unique handle you choose (letters, numbers, underscore). Completing it is required before the map. Phone number is not collected for onboarding.</li>
-        <li>Location points you send while Sealed or Always. Pause and Stop do not add points. A Look is the current place and notifies the person. History on a person is 24 hours on Free and 30 days on Plus.</li>
+        <li>Account identifiers from Sign in with Apple (subject and a display name when Apple provides one).</li>
+        <li>A unique handle you choose (letters, numbers, underscore). A verified phone number is required to complete onboarding and stays private on your account. Exact handle lookup shows only the handle and never reveals your phone number, Apple display name, profile photo, presence, location, or sharing settings.</li>
+        <li>A profile icon you select, or a photo you choose from your camera or photo library. The app crops and converts photos to JPEG; the API removes embedded image metadata, including GPS and EXIF metadata, before storing them.</li>
+        <li>Connection requests you send or receive, including status and timing. Requests expire after seven days; terminal request metadata is retained for 30 days. Trust does not send SMS or push notifications for connection requests.</li>
+        <li>Location points you send while Sealed or Always. Pause and Stop do not add points. A confirmed Look returns the current place and records a receipt; a notification may be delivered, but delivery is not guaranteed. History on a person is 24 hours on Free and 30 days on Plus.</li>
         <li>Presence without coordinates: Home, Away, or Hidden.</li>
-        <li>Log events (look, view, removed). Neither side can erase a row.</li>
-        <li>Share settings per person (Sealed, Always, Pause, or Stop).</li>
+        <li>Look-event records, including who looked and when. These records do not contain coordinates.</li>
+        <li>Share settings per person (Sealed, Always, Pause, or Off).</li>
         <li>Plus subscription status from StoreKit. We receive an entitlement, not your card number. Plus is this account only.</li>
     </ul>
     <h2>What we do not do</h2>
     <ul>
         <li>We do not sell location. There are no ads and no data brokerage.</li>
-        <li>We do not show coordinates while someone has Stop or Pause, or before a Look when they are Sealed.</li>
+        <li>We do not show coordinates while someone has Off or Pause, or before a Look when they are Sealed. Both share directions start Off after a connection is accepted.</li>
         <li>Looking is never silent. The other person gets a receipt.</li>
     </ul>
     <h2>Retention</h2>
-    <p>Location is kept up to 30 days while you are Sealed, Always, or Paused, then pruned. Stop, or sharing with nobody, drops the trail. Coordinates are stored on our servers. We do not sell them. The log of looks, views, and removals is kept 30 days on Free and one year on Plus.</p>
+    <ul>
+        <li>Location points are retained for up to 30 days while stored. A viewer can read history only while you share Always with them: up to 24 hours for a Free viewer or 30 days for a Plus viewer. If you have no one left you share with, your location is cleared.</li>
+        <li>Only your current profile photo is stored. Replacing it with another photo or a profile icon, or removing it, deletes the previous photo.</li>
+        <li>The app shows the most recent 30 days of the View log on Free and up to one year with Plus. Look-event records remain on the service until account deletion; events outside the View log window are not shown in the app.</li>
+        <li>Handle, share modes, push tokens, and subscription records stay while your account exists. Pending connection requests expire after seven days; terminal request metadata is kept for 30 days.</li>
+    </ul>
     <h2>Account deletion</h2>
-    <p>In Trust, You → Delete account removes your account, location, presence, people, log, and push tokens on this server. Remaining people keep their own accounts.</p>
+    <p>In Trust, You → Delete account removes your account, location, presence, people, connection requests, log, and push tokens on this server. Remaining people keep their own accounts.</p>
     <p><a href="/Terms">Terms of Use</a> · <a href="/Support">Support</a></p>
 </main>

@@ -38,13 +38,17 @@ function inviteLanding(code) {
       <nav class="legal" aria-label="Trust links"><a href="/privacy">Privacy</a></nav>
     </header>
     <main>
-      <h1>You’re invited</h1>
+      <h1>Invitation to connect</h1>
       <div class="rule" aria-hidden="true"></div>
-      <p class="lede">Join your circle on Trust.</p>
-      <p>Open Trust and enter this code to review and accept the invitation.</p>
-      <p class="invite-code" aria-label="Invite code ${escapedCode}">${escapedCode}</p>
+      <p class="lede">You’re invited to connect on Trust.</p>
+      <p>Review the invitation in Trust. Accepting connects your accounts; sharing stays off until you choose a mode.</p>
       <p><a class="invite-action" href="trust://invite/${escapedCode}">Open Trust</a></p>
-      <p class="invite-note">Opening the app does not accept the invitation. You’ll choose whether to join there. If Trust isn’t installed, keep this code and enter it in Trust when available.</p>
+      <p class="invite-note">Opening the app does not accept the invitation. If Trust isn’t installed, use your TestFlight invitation to install it, then open this link again.</p>
+      <details class="invite-fallback">
+        <summary>Need a fallback code?</summary>
+        <p class="invite-code" aria-label="Invite code ${escapedCode}">${escapedCode}</p>
+        <p class="invite-note">If Trust isn’t installed yet, save this code and enter it after installing the app.</p>
+      </details>
       <p class="back"><a href="/">About Trust</a></p>
     </main>
   </body>

@@ -4,25 +4,27 @@
 from __future__ import annotations
 
 import re
+import json
 import sys
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "Sources/TrustCore/TrustCopy.swift"
+PROJECT = ROOT / "project.yml"
+BASELINE = Path(__file__).with_name("localization_source_baseline.json")
 LOCALES = (
-    "es.lproj",
-    "ja.lproj",
     "zh-Hans.lproj",
+    "ja.lproj",
     "de.lproj",
     "fr.lproj",
-    "ko.lproj",
     "pt-BR.lproj",
 )
 ENTRY = re.compile(r'^\s*"([^"]+)"\s*=\s*"((?:\\.|[^"])*)";\s*$')
 FORMAT = re.compile(r"%(?:[-+0-9$.]*)(?:hh|h|ll|l|q|L)?(?:@|[diouxXf])")
 INFOPLIST_REQUIRED = (
     "CFBundleDisplayName",
+    "NSCameraUsageDescription",
     "NSLocationWhenInUseUsageDescription",
     "NSLocationAlwaysAndWhenInUseUsageDescription",
     "NSLocationAlwaysUsageDescription",
@@ -59,11 +61,38 @@ def strings(path: Path) -> dict[str, str]:
 
 
 def main() -> int:
+    project = PROJECT.read_text(encoding="utf-8")
+    localization_block = re.search(
+        r"CFBundleLocalizations:\s*\n((?:[ \t]+-[^\n]*\n)+)",
+        project,
+    )
+    shipped_locales = set(
+        re.findall(r"^[ \t]+-[ \t]+([^\s#]+)", localization_block.group(1), re.MULTILINE)
+    ) if localization_block else set()
+    active_locales = {locale.removesuffix(".lproj") for locale in LOCALES} & shipped_locales
+    if not active_locales:
+        print("Trust ships English only; dormant translation overlays are not emitted or validated.")
+        return 0
+
     expected, defaults = source_keys()
     errors: list[str] = []
 
-    for locale in LOCALES:
-        path = ROOT / "Resources" / locale / "Localizable.strings"
+    try:
+        baseline = json.loads(BASELINE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        baseline = {}
+        errors.append(f"missing or invalid English localization baseline: {error}")
+    for key in sorted(expected):
+        if key not in baseline:
+            errors.append(f"English baseline is missing {key!r}; review translations, then refresh the baseline")
+        elif defaults.get(key) != baseline[key]:
+            errors.append(f"English source changed for {key!r}; update every locale overlay, then run update_localization_baseline.py {key}")
+    stale = set(baseline) - expected
+    for key in sorted(stale):
+        errors.append(f"English baseline has removed key {key!r}; remove it from every overlay, then refresh the baseline")
+
+    for locale in sorted(active_locales):
+        path = ROOT / "Resources" / f"{locale}.lproj" / "Localizable.strings"
         try:
             actual = strings(path)
         except (OSError, ValueError) as error:
@@ -85,8 +114,13 @@ def main() -> int:
             if not actual[key].strip():
                 errors.append(f"{locale}: empty translation for {key!r}")
 
-    for locale in LOCALES:
-        path = ROOT / "Resources" / locale / "InfoPlist.strings"
+        consent = actual.get("phone_consent_details", "")
+        for command in ("STOP", "HELP"):
+            if command not in consent:
+                errors.append(f"{locale}: phone_consent_details must preserve the Twilio {command} command")
+
+    for locale in sorted(active_locales):
+        path = ROOT / "Resources" / f"{locale}.lproj" / "InfoPlist.strings"
         try:
             entries = strings(path)
         except (OSError, ValueError) as error:
@@ -95,14 +129,14 @@ def main() -> int:
         for key in INFOPLIST_REQUIRED:
             if not entries.get(key, "").strip():
                 errors.append(f"{locale}: missing {key}")
-        if entries.get("CFBundleDisplayName") != "Trust Circle":
-            errors.append(f"{locale}: CFBundleDisplayName must stay Trust Circle")
+        if entries.get("CFBundleDisplayName") != "Trust":
+            errors.append(f"{locale}: CFBundleDisplayName must stay Trust")
 
     if errors:
         print("\n".join(errors), file=sys.stderr)
         return 1
 
-    print(f"Validated {len(expected)} keys across {len(LOCALES)} locales.")
+    print(f"Validated {len(expected)} keys across {len(active_locales)} shipped locales.")
     return 0
 
 
