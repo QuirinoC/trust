@@ -50,7 +50,7 @@ struct SharingView: View {
                         .padding(.top, 20)
 
                     if !model.circle.isEmpty {
-                        TrustSectionHeading("People")
+                        TrustSectionHeading(TrustCopy.people)
                             .padding(.top, 30)
                             .padding(.bottom, 4)
                         ForEach(model.circle) { member in
@@ -139,8 +139,8 @@ struct SharingView: View {
     private var presenceSection: some View {
         TrustCard(fill: palette.surface) {
             VStack(alignment: .leading, spacing: 10) {
-                TrustSectionHeading("Your status")
-                Text("Home or Away appears only for people you chose Sealed or Always for. Off, Pause, and Hidden keep your status out of their view.")
+                TrustSectionHeading(TrustCopy.yourStatus)
+                Text(TrustCopy.sharingPresenceExplanation)
                     .trustFont(12)
                     .foregroundStyle(palette.muted)
                     .fixedSize(horizontal: false, vertical: true)
@@ -266,7 +266,7 @@ struct OutboundRow: View {
                 .frame(width: 44, height: 44)
                 .contentShape(Rectangle())
         }
-        .accessibilityLabel("More sharing actions for \(member.firstName)")
+        .accessibilityLabel(TrustCopy.moreSharingActions(member.firstName))
         .accessibilityIdentifier("sharing-actions-\(member.firstName.lowercased())")
     }
 

@@ -675,7 +675,7 @@ public sealed class TrustEngine(ITrustStore store, TimeProvider time)
         }
     }
 
-    public async Task PostHomePresenceAsync(
+    public async Task<bool> PostHomePresenceAsync(
         Guid accountId,
         HomePresenceState state,
         DateTimeOffset? signaledAt,
@@ -693,6 +693,7 @@ public sealed class TrustEngine(ITrustStore store, TimeProvider time)
         }
 
         var previous = await store.GetCurrentHomePresenceAsync(you.Id, cancellationToken);
+        var arrivedHome = state == HomePresenceState.Home && previous?.State != HomePresenceState.Home;
         var changedAt = previous is not null && previous.State == state
             ? previous.LastChangedAt
             : at;
@@ -704,6 +705,8 @@ public sealed class TrustEngine(ITrustStore store, TimeProvider time)
         {
             await ResolvePromisesOnArrivalAsync(you.Id, at, cancellationToken);
         }
+
+        return arrivedHome;
     }
 
     public async Task<HomePromise> CreatePromiseAsync(

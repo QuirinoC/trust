@@ -30,8 +30,8 @@ struct AddSomeoneSection: View {
             if formVisible {
                 TrustCard(fill: palette.surface) {
                     VStack(alignment: .leading, spacing: 11) {
-                        TrustSectionHeading("Send an invite")
-                        Text("Create a link for them to accept. They join before either of you shares.")
+                        TrustSectionHeading(TrustCopy.sendAnInvite)
+                        Text(TrustCopy.inviteCreateBody)
                             .trustFont(13)
                             .foregroundStyle(palette.muted)
                             .fixedSize(horizontal: false, vertical: true)
@@ -56,7 +56,7 @@ struct AddSomeoneSection: View {
                                 if model.isAddingByPhone {
                                     ProgressView().tint(palette.accentOn)
                                 } else {
-                                    Text("Create invite")
+                                    Text(TrustCopy.createInvite)
                                 }
                             }
                             .buttonStyle(TrustFilledButtonStyle(expand: false))
@@ -70,7 +70,7 @@ struct AddSomeoneSection: View {
                             Button {
                                 model.createInvite()
                             } label: {
-                                Label("Create invite link", systemImage: "link")
+                                Label(TrustCopy.createInviteLink, systemImage: "link")
                                     .frame(maxWidth: .infinity)
                             }
                             .buttonStyle(TrustOutlineButtonStyle(compact: true))
@@ -88,8 +88,8 @@ struct AddSomeoneSection: View {
 
                 TrustCard(fill: palette.surface) {
                     VStack(alignment: .leading, spacing: 11) {
-                        TrustSectionHeading("Have an invite code?")
-                        Text("Review the code, then tap Join to accept the invitation.")
+                        TrustSectionHeading(TrustCopy.haveInviteCode)
+                        Text(TrustCopy.inviteAcceptBody)
                             .trustFont(13)
                             .foregroundStyle(palette.muted)
                             .fixedSize(horizontal: false, vertical: true)

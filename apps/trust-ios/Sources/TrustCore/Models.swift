@@ -71,11 +71,15 @@ public struct AvatarDescriptor: Hashable, Codable, Sendable {
         return presetId
     }
 
+    /// Every preset ID that the app can still display, including retired choices
+    /// that may already be saved on a person's profile.
     public static let presetIDs = [
         "fern", "ember", "sky", "ocean", "sunrise", "lavender",
-        "moon", "star", "cloud", "raindrop", "rainbow", "mountain", "river", "meadow",
-        "clover", "bloom", "cherry", "lotus", "mushroom", "seashell", "coral", "butterfly",
-        "hummingbird", "fox", "whale", "koi"
+        "moon", "star", "cloud", "raindrop", "rainbow", "mountain",
+        "river", "meadow", "clover", "bloom", "cherry", "lotus",
+        "mushroom", "seashell", "coral", "butterfly", "hummingbird", "fox",
+        "whale", "koi", "rabbit", "bear", "cat", "dog",
+        "otter", "owl", "turtle", "siamese", "ragdoll", "british-shorthair"
     ]
 
     public var photoVersion: UUID? {

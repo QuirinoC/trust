@@ -58,10 +58,11 @@ public sealed class ApnsClient(HttpClient httpClient, IOptions<ApnsOptions> opti
         && !string.IsNullOrWhiteSpace(options.TeamId)
         && !string.IsNullOrWhiteSpace(options.PrivateKey);
 
-    public async ValueTask<ApnsDeliveryOutcome> SendLookReceiptAsync(
+    public async ValueTask<ApnsDeliveryOutcome> SendNotificationAsync(
         PushDevice device,
         string title,
         string body,
+        string kind,
         CancellationToken cancellationToken)
     {
         if (!IsConfigured)
@@ -86,9 +87,9 @@ public sealed class ApnsClient(HttpClient httpClient, IOptions<ApnsOptions> opti
                         ["alert"] = new { title, body },
                         ["sound"] = "default",
                         ["interruption-level"] = "active",
-                        ["thread-id"] = "trust.look"
+                        ["thread-id"] = "trust." + kind
                     },
-                    trust = new { kind = "look" }
+                    trust = new { kind }
                 }),
                 Encoding.UTF8,
                 "application/json")

@@ -1,0 +1,14 @@
+# Trust localization
+
+English remains the source language. The iOS app now includes five additional storefront languages: Simplified Chinese (`zh-Hans`), Japanese (`ja`), German (`de`), French (`fr`), and Brazilian Portuguese (`pt-BR`). This selection maps to China, Japan, Germany, France, and Brazil, all among AppMagic's top-ten 2025 non-gaming app-revenue countries; English serves the United States, United Kingdom, Canada, and Australia. This is an industry-level starting point, not a Trust-specific revenue forecast. Use Trust's App Store Connect territory data to refine priorities as it becomes available. ([AppMagic Mobile Market Landscape 2026](https://appmagic.rocks/files/view/upload/Reports/EN_MobileMarkeLandscape2026.pdf); [Apple localization guidance](https://developer.apple.com/localization/))
+
+This machine-translated first pass covers all 411 current app-copy keys, including interface labels, consent and sharing explanations, accessibility labels, avatar names, appearance settings, and camera/location purpose strings. Look and Home push notifications remain in English so current TestFlight installs, which do not contain these locale keys, keep receiving readable alerts. Add a push-capability handshake before localizing server-generated alerts. The key coverage and format-placeholder validator passes for all five locales; that validates structure, not linguistic quality. `Sources/TrustCore/TrustCopy.swift` is the copy source of truth. Locale overlays live in `apps/trust-ios/Scripts/overlays/`; `emit_localizations.py` generates each locale's `Localizable.strings` and `InfoPlist.strings`. Do not edit generated files by hand.
+
+Before enabling these locales for a public release:
+
+- Have native speakers review every screen and especially phone verification, consent, sharing modes, location permissions, subscription, privacy, and safety language. Apple specifically advises native-speaker review when machine translation is used.
+- Localize and review the website's Terms, Privacy, and Support pages, App Store descriptions/screenshots, and customer support macros. The current pass does not declare these surfaces localized.
+- Verify localization in the iOS Simulator for each locale and both appearance modes; inspect long German/French strings, Chinese/Japanese line wrapping, Dynamic Type, VoiceOver labels, dates, times, units, and prices.
+- Read product metrics by storefront (product-page views, downloads, proceeds, conversion, and retention) and adjust priorities from observed Trust data rather than assuming a permanent market ranking.
+
+Run `python3 apps/trust-ios/Scripts/emit_localizations.py` followed by `python3 apps/trust-ios/Scripts/validate_localizations.py` after changing source copy or overlays. The validator checks key coverage, format placeholders, translated Info.plist purpose strings, and that SMS consent retains Twilio's literal `STOP` and `HELP` commands.

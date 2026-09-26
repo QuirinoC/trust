@@ -3,6 +3,27 @@ import TrustCore
 import UIKit
 
 enum ProfileAvatarArtwork {
+    /// The current picker catalog. `AvatarDescriptor.presetIDs` intentionally
+    /// remains broader so saved legacy choices continue to render.
+    static let pickerGroups: [(title: String, ids: [String])] = [
+        (TrustCopy.sleepyAnimals, ["fox", "rabbit", "bear", "cat", "dog", "otter", "owl", "turtle", "siamese", "ragdoll", "british-shorthair"])
+    ]
+
+    static var pickerPresetIDs: [String] { pickerGroups.flatMap(\.ids) }
+
+    static let paper = Color(red: 0.99, green: 0.98, blue: 0.95)
+
+    static func isSleepyPreset(_ id: String) -> Bool {
+        pickerPresetIDs.contains(id)
+    }
+
+    /// Generated source art has a consistent quiet margin; enlarge it once at
+    /// display time so the subject fills the same circular frame in every view.
+    static func displayScale(for id: String) -> CGFloat {
+        guard isSleepyPreset(id) else { return 1 }
+        return id == "owl" ? 1.43 : 1.28
+    }
+
     static func assetName(for preset: String) -> String {
         switch preset {
         case "fern": "AvatarFern"
@@ -31,12 +52,22 @@ enum ProfileAvatarArtwork {
         case "fox": "AvatarFox"
         case "whale": "AvatarWhale"
         case "koi": "AvatarKoi"
+        case "rabbit": "AvatarRabbit"
+        case "bear": "AvatarBear"
+        case "cat": "AvatarCat"
+        case "dog": "AvatarDog"
+        case "otter": "AvatarOtter"
+        case "owl": "AvatarOwl"
+        case "turtle": "AvatarTurtle"
+        case "siamese": "AvatarSiamese"
+        case "ragdoll": "AvatarRagdoll"
+        case "british-shorthair": "AvatarBritishShorthair"
         default: "AvatarFern"
         }
     }
 
     static func title(for preset: String) -> String {
-        preset.prefix(1).uppercased() + preset.dropFirst()
+        TrustCopy.avatarTitle(for: preset)
     }
 }
 
@@ -100,9 +131,13 @@ struct TrustAvatar: View {
             .resizable()
             .scaledToFill()
             .frame(width: size, height: size)
+            .scaleEffect(ProfileAvatarArtwork.displayScale(for: preset))
     }
 
     private var avatarFill: Color {
+        if let preset = avatar?.knownPresetID, ProfileAvatarArtwork.isSleepyPreset(preset) {
+            return ProfileAvatarArtwork.paper
+        }
         switch abs(seed) % 4 {
         case 0: return palette.accentSoft
         case 1: return palette.sage

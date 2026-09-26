@@ -106,11 +106,12 @@ final class AppModel: ObservableObject {
     @Published private var presenceOverride: HomePresenceKind?
 
     @Published var phoneDraft = ""
-    @Published var phoneConsentChecked = false
     @Published var phoneCodeDraft = ""
     @Published var phoneNotice: String?
+    @Published var phoneNoticeIsConflict = false
     @Published var phoneCodeSent = false
     @Published var isSendingPhone = false
+    private var phoneSendGeneration: UInt64 = 0
 
     @Published var addPhoneDraft = ""
     @Published private(set) var isAddingByPhone = false
@@ -448,7 +449,14 @@ final class AppModel: ObservableObject {
         stopDemo()
         do {
             await client.prepare()
-            let deviceId = UIDevice.current.identifierForVendor?.uuidString ?? "trust-debug-simulator"
+            let deviceId: String
+            if isUITestLaunch,
+               let testDeviceID = ProcessInfo.processInfo.environment["TRUST_UI_TEST_DEVICE_ID"],
+               !testDeviceID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                deviceId = testDeviceID
+            } else {
+                deviceId = UIDevice.current.identifierForVendor?.uuidString ?? "trust-debug-simulator"
+            }
             let session = try await client.developmentSession(displayName: "Dev", deviceId: deviceId)
             auth.persist(
                 account: AuthAccount(
@@ -458,7 +466,9 @@ final class AppModel: ObservableObject {
                 ),
                 token: client.token ?? ""
             )
-            if session.you.onboardingComplete != true, session.you.handle == nil {
+            if session.you.onboardingComplete != true,
+               session.you.handle == nil,
+               !isUITestLaunch {
                 try await claimDebugHandle(deviceId: deviceId)
             }
             await refresh(enterHome: true, fallbackOnboardingComplete: true)
@@ -574,7 +584,11 @@ final class AppModel: ObservableObject {
     }
 
     func saveAvatar(presetID: String) async throws {
-        guard !isDemoMode else { throw TrustClientError.server("Profile pictures are unavailable in demo mode.") }
+        if isDemoMode {
+            demo?.setMyAvatar(.preset(presetID))
+            publishDemoSnapshot()
+            return
+        }
         let avatar = try await client.setAvatarPreset(presetID)
         updateLocalAvatar(avatar)
         await refresh()
@@ -588,7 +602,11 @@ final class AppModel: ObservableObject {
     }
 
     func removeAvatar() async throws {
-        guard !isDemoMode else { throw TrustClientError.server("Profile pictures are unavailable in demo mode.") }
+        if isDemoMode {
+            demo?.setMyAvatar(nil)
+            publishDemoSnapshot()
+            return
+        }
         try await client.removeAvatar()
         updateLocalAvatar(nil)
         await refresh()
@@ -1318,25 +1336,44 @@ final class AppModel: ObservableObject {
 
     func sendPhoneCode() async {
         phoneNotice = nil
-        guard phoneConsentChecked else { return }
+        phoneNoticeIsConflict = false
         let phone = phoneDraft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !phone.isEmpty, !isSendingPhone else {
             if phone.isEmpty { phoneNotice = TrustCopy.enterPhone }
             return
         }
         guard requireOnline() else { return }
+        phoneSendGeneration &+= 1
+        let generation = phoneSendGeneration
         isSendingPhone = true
-        defer { isSendingPhone = false }
+        defer {
+            if generation == phoneSendGeneration {
+                isSendingPhone = false
+            }
+        }
         do {
             let sent = try await client.sendPhoneCode(phone: phone)
+            guard generation == phoneSendGeneration,
+                  phoneDraft.trimmingCharacters(in: .whitespacesAndNewlines) == phone else { return }
             phoneCodeSent = true
             phoneNotice = sent.developmentCode.map(TrustCopy.developmentPhoneCode)
         } catch {
+            guard generation == phoneSendGeneration,
+                  phoneDraft.trimmingCharacters(in: .whitespacesAndNewlines) == phone else { return }
             phoneNotice = plainMessage(for: error)
+            phoneNoticeIsConflict = ["phone_unavailable", "phone_in_use"].contains((error as? TrustClientError)?.apiCode ?? "")
         }
     }
 
+    /// Invalidates any outstanding send when the user leaves phone verification.
+    /// A response for an older phone choice must not reopen code entry.
+    func cancelPendingPhoneSend() {
+        phoneSendGeneration &+= 1
+        isSendingPhone = false
+    }
+
     func verifyPhoneCode() async {
+        phoneNoticeIsConflict = false
         let phone = phoneDraft.trimmingCharacters(in: .whitespacesAndNewlines)
         let code = phoneCodeDraft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !phone.isEmpty, !code.isEmpty, !isSendingPhone else {
@@ -1352,16 +1389,17 @@ final class AppModel: ObservableObject {
             await finishOnboardingIfComplete()
         } catch {
             phoneNotice = plainMessage(for: error)
+            phoneNoticeIsConflict = ["phone_unavailable", "phone_in_use"].contains((error as? TrustClientError)?.apiCode ?? "")
         }
     }
 
     private func resetPhoneDraft() {
+        cancelPendingPhoneSend()
         phoneDraft = ""
-        phoneConsentChecked = false
         phoneCodeDraft = ""
         phoneNotice = nil
+        phoneNoticeIsConflict = false
         phoneCodeSent = false
-        isSendingPhone = false
     }
 
     private func beginOnboarding() {
@@ -1620,22 +1658,31 @@ final class AppModel: ObservableObject {
 
     private func flushIngestQueue() async {
         guard isSharingLocation, location.hasAccess, auth.isAuthenticated, !isDemoMode, !isFlushingIngest else { return }
-        let pending = ingestStore.points
-        guard !pending.isEmpty else { return }
+        guard !ingestStore.points.isEmpty else { return }
         isFlushingIngest = true
         defer { isFlushingIngest = false }
         let device = UIDevice.current
-        do {
-            try await client.ingest(
-                points: pending,
-                battery: Int(device.batteryLevel * 100),
-                charging: device.batteryState == .charging || device.batteryState == .full
-            )
-            ingestStore.removePrefix(pending.count)
-        } catch TrustClientError.unauthorized {
-            signOut()
-        } catch {
-            // Keep pending points; the next fix or refresh retries.
+        while isSharingLocation, location.hasAccess, auth.isAuthenticated, !Task.isCancelled {
+            let points = ingestStore.nextBatch()
+            guard !points.isEmpty else { return }
+            do {
+                try await client.ingest(
+                    points: points,
+                    battery: Int(device.batteryLevel * 100),
+                    charging: device.batteryState == .charging || device.batteryState == .full
+                )
+                // A cancellation or failed request must leave this batch queued.
+                try Task.checkCancellation()
+                ingestStore.removePrefix(points.count)
+            } catch is CancellationError {
+                return
+            } catch TrustClientError.unauthorized {
+                signOut()
+                return
+            } catch {
+                // Keep this and every later batch; the next fix or refresh retries.
+                return
+            }
         }
     }
 }

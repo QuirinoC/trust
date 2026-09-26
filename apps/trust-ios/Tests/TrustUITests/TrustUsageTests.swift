@@ -132,17 +132,85 @@ final class TrustUsageTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["location-permission-status"].exists)
         app.buttons["Done"].tap()
         app.buttons["edit-profile-picture"].tap()
-        XCTAssertTrue(app.buttons["avatar-choose-photo"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.buttons["avatar-take-photo"].exists)
-        app.buttons["Fern icon"].tap()
+        XCTAssertTrue(app.buttons["avatar-photo-options"].waitForExistence(timeout: 5))
+        app.buttons["Fox icon"].tap()
         XCTAssertTrue(app.buttons["avatar-save"].isEnabled)
-        app.buttons["Cancel"].tap()
-        XCTAssertTrue(app.descendants(matching: .any)["support-link"].exists)
+        app.buttons["avatar-save"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["support-link"].waitForExistence(timeout: 5))
+    }
+
+    func testAppearancePreferencePersistsAcrossRelaunch() {
+        let app = launchDemo()
+        XCTAssertTrue(app.buttons["tab-you"].waitForExistence(timeout: 20))
+        app.buttons["tab-you"].tap()
+
+        for option in ["System", "Light", "Dark"] {
+            let picker = app.descendants(matching: .any)["appearance-preference"]
+            XCTAssertTrue(picker.waitForExistence(timeout: 5), "The appearance picker should be available in You.")
+            picker.tap()
+            let choice = app.buttons[option]
+            XCTAssertTrue(choice.waitForExistence(timeout: 5), "The picker should offer the \(option) appearance.")
+            choice.tap()
+            let selectionApplied = XCTNSPredicateExpectation(
+                predicate: NSPredicate(format: "value == %@", option),
+                object: picker)
+            XCTAssertEqual(
+                XCTWaiter.wait(for: [selectionApplied], timeout: 5),
+                .completed,
+                "The picker should reflect the selected appearance.")
+
+            app.terminate()
+            app.launch()
+            XCTAssertTrue(app.buttons["tab-you"].waitForExistence(timeout: 20))
+            app.buttons["tab-you"].tap()
+            let relaunchedPicker = app.descendants(matching: .any)["appearance-preference"]
+            XCTAssertTrue(relaunchedPicker.waitForExistence(timeout: 5))
+            let preferenceRestored = XCTNSPredicateExpectation(
+                predicate: NSPredicate(format: "value == %@", option),
+                object: relaunchedPicker)
+            XCTAssertEqual(
+                XCTWaiter.wait(for: [preferenceRestored], timeout: 5),
+                .completed,
+                "\(option) should persist after restarting the app.")
+        }
+
+        let picker = app.descendants(matching: .any)["appearance-preference"]
+        picker.tap()
+        app.buttons["System"].tap()
+        let systemSelected = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "value == %@", "System"),
+            object: picker)
+        XCTAssertEqual(XCTWaiter.wait(for: [systemSelected], timeout: 5), .completed)
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(app.buttons["tab-you"].waitForExistence(timeout: 20))
+        app.buttons["tab-you"].tap()
+        let restoredPicker = app.descendants(matching: .any)["appearance-preference"]
+        XCTAssertTrue(restoredPicker.waitForExistence(timeout: 5))
+        let restoredToSystem = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "value == %@", "System"),
+            object: restoredPicker)
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [restoredToSystem], timeout: 5),
+            .completed,
+            "The simulator should be left using System appearance.")
     }
 
     func testPaywallScreenshotRouteIsReachable() {
         let app = launchDemo(route: "paywall")
         XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Plus")).firstMatch.waitForExistence(timeout: 10))
+    }
+
+    func testPhoneCodeRequiresTheDisclosedButtonAction() {
+        let app = launchDemo(route: "phone")
+        XCTAssertTrue(app.textFields["phone-number"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "By tapping Send code")).firstMatch.exists)
+        XCTAssertTrue(app.links["Privacy"].exists)
+        XCTAssertTrue(app.links["Terms"].exists)
+
+        let send = app.buttons["send-phone-code"]
+        XCTAssertTrue(send.exists)
+        XCTAssertFalse(send.isEnabled, "A code cannot be sent without a phone number.")
     }
 
     private func launchDemo(dark: Bool = false, route: String? = nil) -> XCUIApplication {

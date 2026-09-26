@@ -18,11 +18,13 @@ import sys
 import urllib.error
 import urllib.request
 import uuid
+from urllib.parse import urlsplit
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
 BASE = os.environ.get("TRUST_API_BASE", "http://127.0.0.1:5088").rstrip("/")
 PG_CONTAINER = os.environ.get("TRUST_PG_CONTAINER", "trust-api-postgres-1")
+CREATED_SESSIONS: list[tuple[str, str]] = []
 
 PASS = 0
 FAIL = 0
@@ -104,7 +106,26 @@ def session(name: str, device: str) -> dict[str, Any]:
         expect=200,
     )
     assert body and body.get("token") and body.get("you", {}).get("id")
+    CREATED_SESSIONS.append((body["you"]["id"], body["token"]))
     return body
+
+
+def cleanup_sessions() -> None:
+    """Delete every disposable account created by this run, even after a failed assertion."""
+    failures: list[str] = []
+    for account_id, token in reversed(CREATED_SESSIONS):
+        try:
+            status, _ = req("DELETE", "/api/v1/account", token=token)
+            if status not in (204, 404):
+                failures.append(f"account cleanup returned {status}")
+        except Exception as exc:  # noqa: BLE001
+            failures.append(f"account cleanup failed: {type(exc).__name__}")
+    if failures:
+        print(f"[WARN] cleanup: {len(failures)} disposable account(s) could not be deleted", file=sys.stderr)
+
+
+def forget_session(account_id: str) -> None:
+    CREATED_SESSIONS[:] = [item for item in CREATED_SESSIONS if item[0] != account_id]
 
 
 def circle(token: str) -> dict[str, Any]:
@@ -131,6 +152,11 @@ def grant_plus(token: str) -> None:
 
 
 def main() -> int:
+    parsed_base = urlsplit(BASE)
+    if parsed_base.hostname not in {"127.0.0.1", "localhost", "::1"}:
+        print("Refusing to run destructive E2E checks against a non-loopback API host.", file=sys.stderr)
+        return 2
+
     suffix = uuid.uuid4().hex[:10]
     print(f"BASE={BASE} suffix={suffix}")
 
@@ -140,6 +166,29 @@ def main() -> int:
     jordan_id = jordan["you"]["id"]
     sam_tok = sam["token"]
     jordan_tok = jordan["token"]
+
+    unauth_status, _ = req("GET", "/api/v1/circle")
+    check("setup", "circle endpoint requires authentication", unauth_status == 401, f"status={unauth_status}")
+    initial_sam = circle(sam_tok)
+    initial_jordan = circle(jordan_tok)
+    check(
+        "setup",
+        "accounts are not connected before invite acceptance",
+        not any(m["person"]["id"] == jordan_id for m in initial_sam["members"])
+        and not any(m["person"]["id"] == sam_id for m in initial_jordan["members"]),
+    )
+    invalid_invite_status, invalid_invite = req(
+        "POST", "/api/v1/invites/accept", token=jordan_tok, body={"code": "INVALID0"}
+    )
+    check(
+        "setup",
+        "invalid invite code is rejected without creating a connection",
+        invalid_invite_status == 400
+        and isinstance(invalid_invite, dict)
+        and invalid_invite.get("code") == "invalid_code"
+        and not any(m["person"]["id"] == sam_id for m in circle(jordan_tok)["members"]),
+        f"status={invalid_invite_status} body={invalid_invite}",
+    )
 
     _, invite = req("POST", "/api/v1/invites", token=sam_tok, expect=200)
     code = invite["code"]
@@ -151,6 +200,19 @@ def main() -> int:
         "pair exists after invite/accept",
         any(m["person"]["id"] == sam_id for m in j_circ["members"]),
         f"members={len(j_circ['members'])}",
+    )
+    sam_member = member(circle(sam_tok), jordan_id)
+    jordan_member = member(j_circ, sam_id)
+    check(
+        "setup",
+        "new connection starts Off in both sharing directions",
+        sam_member["inboundShare"]["presentation"] == "off"
+        and jordan_member["inboundShare"]["presentation"] == "off"
+        and sam_member["inboundLive"] is False
+        and jordan_member["inboundLive"] is False
+        and sam_member.get("live") is None
+        and jordan_member.get("live") is None,
+        f"sam={sam_member['inboundShare']['presentation']} jordan={jordan_member['inboundShare']['presentation']}",
     )
     check(
         "setup",
@@ -395,6 +457,18 @@ def main() -> int:
     )
 
     # --- 3 Timed Pause 1h ---
+    # Development may seed this disposable account with other review-circle peers. Turn
+    # those edges Off so this assertion isolates the Jordan edge and account-wide ingest.
+    for row in circle(sam_tok)["members"]:
+        if row["person"]["id"] == jordan_id:
+            continue
+        req(
+            "PATCH",
+            f"/api/v1/people/{row['person']['id']}/share",
+            token=sam_tok,
+            body={"resting": "off", "pause": None, "timed": None},
+            expect=204,
+        )
     req(
         "PATCH",
         f"/api/v1/people/{jordan_id}/share",
@@ -428,6 +502,32 @@ def main() -> int:
         "viewer cannot peek (Look) during pause",
         pause_look_status >= 400,
         f"status={pause_look_status} body={pause_look}",
+    )
+    before_pause_count = psql(
+        f"SELECT count(*)::text FROM trust.location_points WHERE account_id = '{sam_id}';"
+    )
+    req(
+        "POST",
+        "/api/v1/location",
+        token=sam_tok,
+        body={
+            "timestamp": iso(utcnow()),
+            "latitude": 37.888,
+            "longitude": -122.488,
+            "batteryPercent": 72,
+            "isCharging": False,
+            "points": None,
+        },
+        expect=204,
+    )
+    during_pause_count = psql(
+        f"SELECT count(*)::text FROM trust.location_points WHERE account_id = '{sam_id}';"
+    )
+    check(
+        "3 Pause",
+        "location ingest during Pause stores no new coordinates",
+        before_pause_count == during_pause_count,
+        f"point_count={before_pause_count}->{during_pause_count}",
     )
 
     # Advance pause_until into the past; GET /circle runs RestoreExpiredPausesAsync
@@ -746,6 +846,7 @@ def main() -> int:
         before_del == "1" and after_del == "0" and acct == "0",
         f"presence {before_del}->{after_del} account_rows={acct}",
     )
+    forget_session(clyde_id)
 
     print()
     print("=" * 72)
@@ -763,8 +864,12 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    exit_code = 0
     try:
-        sys.exit(main())
+        exit_code = main()
     except Exception as exc:  # noqa: BLE001
         print(f"FATAL: {exc}", file=sys.stderr)
-        sys.exit(2)
+        exit_code = 2
+    finally:
+        cleanup_sessions()
+    sys.exit(exit_code)

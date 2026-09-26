@@ -5,6 +5,7 @@ import TrustCore
 struct YouView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.trustPalette) private var palette
+    @AppStorage(TrustAppearance.storageKey) private var appearance = TrustAppearance.system.rawValue
     @State private var showingDeleteAccount = false
     @State private var showingAvatarPicker = false
     @State private var showingLocation = false
@@ -26,7 +27,12 @@ struct YouView: View {
                     plusCard
                         .padding(.bottom, 22)
 
-                    TrustSectionHeading("Account")
+                    TrustSectionHeading(TrustCopy.preferences)
+                        .padding(.bottom, 4)
+                    appearanceRow
+                        .padding(.bottom, 18)
+
+                    TrustSectionHeading(TrustCopy.account)
                         .padding(.bottom, 4)
                     Button(TrustCopy.signOut) { model.signOut() }
                         .buttonStyle(TrustTextButtonStyle())
@@ -53,7 +59,7 @@ struct YouView: View {
         .sheet(isPresented: $showingAvatarPicker) {
             ProfileAvatarPicker()
                 .environmentObject(model)
-                .presentationDetents([.large])
+                .presentationDetents([.medium, .large])
         }
         .sheet(isPresented: $showingLocation) {
             locationSheet
@@ -97,10 +103,50 @@ struct YouView: View {
 
     // MARK: Profile and personal settings
 
+    private var appearanceRow: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "circle.lefthalf.filled")
+                .font(.system(size: 18))
+                .foregroundStyle(palette.accent)
+                .frame(width: 28)
+                .accessibilityHidden(true)
+            Text(TrustCopy.appearance)
+                .trustFont(15, weight: .medium)
+                .foregroundStyle(palette.ink)
+            Spacer(minLength: 8)
+            Picker("Appearance", selection: $appearance) {
+                ForEach(TrustAppearance.allCases) { option in
+                    Text(option.title).tag(option.rawValue)
+                }
+            }
+            .pickerStyle(.menu)
+            .tint(palette.muted)
+            .accessibilityLabel(TrustCopy.appearance)
+            .accessibilityValue((TrustAppearance(rawValue: appearance) ?? .system).title)
+            .accessibilityIdentifier("appearance-preference")
+        }
+        .padding(.horizontal, 14)
+        .frame(minHeight: 52)
+        .background(RoundedRectangle(cornerRadius: TrustTheme.controlRadius, style: .continuous).fill(palette.surface))
+    }
+
     private var profileCard: some View {
         TrustCard(fill: palette.surface) {
             VStack(spacing: 7) {
-                TrustAvatar(name: model.you.displayName, seed: 0, size: 96, avatar: model.you.avatar, personID: model.you.id)
+                Button { showingAvatarPicker = true } label: {
+                    TrustAvatar(name: model.you.displayName, seed: 0, size: 96, avatar: model.you.avatar, personID: model.you.id)
+                        .overlay(alignment: .bottomTrailing) {
+                            Image(systemName: "camera.fill")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(palette.accentOn)
+                                .frame(width: 30, height: 30)
+                                .background(Circle().fill(palette.accent))
+                                .overlay(Circle().stroke(palette.surface, lineWidth: 3))
+                        }
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(TrustCopy.editProfilePicture)
+                .accessibilityIdentifier("edit-profile-picture")
                 Text(model.you.displayName)
                     .font(TrustTheme.display(23))
                     .tracking(-0.6)
@@ -110,9 +156,9 @@ struct YouView: View {
                         .font(TrustTheme.ui(13))
                         .foregroundStyle(palette.muted)
                 }
-                Button("Edit picture") { showingAvatarPicker = true }
-                    .buttonStyle(TrustTextButtonStyle(color: palette.accent))
-                    .accessibilityIdentifier("edit-profile-picture")
+                Text(TrustCopy.changePictureTip)
+                    .trustFont(12)
+                    .foregroundStyle(palette.muted)
             }
             .frame(maxWidth: .infinity)
         }
@@ -126,10 +172,10 @@ struct YouView: View {
                     .foregroundStyle(palette.accent)
                     .frame(width: 34)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("My location")
+                    Text(TrustCopy.myLocation)
                         .trustFont(16, weight: .semibold)
                         .foregroundStyle(palette.ink)
-                    Text(model.location.homeIsSet ? "Home set on this phone" : "Location access: \(model.location.statusLabel)")
+                    Text(model.location.homeIsSet ? TrustCopy.homeSetOnThisPhone : TrustCopy.locationAccessStatus(model.location.statusLabel))
                         .trustFont(12)
                         .foregroundStyle(palette.muted)
                 }
@@ -149,7 +195,7 @@ struct YouView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 25) {
-                    Text("Your Home place stays on this phone. In Sharing, choose each person's location mode and your Home, Away, or Hidden status.")
+                    Text(TrustCopy.homePlacePrivacy)
                         .trustFont(13)
                         .foregroundStyle(palette.muted)
                         .fixedSize(horizontal: false, vertical: true)
@@ -160,7 +206,7 @@ struct YouView: View {
                 .trustReadableWidth()
             }
             .background(palette.paper.ignoresSafeArea())
-            .navigationTitle("My location")
+            .navigationTitle(TrustCopy.myLocation)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
@@ -172,7 +218,7 @@ struct YouView: View {
 
     private var locationPermissionSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            TrustSectionHeading("Location permission")
+            TrustSectionHeading(TrustCopy.locationPermissionHeading)
             Text("\(model.location.statusLabel) · \(model.location.accuracyLabel)")
                 .trustFont(13, weight: .semibold)
                 .foregroundStyle(palette.ink)
@@ -241,7 +287,7 @@ struct YouView: View {
                 }
                 Spacer(minLength: 4)
                 if model.coverage.isCovered {
-                    Link("Manage", destination: StoreManager.manageSubscriptionsURL)
+                    Link(TrustCopy.manage, destination: StoreManager.manageSubscriptionsURL)
                         .font(TrustTheme.ui(13, weight: .medium))
                         .foregroundStyle(palette.accent)
                         .frame(minHeight: 44)

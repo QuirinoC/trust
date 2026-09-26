@@ -39,7 +39,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.collapsetechnologies.trust
         PRODUCT_NAME: Trust
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        CURRENT_PROJECT_VERSION: 24
+        CURRENT_PROJECT_VERSION: 27
         MARKETING_VERSION: 1.0
         ENABLE_USER_SCRIPT_SANDBOXING: YES
         SWIFT_STRICT_CONCURRENCY: targeted
@@ -52,10 +52,14 @@ targets:
       properties:
         CFBundleDisplayName: Trust
         CFBundleDevelopmentRegion: en
-        # English-only 1.0. Non-EN .lproj were removed in M0; regenerate later with
-        # Scripts/emit_localizations.py if localization returns post-1.0.
+        # In-app localization supported by the current release.
         CFBundleLocalizations:
           - en
+          - zh-Hans
+          - ja
+          - de
+          - fr
+          - pt-BR
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         LSApplicationCategoryType: public.app-category.lifestyle
         UIApplicationSupportsIndirectInputEvents: true

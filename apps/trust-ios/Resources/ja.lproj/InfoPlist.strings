@@ -1,0 +1,6 @@
+"CFBundleDisplayName" = "Trust";
+"NSCameraUsageDescription" = "プロフィール写真を設定するために「写真を撮る」を選んだときだけ、Trustはカメラを使用します。";
+"NSLocationAlwaysAndWhenInUseUsageDescription" = "Trustは位置情報を預かり、バックグラウンドでも保持します。信頼できる大人の相手が「見る」とあなたを見つけられます。確認するまで相手には見えず、あなたに通知されます。Trustは位置情報を販売しません。";
+"NSLocationAlwaysUsageDescription" = "Trustは位置情報を預かり、バックグラウンドでも保持します。信頼できる大人の相手が「見る」とあなたを見つけられます。確認するまで相手には見えず、あなたに通知されます。Trustは位置情報を販売しません。";
+"NSLocationWhenInUseUsageDescription" = "Trustは、アプリを開いているあいだ位置情報を使い、地図上の自分と、共有している人を見るために使います。Trustは位置情報を販売しません。";
+"PreciseEscrow" = "Trustは、信頼できる大人の相手が「見る」ときに見つけられるよう、正確な位置情報が必要です。おおよその位置では預かりに足りません。";

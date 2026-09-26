@@ -51,7 +51,7 @@ public sealed class LookReceiptPublisher(
         {
             try
             {
-                var outcome = await apns.SendLookReceiptAsync(device, title, body, cancellationToken);
+                var outcome = await apns.SendNotificationAsync(device, title, body, kind, cancellationToken);
                 if (outcome.Result == ApnsDeliveryResult.InvalidToken)
                 {
                     await devices.InvalidateTokenAsync(device.Token, cancellationToken);
@@ -88,6 +88,15 @@ public sealed class LookReceiptPublisher(
         var timeLabel = DateTimeOffset.UtcNow.ToOffset(TimeSpan.Zero).ToString("h:mm tt");
         foreach (var person in connected)
         {
+            // A presence grant does not override a person's current location mode.
+            // Off and active Pause must not leak Home through a notification when
+            // the same Home state is hidden from the connected person's circle.
+            var share = await store.GetShareAsync(subjectId, person.Id, cancellationToken);
+            if (!share.AcceptsLocation(DateTimeOffset.UtcNow))
+            {
+                continue;
+            }
+
             var grant = await store.GetPresenceGrantAsync(subjectId, person.Id, cancellationToken);
             if (grant?.Enabled != true)
             {

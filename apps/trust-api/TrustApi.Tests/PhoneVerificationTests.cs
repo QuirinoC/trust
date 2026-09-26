@@ -157,6 +157,27 @@ public sealed class PhoneVerificationTests
     }
 
     [Fact]
+    public async Task VerifiedPhoneOnAnotherAccountIsRejectedBeforeSms()
+    {
+        var store = new MemoryTrustStore();
+        var engine = new TrustEngine(store, TimeProvider.System);
+        var owner = await engine.SignInAsync("development", "otp-owner", "Sam", CancellationToken.None);
+        var newcomer = await engine.SignInAsync("development", "otp-newcomer", "Alex", CancellationToken.None);
+        var sms = new RecordingSms();
+        var phones = NewPhones(store, sms, NullLogger<PhoneVerificationService>.Instance, Environments.Development);
+        const string phone = "+15555550167";
+
+        await store.SetVerifiedPhoneAsync(owner.Id, phone, DateTimeOffset.UtcNow, CancellationToken.None);
+        var exception = await Assert.ThrowsAsync<TrustException>(() =>
+            phones.SendAsync(newcomer.Id, phone, CancellationToken.None));
+
+        Assert.Equal("phone_unavailable", exception.Code);
+        Assert.Equal(0, sms.Sends);
+        Assert.Null(await store.GetPhoneChallengeAsync(newcomer.Id, CancellationToken.None));
+        Assert.Null(await store.GetSmsSendBudgetAsync(SmsSendBudget.AccountKey(newcomer.Id), CancellationToken.None));
+    }
+
+    [Fact]
     public async Task ProductionWithoutTwilioDoesNotBypass()
     {
         var store = new MemoryTrustStore();
@@ -197,12 +218,9 @@ public sealed class PhoneVerificationTests
         var sent = await phones.SendAsync(first.Id, "+15555550127", CancellationToken.None);
         await phones.VerifyAsync(first.Id, "+15555550127", sent.DevelopmentCode!, CancellationToken.None);
 
-        clock.UtcNow = clock.UtcNow.AddSeconds(PhoneVerificationService.ResendCooldownSeconds);
-        var duplicatePhoneChallenge = await phones.SendAsync(second.Id, "+15555550127", CancellationToken.None);
-        Assert.False(string.IsNullOrWhiteSpace(duplicatePhoneChallenge.DevelopmentCode));
         var exception = await Assert.ThrowsAsync<TrustException>(() =>
-            phones.VerifyAsync(second.Id, "+15555550127", duplicatePhoneChallenge.DevelopmentCode, CancellationToken.None));
-        Assert.Equal("phone_in_use", exception.Code);
+            phones.SendAsync(second.Id, "+15555550127", CancellationToken.None));
+        Assert.Equal("phone_unavailable", exception.Code);
         Assert.False((await store.FindAccountAsync(second.Id, CancellationToken.None))!.HasVerifiedPhone);
     }
 

@@ -40,7 +40,7 @@ struct LookConfirmSheet: View {
 
                 (Text(TrustCopy.thenOneSnapshot).fontWeight(.semibold).foregroundColor(palette.ink)
                     + Text("\n")
-                    + Text("Trust records this Look. A notification may be delivered.").foregroundColor(palette.muted))
+                    + Text(TrustCopy.lookNotificationNote).foregroundColor(palette.muted))
                     .trustFont(15)
                     .lineSpacing(5)
                     .fixedSize(horizontal: false, vertical: true)

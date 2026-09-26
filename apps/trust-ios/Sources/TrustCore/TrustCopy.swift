@@ -2,9 +2,10 @@ import Foundation
 
 /// Product copy. Voice (design SoT `design-mocks/duo-gpt6`): short nouns and verbs,
 /// consequence before action, no apology copy, no lifestyle poetry.
-/// English is the development language; 1.0 ships English only.
+/// English is the development language. Keep non-English values in Scripts/overlays
+/// and regenerate the bundled .lproj resources with Scripts/emit_localizations.py.
 public enum TrustCopy {
-    /// Product name. Do not translate. Not “Trust Circle” — that collides with Life360.
+    /// Product name. Do not translate. Use “Trust”; avoid the former name because it collides with Life360.
     public static let appName = "Trust"
     /// Wordmark. Rendered as "Trust" + accent dot. Do not translate.
     public static let mastheadName = "Trust"
@@ -51,6 +52,75 @@ public enum TrustCopy {
     public static var someone: String { value("someone", defaultValue: "Someone") }
     public static var now: String { value("now", defaultValue: "now") }
     public static var retry: String { value("retry", defaultValue: "Retry") }
+    public static var preferences: String { value("preferences", defaultValue: "Preferences") }
+    public static var account: String { value("account", defaultValue: "Account") }
+    public static var sendAnInvite: String { value("send_an_invite", defaultValue: "Send an invite") }
+    public static var haveInviteCode: String { value("have_invite_code", defaultValue: "Have an invite code?") }
+    public static var yourStatus: String { value("your_status", defaultValue: "Your status") }
+    public static var addProfilePicture: String { value("add_profile_picture", defaultValue: "Add a profile picture") }
+    public static var changeProfilePicture: String { value("change_profile_picture", defaultValue: "Change profile picture") }
+    public static var yourProfile: String { value("your_profile", defaultValue: "Your profile") }
+    public static var addPicture: String { value("add_picture", defaultValue: "Add a picture") }
+    public static var profilePicture: String { value("profile_picture", defaultValue: "Profile picture") }
+    public static var cameraUnavailable: String { value("camera_unavailable", defaultValue: "Camera unavailable") }
+    public static var cameraSettingsGuide: String { value("camera_settings_guide", defaultValue: "Allow camera access in Settings to take a picture.") }
+    public static var homeSetOnThisPhone: String { value("home_set_on_this_phone", defaultValue: "Home set on this phone") }
+    public static func locationAccessStatus(_ status: String) -> String { format("location_access_status", defaultValue: "Location access: %@", status) }
+    public static var locationPermissionHeading: String { value("location_permission_heading", defaultValue: "Location permission") }
+    public static var manage: String { value("manage", defaultValue: "Manage") }
+    public static var systemAppearance: String { value("system_appearance", defaultValue: "System") }
+    public static var lightAppearance: String { value("light_appearance", defaultValue: "Light") }
+    public static var darkAppearance: String { value("dark_appearance", defaultValue: "Dark") }
+    public static func peopleCountAccessibility(_ count: Int) -> String { format("people_count_accessibility", defaultValue: "%d people", count) }
+    public static var peopleListSizeAccessibility: String { value("people_list_size_accessibility", defaultValue: "People list size") }
+    public static var peopleEmptyTitle: String { value("people_empty_title", defaultValue: "No one is sharing with you yet") }
+    public static var peopleEmptyBody: String { value("people_empty_body", defaultValue: "You can invite someone or choose what to share with them.") }
+    public static var goToSharing: String { value("go_to_sharing", defaultValue: "Go to Sharing") }
+    public static var loadingRecentPlaces: String { value("loading_recent_places", defaultValue: "Loading recent places") }
+    public static var optionalAvatarIntro: String { value("optional_avatar_intro", defaultValue: "Optional · choose an animal or a photo") }
+    public static var inviteCreateBody: String { value("invite_create_body", defaultValue: "Create a link for them to accept. They join before either of you shares.") }
+    public static var createInviteLink: String { value("create_invite_link", defaultValue: "Create invite link") }
+    public static var inviteAcceptBody: String { value("invite_accept_body", defaultValue: "Review the code, then tap Join to accept the invitation.") }
+    public static var lookNotificationNote: String { value("look_notification_note", defaultValue: "Trust records this Look. A notification may be delivered.") }
+    public static func plusFeatureSummary(_ log: String) -> String { format("plus_feature_summary", defaultValue: "Live pins · %@", log) }
+    public static func subscriptionError(_ message: String) -> String { format("subscription_error", defaultValue: "Subscription error. %@", message) }
+    public static var avatarVisibleToConnections: String { value("avatar_visible_to_connections", defaultValue: "Visible to people connected with you.") }
+    public static var demoAvatarNotice: String { value("demo_avatar_notice", defaultValue: "Photos and camera need an account. Animal icons work in this demo and stay on this device.") }
+    public static var save: String { value("save", defaultValue: "Save") }
+    public static var chooseFromPhotos: String { value("choose_from_photos", defaultValue: "Choose from Photos") }
+    public static var takePhoto: String { value("take_photo", defaultValue: "Take Photo") }
+    public static var removePicture: String { value("remove_picture", defaultValue: "Remove picture") }
+    public static var photoOptions: String { value("photo_options", defaultValue: "Photo options") }
+    public static func avatarIconAccessibility(_ name: String) -> String { format("avatar_icon_accessibility", defaultValue: "%@ icon", name) }
+    public static var sharingPresenceExplanation: String { value("sharing_presence_explanation", defaultValue: "Home or Away appears only for people you chose Sealed or Always for. Off, Pause, and Hidden keep your status out of their view.") }
+    public static func moreSharingActions(_ name: String) -> String { format("more_sharing_actions", defaultValue: "More sharing actions for %@", name) }
+    public static func sharingDirections(inbound: String, outbound: String) -> String {
+        format("sharing_directions", defaultValue: "They share with you: %@ · You share with them: %@", inbound, outbound)
+    }
+    public static var appearance: String { value("appearance", defaultValue: "Appearance") }
+    public static var editProfilePicture: String { value("edit_profile_picture", defaultValue: "Edit profile picture") }
+    public static var changePictureTip: String { value("change_picture_tip", defaultValue: "Tap to change your picture") }
+    public static var myLocation: String { value("my_location", defaultValue: "My location") }
+    public static var homePlacePrivacy: String { value("home_place_privacy", defaultValue: "Your Home place stays on this phone. In Sharing, choose each person's location mode and your Home, Away, or Hidden status.") }
+    public static var sleepyAnimals: String { value("sleepy_animals", defaultValue: "Sleepy animals") }
+    public static func avatarTitle(for id: String) -> String {
+        switch id {
+        case "fox": value("avatar_fox", defaultValue: "Fox")
+        case "rabbit": value("avatar_rabbit", defaultValue: "Rabbit")
+        case "bear": value("avatar_bear", defaultValue: "Bear")
+        case "cat": value("avatar_cat", defaultValue: "Cat")
+        case "dog": value("avatar_dog", defaultValue: "Dog")
+        case "otter": value("avatar_otter", defaultValue: "Otter")
+        case "owl": value("avatar_owl", defaultValue: "Owl")
+        case "turtle": value("avatar_turtle", defaultValue: "Turtle")
+        case "siamese": value("avatar_siamese", defaultValue: "Siamese cat")
+        case "ragdoll": value("avatar_ragdoll", defaultValue: "Ragdoll cat")
+        case "british-shorthair": value("avatar_british_shorthair", defaultValue: "British Shorthair")
+        default: value("avatar", defaultValue: "Animal")
+        }
+    }
+    public static var cameraPermission: String { value("camera_permission", defaultValue: "Trust uses the camera only when you choose Take Photo to set your profile picture.") }
+    public static var peopleListSizeHint: String { value("people_list_size_hint", defaultValue: "Swipe up or down to change the list size. Double-tap to expand or collapse.") }
 
     // MARK: Login (A1)
 
@@ -84,6 +154,7 @@ public enum TrustCopy {
         value("handle_intro", defaultValue: "Pick a handle. This is your name on Trust.")
     }
     public static var handle: String { value("handle", defaultValue: "Handle") }
+    public static var handlePlaceholder: String { value("handle_placeholder", defaultValue: "jordan") }
     public static var handleRules: String {
         value("handle_rules", defaultValue: "3–20 characters. Letters, numbers, underscores. Starts with a letter.")
     }
@@ -408,13 +479,14 @@ public enum TrustCopy {
     }
     public static var yourPhone: String { value("your_phone", defaultValue: "Your phone") }
     public static var phoneIntro: String {
-        value("phone_intro", defaultValue: "A code is texted to this number.")
+        value("phone_intro", defaultValue: "Phone verification is required.")
     }
-    public static var phoneConsent: String {
-        value(
-            "phone_consent",
-            defaultValue: "Text me a Trust verification code. Up to 8 texts a day. Message and data rates may apply. Reply HELP for help or STOP to opt out.")
+    public static var phoneConsentDetails: String {
+        value("phone_consent_details", defaultValue: "By tapping Send code, you agree to receive Trust verification texts at this number. Standard message and data rates may apply. Up to 8/day. Reply STOP to opt out, HELP for help.")
     }
+    public static var verifyPhoneTitle: String { value("verify_phone_title", defaultValue: "Verify your number") }
+    public static var phoneCodeIntro: String { value("phone_code_intro", defaultValue: "Enter the code we sent to:") }
+    public static var editPhone: String { value("edit_phone", defaultValue: "Edit") }
     public static var verificationCode: String { value("verification_code", defaultValue: "Code") }
     public static var verifyCode: String { value("verify_code", defaultValue: "Verify") }
     public static var phoneNumber: String { value("phone_number", defaultValue: "Phone number") }
@@ -761,6 +833,8 @@ public enum TrustCopy {
             return value("api_otp_send_failed", defaultValue: "Trust could not send a text. Try again.")
         case "phone_in_use":
             return value("api_phone_in_use", defaultValue: "That phone is already on another Trust account.")
+        case "phone_unavailable":
+            return value("api_phone_unavailable", defaultValue: "This number can't be used for this account.")
         case "own_phone":
             return value("api_own_phone", defaultValue: "That number is already on this account.")
         case "invalid_state":

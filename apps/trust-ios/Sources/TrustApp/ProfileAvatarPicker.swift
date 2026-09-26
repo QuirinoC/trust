@@ -6,6 +6,7 @@ import UIKit
 
 /// Profile photo changes are staged locally and only uploaded when the person taps Save.
 struct ProfileAvatarPicker: View {
+    var onboarding = false
     @EnvironmentObject private var model: AppModel
     @Environment(\.dismiss) private var dismiss
     @Environment(\.trustPalette) private var palette
@@ -22,7 +23,7 @@ struct ProfileAvatarPicker: View {
     @State private var showingCameraAlert = false
     @State private var errorMessage: String?
 
-    private let presetIDs = AvatarDescriptor.presetIDs
+    private let presetGroups = ProfileAvatarArtwork.pickerGroups
 
     var body: some View {
         NavigationStack {
@@ -31,10 +32,8 @@ struct ProfileAvatarPicker: View {
                     ScrollViewReader { carousel in
                         VStack(spacing: 22) {
                             VStack(spacing: 10) {
-                                stagedAvatar
-                                    .frame(width: 116, height: 116)
-                                    .accessibilityLabel("Profile picture preview")
-                                Text("Visible to people connected with you.")
+                                avatarActionMenu
+                                Text(TrustCopy.avatarVisibleToConnections)
                                     .trustFont(12)
                                     .foregroundStyle(palette.muted)
                                     .multilineTextAlignment(.center)
@@ -42,48 +41,32 @@ struct ProfileAvatarPicker: View {
                             .frame(maxWidth: .infinity)
                             .padding(.top, 6)
 
-                            VStack(alignment: .leading, spacing: 10) {
-                                TrustSectionHeading("Choose an icon")
-                                    .padding(.horizontal, 22)
-                                ScrollView(.horizontal) {
-                                    HStack(spacing: 10) {
-                                        ForEach(presetIDs, id: \.self) { id in
-                                            Button { selectPreset(id) } label: {
-                                                presetTile(id, selected: selectedPreset == id && !removeSelected && photoData == nil)
+                            VStack(alignment: .leading, spacing: 16) {
+                                ForEach(Array(presetGroups.enumerated()), id: \.offset) { entry in
+                                    let group = entry.element
+                                    VStack(alignment: .leading, spacing: 10) {
+                                        TrustSectionHeading(group.title)
+                                            .padding(.horizontal, 22)
+                                        ScrollView(.horizontal) {
+                                            HStack(spacing: 10) {
+                                                ForEach(group.ids, id: \.self) { id in
+                                                    Button { selectPreset(id) } label: {
+                                                        presetTile(id, selected: selectedPreset == id && !removeSelected && photoData == nil)
+                                                    }
+                                                    .buttonStyle(.plain)
+                                                    .disabled(isSaving)
+                                                    .id(id)
+                                                    .accessibilityLabel(TrustCopy.avatarIconAccessibility(ProfileAvatarArtwork.title(for: id)))
+                                                    .accessibilityAddTraits(selectedPreset == id && !removeSelected && photoData == nil ? .isSelected : [])
+                                                }
                                             }
-                                            .buttonStyle(.plain)
-                                            .id(id)
-                                            .accessibilityLabel("\(ProfileAvatarArtwork.title(for: id)) icon")
-                                            .accessibilityAddTraits(selectedPreset == id && !removeSelected && photoData == nil ? .isSelected : [])
+                                            .padding(.horizontal, 22)
                                         }
+                                        .scrollIndicators(.hidden)
                                     }
-                                    .padding(.horizontal, 22)
-                                }
-                                .scrollIndicators(.hidden)
-                            }
-
-                            VStack(alignment: .leading, spacing: 10) {
-                                TrustSectionHeading("Or use a photo")
-                                HStack(spacing: 10) {
-                                    PhotosPicker(selection: $photoItem, matching: .images) {
-                                        Label("Photos", systemImage: "photo.on.rectangle")
-                                            .frame(maxWidth: .infinity, minHeight: 52)
-                                    }
-                                    .buttonStyle(TrustOutlineButtonStyle(compact: true))
-                                    .accessibilityLabel("Choose from Photos")
-                                    .accessibilityIdentifier("avatar-choose-photo")
-
-                                    Button {
-                                        requestCamera()
-                                    } label: {
-                                        Label("Camera", systemImage: "camera")
-                                            .frame(maxWidth: .infinity, minHeight: 52)
-                                    }
-                                    .buttonStyle(TrustOutlineButtonStyle(compact: true))
-                                    .accessibilityIdentifier("avatar-take-photo")
                                 }
                             }
-                            .padding(.horizontal, 22)
+
                         }
                         .onAppear {
                             if let selectedPreset { carousel.scrollTo(selectedPreset, anchor: .center) }
@@ -102,17 +85,11 @@ struct ProfileAvatarPicker: View {
                         }
                     }
 
-                    if model.you.avatar != nil {
-                        Button("Remove picture", role: .destructive) {
-                            invalidatePhotoLoad()
-                            photoItem = nil
-                            selectedPreset = nil
-                            photoData = nil
-                            previewImage = nil
-                            removeSelected = true
-                        }
-                        .buttonStyle(TrustTextButtonStyle(color: palette.danger))
-                        .accessibilityIdentifier("avatar-remove")
+                    if model.isDemoMode {
+                        Text(TrustCopy.demoAvatarNotice)
+                            .trustFont(12)
+                            .foregroundStyle(palette.muted)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                     if let errorMessage {
                         Text(errorMessage)
@@ -126,7 +103,7 @@ struct ProfileAvatarPicker: View {
                 .trustReadableWidth()
             }
             .background(palette.paper.ignoresSafeArea())
-            .navigationTitle("Profile picture")
+            .navigationTitle(onboarding ? TrustCopy.addPicture : TrustCopy.profilePicture)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -134,7 +111,7 @@ struct ProfileAvatarPicker: View {
                         .disabled(isSaving)
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") { Task { await save() } }
+                    Button(TrustCopy.save) { Task { await save() } }
                         .fontWeight(.semibold)
                         .disabled(!hasChanges || isSaving || isLoadingPhoto)
                         .accessibilityIdentifier("avatar-save")
@@ -162,20 +139,21 @@ struct ProfileAvatarPicker: View {
             }
             .ignoresSafeArea()
         }
-        .alert("Camera unavailable", isPresented: $showingCameraAlert) {
+        .alert(TrustCopy.cameraUnavailable, isPresented: $showingCameraAlert) {
             if AVCaptureDevice.authorizationStatus(for: .video) == .denied {
-                Button("Open Settings") {
+                Button(TrustCopy.openSettings) {
                     guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
                     UIApplication.shared.open(url)
                 }
             }
             Button(TrustCopy.cancel, role: .cancel) {}
         } message: {
-            Text(errorMessage ?? "Allow camera access in Settings to take a picture.")
+            Text(errorMessage ?? TrustCopy.cameraSettingsGuide)
         }
         .task {
             if let selected = model.you.avatar?.knownPresetID { selectedPreset = selected }
         }
+        .interactiveDismissDisabled(isSaving)
     }
 
     private var hasChanges: Bool {
@@ -183,6 +161,67 @@ struct ProfileAvatarPicker: View {
         if photoData != nil { return true }
         guard let selectedPreset else { return false }
         return model.you.avatar?.knownPresetID != selectedPreset
+    }
+
+    /// Photo actions live on the preview itself so the picker stays focused on choosing
+    /// an identity. The menu keeps native Photos, Camera, and removal behavior together.
+    private var avatarActionMenu: some View {
+        Menu {
+            PhotosPicker(selection: $photoItem, matching: .images) {
+                Label(TrustCopy.chooseFromPhotos, systemImage: "photo.on.rectangle")
+            }
+            .disabled(model.isDemoMode || isSaving)
+            .accessibilityIdentifier("avatar-choose-photo")
+
+            Button { requestCamera() } label: {
+                Label(TrustCopy.takePhoto, systemImage: "camera")
+            }
+            .disabled(model.isDemoMode || isSaving)
+            .accessibilityIdentifier("avatar-take-photo")
+
+            if model.you.avatar != nil || selectedPreset != nil || photoData != nil {
+                Button(TrustCopy.removePicture, systemImage: "person.crop.circle.badge.xmark", role: .destructive) {
+                    invalidatePhotoLoad()
+                    photoItem = nil
+                    selectedPreset = nil
+                    photoData = nil
+                    previewImage = nil
+                    removeSelected = model.you.avatar != nil
+                }
+                .disabled(isSaving)
+                .accessibilityIdentifier("avatar-remove")
+            }
+        } label: {
+            stagedAvatar
+                .frame(width: 116, height: 116)
+                .overlay(alignment: .bottomTrailing) {
+                    Image(systemName: "camera.fill")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(palette.accentOn)
+                        .frame(width: 34, height: 34)
+                        .background(Circle().fill(palette.accent))
+                        .overlay(Circle().stroke(palette.paper, lineWidth: 3))
+                        .offset(x: 2, y: 2)
+                }
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(TrustCopy.photoOptions)
+        .accessibilityValue(avatarAccessibilityValue)
+        .accessibilityIdentifier("avatar-photo-options")
+        .disabled(isSaving)
+    }
+
+    private var avatarAccessibilityValue: String {
+        if photoData != nil { return "Photo" }
+        if let selectedPreset, !removeSelected {
+            return "\(ProfileAvatarArtwork.title(for: selectedPreset)) icon"
+        }
+        if removeSelected { return "Initials" }
+        if let preset = model.you.avatar?.knownPresetID {
+            return "\(ProfileAvatarArtwork.title(for: preset)) icon"
+        }
+        return model.you.avatar == nil ? "Initials" : "Photo"
     }
 
     @ViewBuilder
@@ -222,6 +261,9 @@ struct ProfileAvatarPicker: View {
             .resizable()
             .scaledToFill()
             .frame(width: size, height: size)
+            .scaleEffect(ProfileAvatarArtwork.displayScale(for: id))
+            .frame(width: size, height: size)
+            .background(Circle().fill(ProfileAvatarArtwork.paper))
             .clipShape(Circle())
     }
 

@@ -164,9 +164,12 @@ public sealed class AvatarApiTests
         var sam = await CreateAccountAsync(client, "Avatar Catalog");
         var presetIds = new[]
         {
-            "moon", "star", "cloud", "raindrop", "rainbow", "mountain", "river", "meadow",
-            "clover", "bloom", "cherry", "lotus", "mushroom", "seashell", "coral", "butterfly",
-            "hummingbird", "fox", "whale", "koi"
+            "fern", "ember", "sky", "ocean", "sunrise", "lavender",
+            "moon", "star", "cloud", "raindrop", "rainbow", "mountain",
+            "river", "meadow", "clover", "bloom", "cherry", "lotus",
+            "mushroom", "seashell", "coral", "butterfly", "hummingbird", "fox",
+            "whale", "koi", "rabbit", "bear", "cat", "dog",
+            "otter", "owl", "turtle", "siamese", "ragdoll", "british-shorthair"
         };
 
         foreach (var presetId in presetIds)

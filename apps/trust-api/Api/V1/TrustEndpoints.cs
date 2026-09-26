@@ -23,9 +23,11 @@ public static class TrustEndpoints
     private static readonly HashSet<string> AvatarPresetIds = new(StringComparer.Ordinal)
     {
         "fern", "ember", "sky", "ocean", "sunrise", "lavender",
-        "moon", "star", "cloud", "raindrop", "rainbow", "mountain", "river", "meadow",
-        "clover", "bloom", "cherry", "lotus", "mushroom", "seashell", "coral", "butterfly",
-        "hummingbird", "fox", "whale", "koi"
+        "moon", "star", "cloud", "raindrop", "rainbow", "mountain",
+        "river", "meadow", "clover", "bloom", "cherry", "lotus",
+        "mushroom", "seashell", "coral", "butterfly", "hummingbird", "fox",
+        "whale", "koi", "rabbit", "bear", "cat", "dog",
+        "otter", "owl", "turtle", "siamese", "ragdoll", "british-shorthair"
     };
 
     public static IEndpointRouteBuilder MapTrustApiV1(this IEndpointRouteBuilder endpoints)
@@ -784,8 +786,8 @@ public static class TrustEndpoints
 
         try
         {
-            await engine.PostHomePresenceAsync(accountId.Value, state.Value, request.SignaledAt, cancellationToken);
-            if (state == HomePresenceState.Home)
+            var arrivedHome = await engine.PostHomePresenceAsync(accountId.Value, state.Value, request.SignaledAt, cancellationToken);
+            if (arrivedHome)
             {
                 await receipts.NotifyHomeArrivalAsync(accountId.Value, cancellationToken);
             }
@@ -1184,7 +1186,7 @@ public static class TrustEndpoints
             Results.BadRequest(new ApiError(exception.Code, exception.Message)),
         "otp_not_configured" or "otp_send_failed" =>
             Results.Json(new ApiError(exception.Code, exception.Message), statusCode: StatusCodes.Status503ServiceUnavailable),
-        "not_connected" or "pair_inactive" or "no_location" or "phone_in_use" or "handle_in_use"
+        "not_connected" or "pair_inactive" or "no_location" or "phone_in_use" or "phone_unavailable" or "handle_in_use"
             or "share_off" or "look_requires_sealed" or "view_requires_available" =>
             Results.Json(new ApiError(exception.Code, exception.Message), statusCode: StatusCodes.Status409Conflict),
         "seat_limit" or "pro_required" =>

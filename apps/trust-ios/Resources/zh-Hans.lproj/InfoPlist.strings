@@ -1,0 +1,6 @@
+"CFBundleDisplayName" = "Trust";
+"NSCameraUsageDescription" = "只有当你选择“拍照”来设置头像时，Trust 才会使用相机。";
+"NSLocationAlwaysAndWhenInUseUsageDescription" = "Trust 在后台使用您的位置，因此当应用程序关闭时，Look 仍然有效。记录确认的外观并请求通知。信任不会出售您的位置。";
+"NSLocationAlwaysUsageDescription" = "Trust 在后台使用您的位置，因此当应用程序关闭时，Look 仍然有效。记录确认的外观并请求通知。信任不会出售您的位置。";
+"NSLocationWhenInUseUsageDescription" = "Trust 在应用程序打开时使用您的位置，以便您可以在地图上看到自己并查看与您共享的人。信任不会出售您的位置。";
+"PreciseEscrow" = "信任需要精确的位置，因此“外观”即可显示当前位置。大概位置还不够。";

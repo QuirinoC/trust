@@ -472,6 +472,9 @@ public sealed class TrustException : Exception
     public static TrustException PhoneInUse() =>
         new("phone_in_use", "That phone is already on another Trust account.");
 
+    public static TrustException PhoneUnavailable() =>
+        new("phone_unavailable", "This number can't be used for this account.");
+
     public static TrustException OwnPhone() =>
         new("own_phone", "That number is already on this account.");
 

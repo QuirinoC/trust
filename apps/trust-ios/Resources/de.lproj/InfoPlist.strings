@@ -1,0 +1,6 @@
+"CFBundleDisplayName" = "Trust";
+"NSCameraUsageDescription" = "Trust verwendet die Kamera nur, wenn du „Foto aufnehmen“ auswählst, um dein Profilbild festzulegen.";
+"NSLocationAlwaysAndWhenInUseUsageDescription" = "Trust verwendet Ihren Standort im Hintergrund, sodass ein Look auch dann funktioniert, wenn die App geschlossen ist. Ein bestätigter Blick wird aufgezeichnet und fordert eine Benachrichtigung. Vertrauen verkauft Ihren Standort nicht.";
+"NSLocationAlwaysUsageDescription" = "Trust verwendet Ihren Standort im Hintergrund, sodass ein Look auch dann funktioniert, wenn die App geschlossen ist. Ein bestätigter Blick wird aufgezeichnet und fordert eine Benachrichtigung. Vertrauen verkauft Ihren Standort nicht.";
+"NSLocationWhenInUseUsageDescription" = "Trust verwendet Ihren Standort, während die App geöffnet ist, sodass Sie sich selbst auf der Karte sehen und Personen sehen können, die etwas mit Ihnen teilen. Vertrauen verkauft Ihren Standort nicht.";
+"PreciseEscrow" = "Vertrauen benötigt einen genauen Standort, damit ein Blick den aktuellen Standort anzeigt. Der ungefähre Standort reicht nicht aus.";

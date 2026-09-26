@@ -44,6 +44,15 @@ public sealed class PhoneVerificationService(
             throw TrustException.InvalidPhone();
         }
 
+        // Reject a number already verified by someone else before reserving a send or
+        // creating a challenge. The completion path still enforces uniqueness if two
+        // accounts race to verify the same previously unused number.
+        var verifiedOwner = await store.FindByVerifiedPhoneAsync(e164, cancellationToken);
+        if (verifiedOwner is not null && verifiedOwner.Id != accountId)
+        {
+            throw TrustException.PhoneUnavailable();
+        }
+
         var now = time.GetUtcNow();
         var existing = await store.GetPhoneChallengeAsync(accountId, cancellationToken);
         var samePhone = existing is not null
