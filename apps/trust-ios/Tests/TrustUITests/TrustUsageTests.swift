@@ -273,6 +273,17 @@ final class TrustUsageTests: XCTestCase {
         XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Plus")).firstMatch.waitForExistence(timeout: 10))
     }
 
+    func testLookupScreenshotRouteShowsCurrentAddPersonDesign() {
+        let app = launchDemo(route: "lookup")
+        XCTAssertTrue(app.staticTexts["add-person-heading"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.descendants(matching: .any)["connection-lookup-result"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["send-connection-request"].exists)
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "App Store - Find a person by handle"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
     func testPhoneCodeRequiresTheDisclosedButtonAction() {
         let app = launchDemo(route: "phone")
         XCTAssertTrue(app.textFields["phone-number"].waitForExistence(timeout: 10))

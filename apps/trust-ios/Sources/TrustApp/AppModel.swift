@@ -386,6 +386,12 @@ final class AppModel: ObservableObject {
             showingPaywall = true
         case "circle":
             guard auth.isAuthenticated else { return }
+            if let demo,
+               let sealed = circle.first(where: \.isSealed),
+               let session = try? demo.look(confirmed: true, subjectID: sealed.id) {
+                openedSnapshots[sealed.id] = session
+                publishDemoSnapshot()
+            }
             selectedTab = .circle
         case "person":
             guard auth.isAuthenticated else { return }
@@ -411,6 +417,13 @@ final class AppModel: ObservableObject {
             if let available = circle.first(where: \.isAvailable) { openView(available) }
         case "log":
             guard auth.isAuthenticated else { return }
+            if let demo,
+               let mayaID = demo.members.first(where: { $0.displayName == "Maya Chen" })?.id,
+               let leoID = demo.members.first(where: { $0.displayName == "Leo Park" })?.id {
+                _ = try? demo.look(confirmed: true, subjectID: mayaID)
+                _ = try? demo.view(subjectID: leoID)
+                publishDemoSnapshot()
+            }
             selectedTab = .log
         case "share":
             guard auth.isAuthenticated else { return }
@@ -434,6 +447,17 @@ final class AppModel: ObservableObject {
             selectedTab = .sharing
             // The invite route now opens the handle-first Add sheet. It never creates
             // a request or invite as a side effect of a screenshot route.
+            showingAddPersonSheet = true
+        case "lookup":
+            guard auth.isAuthenticated else { return }
+            selectedTab = .sharing
+            connectionHandleDraft = "+1 (202) 555-0134"
+            connectionLookup = PersonLookupPayload(
+                accountId: UUID(),
+                handle: "morganlee",
+                relationship: "none",
+                avatar: .preset("fox")
+            )
             showingAddPersonSheet = true
         default:
             break

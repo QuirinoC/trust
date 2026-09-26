@@ -205,6 +205,7 @@ struct AddPersonSheet: View {
             }
         }
         .task {
+            guard !model.isScreenshotLaunch else { return }
             model.setConnectionHandleDraft("")
             try? await Task.sleep(for: .milliseconds(350))
             guard !Task.isCancelled else { return }
