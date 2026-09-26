@@ -239,6 +239,19 @@ final class TrustUsageTests: XCTestCase {
 
     func testLanguagePreferenceChangesCopyAndPersists() {
         let app = launchDemo()
+        var changedLanguage = false
+        defer {
+            // Keep a failed assertion from leaking French into the rest of the suite.
+            if changedLanguage, app.state == .runningForeground {
+                let systemOption = app.buttons["Suivre la langue de l’iPhone"]
+                if !systemOption.exists {
+                    let languagePicker = app.descendants(matching: .any)["language-preference"]
+                    if languagePicker.exists { languagePicker.tap() }
+                }
+                if systemOption.waitForExistence(timeout: 2) { systemOption.tap() }
+                app.terminate()
+            }
+        }
         XCTAssertTrue(app.buttons["tab-you"].waitForExistence(timeout: 20))
         app.buttons["tab-you"].tap()
 
@@ -248,12 +261,19 @@ final class TrustUsageTests: XCTestCase {
         let french = app.buttons["Français"]
         XCTAssertTrue(french.waitForExistence(timeout: 5))
         french.tap()
+        changedLanguage = true
 
         let selected = XCTNSPredicateExpectation(
             predicate: NSPredicate(format: "value == %@", "Français"),
             object: picker)
         XCTAssertEqual(XCTWaiter.wait(for: [selected], timeout: 5), .completed)
-        XCTAssertEqual(app.buttons["tab-you"].label, "Toi", "Changing language should update visible copy immediately.")
+        let localizedTab = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label == %@", "Toi"),
+            object: app.buttons["tab-you"])
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [localizedTab], timeout: 5),
+            .completed,
+            "Changing language should update visible copy immediately.")
 
         app.terminate()
         app.launch()
@@ -263,9 +283,6 @@ final class TrustUsageTests: XCTestCase {
         XCTAssertTrue(restoredPicker.waitForExistence(timeout: 5))
         XCTAssertEqual(restoredPicker.value as? String, "Français")
 
-        restoredPicker.tap()
-        app.buttons["Suivre la langue de l’iPhone"].tap()
-        app.terminate()
     }
 
     func testPaywallScreenshotRouteIsReachable() {
@@ -315,6 +332,14 @@ final class TrustUsageTests: XCTestCase {
         XCTAssertTrue(matches.firstMatch.waitForExistence(timeout: 5))
         // SwiftUI exposes a confirmation-dialog action through both its legacy and modern
         // automation attributes; the build log confirms these are two aliases of one control.
-        matches.element(boundBy: 0).tap()
+        let action = matches.element(boundBy: 0)
+        action.tap()
+        let dismissed = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == false"),
+            object: action)
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [dismissed], timeout: 5),
+            .completed,
+            "The confirmation dialog should dismiss before the next sharing action.")
     }
 }
