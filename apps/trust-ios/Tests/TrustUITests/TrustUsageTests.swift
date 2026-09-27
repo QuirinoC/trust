@@ -180,12 +180,12 @@ final class TrustUsageTests: XCTestCase {
                 "The \(option) appearance choice should be hittable before selection. \(app.debugDescription)")
             choice.tap()
             let menuDismissed = XCTNSPredicateExpectation(
-                predicate: NSPredicate(format: "exists == false"),
+                predicate: NSPredicate(format: "hittable == false"),
                 object: choice)
             XCTAssertEqual(
                 XCTWaiter.wait(for: [menuDismissed], timeout: 5),
                 .completed,
-                "The \(option) appearance choice should close the picker menu.")
+                "The \(option) appearance choice should dismiss the picker menu.")
 
             // Changing the color scheme can recreate the SwiftUI hierarchy. Reacquire the
             // accessibility element after the menu closes instead of polling its old snapshot.

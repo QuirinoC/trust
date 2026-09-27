@@ -17,14 +17,15 @@ The current design direction and actual palette tokens are in [DESIGN.md](DESIGN
 - Real-API onboarding, phone lookup, invite sharing, request acceptance, default-Off sharing, and stopping sharing passed once on stable iOS 26.5 and once on iOS 27.1 beta Duo.
 - Local development API health, Cloudflare Wrangler authentication, and a website deploy dry run were verified.
 - App Store screenshot assets were regenerated for iPhone 6.9-inch, iPhone 6.5-inch, and iPad 13-inch sets. The capture script explicitly uses Light appearance. The assets are local; they have not been uploaded to the App Store listing.
-- Build 31 was archived with the `Trust-Internal` scheme, checked to contain `TRUST_SKIP_PHONE_VERIFICATION=true`, and uploaded successfully to App Store Connect using the internal-only export configuration. At the last check, App Store Connect reported that the package was processing. Assignment to an internal group and tester visibility are not yet verified.
+- Build 31 was archived with the `Trust-Internal` scheme, checked to contain `TRUST_SKIP_PHONE_VERIFICATION=true`, and uploaded with the internal-only export configuration. App Store Connect processed it and lists it as **Testing** in the `iPhone Juan` internal group. That group contains one tester; the device record still shows build 28 installed, so install/update visibility needs physical confirmation.
+- GitHub CI run [36299412303](https://github.com/QuirinoC/trust/actions/runs/36299412303) passed API, web, and localization checks but failed one iOS UI assertion: XCTest expected a SwiftUI appearance-menu item to disappear from the accessibility tree. The check now waits for that item to become non-hittable; the focused UI test passes locally on the iPhone 17 Pro simulator. A full CI rerun is pending.
 
 On Duo's iOS 27.1 beta, XCTest could not close the system share sheet with its close-button tap; a swipe-down closed it and the rest of the real-API flow passed. Simulator checks do not establish physical SMS, Sign in with Apple, APNs delivery, background location, or TestFlight behavior.
 
 ## Release state
 
 - The latest merged app work and release-prep changes are committed and pushed to `origin/main`.
-- Build 31 is uploaded for internal TestFlight and was processing at last observation. Complete processing verification and assign it to the intended existing internal group; confirm the tester can see build 31 before calling TestFlight delivery complete.
+- Build 31 is processed and assigned to the existing `iPhone Juan` internal TestFlight group. Confirm the tester can see and install build 31 on the physical iPhone; App Store Connect currently records build 28 as installed.
 - App Store listing artwork is not updated. The refreshed screenshot sets are staged locally, and the current listing icon/screenshots still need an App Store Connect review and update.
 - The production Render API and Cloudflare site were previously observed on an earlier release; deploy and health-check current server/site changes separately.
 - Reconcile the Send code disclosure with Twilio campaign records and public SMS evidence. Do not claim carrier SMS consent language is registered until verified.
