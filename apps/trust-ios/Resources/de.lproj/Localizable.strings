@@ -431,7 +431,7 @@
 "terms_of_service" = "Nutzungsbedingungen";
 "their_handle" = "Handle der Person";
 "them" = "ihnen";
-"then_one_snapshot" = "Ein Schnappschuss von ihrem aktuellen Standort.";
+"then_one_snapshot" = "Ein Schnappschuss ihres zuletzt verfügbaren Standorts.";
 "timed_15m" = "15 Minuten";
 "timed_1h" = "1 Stunde";
 "timed_4h" = "4 Stunden";

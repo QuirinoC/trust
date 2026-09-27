@@ -248,7 +248,7 @@ public enum TrustCopy {
         format("will_be_notified", defaultValue: "A notification will be requested for %@.", name)
     }
     public static var thenOneSnapshot: String {
-        value("then_one_snapshot", defaultValue: "One snapshot of their current place.")
+        value("then_one_snapshot", defaultValue: "One snapshot of their latest available location.")
     }
     public static func previewLine(viewer: String) -> String {
         format("preview_line", defaultValue: "%@ looked at your location.", viewer)

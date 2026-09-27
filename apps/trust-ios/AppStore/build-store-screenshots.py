@@ -15,13 +15,12 @@ FONT_BOLD = "/System/Library/Fonts/Avenir Next.ttc"
 FONT_REGULAR = "/System/Library/Fonts/HelveticaNeue.ttc"
 
 STORY = [
-    ("map", "SEALED LOOKS", "One Look. One snapshot.", "A confirmed Look reveals one location—not a live trail.", "RECORDED IN ACTIVITY"),
-    ("look", "SEALED LOOKS", "A clear ask before a Look.", "One current location snapshot. Each Look is recorded.", "ONE SNAPSHOT · NO LIVE SESSION"),
-    ("share", "SHARING CONTROLS", "Choose your boundary.", "Off, Sealed, or Always—set per person.", "ALWAYS IS A SEPARATE CHOICE"),
-    ("lookup", "FIND YOUR PEOPLE", "Handle or phone. Your call.", "Only verified numbers with discovery enabled can match.", "NO CONTACT-BOOK UPLOAD"),
-    ("log", "ACTIVITY", "See what happened, when.", "Review Looks and Views in one activity log.", "YOUR ACTIVITY LOG"),
-    ("view", "ALWAYS SHARING", "Live sharing is its own choice.", "Always shares while it is on. Turn it off anytime.", "ALWAYS MUST BE CHOSEN"),
-    ("you", "YOUR ACCOUNT", "Your profile, your settings.", "Manage your picture, location access, and account.", "SIMPLE BY DESIGN"),
+    ("map", "Share your location.\nSee who checks.", "Review location checks recorded in Trust."),
+    ("look", "One check. One snapshot.", "Confirm a check to request the latest available location."),
+    ("share", "Choose what they can see.", "Sharing starts Off. Choose a mode for each person."),
+    ("view", "Live sharing is optional.", "Trust Plus includes Always live sharing."),
+    ("log", "Review location activity.", "Activity records confirmed checks and live views."),
+    ("lookup", "Adding someone doesn’t start\nsharing.", "Accepting a connection leaves sharing Off both ways."),
 ]
 
 
@@ -31,16 +30,17 @@ def font(path: str, size: int, index: int = 0) -> ImageFont.FreeTypeFont:
 
 def wrap_text(draw: ImageDraw.ImageDraw, text: str, selected_font: ImageFont.FreeTypeFont, width: int) -> list[str]:
     lines: list[str] = []
-    current = ""
-    for word in text.split():
-        candidate = f"{current} {word}".strip()
-        if current and draw.textbbox((0, 0), candidate, font=selected_font)[2] > width:
+    for paragraph in text.splitlines() or [text]:
+        current = ""
+        for word in paragraph.split():
+            candidate = f"{current} {word}".strip()
+            if current and draw.textbbox((0, 0), candidate, font=selected_font)[2] > width:
+                lines.append(current)
+                current = word
+            else:
+                current = candidate
+        if current:
             lines.append(current)
-            current = word
-        else:
-            current = candidate
-    if current:
-        lines.append(current)
     return lines
 
 
@@ -78,8 +78,8 @@ def vertical_background(size: tuple[int, int], factor: float) -> Image.Image:
     return background
 
 
-def make_panel(source: Path, output: Path, index: int, story: tuple[str, str, str, str, str], expected: tuple[int, int]) -> None:
-    route, category, headline, description, note = story
+def make_panel(source: Path, output: Path, index: int, story: tuple[str, str, str], expected: tuple[int, int]) -> None:
+    route, headline, description = story
     screen = Image.open(source).convert("RGB")
     if screen.size != expected:
         raise ValueError(f"{source} is {screen.width}×{screen.height}, expected {expected[0]}×{expected[1]}")
@@ -87,9 +87,10 @@ def make_panel(source: Path, output: Path, index: int, story: tuple[str, str, st
     if expected == (2064, 2752):
         # iPad Simulator captures an OS window-resize affordance over this blank
         # corner. It is outside the app UI and must not appear in store artwork.
+        corner_color = screen.getpixel((screen.width - 81, screen.height - 81))
         ImageDraw.Draw(screen).rectangle(
             (screen.width - 80, screen.height - 80, screen.width - 1, screen.height - 1),
-            fill=(255, 255, 255),
+            fill=corner_color,
         )
 
     width, height = expected
@@ -99,10 +100,8 @@ def make_panel(source: Path, output: Path, index: int, story: tuple[str, str, st
     draw = ImageDraw.Draw(canvas)
 
     bold = font(FONT_BOLD, int(31 * factor), index=0)
-    label_font = font(FONT_BOLD, int(23 * factor), index=2)
-    title_font = font(FONT_BOLD, int(76 * factor), index=0)
+    title_font = font(FONT_BOLD, int(78 * factor), index=0)
     body_font = font(FONT_REGULAR, int(31 * factor), index=0)
-    note_font = font(FONT_BOLD, int(18 * factor), index=2)
     page_font = font(FONT_BOLD, int(20 * factor), index=2)
 
     # Keep these light-mode annotation tokens aligned with TrustPalette.paper.
@@ -111,17 +110,13 @@ def make_panel(source: Path, output: Path, index: int, story: tuple[str, str, st
     accent = (36, 92, 231)
     line = (220, 227, 239)
 
-    top = int(62 * factor)
+    top = int(58 * factor)
     draw.text((pad, top), "TRUST", font=bold, fill=ink)
-    brand_width = draw.textbbox((pad, top), "TRUST", font=bold)[2] - pad
-    draw.text((pad + brand_width + int(14 * factor), top + int(6 * factor)), "CLOSE BY CHOICE", font=page_font, fill=muted)
     page_label = f"{index:02d} / {len(STORY):02d}"
     page_box = draw.textbbox((0, 0), page_label, font=page_font)
     draw.text((width - pad - (page_box[2] - page_box[0]), top + int(5 * factor)), page_label, font=page_font, fill=muted)
 
-    y = int(128 * factor)
-    draw.text((pad, y), category, font=label_font, fill=accent)
-    y += int(47 * factor)
+    y = int(132 * factor)
     max_text_width = width - pad * 2
     title_lines = wrap_text(draw, headline, title_font, max_text_width)
     title_bbox = title_font.getbbox("Ag")
@@ -130,7 +125,7 @@ def make_panel(source: Path, output: Path, index: int, story: tuple[str, str, st
         draw.text((pad, y), line_text, font=title_font, fill=ink)
         y += title_line_height
 
-    y += int(7 * factor)
+    y += int(10 * factor)
     body_lines = wrap_text(draw, description, body_font, max_text_width)
     body_bbox = body_font.getbbox("Ag")
     body_line_height = body_bbox[3] - body_bbox[1] + int(6 * factor)
@@ -138,16 +133,7 @@ def make_panel(source: Path, output: Path, index: int, story: tuple[str, str, st
         draw.text((pad, y), line_text, font=body_font, fill=muted)
         y += body_line_height
 
-    y += int(18 * factor)
-    badge_bbox = draw.textbbox((0, 0), note, font=note_font)
-    badge_w = badge_bbox[2] - badge_bbox[0] + int(28 * factor)
-    badge_h = badge_bbox[3] - badge_bbox[1] + int(18 * factor)
-    badge = (pad, y, min(width - pad, pad + badge_w), y + badge_h)
-    draw.rounded_rectangle(badge, radius=int(18 * factor), fill=(232, 239, 255))
-    draw.ellipse((badge[0] + int(11 * factor), badge[1] + int(11 * factor), badge[0] + int(18 * factor), badge[1] + int(18 * factor)), fill=accent)
-    draw.text((badge[0] + int(26 * factor), badge[1] + int(7 * factor)), note, font=note_font, fill=ink)
-
-    screen_top = max(int(430 * factor), badge[3] + int(26 * factor))
+    screen_top = max(int(420 * factor), y + int(26 * factor))
     bottom = int(28 * factor)
     max_screen_height = height - screen_top - bottom
     max_screen_width = width - pad * 2
@@ -182,6 +168,8 @@ def make_iphone_65_panels() -> None:
     source_dir = SET / "iphone-69"
     output_dir = SET / "iphone-65"
     output_dir.mkdir(parents=True, exist_ok=True)
+    for stale_panel in output_dir.glob("*.png"):
+        stale_panel.unlink()
     for source in sorted(source_dir.glob("*.png")):
         image = Image.open(source).convert("RGB")
         image = image.resize((1242, 2688), Image.Resampling.LANCZOS)

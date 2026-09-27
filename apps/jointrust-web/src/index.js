@@ -30,7 +30,7 @@ function inviteLanding(code) {
     <meta name="color-scheme" content="light dark" />
     <link rel="canonical" href="https://jointrust.app/i/${escapedCode}" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/styles.css?v=together-lines" />
+    <link rel="stylesheet" href="/styles.css?v=location-sharing" />
   </head>
   <body>
     <header class="top">

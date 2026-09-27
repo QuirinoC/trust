@@ -121,7 +121,7 @@
   "look_at_title": "%@さんをLookしますか？",
   "look_at": "%@さんをLook",
   "will_be_notified": "%@さんへの通知がリクエストされます。",
-  "then_one_snapshot": "現在地のスナップショットを1回取得します。",
+  "then_one_snapshot": "相手の最後に取得できた位置情報を1回表示します。",
   "preview_line": "%@さんがあなたの位置情報をLookしました。",
   "receipt_note_sealed": "相手の共有モードはSealedのままです。",
   "look_notify": "Look · %@さんに通知",

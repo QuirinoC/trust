@@ -431,7 +431,7 @@
 "terms_of_service" = "Termos de Serviço";
 "their_handle" = "Identificador da pessoa";
 "them" = "essa pessoa";
-"then_one_snapshot" = "Um instantâneo da localização atual da pessoa.";
+"then_one_snapshot" = "Um instantâneo da localização mais recente disponível da pessoa.";
 "timed_15m" = "15 minutos";
 "timed_1h" = "1 hora";
 "timed_4h" = "4 horas";

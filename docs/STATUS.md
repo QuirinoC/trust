@@ -1,10 +1,10 @@
 # Trust project status
 
-Updated 2026-09-26. This is a dated evidence snapshot; verify live service and App Store Connect state before relying on it.
+Updated 2026-09-27. This is a dated evidence snapshot; verify live service and App Store Connect state before relying on it.
 
 ## Current source
 
-The release-prep changes are committed and pushed to `origin/main` (release-prep commit `8417445`). There was no outstanding feature branch to merge. The release-prep commit restores the approved blue light palette, aligns the App Store screenshot artwork and capture script to it, removes the iPad Simulator resize affordance from the prepared artwork, advances the iOS build number to 31, and refreshes the release notes.
+The release-prep changes are committed and pushed to `origin/main` (release-prep commit `8417445`); the latest main commit is `6e13108`, which stabilizes an appearance-menu UI assertion. The current working branch, `codex/rebrand-launch-brief`, starts from that main head and contains a draft website/listing/screenshot copy refresh. Those branch changes are not deployed to jointrust.app or App Store Connect.
 
 The current design direction and actual palette tokens are in [DESIGN.md](DESIGN.md). The app icon redesign remains paused.
 
@@ -16,7 +16,8 @@ The current design direction and actual palette tokens are in [DESIGN.md](DESIGN
 - Website tests: **3/3 passed**; localization validation found **470 keys across five translated locales**.
 - Real-API onboarding, phone lookup, invite sharing, request acceptance, default-Off sharing, and stopping sharing passed once on stable iOS 26.5 and once on iOS 27.1 beta Duo.
 - Local development API health, Cloudflare Wrangler authentication, and a website deploy dry run were verified.
-- App Store screenshot assets were regenerated for iPhone 6.9-inch, iPhone 6.5-inch, and iPad 13-inch sets. The capture script explicitly uses Light appearance. The assets are local; they have not been uploaded to the App Store listing.
+- App Store screenshot assets were regenerated from the current Debug app for six panels at iPhone 6.9-inch, iPhone 6.5-inch, and iPad 13-inch sizes. The capture script explicitly uses Light appearance and removes its temporary simulators. The assets are local; they have not been uploaded to the App Store listing.
+- Rebrand-brief branch checks: Swift package tests **33/33 passed**, website tests **3/3 passed**, and localization validation **470 keys across five translated locales**. Screenshot capture built the Debug app and recaptured iPhone and iPad UI. This branch has not run the full iOS UI suite or a GitHub CI workflow.
 - Build 31 was archived with the `Trust-Internal` scheme, checked to contain `TRUST_SKIP_PHONE_VERIFICATION=true`, and uploaded with the internal-only export configuration. App Store Connect processed it and lists it as **Testing** in the `iPhone Juan` internal group. That group contains one tester; the device record still shows build 28 installed, so install/update visibility needs physical confirmation.
 - GitHub CI run [36299412303](https://github.com/QuirinoC/trust/actions/runs/36299412303) passed API, web, and localization checks but failed one iOS UI assertion: XCTest expected a SwiftUI appearance-menu item to disappear from the accessibility tree. The check now waits for that item to become non-hittable; the focused UI test passes locally on the iPhone 17 Pro simulator. A full CI rerun is pending.
 
@@ -27,6 +28,7 @@ On Duo's iOS 27.1 beta, XCTest could not close the system share sheet with its c
 - The latest merged app work and release-prep changes are committed and pushed to `origin/main`.
 - Build 31 is processed and assigned to the existing `iPhone Juan` internal TestFlight group. Confirm the tester can see and install build 31 on the physical iPhone; App Store Connect currently records build 28 as installed.
 - App Store listing artwork is not updated. The refreshed screenshot sets are staged locally, and the current listing icon/screenshots still need an App Store Connect review and update.
+- The rebrand-brief working branch updates the website's English marketing copy, proposed listing copy, and six-panel artwork only. The website changes have not been deployed. Its beta-access link still opens an email draft; a real waitlist needs an approved collection flow and matching privacy disclosure.
 - The production Render API and Cloudflare site were previously observed on an earlier release; deploy and health-check current server/site changes separately.
 - Reconcile the Send code disclosure with Twilio campaign records and public SMS evidence. Do not claim carrier SMS consent language is registered until verified.
 - Push delivery has not been end-to-end verified. APNs delivery is best effort; a successful server publish does not prove delivery to a device.

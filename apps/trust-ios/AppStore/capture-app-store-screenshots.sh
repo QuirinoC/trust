@@ -10,8 +10,8 @@ RUNTIME="com.apple.CoreSimulator.SimRuntime.iOS-26-5"
 DERIVED="${DERIVED:-/private/tmp/trust-appstore-screenshots-derived-data}"
 APP="${DERIVED}/Build/Products/Debug-iphonesimulator/Trust.app"
 OUTPUT_ROOT="${OUTPUT_ROOT:-${ROOT}/AppStore/Screenshots/2026-09/raw}"
-# The initial warmup opens the map; these are the seven current store panels.
-SHOTS=(map look share lookup log view you)
+# The initial warmup opens the map; capture the six current store panels.
+SHOTS=(map look share view log lookup)
 
 IPHONE_TYPE="com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro-Max"
 IPAD_TYPE="com.apple.CoreSimulator.SimDeviceType.iPad-Pro-13-inch-M5-12GB"

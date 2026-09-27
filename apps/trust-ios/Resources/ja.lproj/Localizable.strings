@@ -431,7 +431,7 @@
 "terms_of_service" = "利用規約";
 "their_handle" = "相手のハンドル";
 "them" = "相手";
-"then_one_snapshot" = "現在地のスナップショットを1回取得します。";
+"then_one_snapshot" = "相手の最後に取得できた位置情報を1回表示します。";
 "timed_15m" = "15分";
 "timed_1h" = "1時間";
 "timed_4h" = "4時間";

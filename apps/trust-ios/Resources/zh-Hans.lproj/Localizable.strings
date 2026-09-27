@@ -431,7 +431,7 @@
 "terms_of_service" = "服务条款";
 "their_handle" = "对方的账号名";
 "them" = "他们";
-"then_one_snapshot" = "他们当前所在位置的一张快照。";
+"then_one_snapshot" = "对方最近一次可用位置的快照。";
 "timed_15m" = "15分钟";
 "timed_1h" = "1小时";
 "timed_4h" = "4小时";

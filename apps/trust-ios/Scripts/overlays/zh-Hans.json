@@ -121,7 +121,7 @@
   "look_at_title": "看看%@？",
   "look_at": "看看%@",
   "will_be_notified": "将要求 %@ 发出通知。",
-  "then_one_snapshot": "他们当前所在位置的一张快照。",
+  "then_one_snapshot": "对方最近一次可用位置的快照。",
   "preview_line": "%@ 查看了您的位置。",
   "receipt_note_sealed": "他们的份额保持密封状态。",
   "look_notify": "看·通知%@",

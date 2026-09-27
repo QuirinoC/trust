@@ -420,17 +420,6 @@ body.home { padding-bottom: 24px; }
 .together-lines .mark-blue { stroke-width: 13; }
 .together-lines .mark-teal { stroke-width: 10; }
 
-.art-caption {
-  position: absolute;
-  right: 24px;
-  bottom: 22px;
-  left: 24px;
-  color: var(--muted);
-  font-size: 13px;
-  font-weight: 600;
-  text-align: center;
-}
-
 .feature-section { padding: clamp(36px, 5vw, 64px) 0 0; }
 .section-heading h2 { margin: 0; font-size: clamp(1.75rem, 3vw, 2.5rem); line-height: 1.15; letter-spacing: -0.04em; }
 .section-heading .eyebrow { margin-bottom: 12px; }

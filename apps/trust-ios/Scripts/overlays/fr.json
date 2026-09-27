@@ -77,7 +77,7 @@
   "look_at_title": "Regardez %@ ?",
   "look_at": "Regardez %@",
   "will_be_notified": "Une notification sera demandée pour %@.",
-  "then_one_snapshot": "Un instantané de leur emplacement actuel.",
+  "then_one_snapshot": "Un instantané de leur dernière position disponible.",
   "preview_line": "%@ a examiné votre position.",
   "receipt_note_sealed": "Leur part reste scellée.",
   "look_notify": "Regardez · avertissez %@",

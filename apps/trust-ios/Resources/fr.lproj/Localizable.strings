@@ -431,7 +431,7 @@
 "terms_of_service" = "Conditions d'utilisation";
 "their_handle" = "Son identifiant";
 "them" = "eux";
-"then_one_snapshot" = "Un instantané de leur emplacement actuel.";
+"then_one_snapshot" = "Un instantané de leur dernière position disponible.";
 "timed_15m" = "15 minutes";
 "timed_1h" = "1 heure";
 "timed_4h" = "4 heures";

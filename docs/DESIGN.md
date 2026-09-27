@@ -6,6 +6,12 @@ Trust uses a cool porcelain canvas, white elevated surfaces, deep navy text, cle
 
 Use rounded system typography, clear hierarchy, 24 pt page gutters, a consistent 20 pt title inset below the safe area on non-map tabs, soft 18–24 pt corners, and controls at least 44 pt tall. Use illustration sparingly: the profile gallery and real profile pictures carry the animal art into the app. Avoid decorative symbols that could be mistaken for a person's real profile. Keep Stop, Pause, visibility, and other consent controls plain and clear.
 
+## Brand and launch copy
+
+The product name is **Trust**. Lead with the product category—location sharing for iPhone—and the concrete benefit of reviewing location checks made in Trust. Do not append a permanent slogan to the wordmark or repeat an emotional tagline across the website, screenshots, and listing. App Store name `Trust: Location Sharing` and subtitle `See who checked your location` are working proposals in `AppStore/LISTING-COPY.md`; repository changes do not update the live App Store Connect listing.
+
+Prefer ordinary language about who can see what and when. Never imply that the person sharing approves each snapshot check, that Trust can reveal checks made in other apps, that a push notification is guaranteed, or that location is not stored before someone checks. Describe a snapshot as the latest available location, not as guaranteed-current GPS. The runtime labels Off / Sealed / Always / Look / View remain unchanged until the proposed replacement vocabulary is tested, implemented across the interface, and reviewed in all shipped languages.
+
 ## Screen intent
 
 - **Sign in:** present a modest Trust wordmark and the current motif, then a recognizable “Sign in to Trust” heading. State that sharing stays off until a mode is chosen for each person. Sign in with Apple is primary; Terms, Privacy, and Support remain reachable.
@@ -27,3 +33,5 @@ The closed Duo keeps the compact phone experience. When open, the map stays on t
 ## Product language
 
 Sharing is a per-person choice. Avoid implying that Trust guarantees delivery of push notifications or SMS beyond the verification flow. Describe map, presence, and activity only as implemented; distinguish a one-time snapshot from live sharing.
+
+In customer-facing copy, keep Trust's activity scope explicit: it records checks and views made in Trust. A snapshot check is the viewer's action under a mode the other person already enabled; it is not a fresh approval request. Say “latest available location” when freshness is not guaranteed. Keep privacy, retention, age, pricing, and subscription claims tied to the current implementation and approved policy; do not change legal text as part of a visual-copy refresh.
