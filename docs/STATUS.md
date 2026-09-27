@@ -4,7 +4,7 @@ Updated 2026-09-26. This is a dated evidence snapshot; verify live service and A
 
 ## Current source
 
-The checked-out branch is `main` at `c3401cf` (`Consent-aware discovery and App Store screenshots`, already on `origin/main`). There was no outstanding feature branch to merge. This working change restores the approved blue light palette, aligns the App Store screenshot artwork and capture script to it, removes the iPad Simulator resize affordance from the prepared artwork, and advances the iOS build number to 31.
+The checked-out branch is `main` at `8417445` (`Restore blue palette and prepare TestFlight build 31`), pushed to `origin/main`. There was no outstanding feature branch to merge. This release-prep commit restores the approved blue light palette, aligns the App Store screenshot artwork and capture script to it, removes the iPad Simulator resize affordance from the prepared artwork, advances the iOS build number to 31, and refreshes the release notes.
 
 The current design direction and actual palette tokens are in [DESIGN.md](DESIGN.md). The app icon redesign remains paused.
 
@@ -23,7 +23,7 @@ On Duo's iOS 27.1 beta, XCTest could not close the system share sheet with its c
 
 ## Release state
 
-- The current branch contains the latest merged app work plus the pending palette, screenshot, and build-number changes. Commit and push those changes to `main`.
+- The latest merged app work and release-prep changes are committed and pushed to `origin/main`.
 - Build 31 is uploaded for internal TestFlight and was processing at last observation. Complete processing verification and assign it to the intended existing internal group; confirm the tester can see build 31 before calling TestFlight delivery complete.
 - App Store listing artwork is not updated. The refreshed screenshot sets are staged locally, and the current listing icon/screenshots still need an App Store Connect review and update.
 - The production Render API and Cloudflare site were previously observed on an earlier release; deploy and health-check current server/site changes separately.
