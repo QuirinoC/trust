@@ -4,7 +4,7 @@ Updated 2026-09-26. This is a dated evidence snapshot; verify live service and A
 
 ## Current source
 
-The checked-out branch is `main` at `8417445` (`Restore blue palette and prepare TestFlight build 31`), pushed to `origin/main`. There was no outstanding feature branch to merge. This release-prep commit restores the approved blue light palette, aligns the App Store screenshot artwork and capture script to it, removes the iPad Simulator resize affordance from the prepared artwork, advances the iOS build number to 31, and refreshes the release notes.
+The release-prep changes are committed and pushed to `origin/main` (release-prep commit `8417445`). There was no outstanding feature branch to merge. The release-prep commit restores the approved blue light palette, aligns the App Store screenshot artwork and capture script to it, removes the iPad Simulator resize affordance from the prepared artwork, advances the iOS build number to 31, and refreshes the release notes.
 
 The current design direction and actual palette tokens are in [DESIGN.md](DESIGN.md). The app icon redesign remains paused.
 
