@@ -2,8 +2,8 @@
 
 This is an index, not a second release-status snapshot. Current local evidence and dated external observations live in [docs/STATUS.md](../../docs/STATUS.md). App Store Connect claims must be rechecked in App Store Connect before acting.
 
-- Source build 30 is the current internal candidate. Commit and merge it, archive with the `Trust-Internal` scheme, validate the `TRUST_SKIP_PHONE_VERIFICATION=true` build setting, upload, process, and assign to the intended internal groups. Verify the tester sees that exact build.
-- Refresh the App Store listing icon and replace its seven older screenshots after the new build is processed; keep the draft version unsubmitted.
+- Build 31 is the current internal candidate. It was archived with `Trust-Internal`, verified to include `TRUST_SKIP_PHONE_VERIFICATION=true`, and uploaded successfully; App Store Connect reported it was processing. Recheck processing, assign it to the intended existing internal group, and verify the tester sees that exact build.
+- The September screenshot sets have been regenerated locally for iPhone 6.9-inch, iPhone 6.5-inch, and iPad 13-inch. Review and upload the approved assets in App Store Connect; its listing artwork remains unchanged. Keep the draft version unsubmitted.
 - Reconcile the current Send code consent disclosure with Twilio campaign records and public SMS evidence.
 - Complete physical two-account TestFlight checks, including SMS, location permissions/background behavior, APNs receipt, StoreKit purchase/restore, and account deletion. No physical APNs receipt has been verified yet.
 - Complete remaining App Review metadata checks: privacy answers, age policy, reviewer access, agreements, availability, platform scope, and subscription review status.

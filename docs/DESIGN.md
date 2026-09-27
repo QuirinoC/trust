@@ -2,7 +2,7 @@
 
 ## Direction
 
-Trust uses warm paper, charcoal ink, muted clay-red actions, and quiet sage status colors. The illustrated sleepy-animal avatars supply the hand-drawn warmth; keep functional screens calm, spacious, and unmistakably native iOS. Carry the warm colors through light mode while keeping the established deep-navy dark mode. Keep the current app icon in place; app-icon redesign work is paused.
+Trust uses a cool porcelain canvas, white elevated surfaces, deep navy text, clear blue actions, and teal positive states. Light tokens are paper `#F6F8FC`, canvas `#EEF2F8`, surface `#FFFFFF`, ink `#14233B`, muted `#617089`, accent `#245CE7`, and positive `#168879`; `TrustTheme.swift` is their implementation source. The sleepy-animal avatars supply the hand-drawn character; keep functional screens calm, spacious, and unmistakably native iOS. Carry this palette through light mode while keeping the established deep-navy dark mode. Keep the current app icon in place; app-icon redesign work is paused.
 
 Use rounded system typography, clear hierarchy, 24 pt page gutters, a consistent 20 pt title inset below the safe area on non-map tabs, soft 18–24 pt corners, and controls at least 44 pt tall. Use illustration sparingly: the profile gallery and real profile pictures carry the animal art into the app. Avoid decorative symbols that could be mistaken for a person's real profile. Keep Stop, Pause, visibility, and other consent controls plain and clear.
 

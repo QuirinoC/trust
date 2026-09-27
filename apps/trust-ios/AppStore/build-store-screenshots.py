@@ -46,8 +46,8 @@ def wrap_text(draw: ImageDraw.ImageDraw, text: str, selected_font: ImageFont.Fre
 
 def vertical_background(size: tuple[int, int], factor: float) -> Image.Image:
     width, height = size
-    top = (250, 249, 246)
-    bottom = (244, 238, 235)
+    top = (246, 248, 252)
+    bottom = (238, 242, 248)
     background = Image.new("RGB", size)
     draw = ImageDraw.Draw(background)
     for y in range(height):
@@ -57,8 +57,8 @@ def vertical_background(size: tuple[int, int], factor: float) -> Image.Image:
 
     haze = Image.new("RGBA", size, (0, 0, 0, 0))
     haze_draw = ImageDraw.Draw(haze)
-    haze_draw.ellipse((width * 0.55, height * 0.12, width * 1.22, height * 0.54), fill=(201, 116, 88, 22))
-    haze_draw.ellipse((-width * 0.28, height * 0.64, width * 0.38, height * 1.13), fill=(126, 178, 176, 16))
+    haze_draw.ellipse((width * 0.55, height * 0.12, width * 1.22, height * 0.54), fill=(36, 92, 231, 18))
+    haze_draw.ellipse((-width * 0.28, height * 0.64, width * 0.38, height * 1.13), fill=(22, 136, 121, 14))
     haze = haze.filter(ImageFilter.GaussianBlur(int(75 * factor)))
     background = Image.alpha_composite(background.convert("RGBA"), haze).convert("RGB")
     draw = ImageDraw.Draw(background)
@@ -66,9 +66,9 @@ def vertical_background(size: tuple[int, int], factor: float) -> Image.Image:
     # Quiet orbital strokes echo the Trust mark without competing with the app UI.
     center = (int(width * 0.86), int(105 * factor))
     for radius, start, end, color in [
-        (38, 205, 325, (226, 185, 171)),
-        (54, 210, 320, (237, 207, 196)),
-        (70, 215, 315, (245, 224, 216)),
+        (38, 205, 325, (188, 205, 243)),
+        (54, 210, 320, (211, 222, 248)),
+        (70, 215, 315, (228, 235, 250)),
     ]:
         box = (
             center[0] - int(radius * factor), center[1] - int(radius * factor),
@@ -84,6 +84,14 @@ def make_panel(source: Path, output: Path, index: int, story: tuple[str, str, st
     if screen.size != expected:
         raise ValueError(f"{source} is {screen.width}×{screen.height}, expected {expected[0]}×{expected[1]}")
 
+    if expected == (2064, 2752):
+        # iPad Simulator captures an OS window-resize affordance over this blank
+        # corner. It is outside the app UI and must not appear in store artwork.
+        ImageDraw.Draw(screen).rectangle(
+            (screen.width - 80, screen.height - 80, screen.width - 1, screen.height - 1),
+            fill=(255, 255, 255),
+        )
+
     width, height = expected
     factor = min(width / 1320, 1.25)
     pad = int(88 * factor)
@@ -97,10 +105,11 @@ def make_panel(source: Path, output: Path, index: int, story: tuple[str, str, st
     note_font = font(FONT_BOLD, int(18 * factor), index=2)
     page_font = font(FONT_BOLD, int(20 * factor), index=2)
 
+    # Keep these light-mode annotation tokens aligned with TrustPalette.paper.
     ink = (20, 35, 60)
-    muted = (91, 108, 132)
-    accent = (183, 72, 53)
-    line = (232, 222, 215)
+    muted = (97, 112, 137)
+    accent = (36, 92, 231)
+    line = (220, 227, 239)
 
     top = int(62 * factor)
     draw.text((pad, top), "TRUST", font=bold, fill=ink)
@@ -134,7 +143,7 @@ def make_panel(source: Path, output: Path, index: int, story: tuple[str, str, st
     badge_w = badge_bbox[2] - badge_bbox[0] + int(28 * factor)
     badge_h = badge_bbox[3] - badge_bbox[1] + int(18 * factor)
     badge = (pad, y, min(width - pad, pad + badge_w), y + badge_h)
-    draw.rounded_rectangle(badge, radius=int(18 * factor), fill=(249, 232, 225))
+    draw.rounded_rectangle(badge, radius=int(18 * factor), fill=(232, 239, 255))
     draw.ellipse((badge[0] + int(11 * factor), badge[1] + int(11 * factor), badge[0] + int(18 * factor), badge[1] + int(18 * factor)), fill=accent)
     draw.text((badge[0] + int(26 * factor), badge[1] + int(7 * factor)), note, font=note_font, fill=ink)
 

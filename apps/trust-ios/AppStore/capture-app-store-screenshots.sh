@@ -30,6 +30,7 @@ prepare_sim() {
   local udid="$1"
   xcrun simctl boot "$udid" >/dev/null 2>&1 || true
   xcrun simctl bootstatus "$udid" -b
+  xcrun simctl ui "$udid" appearance light
   xcrun simctl status_bar "$udid" override \
     --time "9:41" \
     --dataNetwork wifi \
