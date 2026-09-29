@@ -8,7 +8,7 @@ public sealed class MemoryTrustStore : ITrustStore
     private readonly ConcurrentDictionary<Guid, Account> _accounts = new();
     private readonly ConcurrentDictionary<Guid, byte[]> _avatarPhotos = new();
     private readonly ConcurrentDictionary<(string Provider, string Subject), Guid> _byProvider = new();
-    private readonly ConcurrentDictionary<(Guid A, Guid B), string> _memberships = new();
+    private readonly ConcurrentDictionary<(Guid A, Guid B), MembershipRecord> _memberships = new();
     private readonly ConcurrentDictionary<(Guid Grantor, Guid Grantee), ShareState> _shares = new();
     private readonly ConcurrentDictionary<Guid, Presence> _presence = new();
     private readonly ConcurrentDictionary<Guid, List<LocationFix>> _locations = new();
@@ -109,7 +109,7 @@ public sealed class MemoryTrustStore : ITrustStore
     public Task<IReadOnlyList<Account>> ListConnectedAsync(Guid accountId, CancellationToken cancellationToken)
     {
         var people = _memberships
-            .Where(pair => pair.Value == "active" && (pair.Key.A == accountId || pair.Key.B == accountId))
+            .Where(pair => pair.Value.Status == "active" && (pair.Key.A == accountId || pair.Key.B == accountId))
             .Select(pair => pair.Key.A == accountId ? pair.Key.B : pair.Key.A)
             .Select(id => _accounts.GetValueOrDefault(id))
             .OfType<Account>()
@@ -119,18 +119,32 @@ public sealed class MemoryTrustStore : ITrustStore
 
     public Task<int> ActiveMembershipCountAsync(Guid accountId, CancellationToken cancellationToken) =>
         Task.FromResult(_memberships.Count(pair =>
-            pair.Value == "active" && (pair.Key.A == accountId || pair.Key.B == accountId)));
+            pair.Value.Status == "active" && (pair.Key.A == accountId || pair.Key.B == accountId)));
 
     public Task<bool> AreConnectedAsync(Guid a, Guid b, CancellationToken cancellationToken)
     {
         var key = Order(a, b);
-        return Task.FromResult(_memberships.TryGetValue(key, out var status) && status == "active");
+        return Task.FromResult(_memberships.TryGetValue(key, out var membership) && membership.Status == "active");
+    }
+
+    public Task<Guid?> GetActiveMembershipIdAsync(Guid a, Guid b, CancellationToken cancellationToken)
+    {
+        lock (_gate)
+        {
+            return Task.FromResult<Guid?>(_memberships.TryGetValue(Order(a, b), out var membership)
+                && membership.Status == "active" ? membership.Id : null);
+        }
     }
 
     public Task InsertMembershipAsync(Guid a, Guid b, CancellationToken cancellationToken)
     {
-        _memberships[Order(a, b)] = "active";
-        return Task.CompletedTask;
+        lock (_gate)
+        {
+            var key = Order(a, b);
+            if (!_memberships.TryGetValue(key, out var current) || current.Status != "active")
+                _memberships[key] = new MembershipRecord(Guid.NewGuid(), "active");
+            return Task.CompletedTask;
+        }
     }
 
     public Task<bool> ConnectAccountsWithOffSharesAsync(Guid a, Guid b, DateTimeOffset now, CancellationToken cancellationToken)
@@ -138,16 +152,16 @@ public sealed class MemoryTrustStore : ITrustStore
         lock (_gate)
         {
             if (!_accounts.TryGetValue(a, out var first) || !_accounts.TryGetValue(b, out var second)) throw TrustException.RequestNotFound();
-            if (_memberships.TryGetValue(Order(a, b), out var status) && status == "active")
+            if (_memberships.TryGetValue(Order(a, b), out var membership) && membership.Status == "active")
             {
                 ResolvePendingRequests(a, b, now);
                 return Task.FromResult(false);
             }
             if (ActiveMembershipCount(a) >= (first.HasCircle ? TrustRules.ProSeats : TrustRules.FreeSeats)
                 || ActiveMembershipCount(b) >= (second.HasCircle ? TrustRules.ProSeats : TrustRules.FreeSeats)) throw TrustException.SeatLimit();
-            _memberships[Order(a, b)] = "active";
-            _shares[(a, b)] = ShareState.Default;
-            _shares[(b, a)] = ShareState.Default;
+            _memberships[Order(a, b)] = new MembershipRecord(Guid.NewGuid(), "active");
+            ResetShareOff(a, b);
+            ResetShareOff(b, a);
             ResolvePendingRequests(a, b, now);
             return Task.FromResult(true);
         }
@@ -155,7 +169,32 @@ public sealed class MemoryTrustStore : ITrustStore
 
     public Task RevokeMembershipAsync(Guid a, Guid b, CancellationToken cancellationToken)
     {
-        lock (_gate) _memberships[Order(a, b)] = "revoked";
+        lock (_gate)
+        {
+            var key = Order(a, b);
+            if (_memberships.TryGetValue(key, out var current))
+                _memberships[key] = current with { Status = "revoked" };
+            else
+                _memberships[key] = new MembershipRecord(Guid.NewGuid(), "revoked");
+            _presenceGrants.TryRemove((a, b), out _);
+            _presenceGrants.TryRemove((b, a), out _);
+        }
+        return Task.CompletedTask;
+    }
+
+    public Task RevokeMembershipForConnectionAsync(Guid a, Guid b, Guid connectionId, CancellationToken cancellationToken)
+    {
+        lock (_gate)
+        {
+            var key = Order(a, b);
+            if (!_memberships.TryGetValue(key, out var current) || current.Status != "active")
+                throw TrustException.NotConnected();
+            if (current.Id != connectionId)
+                throw TrustException.ConnectionChanged();
+            _memberships[key] = current with { Status = "revoked" };
+            _presenceGrants.TryRemove((a, b), out _);
+            _presenceGrants.TryRemove((b, a), out _);
+        }
         return Task.CompletedTask;
     }
 
@@ -166,20 +205,47 @@ public sealed class MemoryTrustStore : ITrustStore
 
     public Task UpsertShareAsync(Guid grantor, Guid grantee, ShareState state, CancellationToken cancellationToken)
     {
-        _shares[(grantor, grantee)] = state;
+        lock (_gate)
+        {
+            var key = (grantor, grantee);
+            var current = _shares.GetValueOrDefault(key);
+            _shares[key] = current is null ? state : state with { Revision = current.Revision + 1 };
+        }
+        return Task.CompletedTask;
+    }
+
+    public Task SetShareForConnectionAsync(Guid grantor, Guid grantee, Guid? connectionId, long? expectedRevision, ShareState state, bool isOff, CancellationToken cancellationToken)
+    {
+        lock (_gate)
+        {
+            if (!_memberships.TryGetValue(Order(grantor, grantee), out var membership)
+                || membership.Status != "active")
+                throw TrustException.NotConnected();
+            if (connectionId is { } expectedConnection && membership.Id != expectedConnection)
+                throw TrustException.ConnectionChanged();
+            if (!isOff && (connectionId is null || expectedRevision is null))
+                throw TrustException.ClientUpdateRequired();
+            var current = _shares.GetValueOrDefault((grantor, grantee), ShareState.Default);
+            if (!isOff && current.Revision != expectedRevision)
+                throw TrustException.StaleShareIntent();
+            _shares[(grantor, grantee)] = state with { Revision = current.Revision + 1 };
+        }
         return Task.CompletedTask;
     }
 
     public Task RestoreExpiredPausesAsync(DateTimeOffset now, CancellationToken cancellationToken)
     {
-        foreach (var (key, state) in _shares.ToList())
+        lock (_gate)
         {
-            if (state.Resting == ShareResting.Paused && state.PauseUntil is { } until && until <= now)
+            foreach (var (key, state) in _shares.ToList())
             {
-                var restore = state.RestoresTo == ShareResting.Always
-                    ? ShareResting.Always
-                    : ShareResting.UntilTheyLook;
-                _shares[key] = new ShareState(restore);
+                if (state.Resting == ShareResting.Paused && state.PauseUntil is { } until && until <= now)
+                {
+                    var restore = state.RestoresTo == ShareResting.Always
+                        ? ShareResting.Always
+                        : ShareResting.UntilTheyLook;
+                    _shares[key] = new ShareState(restore, Revision: state.Revision + 1);
+                }
             }
         }
 
@@ -370,13 +436,13 @@ public sealed class MemoryTrustStore : ITrustStore
             if (invite.CreatorId == joiningAccountId) throw new TrustException("own_invite", "You cannot join your own invite.");
             if (!_accounts.TryGetValue(invite.CreatorId, out var creator) || !_accounts.TryGetValue(joiningAccountId, out var joiner)) throw TrustException.InvalidCode();
             var pair = Order(joiningAccountId, creator.Id);
-            if (!_memberships.TryGetValue(pair, out var status) || status != "active")
+            if (!_memberships.TryGetValue(pair, out var membership) || membership.Status != "active")
             {
                 if (ActiveMembershipCount(joiningAccountId) >= (joiner.HasCircle ? TrustRules.ProSeats : TrustRules.FreeSeats)
                     || ActiveMembershipCount(creator.Id) >= (creator.HasCircle ? TrustRules.ProSeats : TrustRules.FreeSeats)) throw TrustException.SeatLimit();
-                _memberships[pair] = "active";
-                _shares[(joiningAccountId, creator.Id)] = ShareState.Default;
-                _shares[(creator.Id, joiningAccountId)] = ShareState.Default;
+                _memberships[pair] = new MembershipRecord(Guid.NewGuid(), "active");
+                ResetShareOff(joiningAccountId, creator.Id);
+                ResetShareOff(creator.Id, joiningAccountId);
             }
             ResolvePendingRequests(joiningAccountId, creator.Id, now);
             _invites[invite.Code] = invite with { Status = "consumed" };
@@ -438,15 +504,31 @@ public sealed class MemoryTrustStore : ITrustStore
         return Task.CompletedTask;
     }
 
-    public Task SetPresenceGrantAsync(
+    public Task<PresenceGrantWriteResult> SetPresenceGrantAsync(
         Guid subjectId,
         Guid trusteeId,
+        Guid connectionId,
         bool enabled,
+        long? expectedRevision,
         DateTimeOffset updatedAt,
         CancellationToken cancellationToken)
     {
-        _presenceGrants[(subjectId, trusteeId)] = new PresenceGrant(subjectId, trusteeId, enabled, updatedAt);
-        return Task.CompletedTask;
+        lock (_gate)
+        {
+            if (!_memberships.TryGetValue(Order(subjectId, trusteeId), out var membership) || membership.Status != "active")
+            {
+                return Task.FromResult(new PresenceGrantWriteResult(PresenceGrantWriteStatus.NotConnected, 0));
+            }
+            if (membership.Id != connectionId)
+                return Task.FromResult(new PresenceGrantWriteResult(PresenceGrantWriteStatus.ConnectionChanged, 0));
+            var current = _presenceGrants.GetValueOrDefault((subjectId, trusteeId));
+            var revision = current?.Revision ?? 0;
+            if (enabled && (expectedRevision is null || expectedRevision != revision))
+                return Task.FromResult(new PresenceGrantWriteResult(PresenceGrantWriteStatus.StaleRevision, revision));
+            var committedRevision = revision + 1;
+            _presenceGrants[(subjectId, trusteeId)] = new PresenceGrant(subjectId, trusteeId, enabled, updatedAt, committedRevision);
+            return Task.FromResult(new PresenceGrantWriteResult(PresenceGrantWriteStatus.Updated, committedRevision));
+        }
     }
 
     public Task<PresenceGrant?> GetPresenceGrantAsync(
@@ -460,7 +542,43 @@ public sealed class MemoryTrustStore : ITrustStore
 
     public Task UpsertHomePlaceAsync(HomePlace place, CancellationToken cancellationToken)
     {
-        _homePlaces[place.AccountId] = place;
+        lock (_gate)
+        {
+            var changed = !_homePlaces.TryGetValue(place.AccountId, out var currentPlace)
+                || currentPlace.PlaceId != place.PlaceId;
+            _homePlaces[place.AccountId] = place;
+            if (changed && _homePresence.TryGetValue(place.AccountId, out var currentPresence))
+            {
+                _homePresence[place.AccountId] = currentPresence with
+                {
+                    PlaceId = place.PlaceId,
+                    TransitionId = Guid.NewGuid()
+                };
+            }
+            else if (!_homePresence.ContainsKey(place.AccountId))
+            {
+                _homePresence[place.AccountId] = new CurrentHomePresence(
+                    place.AccountId,
+                    place.PlaceId,
+                    HomePresenceState.Unknown,
+                    place.UpdatedAt,
+                    null,
+                    Guid.NewGuid());
+            }
+        }
+        return Task.CompletedTask;
+    }
+
+    public Task ClearHomePlaceAsync(Guid accountId, CancellationToken cancellationToken)
+    {
+        lock (_gate)
+        {
+            _homePlaces.TryRemove(accountId, out _);
+            if (_homePresence.TryGetValue(accountId, out var current))
+            {
+                _homePresence[accountId] = current with { PlaceId = null, TransitionId = Guid.NewGuid() };
+            }
+        }
         return Task.CompletedTask;
     }
 
@@ -472,8 +590,61 @@ public sealed class MemoryTrustStore : ITrustStore
 
     public Task UpsertCurrentHomePresenceAsync(CurrentHomePresence presence, CancellationToken cancellationToken)
     {
-        _homePresence[presence.AccountId] = presence;
+        lock (_gate)
+        {
+            if (presence.TransitionId == Guid.Empty)
+            {
+                presence = presence with
+                {
+                    TransitionId = _homePresence.TryGetValue(presence.AccountId, out var current)
+                        ? current.TransitionId
+                        : Guid.NewGuid()
+                };
+            }
+            _homePresence[presence.AccountId] = presence;
+        }
         return Task.CompletedTask;
+    }
+
+    public Task<HomePresenceSignalResult> RecordHomePresenceSignalAsync(
+        Guid accountId,
+        Guid? expectedPlaceId,
+        HomePresenceState state,
+        DateTimeOffset signaledAt,
+        CancellationToken cancellationToken)
+    {
+        lock (_gate)
+        {
+            _homePlaces.TryGetValue(accountId, out var place);
+            if (expectedPlaceId is { } expected && place?.PlaceId != expected)
+            {
+                return Task.FromResult(new HomePresenceSignalResult(
+                    false,
+                    false,
+                    _homePresence.GetValueOrDefault(accountId)?.TransitionId ?? Guid.Empty));
+            }
+
+            var previous = _homePresence.GetValueOrDefault(accountId);
+            if (previous?.LastSignalAt is { } lastSignal && signaledAt < lastSignal)
+            {
+                return Task.FromResult(new HomePresenceSignalResult(false, false, previous.TransitionId));
+            }
+
+            var arrivedHome = state == HomePresenceState.Home && previous?.State != HomePresenceState.Home;
+            var changed = previous is null || previous.State != state;
+            var transitionId = changed || previous?.TransitionId == Guid.Empty
+                ? Guid.NewGuid()
+                : previous!.TransitionId;
+            var current = new CurrentHomePresence(
+                accountId,
+                place?.PlaceId,
+                state,
+                changed ? signaledAt : previous!.LastChangedAt,
+                signaledAt,
+                transitionId);
+            _homePresence[accountId] = current;
+            return Task.FromResult(new HomePresenceSignalResult(true, arrivedHome, transitionId));
+        }
     }
 
     public Task<CurrentHomePresence?> GetCurrentHomePresenceAsync(
@@ -482,6 +653,27 @@ public sealed class MemoryTrustStore : ITrustStore
     {
         _homePresence.TryGetValue(accountId, out var presence);
         return Task.FromResult(presence);
+    }
+
+    public Task<bool> IsHomeTransitionEligibleAsync(
+        Guid subjectId, Guid viewerId, Guid connectionId, Guid expectedTransitionId,
+        DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        lock (_gate)
+        {
+            var pair = Order(subjectId, viewerId);
+            if (!_memberships.TryGetValue(pair, out var membership)
+                || membership.Status != "active" || membership.Id != connectionId
+                || !_homePresence.TryGetValue(subjectId, out var current)
+                || current.State != HomePresenceState.Home
+                || current.TransitionId != expectedTransitionId
+                || !_presenceGrants.TryGetValue((subjectId, viewerId), out var grant)
+                || !grant.Enabled)
+                return Task.FromResult(false);
+
+            var share = _shares.GetValueOrDefault((subjectId, viewerId), ShareState.Default);
+            return Task.FromResult(share.AcceptsLocation(now));
+        }
     }
 
     public Task InsertPromiseAsync(HomePromise promise, CancellationToken cancellationToken)
@@ -596,7 +788,7 @@ public sealed class MemoryTrustStore : ITrustStore
     {
         lock (_gate)
         {
-            if (_memberships.TryGetValue(Order(accountId, otherId), out var membership) && membership == "active")
+            if (_memberships.TryGetValue(Order(accountId, otherId), out var membership) && membership.Status == "active")
                 return Task.FromResult(new ConnectionRelationshipMatch(ConnectionRelationship.Connected));
             ExpireRequests(now);
             var pending = _connectionRequests.Values.FirstOrDefault(r => r.Status == ConnectionRequestStatus.Pending
@@ -642,7 +834,7 @@ public sealed class MemoryTrustStore : ITrustStore
             if (!sender.OnboardingComplete || !recipient.OnboardingComplete) throw TrustException.RequestNotFound();
             if (senderId == recipientId) throw TrustException.RequestNotFound();
             ExpireRequests(now);
-            if (_memberships.TryGetValue(Order(senderId, recipientId), out var status) && status == "active") throw TrustException.RequestNotFound();
+            if (_memberships.TryGetValue(Order(senderId, recipientId), out var membership) && membership.Status == "active") throw TrustException.RequestNotFound();
             var existing = _connectionRequests.Values.FirstOrDefault(r => Order(r.SenderId, r.RecipientId) == Order(senderId, recipientId)
                 && r.Status == ConnectionRequestStatus.Pending);
             if (existing is not null) return Task.FromResult(existing);
@@ -669,13 +861,13 @@ public sealed class MemoryTrustStore : ITrustStore
             if (request.Status != ConnectionRequestStatus.Pending) throw TrustException.RequestNotFound();
             var first = _accounts[request.SenderId]; var second = _accounts[request.RecipientId];
             if (!first.OnboardingComplete || !second.OnboardingComplete) throw TrustException.PhoneVerificationRequired();
-            if (!_memberships.TryGetValue(Order(first.Id, second.Id), out var active) || active != "active")
+            if (!_memberships.TryGetValue(Order(first.Id, second.Id), out var active) || active.Status != "active")
             {
                 if (ActiveMembershipCount(first.Id) >= (first.HasCircle ? TrustRules.ProSeats : TrustRules.FreeSeats)
                     || ActiveMembershipCount(second.Id) >= (second.HasCircle ? TrustRules.ProSeats : TrustRules.FreeSeats)) throw TrustException.SeatLimit();
-                _memberships[Order(first.Id, second.Id)] = "active";
-                _shares[(first.Id, second.Id)] = ShareState.Default;
-                _shares[(second.Id, first.Id)] = ShareState.Default;
+                _memberships[Order(first.Id, second.Id)] = new MembershipRecord(Guid.NewGuid(), "active");
+                ResetShareOff(first.Id, second.Id);
+                ResetShareOff(second.Id, first.Id);
             }
             _connectionRequests[request.Id] = request with { Status = ConnectionRequestStatus.Accepted, UpdatedAt = now };
             return Task.CompletedTask;
@@ -736,7 +928,7 @@ public sealed class MemoryTrustStore : ITrustStore
             };
     }
 
-    private int ActiveMembershipCount(Guid accountId) => _memberships.Count(pair => pair.Value == "active" && (pair.Key.A == accountId || pair.Key.B == accountId));
+    private int ActiveMembershipCount(Guid accountId) => _memberships.Count(pair => pair.Value.Status == "active" && (pair.Key.A == accountId || pair.Key.B == accountId));
 
     public Task SetHandleAsync(
         Guid accountId,
@@ -924,4 +1116,12 @@ public sealed class MemoryTrustStore : ITrustStore
 
     private static (Guid A, Guid B) Order(Guid a, Guid b) =>
         a.CompareTo(b) < 0 ? (a, b) : (b, a);
+
+    private void ResetShareOff(Guid grantor, Guid grantee)
+    {
+        var previous = _shares.GetValueOrDefault((grantor, grantee), ShareState.Default);
+        _shares[(grantor, grantee)] = new ShareState(ShareResting.Off, Revision: previous.Revision + 1);
+    }
+
+    private sealed record MembershipRecord(Guid Id, string Status);
 }

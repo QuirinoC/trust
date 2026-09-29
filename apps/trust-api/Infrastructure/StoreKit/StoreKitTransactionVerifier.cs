@@ -38,6 +38,24 @@ public sealed class StoreKitTransactionVerifier(
         }
     }
 
+    public StoreKitAppTransactionVerificationResult VerifyAppTransaction(string signedAppTransaction)
+    {
+        if (!TryVerifyPayload(signedAppTransaction, out var payloadBytes, out var error))
+        {
+            return InvalidAppTransaction(error);
+        }
+
+        try
+        {
+            using var payload = JsonDocument.Parse(payloadBytes, JsonOptions);
+            return ParseAppTransaction(payload.RootElement);
+        }
+        catch (JsonException)
+        {
+            return InvalidAppTransaction("The signed app transaction contains invalid JSON.");
+        }
+    }
+
     public StoreKitNotificationVerificationResult VerifyNotification(string signedPayload)
     {
         if (!TryVerifyPayload(signedPayload, out var payloadBytes, out var error))
@@ -52,6 +70,47 @@ public sealed class StoreKitTransactionVerifier(
             if (!TryGetString(root, "notificationType", out var notificationType)
                 || !TryGetString(root, "notificationUUID", out var rawNotificationId)
                 || !Guid.TryParse(rawNotificationId, out var notificationId)
+                || !TryGetUnixMilliseconds(root, "signedDate", out var signedAt)
+                || !TryGetString(root, "version", out var version)
+                || version != "2.0")
+            {
+                return InvalidNotification("The StoreKit notification claims are invalid.");
+            }
+
+            if (string.Equals(notificationType, "RESCIND_CONSENT", StringComparison.Ordinal))
+            {
+                if (root.TryGetProperty("data", out _)
+                    || !root.TryGetProperty("appData", out var appData)
+                    || appData.ValueKind != JsonValueKind.Object
+                    || !TryGetString(appData, "bundleId", out var bundleId)
+                    || !string.Equals(bundleId, _options.BundleId, StringComparison.Ordinal)
+                    || !TryGetString(appData, "environment", out var rawEnvironment)
+                    || !TryNormalizeEnvironment(rawEnvironment, out var environment)
+                    || !TryGetString(appData, "signedAppTransactionInfo", out var signedAppTransaction))
+                {
+                    return InvalidNotification("The StoreKit consent-revocation claims are invalid.");
+                }
+
+                var appTransaction = VerifyAppTransaction(signedAppTransaction);
+                if (!appTransaction.IsValid
+                    || appTransaction.AppTransaction!.BundleId != bundleId
+                    || appTransaction.AppTransaction.Environment != environment)
+                {
+                    return InvalidNotification(appTransaction.Error
+                        ?? "The signed app transaction does not match the consent-revocation metadata.");
+                }
+
+                return new StoreKitNotificationVerificationResult(
+                    true,
+                    notificationId,
+                    notificationType,
+                    null,
+                    null,
+                    appTransaction.AppTransaction,
+                    signedAt);
+            }
+
+            if (root.TryGetProperty("appData", out _)
                 || !root.TryGetProperty("data", out var data)
                 || data.ValueKind != JsonValueKind.Object)
             {
@@ -65,7 +124,8 @@ public sealed class StoreKitTransactionVerifier(
                     notificationId,
                     notificationType,
                     null,
-                    null);
+                    null,
+                    SignedAt: signedAt);
             }
 
             if (transactionProperty.ValueKind != JsonValueKind.String)
@@ -81,7 +141,8 @@ public sealed class StoreKitTransactionVerifier(
                     notificationId,
                     notificationType,
                     transaction.Transaction,
-                    null)
+                    null,
+                    SignedAt: signedAt)
                 : InvalidNotification(transaction.Error ?? "The nested transaction is invalid.");
         }
         catch (JsonException)
@@ -177,8 +238,8 @@ public sealed class StoreKitTransactionVerifier(
             || !string.Equals(bundleId, _options.BundleId, StringComparison.Ordinal)
             || !TryGetString(payload, "productId", out var productId)
             || !IsKnownProduct(productId)
-            || !TryGetString(payload, "environment", out var environment)
-            || !_options.AllowedEnvironments.Contains(environment, StringComparer.Ordinal)
+            || !TryGetString(payload, "environment", out var rawEnvironment)
+            || !TryNormalizeEnvironment(rawEnvironment, out var environment)
             || !TryGetString(payload, "transactionId", out var transactionId)
             || !TryGetString(payload, "originalTransactionId", out var originalTransactionId)
             || !TryGetString(payload, "appAccountToken", out var rawToken)
@@ -216,6 +277,37 @@ public sealed class StoreKitTransactionVerifier(
                 expiresAt,
                 revokedAt),
             null);
+    }
+
+    private StoreKitAppTransactionVerificationResult ParseAppTransaction(JsonElement payload)
+    {
+        if (!TryGetString(payload, "appTransactionId", out var appTransactionId)
+            || appTransactionId.Length > 512
+            || !TryGetString(payload, "bundleId", out var bundleId)
+            || !string.Equals(bundleId, _options.BundleId, StringComparison.Ordinal)
+            || !TryGetString(payload, "environment", out var rawEnvironment)
+            || !TryNormalizeEnvironment(rawEnvironment, out var environment))
+        {
+            return InvalidAppTransaction("The StoreKit app transaction claims are invalid.");
+        }
+
+        if (payload.TryGetProperty("signedDate", out _)
+            && (!TryGetUnixMilliseconds(payload, "signedDate", out var signedAt)
+                || signedAt > timeProvider.GetUtcNow().AddMinutes(5)))
+        {
+            return InvalidAppTransaction("The StoreKit app transaction date is invalid.");
+        }
+
+        return new StoreKitAppTransactionVerificationResult(
+            new VerifiedStoreKitAppTransaction(appTransactionId, bundleId, environment),
+            null);
+    }
+
+    private bool TryNormalizeEnvironment(string rawEnvironment, out string environment)
+    {
+        environment = _options.AllowedEnvironments.FirstOrDefault(candidate =>
+            string.Equals(candidate, rawEnvironment, StringComparison.OrdinalIgnoreCase)) ?? string.Empty;
+        return environment.Length > 0;
     }
 
     private bool ValidateCertificateChain(X509Certificate2Collection certificates)
@@ -382,6 +474,8 @@ public sealed class StoreKitTransactionVerifier(
     }
 
     private static StoreKitVerificationResult Invalid(string error) => new(null, error);
+
+    private static StoreKitAppTransactionVerificationResult InvalidAppTransaction(string error) => new(null, error);
 
     private static StoreKitNotificationVerificationResult InvalidNotification(string error) =>
         new(false, null, null, null, error);

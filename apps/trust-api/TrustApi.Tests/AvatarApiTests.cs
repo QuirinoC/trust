@@ -2,7 +2,10 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
 using SkiaSharp;
+using TrustApi.Infrastructure.AgeAssurance;
+using TrustApi.Infrastructure.StoreKit;
 
 namespace TrustApi.Tests;
 
@@ -40,9 +43,10 @@ public sealed class AvatarApiTests
         using var circleResponse = await client.SendAsync(circleRequest);
         circleResponse.EnsureSuccessStatusCode();
         using var circleJson = JsonDocument.Parse(await circleResponse.Content.ReadAsStringAsync());
-        var samDto = circleJson.RootElement.GetProperty("members").EnumerateArray()
-            .Single(member => member.GetProperty("person").GetProperty("id").GetGuid() == sam.Id)
-            .GetProperty("person");
+        var samMember = circleJson.RootElement.GetProperty("members").EnumerateArray()
+            .Single(member => member.GetProperty("person").GetProperty("id").GetGuid() == sam.Id);
+        var connectionId = samMember.GetProperty("connectionId").GetGuid();
+        var samDto = samMember.GetProperty("person");
         Assert.Equal("photo", samDto.GetProperty("avatar").GetProperty("kind").GetString());
         Assert.False(samDto.GetProperty("avatar").TryGetProperty("url", out _));
         Assert.Equal(version, samDto.GetProperty("avatar").GetProperty("version").GetGuid());
@@ -66,7 +70,13 @@ public sealed class AvatarApiTests
         using var strangerResponse = await client.SendAsync(strangerFetch);
         Assert.Equal(HttpStatusCode.NotFound, strangerResponse.StatusCode);
 
+        using var outdatedRevoke = Authorized(HttpMethod.Post, $"/api/v1/people/{sam.Id}/revoke", jordan.Token);
+        outdatedRevoke.Content = JsonContent.Create(new { connectionId = Guid.NewGuid() });
+        using var outdatedRevokeResponse = await client.SendAsync(outdatedRevoke);
+        Assert.Equal(HttpStatusCode.Conflict, outdatedRevokeResponse.StatusCode);
+
         using var revoke = Authorized(HttpMethod.Post, $"/api/v1/people/{sam.Id}/revoke", jordan.Token);
+        revoke.Content = JsonContent.Create(new { connectionId });
         (await client.SendAsync(revoke)).EnsureSuccessStatusCode();
         using var revokedFetch = Authorized(HttpMethod.Get, PhotoPath(sam.Id, version), jordan.Token);
         using var revokedResponse = await client.SendAsync(revokedFetch);
@@ -154,6 +164,44 @@ public sealed class AvatarApiTests
             using var wrongDimensionsResponse = await client.SendAsync(wrongDimensions);
             Assert.Equal(HttpStatusCode.BadRequest, wrongDimensionsResponse.StatusCode);
         }
+    }
+
+    [Fact]
+    public async Task ConnectedViewerCannotDownloadPhotoWhileSubjectConsentRevocationCleanupIsPending()
+    {
+        using var factory = new TrustApiFactory();
+        using var client = factory.CreateClient();
+        var subject = await CreateAccountAsync(client, "Revoked Avatar Subject");
+        var viewer = await CreateAccountAsync(client, "Avatar Viewer");
+
+        using var invite = Authorized(HttpMethod.Post, "/api/v1/invites", subject.Token);
+        using var inviteResponse = await client.SendAsync(invite);
+        inviteResponse.EnsureSuccessStatusCode();
+        using var inviteJson = JsonDocument.Parse(await inviteResponse.Content.ReadAsStringAsync());
+        using var accept = Authorized(HttpMethod.Post, "/api/v1/invites/accept", viewer.Token);
+        accept.Content = JsonContent.Create(new { code = inviteJson.RootElement.GetProperty("code").GetString() });
+        (await client.SendAsync(accept)).EnsureSuccessStatusCode();
+
+        using var upload = Authorized(HttpMethod.Put, "/api/v1/me/avatar/photo", subject.Token);
+        upload.Content = new ByteArrayContent(CreateJpeg(128, 128));
+        upload.Content.Headers.ContentType = new MediaTypeHeaderValue("image/jpeg");
+        using var uploadResponse = await client.SendAsync(upload);
+        uploadResponse.EnsureSuccessStatusCode();
+        using var uploadJson = JsonDocument.Parse(await uploadResponse.Content.ReadAsStringAsync());
+        var version = uploadJson.RootElement.GetProperty("version").GetGuid();
+
+        var ageAssurance = factory.Services.GetRequiredService<IAgeAssuranceAccountStore>();
+        var transaction = new VerifiedStoreKitAppTransaction(
+            "revoked-avatar-subject-transaction",
+            "com.collapsetechnologies.trust",
+            "Sandbox");
+        await ageAssurance.TryRegisterAppTransactionLinkAsync(subject.Id, transaction, CancellationToken.None);
+        await ageAssurance.RecordConsentRevocationAsync(
+            Guid.NewGuid(), transaction, DateTimeOffset.UtcNow, CancellationToken.None);
+
+        using var staleFetch = Authorized(HttpMethod.Get, PhotoPath(subject.Id, version), viewer.Token);
+        using var staleResponse = await client.SendAsync(staleFetch);
+        Assert.Equal(HttpStatusCode.NotFound, staleResponse.StatusCode);
     }
 
     [Fact]

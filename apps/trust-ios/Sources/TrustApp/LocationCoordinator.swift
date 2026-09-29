@@ -8,24 +8,28 @@ final class LocationCoordinator: NSObject, ObservableObject, CLLocationManagerDe
     @Published var authorization: CLAuthorizationStatus = .notDetermined
     @Published var accuracyAuthorization: CLAccuracyAuthorization = .fullAccuracy
     @Published var lastFix: LocationPoint?
+    private var homeAccountID: String?
     @Published var isUsingSimulatorFeed = true
     @Published var isSharing = false
     @Published private(set) var sharingTier: LocationSharingTier = .off
     @Published private(set) var homeIsSet = false
 
     var onLocations: (([LocationPoint]) -> Void)?
-    var onHomePresence: ((HomePresenceKind) -> Void)?
+    var onHomePresence: ((HomePresenceKind, Date, UUID) -> Void)?
 
     private let manager = CLLocationManager()
     private let alwaysAskedKey = "trust.location.didRequestAlways"
-    private let homeStore = HomePlaceStore()
+    private var homeStore = HomePlaceStore()
     private var isMapActive = false
     private var isAppActive = true
+    private var isAgeAccessAllowed = false
     private var pendingAlwaysAfterWhenInUse = false
     private var awaitingAlwaysAnswer = false
     private var didRequestPreciseThisSession = false
     private var monitoringHome = false
     private var lastPostedHomeState: HomePresenceKind?
+    private var pendingOneShotLocationCompletion: ((LocationPoint?) -> Void)?
+    private var pendingOneShotLocationRequestID: UUID?
 
     override init() {
         super.init()
@@ -40,6 +44,16 @@ final class LocationCoordinator: NSObject, ObservableObject, CLLocationManagerDe
         authorization = manager.authorizationStatus
         accuracyAuthorization = manager.accuracyAuthorization
         homeIsSet = homeStore.isSet
+    }
+
+    func setHomeAccountScope(_ accountID: String?) {
+        guard TrustHomeScope.requiresSwitch(from: homeAccountID, to: accountID) else { return }
+        finishOneShotLocationRequest(nil)
+        setHomeMonitoring(false)
+        homeAccountID = TrustHomeScope.normalizedAccountID(accountID)
+        homeStore = HomePlaceStore(accountID: homeAccountID)
+        homeIsSet = homeStore.isSet
+        lastPostedHomeState = nil
     }
 
     var homePlaceID: UUID? { homeStore.placeID }
@@ -94,6 +108,11 @@ final class LocationCoordinator: NSObject, ObservableObject, CLLocationManagerDe
         applyTracking()
     }
 
+    func setAgeAccessAllowed(_ allowed: Bool) {
+        isAgeAccessAllowed = allowed
+        applyTracking()
+    }
+
     func setSharing(_ sharing: Bool) {
         setSharingTier(sharing ? (sharingTier == .off ? .available : sharingTier) : .off)
     }
@@ -123,23 +142,75 @@ final class LocationCoordinator: NSObject, ObservableObject, CLLocationManagerDe
         applyHomeMonitoring()
     }
 
-    @discardableResult
-    func setHomeFromCurrentFix(label: String = "Home") -> (placeID: UUID, label: String)? {
-        guard let fix = lastFix ?? manager.location.map({
+    func homeCandidateFromCurrentFix(label: String = "Home") -> (placeID: UUID, label: String, coordinate: CLLocationCoordinate2D)? {
+        guard let fix = currentUsableLocationFix() else { return nil }
+        return homeCandidate(from: fix, label: label)
+    }
+
+    private func currentUsableLocationFix() -> LocationPoint? {
+        let fixes = [lastFix, manager.location.map {
             LocationPoint(timestamp: $0.timestamp, latitude: $0.coordinate.latitude, longitude: $0.coordinate.longitude)
-        }) else {
+        }].compactMap { $0 }
+        return fixes.first { abs($0.timestamp.timeIntervalSinceNow) <= 300 }
+    }
+
+    func homeCandidate(from fix: LocationPoint, label: String = "Home") -> (placeID: UUID, label: String, coordinate: CLLocationCoordinate2D)? {
+        guard
+              abs(fix.timestamp.timeIntervalSinceNow) <= 300,
+              CLLocationCoordinate2DIsValid(CLLocationCoordinate2D(latitude: fix.latitude, longitude: fix.longitude)) else {
             return nil
         }
-        let placeID = homeStore.placeID ?? UUID()
-        homeStore.save(
-            coordinate: CLLocationCoordinate2D(latitude: fix.latitude, longitude: fix.longitude),
-            label: label,
-            placeID: placeID
-        )
+        return (homeStore.placeID ?? UUID(), label, CLLocationCoordinate2D(latitude: fix.latitude, longitude: fix.longitude))
+    }
+
+    /// Requests a fresh one-shot fix for user actions such as choosing Home.
+    /// If permission is new, the request resumes after the authorization prompt.
+    func requestCurrentFix(completion: @escaping (LocationPoint?) -> Void) {
+        guard !isDenied else {
+            completion(nil)
+            return
+        }
+        finishOneShotLocationRequest(nil)
+        let requestID = UUID()
+        pendingOneShotLocationRequestID = requestID
+        pendingOneShotLocationCompletion = completion
+        if hasAccess {
+            beginOneShotLocationRequest()
+        } else {
+            manager.requestWhenInUseAuthorization()
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 20) { [weak self] in
+            guard self?.pendingOneShotLocationRequestID == requestID else { return }
+            self?.finishOneShotLocationRequest(self?.currentUsableLocationFix())
+        }
+    }
+
+    private func finishOneShotLocationRequest(_ fix: LocationPoint?) {
+        let completion = pendingOneShotLocationCompletion
+        pendingOneShotLocationCompletion = nil
+        pendingOneShotLocationRequestID = nil
+        applyTracking()
+        completion?(fix)
+    }
+
+    private func beginOneShotLocationRequest() {
+        manager.startUpdatingLocation()
+        manager.requestLocation()
+    }
+
+    func commitHome(_ candidate: (placeID: UUID, label: String, coordinate: CLLocationCoordinate2D)) {
+        homeStore.save(coordinate: candidate.coordinate, label: candidate.label, placeID: candidate.placeID)
         homeIsSet = true
+        lastPostedHomeState = nil
         applyHomeMonitoring()
-        evaluateHomePresence(at: CLLocation(latitude: fix.latitude, longitude: fix.longitude))
-        return (placeID, label)
+        evaluateHomePresence(at: CLLocation(latitude: candidate.coordinate.latitude, longitude: candidate.coordinate.longitude))
+    }
+
+    @discardableResult
+    func setHomeFromCurrentFix(label: String = "Home") -> (placeID: UUID, label: String)? {
+        guard let candidate = homeCandidateFromCurrentFix(label: label) else { return nil }
+        commitHome(candidate)
+        return (candidate.placeID, candidate.label)
     }
 
     func requestWhenInUse() {
@@ -191,11 +262,16 @@ final class LocationCoordinator: NSObject, ObservableObject, CLLocationManagerDe
                 self.pendingAlwaysAfterWhenInUse = false
             }
             self.requestPreciseIfNeeded()
-            // Home set earlier without Always: start the region once Always lands.
-            if self.homeStore.isSet && self.hasAlways {
-                self.monitoringHome = true
-                self.applyHomeMonitoring()
+            if self.pendingOneShotLocationCompletion != nil {
+                if self.hasAccess {
+                    self.beginOneShotLocationRequest()
+                } else if self.isDenied {
+                    self.finishOneShotLocationRequest(nil)
+                }
             }
+            // Do not infer permission to monitor from a saved Home place or the
+            // system authorization callback. AppModel enables monitoring only
+            // after age access and an authenticated account have been restored.
             self.applyTracking()
         }
     }
@@ -216,6 +292,9 @@ final class LocationCoordinator: NSObject, ObservableObject, CLLocationManagerDe
             if !points.isEmpty {
                 self.onLocations?(points)
             }
+            if let last = points.last, self.pendingOneShotLocationCompletion != nil {
+                self.finishOneShotLocationRequest(last)
+            }
             if let latest = locations.last {
                 self.evaluateHomePresence(at: latest)
             }
@@ -225,29 +304,43 @@ final class LocationCoordinator: NSObject, ObservableObject, CLLocationManagerDe
     func locationManager(_ manager: CLLocationManager, didEnterRegion region: CLRegion) {
         guard region.identifier.hasPrefix("trust.home.") else { return }
         DispatchQueue.main.async {
-            self.postHomeState(.home)
+            guard self.monitoringHome,
+                  let currentRegion = self.homeStore.region,
+                  currentRegion.identifier == region.identifier,
+                  let placeID = self.homeStore.placeID else { return }
+            self.postHomeState(.home, signaledAt: Date(), placeID: placeID)
         }
     }
 
     func locationManager(_ manager: CLLocationManager, didExitRegion region: CLRegion) {
         guard region.identifier.hasPrefix("trust.home.") else { return }
         DispatchQueue.main.async {
-            self.postHomeState(.away)
+            guard self.monitoringHome,
+                  let currentRegion = self.homeStore.region,
+                  currentRegion.identifier == region.identifier,
+                  let placeID = self.homeStore.placeID else { return }
+            self.postHomeState(.away, signaledAt: Date(), placeID: placeID)
         }
     }
 
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
         DispatchQueue.main.async {
             self.isUsingSimulatorFeed = true
+            if let coreLocationError = error as? CLError, coreLocationError.code == .locationUnknown {
+                return
+            }
+            if self.pendingOneShotLocationCompletion != nil {
+                self.finishOneShotLocationRequest(self.currentUsableLocationFix())
+            }
         }
     }
 
     private var wantsBackground: Bool {
-        (isSharing || monitoringHome) && authorization == .authorizedAlways
+        isAgeAccessAllowed && (isSharing || monitoringHome) && authorization == .authorizedAlways
     }
 
     private var wantsForegroundUpdates: Bool {
-        hasAccess && isAppActive && (isMapActive || isSharing || monitoringHome)
+        isAgeAccessAllowed && hasAccess && isAppActive && (isMapActive || isSharing || monitoringHome)
     }
 
     private func applyTracking() {
@@ -300,8 +393,7 @@ final class LocationCoordinator: NSObject, ObservableObject, CLLocationManagerDe
     }
 
     private func applyHomeMonitoring() {
-        // Region monitoring needs authorization; nothing to reconcile before the user has answered.
-        guard hasAccess else { return }
+        // Remove stale regions even while the user is signed out or age-blocked.
         let existing = manager.monitoredRegions.filter { $0.identifier.hasPrefix("trust.home.") }
         for region in existing {
             manager.stopMonitoring(for: region)
@@ -315,13 +407,14 @@ final class LocationCoordinator: NSObject, ObservableObject, CLLocationManagerDe
 
     private func evaluateHomePresence(at location: CLLocation) {
         guard monitoringHome, homeStore.isSet else { return }
-        postHomeState(homeStore.contains(location) ? .home : .away)
+        guard let placeID = homeStore.placeID else { return }
+        postHomeState(homeStore.contains(location) ? .home : .away, signaledAt: location.timestamp, placeID: placeID)
     }
 
-    private func postHomeState(_ state: HomePresenceKind) {
+    private func postHomeState(_ state: HomePresenceKind, signaledAt: Date, placeID: UUID) {
         guard lastPostedHomeState != state else { return }
         lastPostedHomeState = state
-        onHomePresence?(state)
+        onHomePresence?(state, signaledAt, placeID)
     }
 
     private func requestPreciseIfNeeded() {

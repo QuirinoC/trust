@@ -22,6 +22,7 @@ public final class DemoTrustService: ObservableObject {
     /// Them → you.
     private var inbound: [UUID: PersonShareState] = [:]
     private var presenceByPerson: [UUID: HomePresenceKind] = [:]
+    private var outboundPresenceGrants: Set<UUID> = []
     private var placeLabels: [UUID: String] = [:]
     private var tickPhase: Double = 0
     private let clock: TrustClock
@@ -60,7 +61,7 @@ public final class DemoTrustService: ObservableObject {
                 share: outbound[person.id] ?? PersonShareState(),
                 inboundLive: available,
                 livePoint: available ? vault(for: person.id).latest(now: now) : nil,
-                outboundPresenceGranted: true,
+                outboundPresenceGranted: outboundPresenceGrants.contains(person.id),
                 inboundPresenceGranted: true,
                 homePresence: visiblePresence,
                 promise: nil,
@@ -250,6 +251,11 @@ public final class DemoTrustService: ObservableObject {
         presenceByPerson[personID] = presence
     }
 
+    public func setPresenceGrant(personID: UUID, enabled: Bool) {
+        if enabled { outboundPresenceGrants.insert(personID) }
+        else { outboundPresenceGrants.remove(personID) }
+    }
+
     public func recordLookForTesting(_ event: LookEvent) {
         lookLog.append(event)
     }
@@ -430,6 +436,7 @@ public final class DemoTrustService: ObservableObject {
         vaults[personID] = nil
         outbound[personID] = nil
         inbound[personID] = nil
+        outboundPresenceGrants.remove(personID)
         presenceByPerson[personID] = nil
         placeLabels[personID] = nil
         snapshots[personID] = nil

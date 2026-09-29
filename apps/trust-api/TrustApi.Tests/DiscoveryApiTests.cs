@@ -14,6 +14,27 @@ public sealed class DiscoveryApiTests
     private static readonly JsonSerializerOptions Json = new() { PropertyNameCaseInsensitive = true };
 
     [Fact]
+    public async Task CircleIsPrivateNoStoreAndHomePresenceAllowsMissingTimestamp()
+    {
+        using var factory = new TrustApiFactory();
+        using var client = factory.CreateClient();
+        var account = await CreateReadyAccountAsync(factory, client, "Circle Cache");
+
+        using (var circle = await AuthorizedSendAsync(client, HttpMethod.Get, "/api/v1/circle", account.Token))
+        {
+            Assert.Equal(HttpStatusCode.OK, circle.StatusCode);
+            Assert.True(circle.Headers.CacheControl?.Private);
+            Assert.True(circle.Headers.CacheControl?.NoStore);
+        }
+
+        using (var presence = Authorized(HttpMethod.Post, "/api/v1/me/home/presence", account.Token))
+        {
+            presence.Content = JsonContent.Create(new { state = "home" });
+            Assert.Equal(HttpStatusCode.NoContent, (await client.SendAsync(presence)).StatusCode);
+        }
+    }
+
+    [Fact]
     public async Task LegacyHandleSaveStaysPrivateAndMissingConsentPreservesExistingChoice()
     {
         using var factory = new TrustApiFactory();

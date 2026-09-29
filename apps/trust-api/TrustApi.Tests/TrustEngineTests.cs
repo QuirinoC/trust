@@ -507,7 +507,7 @@ public sealed class TrustEngineTests
         var (sam, jordan) = await PairAsync(engine);
         var placeId = Guid.NewGuid();
         await engine.SetHomePlaceAsync(sam.Id, placeId, "Home", CancellationToken.None);
-        await engine.SetPresenceGrantAsync(sam.Id, jordan.Id, true, CancellationToken.None);
+        await SetGrantAsync(engine, store, sam.Id, jordan.Id, true);
         await engine.PostHomePresenceAsync(sam.Id, HomePresenceState.Away, null, CancellationToken.None);
         await engine.CreatePromiseAsync(sam.Id, jordan.Id, DateTimeOffset.UtcNow.AddHours(2), CancellationToken.None);
 
@@ -525,9 +525,27 @@ public sealed class TrustEngineTests
     }
 
     [Fact]
+    public async Task ClearingHomePlacePreservesManualPresenceAndRemovesPlaceAssociation()
+    {
+        var engine = NewEngine(out var store);
+        var (sam, _) = await PairAsync(engine);
+        var placeId = Guid.NewGuid();
+        await engine.SetHomePlaceAsync(sam.Id, placeId, "Home", CancellationToken.None);
+        await engine.PostHomePresenceAsync(sam.Id, HomePresenceState.Away, null, CancellationToken.None);
+
+        await engine.ClearHomePlaceAsync(sam.Id, CancellationToken.None);
+
+        Assert.Null(await store.GetHomePlaceAsync(sam.Id, CancellationToken.None));
+        var presence = await store.GetCurrentHomePresenceAsync(sam.Id, CancellationToken.None);
+        Assert.NotNull(presence);
+        Assert.Equal(HomePresenceState.Away, presence.State);
+        Assert.Null(presence.PlaceId);
+    }
+
+    [Fact]
     public async Task SealedMemberDoesNotLeakPresenceWithoutGrant()
     {
-        var engine = NewEngine(out _);
+        var engine = NewEngine(out var store);
         var (sam, jordan) = await PairAsync(engine);
         await engine.SetShareAsync(sam.Id, jordan.Id, ShareResting.UntilTheyLook, null, CancellationToken.None);
         await engine.IngestAsync(
@@ -546,18 +564,33 @@ public sealed class TrustEngineTests
         await engine.PostHomePresenceAsync(sam.Id, HomePresenceState.Away, null, CancellationToken.None);
         jordanView = await engine.GetCircleAsync(jordan.Id, CancellationToken.None);
         sealedSam = jordanView.Members.Single(member => member.Person.Id == sam.Id);
+        Assert.True(sealedSam.HomePresence is null, "A share mode alone cannot expose Home/Away without the subject's grant.");
+        Assert.Null(sealedSam.Live);
+
+        await SetGrantAsync(engine, store, sam.Id, jordan.Id, true);
+        jordanView = await engine.GetCircleAsync(jordan.Id, CancellationToken.None);
+        sealedSam = jordanView.Members.Single(member => member.Person.Id == sam.Id);
+        Assert.True(sealedSam.InboundPresenceGranted);
         Assert.Equal(HomePresenceState.Away, sealedSam.HomePresence!.State);
         Assert.Null(sealedSam.Live);
+
+        await engine.SetShareAsync(sam.Id, jordan.Id, ShareResting.Off, null, CancellationToken.None);
+        jordanView = await engine.GetCircleAsync(jordan.Id, CancellationToken.None);
+        Assert.Null(Assert.Single(jordanView.Members, member => member.Person.Id == sam.Id).HomePresence);
+        await engine.SetShareAsync(sam.Id, jordan.Id, ShareResting.UntilTheyLook, null, CancellationToken.None);
+        await engine.PostHomePresenceAsync(sam.Id, HomePresenceState.Hidden, null, CancellationToken.None);
+        jordanView = await engine.GetCircleAsync(jordan.Id, CancellationToken.None);
+        Assert.Null(Assert.Single(jordanView.Members, member => member.Person.Id == sam.Id).HomePresence);
     }
 
     [Fact]
     public async Task PresenceGrantShowsHomeAwayWithoutCoordinates()
     {
-        var engine = NewEngine(out _);
+        var engine = NewEngine(out var store);
         var (sam, jordan) = await PairAsync(engine);
         var placeId = Guid.NewGuid();
         await engine.SetHomePlaceAsync(sam.Id, placeId, "Home", CancellationToken.None);
-        await engine.SetPresenceGrantAsync(sam.Id, jordan.Id, true, CancellationToken.None);
+        await SetGrantAsync(engine, store, sam.Id, jordan.Id, true);
         await engine.SetShareAsync(sam.Id, jordan.Id, ShareResting.UntilTheyLook, null, CancellationToken.None);
         await engine.PostHomePresenceAsync(sam.Id, HomePresenceState.Away, null, CancellationToken.None);
 
@@ -575,6 +608,170 @@ public sealed class TrustEngineTests
         jordanView = await engine.GetCircleAsync(jordan.Id, CancellationToken.None);
         samMember = jordanView.Members.Single(member => member.Person.Id == sam.Id);
         Assert.Equal(HomePresenceState.Home, samMember.HomePresence!.State);
+    }
+
+    [Fact]
+    public async Task RevokingAndReconnectingRequiresFreshPresenceGrantsInBothDirections()
+    {
+        var engine = NewEngine(out var store);
+        var (sam, jordan) = await PairAsync(engine);
+        await SetGrantAsync(engine, store, sam.Id, jordan.Id, true);
+        await SetGrantAsync(engine, store, jordan.Id, sam.Id, true);
+
+        var connectionA = Assert.IsType<Guid>(await store.GetActiveMembershipIdAsync(sam.Id, jordan.Id, CancellationToken.None));
+        Assert.Equal(connectionA, Assert.Single((await engine.GetCircleAsync(sam.Id, CancellationToken.None)).Members).ConnectionId);
+        await engine.RevokeAsync(sam.Id, jordan.Id, CancellationToken.None);
+        Assert.Null(await store.GetPresenceGrantAsync(sam.Id, jordan.Id, CancellationToken.None));
+        Assert.Null(await store.GetPresenceGrantAsync(jordan.Id, sam.Id, CancellationToken.None));
+        var staleGrant = await Assert.ThrowsAsync<TrustException>(
+            () => engine.SetPresenceGrantAsync(sam.Id, jordan.Id, connectionA, true, null, CancellationToken.None));
+        Assert.Equal("not_connected", staleGrant.Code);
+        Assert.Null(await store.GetPresenceGrantAsync(sam.Id, jordan.Id, CancellationToken.None));
+
+        await engine.ConnectAccountsAsync(sam.Id, jordan.Id, CancellationToken.None);
+        var connectionB = Assert.IsType<Guid>(await store.GetActiveMembershipIdAsync(sam.Id, jordan.Id, CancellationToken.None));
+        Assert.NotEqual(connectionA, connectionB);
+        var samMember = Assert.Single((await engine.GetCircleAsync(sam.Id, CancellationToken.None)).Members,
+            member => member.Person.Id == jordan.Id);
+        Assert.Equal(connectionB, samMember.ConnectionId);
+        var jordanMember = Assert.Single((await engine.GetCircleAsync(jordan.Id, CancellationToken.None)).Members,
+            member => member.Person.Id == sam.Id);
+        Assert.Equal(ShareResting.Off, samMember.OutboundShare.Effective(DateTimeOffset.UtcNow));
+        Assert.Equal(ShareResting.Off, jordanMember.OutboundShare.Effective(DateTimeOffset.UtcNow));
+        Assert.False(samMember.OutboundPresenceGranted);
+        Assert.False(samMember.InboundPresenceGranted);
+        Assert.False(jordanMember.OutboundPresenceGranted);
+        Assert.False(jordanMember.InboundPresenceGranted);
+
+        var delayedGrant = await Assert.ThrowsAsync<TrustException>(
+            () => engine.SetPresenceGrantAsync(sam.Id, jordan.Id, connectionA, true, null, CancellationToken.None));
+        Assert.Equal("connection_changed", delayedGrant.Code);
+        Assert.Null(await store.GetPresenceGrantAsync(sam.Id, jordan.Id, CancellationToken.None));
+        await engine.SetPresenceGrantAsync(sam.Id, jordan.Id, connectionB, true, 0, CancellationToken.None);
+        Assert.True((await store.GetPresenceGrantAsync(sam.Id, jordan.Id, CancellationToken.None))?.Enabled);
+    }
+
+    [Fact]
+    public async Task PresenceGrantRevisionRejectsDelayedEnableButAllowsOffToDominate()
+    {
+        var engine = NewEngine(out var store);
+        var (subject, viewer) = await PairAsync(engine);
+        var connectionId = Assert.IsType<Guid>(await store.GetActiveMembershipIdAsync(subject.Id, viewer.Id, CancellationToken.None));
+
+        var revisionlessEnable = await Assert.ThrowsAsync<TrustException>(() =>
+            engine.SetPresenceGrantAsync(subject.Id, viewer.Id, connectionId, true, null, CancellationToken.None));
+        Assert.Equal("presence_state_changed", revisionlessEnable.Code);
+        var firstRevision = await engine.SetPresenceGrantAsync(subject.Id, viewer.Id, connectionId, true, 0, CancellationToken.None);
+        Assert.Equal(1, firstRevision);
+        var offRevision = await engine.SetPresenceGrantAsync(subject.Id, viewer.Id, connectionId, false, 0, CancellationToken.None);
+        Assert.Equal(2, offRevision);
+        Assert.False((await store.GetPresenceGrantAsync(subject.Id, viewer.Id, CancellationToken.None))!.Enabled);
+
+        var staleEnable = await Assert.ThrowsAsync<TrustException>(() =>
+            engine.SetPresenceGrantAsync(subject.Id, viewer.Id, connectionId, true, firstRevision, CancellationToken.None));
+        Assert.Equal("presence_state_changed", staleEnable.Code);
+        var currentRevision = await engine.SetPresenceGrantAsync(subject.Id, viewer.Id, connectionId, true, offRevision, CancellationToken.None);
+        Assert.Equal(3, currentRevision);
+        Assert.True((await store.GetPresenceGrantAsync(subject.Id, viewer.Id, CancellationToken.None))!.Enabled);
+    }
+
+    [Fact]
+    public async Task HomeNotificationEligibilityBindsToCurrentTransitionAndEffectiveShare()
+    {
+        var engine = NewEngine(out var store);
+        var (subject, viewer) = await PairAsync(engine);
+        var connectionId = Assert.IsType<Guid>(await store.GetActiveMembershipIdAsync(subject.Id, viewer.Id, CancellationToken.None));
+        var now = DateTimeOffset.UtcNow;
+        var transitionId = Guid.NewGuid();
+        await store.UpsertShareAsync(subject.Id, viewer.Id, new ShareState(ShareResting.Always), CancellationToken.None);
+        await store.SetPresenceGrantAsync(subject.Id, viewer.Id, connectionId, true, 0, now, CancellationToken.None);
+        await store.UpsertCurrentHomePresenceAsync(
+            new CurrentHomePresence(subject.Id, null, HomePresenceState.Home, now, now, transitionId), CancellationToken.None);
+
+        Assert.True(await store.IsHomeTransitionEligibleAsync(subject.Id, viewer.Id, connectionId, transitionId, now, CancellationToken.None));
+        await store.UpsertShareAsync(subject.Id, viewer.Id,
+            new ShareState(ShareResting.Paused, now.AddMinutes(5), ShareResting.Always), CancellationToken.None);
+        Assert.False(await store.IsHomeTransitionEligibleAsync(subject.Id, viewer.Id, connectionId, transitionId, now, CancellationToken.None));
+        Assert.True(await store.IsHomeTransitionEligibleAsync(subject.Id, viewer.Id, connectionId, transitionId, now.AddMinutes(6), CancellationToken.None));
+
+        var nextTransitionId = Guid.NewGuid();
+        await store.UpsertCurrentHomePresenceAsync(
+            new CurrentHomePresence(subject.Id, null, HomePresenceState.Home, now.AddMinutes(7), now, nextTransitionId), CancellationToken.None);
+        Assert.False(await store.IsHomeTransitionEligibleAsync(subject.Id, viewer.Id, connectionId, transitionId, now.AddMinutes(7), CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task ShareMutationFromRemovedConnectionCannotChangeReconnectedPair()
+    {
+        var engine = NewEngine(out var store);
+        var (sam, jordan) = await PairAsync(engine);
+        var originalConnection = Assert.IsType<Guid>(
+            await store.GetActiveMembershipIdAsync(sam.Id, jordan.Id, CancellationToken.None));
+        var originalRevision = (await store.GetShareAsync(sam.Id, jordan.Id, CancellationToken.None)).Revision;
+
+        await engine.SetShareAsync(sam.Id, jordan.Id, originalConnection, originalRevision, ShareResting.UntilTheyLook, null, CancellationToken.None);
+        await engine.SetShareAsync(sam.Id, jordan.Id, originalConnection, originalRevision, ShareResting.Off, null, CancellationToken.None);
+        await engine.RevokeAsync(sam.Id, jordan.Id, CancellationToken.None);
+        await engine.ConnectAccountsAsync(sam.Id, jordan.Id, CancellationToken.None);
+        var newConnection = Assert.IsType<Guid>(
+            await store.GetActiveMembershipIdAsync(sam.Id, jordan.Id, CancellationToken.None));
+        Assert.NotEqual(originalConnection, newConnection);
+
+        var staleWrite = await Assert.ThrowsAsync<TrustException>(() =>
+            engine.SetShareAsync(sam.Id, jordan.Id, originalConnection, originalRevision, ShareResting.UntilTheyLook, null, CancellationToken.None));
+
+        Assert.Equal("connection_changed", staleWrite.Code);
+        Assert.Equal(ShareResting.Off,
+            (await store.GetShareAsync(sam.Id, jordan.Id, CancellationToken.None)).Effective(DateTimeOffset.UtcNow));
+        var staleRemoval = await Assert.ThrowsAsync<TrustException>(
+            () => engine.RevokeAsync(sam.Id, jordan.Id, originalConnection, CancellationToken.None));
+        Assert.Equal("connection_changed", staleRemoval.Code);
+        Assert.Equal(newConnection, await store.GetActiveMembershipIdAsync(sam.Id, jordan.Id, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task StopWinsAgainstDelayedSameConnectionEnableInEitherArrivalOrder()
+    {
+        var engine = NewEngine(out var store);
+        var (sam, jordan) = await PairAsync(engine);
+        var connectionId = Assert.IsType<Guid>(await store.GetActiveMembershipIdAsync(sam.Id, jordan.Id, CancellationToken.None));
+        var revision = (await store.GetShareAsync(sam.Id, jordan.Id, CancellationToken.None)).Revision;
+
+        await engine.SetShareAsync(sam.Id, jordan.Id, connectionId, revision, ShareResting.UntilTheyLook, null, CancellationToken.None);
+        await engine.SetShareAsync(sam.Id, jordan.Id, connectionId, revision, ShareResting.Off, null, CancellationToken.None);
+        var sealedThenStop = await store.GetShareAsync(sam.Id, jordan.Id, CancellationToken.None);
+        Assert.Equal(ShareResting.Off, sealedThenStop.Effective(DateTimeOffset.UtcNow));
+        Assert.Equal(revision + 2, sealedThenStop.Revision);
+
+        var staleEnable = await Assert.ThrowsAsync<TrustException>(() =>
+            engine.SetShareAsync(sam.Id, jordan.Id, connectionId, revision, ShareResting.UntilTheyLook, null, CancellationToken.None));
+        Assert.Equal("share_state_changed", staleEnable.Code);
+        var stopThenSealed = await store.GetShareAsync(sam.Id, jordan.Id, CancellationToken.None);
+        Assert.Equal(ShareResting.Off, stopThenSealed.Effective(DateTimeOffset.UtcNow));
+        Assert.Equal(revision + 2, stopThenSealed.Revision);
+        var recipientView = Assert.Single((await engine.GetCircleAsync(jordan.Id, CancellationToken.None)).Members,
+            member => member.Person.Id == sam.Id);
+        Assert.False(recipientView.InboundLive);
+        Assert.Null(recipientView.Live);
+    }
+
+    [Fact]
+    public async Task LegacyOffCanResolveCurrentConnectionButLegacyEnableFailsClosed()
+    {
+        var engine = NewEngine(out var store);
+        var (sam, jordan) = await PairAsync(engine);
+        var connectionId = Assert.IsType<Guid>(await store.GetActiveMembershipIdAsync(sam.Id, jordan.Id, CancellationToken.None));
+        var current = await store.GetShareAsync(sam.Id, jordan.Id, CancellationToken.None);
+
+        var unsupportedEnable = await Assert.ThrowsAsync<TrustException>(() =>
+            engine.SetShareAsync(sam.Id, jordan.Id, null, null, ShareResting.UntilTheyLook, null, CancellationToken.None));
+        Assert.Equal("client_update_required", unsupportedEnable.Code);
+
+        await engine.SetShareAsync(sam.Id, jordan.Id, null, null, ShareResting.Off, null, CancellationToken.None);
+        var stopped = await store.GetShareAsync(sam.Id, jordan.Id, CancellationToken.None);
+        Assert.Equal(ShareResting.Off, stopped.Effective(DateTimeOffset.UtcNow));
+        Assert.Equal(current.Revision + 1, stopped.Revision);
+        Assert.NotEqual(Guid.Empty, connectionId);
     }
 
     [Fact]
@@ -609,7 +806,7 @@ public sealed class TrustEngineTests
     [Fact]
     public async Task EachConfirmedLookIsANewReceipt()
     {
-        var engine = NewEngine(out _);
+        var engine = NewEngine(out var store);
         var (sam, jordan) = await PairAsync(engine);
         await engine.SetShareAsync(sam.Id, jordan.Id, ShareResting.UntilTheyLook, null, CancellationToken.None);
         await engine.IngestAsync(
@@ -794,9 +991,9 @@ public sealed class TrustEngineTests
     [Fact]
     public async Task HiddenPresenceIsOmittedFromCircleEvenWithGrant()
     {
-        var engine = NewEngine(out _);
+        var engine = NewEngine(out var store);
         var (sam, jordan) = await PairAsync(engine);
-        await engine.SetPresenceGrantAsync(sam.Id, jordan.Id, true, CancellationToken.None);
+        await SetGrantAsync(engine, store, sam.Id, jordan.Id, true);
         await engine.PostHomePresenceAsync(sam.Id, HomePresenceState.Hidden, null, CancellationToken.None);
 
         var jordanView = await engine.GetCircleAsync(jordan.Id, CancellationToken.None);
@@ -809,9 +1006,9 @@ public sealed class TrustEngineTests
     public async Task HomePresenceFollowsEffectiveOutboundShareMode()
     {
         var time = new MutableTimeProvider { UtcNow = new DateTimeOffset(2026, 9, 24, 12, 0, 0, TimeSpan.Zero) };
-        var engine = NewEngine(out _, time);
+        var engine = NewEngine(out var store, time);
         var (sam, jordan) = await PairAsync(engine);
-        await engine.SetPresenceGrantAsync(sam.Id, jordan.Id, true, CancellationToken.None);
+        await SetGrantAsync(engine, store, sam.Id, jordan.Id, true);
         await engine.PostHomePresenceAsync(sam.Id, HomePresenceState.Home, null, CancellationToken.None);
 
         async Task<CircleMember> GetSamMemberAsync() =>
@@ -844,9 +1041,9 @@ public sealed class TrustEngineTests
     [Fact]
     public async Task PresenceCanBeSetManuallyWithoutAHomePlace()
     {
-        var engine = NewEngine(out _);
+        var engine = NewEngine(out var store);
         var (sam, jordan) = await PairAsync(engine);
-        await engine.SetPresenceGrantAsync(sam.Id, jordan.Id, true, CancellationToken.None);
+        await SetGrantAsync(engine, store, sam.Id, jordan.Id, true);
         await engine.SetShareAsync(sam.Id, jordan.Id, ShareResting.UntilTheyLook, null, CancellationToken.None);
 
         // No SetHomePlaceAsync call at all — the triad doesn't require Home to be set.
@@ -857,6 +1054,69 @@ public sealed class TrustEngineTests
         Assert.NotNull(samMember.HomePresence);
         Assert.Equal(HomePresenceState.Away, samMember.HomePresence!.State);
         Assert.Null(samMember.HomePresence.PlaceLabel);
+    }
+
+    [Fact]
+    public async Task HomePresenceRejectsOlderSignalsAndReplacedHomeRegions()
+    {
+        var start = new DateTimeOffset(2026, 9, 29, 12, 0, 0, TimeSpan.Zero);
+        var time = new MutableTimeProvider { UtcNow = start.AddMinutes(10) };
+        var engine = NewEngine(out var store, time);
+        var (sam, _) = await PairAsync(engine);
+        var firstPlace = Guid.NewGuid();
+        var replacementPlace = Guid.NewGuid();
+        await engine.SetHomePlaceAsync(sam.Id, firstPlace, "Home", CancellationToken.None);
+
+        var hidden = await engine.PostHomePresenceAsync(
+            sam.Id, HomePresenceState.Hidden, start.AddMinutes(2), null, CancellationToken.None);
+        Assert.True(hidden.Accepted);
+        Assert.False(hidden.ArrivedHome);
+
+        var delayedHome = await engine.PostHomePresenceAsync(
+            sam.Id, HomePresenceState.Home, start.AddMinutes(1), firstPlace, CancellationToken.None);
+        Assert.False(delayedHome.Accepted);
+        Assert.Equal(HomePresenceState.Hidden,
+            (await store.GetCurrentHomePresenceAsync(sam.Id, CancellationToken.None))!.State);
+
+        var home = await engine.PostHomePresenceAsync(
+            sam.Id, HomePresenceState.Home, start.AddMinutes(3), firstPlace, CancellationToken.None);
+        Assert.True(home.Accepted);
+        Assert.True(home.ArrivedHome);
+
+        var away = await engine.PostHomePresenceAsync(
+            sam.Id, HomePresenceState.Away, start.AddMinutes(4), firstPlace, CancellationToken.None);
+        Assert.True(away.Accepted);
+        Assert.NotEqual(home.TransitionId, away.TransitionId);
+        var returnedHome = await engine.PostHomePresenceAsync(
+            sam.Id, HomePresenceState.Home, start.AddMinutes(5), firstPlace, CancellationToken.None);
+        Assert.True(returnedHome.ArrivedHome);
+        Assert.NotEqual(home.TransitionId, returnedHome.TransitionId);
+
+        await engine.SetHomePlaceAsync(sam.Id, replacementPlace, "New home", CancellationToken.None);
+        var oldRegion = await engine.PostHomePresenceAsync(
+            sam.Id, HomePresenceState.Away, start.AddMinutes(6), firstPlace, CancellationToken.None);
+        Assert.False(oldRegion.Accepted);
+        var olderSignal = await engine.PostHomePresenceAsync(
+            sam.Id, HomePresenceState.Away, start.AddMinutes(4), replacementPlace, CancellationToken.None);
+        Assert.False(olderSignal.Accepted);
+        var current = await store.GetCurrentHomePresenceAsync(sam.Id, CancellationToken.None);
+        Assert.Equal(HomePresenceState.Home, current!.State);
+        Assert.Equal(replacementPlace, current.PlaceId);
+    }
+
+    [Fact]
+    public async Task ConcurrentHomeSignalsPublishOnlyOneArrivalTransition()
+    {
+        var time = new MutableTimeProvider { UtcNow = new DateTimeOffset(2026, 9, 29, 12, 0, 0, TimeSpan.Zero) };
+        var engine = NewEngine(out _, time);
+        var (sam, _) = await PairAsync(engine);
+
+        var results = await Task.WhenAll(Enumerable.Range(0, 12).Select(_ =>
+            engine.PostHomePresenceAsync(sam.Id, HomePresenceState.Home, time.UtcNow, null, CancellationToken.None)));
+
+        Assert.Single(results, result => result.ArrivedHome);
+        Assert.All(results, result => Assert.True(result.Accepted));
+        Assert.Single(results.Select(result => result.TransitionId).Distinct());
     }
 
     private static TrustEngine NewEngine(out MemoryTrustStore store, TimeProvider? time = null)
@@ -872,6 +1132,14 @@ public sealed class TrustEngineTests
         var invite = await engine.CreateInviteAsync(sam.Id, CancellationToken.None);
         await engine.AcceptInviteAsync(jordan.Id, invite.Code, CancellationToken.None);
         return (sam, jordan);
+    }
+
+    private static async Task SetGrantAsync(TrustEngine engine, ITrustStore store, Guid subjectId, Guid trusteeId, bool enabled)
+    {
+        var connectionId = await store.GetActiveMembershipIdAsync(subjectId, trusteeId, CancellationToken.None)
+            ?? throw new InvalidOperationException("Test relationship is not active.");
+        var revision = (await store.GetPresenceGrantAsync(subjectId, trusteeId, CancellationToken.None))?.Revision ?? 0;
+        await engine.SetPresenceGrantAsync(subjectId, trusteeId, connectionId, enabled, enabled ? revision : null, CancellationToken.None);
     }
 }
 
@@ -962,9 +1230,19 @@ public sealed class TrustApiTests : IClassFixture<TrustApiFactory>
         accept.Content = JsonContent.Create(new { code });
         (await client.SendAsync(accept)).EnsureSuccessStatusCode();
 
+        var store = factory.Services.GetRequiredService<ITrustStore>();
+        var connectionId = Assert.IsType<Guid>(await store.GetActiveMembershipIdAsync(sam.Id, jordan.Id, CancellationToken.None));
+        var revision = (await store.GetShareAsync(sam.Id, jordan.Id, CancellationToken.None)).Revision;
+
+        using var outdatedShare = new HttpRequestMessage(HttpMethod.Patch, $"/api/v1/people/{jordan.Id}/share");
+        outdatedShare.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", sam.Token);
+        outdatedShare.Content = JsonContent.Create(new { resting = "untilTheyLook" });
+        var outdatedShareResponse = await client.SendAsync(outdatedShare);
+        Assert.Equal(System.Net.HttpStatusCode.Conflict, outdatedShareResponse.StatusCode);
+
         using var share = new HttpRequestMessage(HttpMethod.Patch, $"/api/v1/people/{jordan.Id}/share");
         share.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", sam.Token);
-        share.Content = JsonContent.Create(new { resting = "untilTheyLook" });
+        share.Content = JsonContent.Create(new { connectionId, revision, resting = "untilTheyLook" });
         (await client.SendAsync(share)).EnsureSuccessStatusCode();
 
         using var ingest = new HttpRequestMessage(HttpMethod.Post, "/api/v1/location");
@@ -1053,7 +1331,7 @@ public sealed class TrustApiTests : IClassFixture<TrustApiFactory>
     public async Task IngestAppendsHistoryReleasedOnLook()
     {
         using var factory = new TrustApiFactory();
-        using var client = factory.WithWebHostBuilder(builder =>
+        using var testFactory = factory.WithWebHostBuilder(builder =>
         {
             builder.UseSetting("Trust:SeedReviewCircle", "false");
             builder.ConfigureAppConfiguration((_, config) =>
@@ -1063,7 +1341,8 @@ public sealed class TrustApiTests : IClassFixture<TrustApiFactory>
                     ["Trust:SeedReviewCircle"] = "false"
                 });
             });
-        }).CreateClient();
+        });
+        using var client = testFactory.CreateClient();
 
         var samSession = await client.PostAsJsonAsync(
             "/api/v1/session/development",
@@ -1089,11 +1368,15 @@ public sealed class TrustApiTests : IClassFixture<TrustApiFactory>
         accept.Content = JsonContent.Create(new { code = invite!.Code });
         (await client.SendAsync(accept)).EnsureSuccessStatusCode();
 
+        var store = testFactory.Services.GetRequiredService<ITrustStore>();
+        var connectionId = Assert.IsType<Guid>(await store.GetActiveMembershipIdAsync(sam!.You.Id, jordan!.You.Id, CancellationToken.None));
+        var revision = (await store.GetShareAsync(sam.You.Id, jordan.You.Id, CancellationToken.None)).Revision;
+
         // Join is Off/Off by default — Sam must explicitly seal sharing toward Jordan first.
         using var shareRequest = new HttpRequestMessage(HttpMethod.Patch, $"/api/v1/people/{jordan.You.Id}/share");
         shareRequest.Headers.Authorization =
             new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", sam.Token);
-        shareRequest.Content = JsonContent.Create(new { resting = "untilTheyLook" });
+        shareRequest.Content = JsonContent.Create(new { connectionId, revision, resting = "untilTheyLook" });
         (await client.SendAsync(shareRequest)).EnsureSuccessStatusCode();
 
         var now = DateTimeOffset.UtcNow;
@@ -1329,7 +1612,7 @@ sealed class RecordingReceipts : ILookReceiptPublisher
         string kind,
         CancellationToken cancellationToken) => Task.CompletedTask;
 
-    public Task NotifyHomeArrivalAsync(Guid subjectId, CancellationToken cancellationToken) => Task.CompletedTask;
+    public Task NotifyHomeArrivalAsync(Guid subjectId, Guid transitionId, CancellationToken cancellationToken) => Task.CompletedTask;
 }
 
 static class TestPrincipals

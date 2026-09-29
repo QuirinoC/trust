@@ -141,7 +141,7 @@ struct LoginView: View {
 }
 
 /// Three open paths form a companion motif without the closed-loop icon silhouette.
-private struct TrustLineMark: View {
+struct TrustLineMark: View {
     @Environment(\.trustPalette) private var palette
 
     var body: some View {

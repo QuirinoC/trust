@@ -102,6 +102,9 @@ public enum TrustCopy {
     public static func avatarIconAccessibility(_ name: String) -> String { format("avatar_icon_accessibility", defaultValue: "%@ icon", name) }
     public static var sharingPresenceExplanation: String { value("sharing_presence_explanation", defaultValue: "Home or Away appears only for people you chose Sealed or Always for. Off, Pause, and Hidden keep your status out of their view.") }
     public static func moreSharingActions(_ name: String) -> String { format("more_sharing_actions", defaultValue: "More sharing actions for %@", name) }
+    public static func presenceGrantLabel(_ name: String) -> String { format("presence_grant_label", defaultValue: "Let %@ know when I’m Home or Away", name) }
+    public static var presenceGrantExplanation: String { value("presence_grant_explanation", defaultValue: "Status only, not location. With sharing on, this also allows a Home-arrival alert. Off, Pause, and Hidden suppress it.") }
+    public static var presenceGrantUpdated: String { value("presence_grant_updated", defaultValue: "Home/Away sharing preference updated.") }
     public static func sharingDirections(inbound: String, outbound: String) -> String {
         format("sharing_directions", defaultValue: "They share with you: %@ · You share with them: %@", inbound, outbound)
     }
@@ -155,6 +158,76 @@ public enum TrustCopy {
     public static var terms: String { value("terms", defaultValue: "Terms") }
     public static var privacy: String { value("privacy", defaultValue: "Privacy") }
     public static var support: String { value("support", defaultValue: "Support") }
+    public static var ageGateTitle: String { value("age_gate_title", defaultValue: "Before you join") }
+    public static var ageGateBody: String {
+        value("age_gate_body", defaultValue: "Enter your birth date to confirm your age. It’s checked on this device and isn’t saved or sent to Trust.")
+    }
+    public static var ageBirthMonth: String { value("age_birth_month", defaultValue: "Month") }
+    public static var ageBirthDay: String { value("age_birth_day", defaultValue: "Day") }
+    public static var ageBirthYear: String { value("age_birth_year", defaultValue: "Year") }
+    public static var ageBirthMonthPlaceholder: String { value("age_birth_month_placeholder", defaultValue: "MM") }
+    public static var ageBirthDayPlaceholder: String { value("age_birth_day_placeholder", defaultValue: "DD") }
+    public static var ageBirthYearPlaceholder: String { value("age_birth_year_placeholder", defaultValue: "YYYY") }
+    public static var ageGateContinue: String { value("age_gate_continue", defaultValue: "Continue") }
+    public static var ageBirthDateInvalid: String { value("age_birth_date_invalid", defaultValue: "Enter a valid birth date.") }
+    public static var ageGateBlockedTitle: String { value("age_gate_blocked_title", defaultValue: "Trust isn’t available yet") }
+    public static var ageGateBlockedBody: String {
+        value("age_gate_blocked_body", defaultValue: "Apple’s required age check could not approve access under the current requirements.")
+    }
+    public static var ageGateChecking: String { value("age_gate_checking", defaultValue: "Checking age requirements…") }
+    public static var ageGateUnavailableTitle: String { value("age_gate_unavailable_title", defaultValue: "We can’t complete the required check") }
+    public static var ageGateUnavailableBody: String {
+        value("age_gate_unavailable_body", defaultValue: "Check your connection or Apple settings, then try again.")
+    }
+    public static var ageGateRetry: String { value("age_gate_retry", defaultValue: "Try again") }
+    public static var ageGateTryAppleRange: String {
+        value("age_gate_try_apple_range", defaultValue: "Try Apple age range")
+    }
+    public static var ageRangeBlockedTitle: String {
+        value("age_range_blocked_title", defaultValue: "Trust isn’t available for this age range")
+    }
+    public static var ageRangeBlockedBody: String {
+        value("age_range_blocked_body", defaultValue: "You can’t create a Trust account with the age range Apple shared. If it seems wrong, ask a parent or guardian to review Age Range for Apps in Apple Account settings, or contact Support.")
+    }
+    public static var agePrivacyHoldPendingTitle: String {
+        value("age_privacy_hold_pending_title", defaultValue: "This device is blocked")
+    }
+    public static var agePrivacyHoldPendingBody: String {
+        value("age_privacy_hold_pending_body", defaultValue: "Trust couldn’t confirm the account privacy hold. Access is blocked on this device, but server protection is not confirmed. Reconnect and retry, or contact Support.")
+    }
+    public static var agePrivacyHoldRetry: String {
+        value("age_privacy_hold_retry", defaultValue: "Retry")
+    }
+    public static var agePrivacyHeldTitle: String {
+        value("age_privacy_held_title", defaultValue: "This account is on privacy hold")
+    }
+    public static var agePrivacyHeldBody: String {
+        value("age_privacy_held_body", defaultValue: "Trust received the app’s privacy restriction report and placed this account on hold. This is not age verification. Contact Support for help.")
+    }
+    public static var ageParentTitle: String { value("age_parent_title", defaultValue: "A parent needs to approve this update") }
+    public static var ageParentBody: String {
+        value("age_parent_body", defaultValue: "Ask a parent or guardian to approve continued access to Trust.")
+    }
+    public static var ageParentAction: String { value("age_parent_action", defaultValue: "Ask a parent or guardian") }
+    public static var ageParentWaiting: String { value("age_parent_waiting", defaultValue: "Waiting for approval") }
+    public static var ageParentDeclined: String {
+        value("age_parent_declined", defaultValue: "A parent or guardian didn’t approve this update.")
+    }
+    public static var ageConsentRevokedTitle: String {
+        value("age_consent_revoked_title", defaultValue: "Trust access is disabled")
+    }
+    public static var ageConsentRevokedBody: String {
+        value("age_consent_revoked_body", defaultValue: "A parent or guardian withdrew consent for this Apple app transaction. Trust has disabled account access.")
+    }
+    public static var ageUpdateDescription: String {
+        value("age_update_description", defaultValue: "Trust now follows Apple’s age-assurance and approval requirements where they apply.")
+    }
+    public static var ageRatingChangeDescription: String {
+        value("age_rating_change_description", defaultValue: "Trust’s App Store age rating changed. Please acknowledge this change to continue using Trust.")
+    }
+    public static var ageRatingAndUpdateDescription: String {
+        value("age_rating_and_update_description", defaultValue: "Trust’s age-assurance requirements and its App Store age rating have changed. Acknowledge both changes to continue using Trust.")
+    }
     public static var demoBannerTitle: String { value("demo_banner_title", defaultValue: "Demo") }
     public static var demoBannerBody: String {
         value("demo_banner_body", defaultValue: "Nine fictional people. Offline — no Sign in with Apple, nothing is sent.")
@@ -850,6 +923,8 @@ public enum TrustCopy {
             return value("api_confirmation_required", defaultValue: "Look needs a confirm first.")
         case "not_connected":
             return value("api_not_connected", defaultValue: "This person is not connected to you.")
+        case "connection_changed":
+            return value("api_connection_changed", defaultValue: "This connection changed. Refresh the list and try again.")
         case "pair_inactive":
             return value("api_pair_inactive", defaultValue: "They removed you.")
         case "invalid_code":
@@ -870,6 +945,8 @@ public enum TrustCopy {
             return value("api_view_requires_available", defaultValue: "Sealed. Look instead to record one snapshot and request a notification.")
         case "unauthorized":
             return value("api_unauthorized", defaultValue: "Sign in is required.")
+        case "account_privacy_hold":
+            return value("api_account_privacy_hold", defaultValue: "This Trust account is on privacy hold. Contact Support for help.")
         case "invalid_handle":
             return value("api_invalid_handle", defaultValue: "That handle isn’t valid.")
         case "handle_not_found", "person_not_found":

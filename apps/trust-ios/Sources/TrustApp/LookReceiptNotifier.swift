@@ -12,6 +12,8 @@ final class LookReceiptNotifier: NSObject, ObservableObject, UNUserNotificationC
     private var registeredToken: String?
     private var lastUploadedToken: String?
     private var lastUploadedInstallation: UUID?
+    private var sessionGeneration: UInt64 = 0
+    var onNotificationTap: ((TrustPushDestination) -> Void)?
 
     override init() {
         super.init()
@@ -20,10 +22,13 @@ final class LookReceiptNotifier: NSObject, ObservableObject, UNUserNotificationC
     }
 
     func prepare(client: TrustClient) {
+        sessionGeneration &+= 1
+        let generation = sessionGeneration
+        let authorizedToken = client.token
         self.client = client
         Task {
             await registerForPushIfAllowed()
-            await uploadTokenIfNeeded()
+            await uploadTokenIfNeeded(generation: generation, authorizedToken: authorizedToken)
         }
     }
 
@@ -58,38 +63,54 @@ final class LookReceiptNotifier: NSObject, ObservableObject, UNUserNotificationC
         status == .authorized || status == .provisional
     }
 
-    func unregister() async {
-        if let installationId {
-            try? await client?.removePushDevice(installationId: installationId)
-        }
+    func unregister(authorizedToken: String? = nil) async {
+        let previousClient = client
+        let previousToken = authorizedToken ?? previousClient?.token
+        let previousInstallation = installationId
+        sessionGeneration &+= 1
+        // Detach this session before awaiting the server. A sign-in that happens
+        // while DELETE is in flight may prepare a new account and must keep its state.
+        client = nil
         registeredToken = nil
         lastUploadedToken = nil
         lastUploadedInstallation = nil
-        client = nil
+        if let previousClient, let previousToken, let previousInstallation {
+            try? await previousClient.removePushDevice(
+                installationId: previousInstallation,
+                authorizedToken: previousToken
+            )
+        }
     }
 
     nonisolated func didRegister(deviceToken: Data) {
         let token = deviceToken.map { String(format: "%02x", $0) }.joined()
         Task { @MainActor in
             registeredToken = token
-            await uploadTokenIfNeeded()
+            await uploadTokenIfNeeded(generation: sessionGeneration, authorizedToken: client?.token)
         }
     }
 
     /// APNs can deliver the token before sign-in has a client. Keep the token and upload
     /// once both exist, including when the installation id changes under the same token.
-    private func uploadTokenIfNeeded() async {
-        guard let client, let token = registeredToken, let installationId else { return }
+    private func uploadTokenIfNeeded(generation: UInt64, authorizedToken: String?) async {
+        guard generation == sessionGeneration,
+              let client,
+              let authorizedToken,
+              let token = registeredToken,
+              let installationId else { return }
         guard token != lastUploadedToken || installationId != lastUploadedInstallation else { return }
         do {
             try await client.registerPushDevice(
                 installationId: installationId,
                 token: token,
-                environment: Self.apnsEnvironment
+                environment: Self.apnsEnvironment,
+                authorizedToken: authorizedToken
             )
+            guard generation == sessionGeneration, self.client === client else { return }
             lastUploadedToken = token
             lastUploadedInstallation = installationId
         } catch {
+            guard generation == sessionGeneration, self.client === client else { return }
             lastUploadedToken = nil
             lastUploadedInstallation = nil
         }
@@ -101,12 +122,25 @@ final class LookReceiptNotifier: NSObject, ObservableObject, UNUserNotificationC
         }
     }
 
-    func userNotificationCenter(
+    nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
         completionHandler([.banner, .sound, .list])
+    }
+
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        let destination = TrustPushDestination(userInfo: response.notification.request.content.userInfo)
+        completionHandler()
+        guard let destination else { return }
+        Task { @MainActor [weak self] in
+            self?.onNotificationTap?(destination)
+        }
     }
 
     private var installationId: UUID? {

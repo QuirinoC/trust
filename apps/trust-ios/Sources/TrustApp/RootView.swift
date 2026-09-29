@@ -12,6 +12,8 @@ struct RootView: View {
         ZStack {
             palette.canvas.ignoresSafeArea()
             switch model.phase {
+            case .ageChecking, .ageGate, .ageCheckUnavailable, .ageRangeBlocked, .ageWaitingForParent, .ageBlocked, .ageConsentRevoked, .agePrivacyHoldPending, .agePrivacyHeld:
+                AgeGateView()
             case .login:
                 LoginView()
             case .handle:
@@ -27,7 +29,12 @@ struct RootView: View {
         .tint(palette.accent)
         .preferredColorScheme((TrustAppearance(rawValue: appearance) ?? .system).colorScheme)
         .onChange(of: scenePhase) { _, phase in
-            model.location.setAppActive(phase == .active)
+            if phase == .background {
+                model.ageUpdateSceneDidEnterBackground()
+            } else if phase == .active {
+                model.ageUpdateSceneDidBecomeActive()
+            }
+            model.setSceneActive(phase == .active)
             if phase == .active, model.phase == .home {
                 Task { await model.refreshIfStale() }
             }

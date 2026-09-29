@@ -201,22 +201,42 @@ public sealed class PostgresTrustStore(string connectionString) : ITrustStore
         return await command.ExecuteScalarAsync(cancellationToken) is not null;
     }
 
-    public async Task InsertMembershipAsync(Guid a, Guid b, CancellationToken cancellationToken)
+    public async Task<Guid?> GetActiveMembershipIdAsync(Guid a, Guid b, CancellationToken cancellationToken)
     {
         var (left, right) = Order(a, b);
         await using var connection = await OpenAsync(cancellationToken);
         await using var command = new NpgsqlCommand(
+            "SELECT membership_id FROM trust.memberships WHERE person_a = $1 AND person_b = $2 AND status = 'active';",
+            connection);
+        command.Parameters.AddWithValue(left);
+        command.Parameters.AddWithValue(right);
+        var value = await command.ExecuteScalarAsync(cancellationToken);
+        return value is Guid id ? id : null;
+    }
+
+    public async Task InsertMembershipAsync(Guid a, Guid b, CancellationToken cancellationToken)
+    {
+        var (left, right) = Order(a, b);
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        await LockAccountsAsync(connection, transaction, a, b, cancellationToken);
+        await using var command = new NpgsqlCommand(
             """
             INSERT INTO trust.memberships (membership_id, person_a, person_b, status, created_at)
             VALUES ($1, $2, $3, 'active', $4)
-            ON CONFLICT (person_a, person_b) DO UPDATE SET status = 'active';
+            ON CONFLICT (person_a, person_b) DO UPDATE SET
+                membership_id = CASE WHEN trust.memberships.status = 'active'
+                    THEN trust.memberships.membership_id ELSE EXCLUDED.membership_id END,
+                status = 'active';
             """,
-            connection);
+            connection,
+            transaction);
         command.Parameters.AddWithValue(Guid.NewGuid());
         command.Parameters.AddWithValue(left);
         command.Parameters.AddWithValue(right);
         command.Parameters.AddWithValue(DateTimeOffset.UtcNow);
         await command.ExecuteNonQueryAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
     }
 
     public async Task<bool> ConnectAccountsWithOffSharesAsync(Guid a, Guid b, DateTimeOffset now, CancellationToken cancellationToken)
@@ -238,7 +258,7 @@ public sealed class PostgresTrustStore(string connectionString) : ITrustStore
         var accounts = await LoadConnectionAccountsAsync(connection, transaction, a, b, cancellationToken);
         if (await ActiveMembershipCountAsync(connection, transaction, a, cancellationToken) >= (accounts[a].HasCircle ? TrustRules.ProSeats : TrustRules.FreeSeats)
             || await ActiveMembershipCountAsync(connection, transaction, b, cancellationToken) >= (accounts[b].HasCircle ? TrustRules.ProSeats : TrustRules.FreeSeats)) throw TrustException.SeatLimit();
-        await using (var membership = new NpgsqlCommand("INSERT INTO trust.memberships (membership_id,person_a,person_b,status,created_at) VALUES ($1,LEAST($2,$3),GREATEST($2,$3),'active',$4) ON CONFLICT (person_a,person_b) DO UPDATE SET status='active';", connection, transaction))
+        await using (var membership = new NpgsqlCommand("INSERT INTO trust.memberships (membership_id,person_a,person_b,status,created_at) VALUES ($1,LEAST($2,$3),GREATEST($2,$3),'active',$4) ON CONFLICT (person_a,person_b) DO UPDATE SET membership_id=EXCLUDED.membership_id,status='active';", connection, transaction))
         {
             membership.Parameters.AddWithValue(Guid.NewGuid()); membership.Parameters.AddWithValue(a); membership.Parameters.AddWithValue(b); membership.Parameters.AddWithValue(now);
             await membership.ExecuteNonQueryAsync(cancellationToken);
@@ -263,6 +283,54 @@ public sealed class PostgresTrustStore(string connectionString) : ITrustStore
         command.Parameters.AddWithValue(left);
         command.Parameters.AddWithValue(right);
         await command.ExecuteNonQueryAsync(cancellationToken);
+        await using (var grants = new NpgsqlCommand(
+            "DELETE FROM trust.presence_grants WHERE (subject_id = $1 AND trustee_id = $2) OR (subject_id = $2 AND trustee_id = $1);",
+            connection,
+            transaction))
+        {
+            grants.Parameters.AddWithValue(a);
+            grants.Parameters.AddWithValue(b);
+            await grants.ExecuteNonQueryAsync(cancellationToken);
+        }
+        await transaction.CommitAsync(cancellationToken);
+    }
+
+    public async Task RevokeMembershipForConnectionAsync(Guid a, Guid b, Guid connectionId, CancellationToken cancellationToken)
+    {
+        var (left, right) = Order(a, b);
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        await LockAccountsAsync(connection, transaction, a, b, cancellationToken);
+        await using (var membership = new NpgsqlCommand(
+            "SELECT membership_id FROM trust.memberships WHERE person_a = $1 AND person_b = $2 AND status = 'active';",
+            connection, transaction))
+        {
+            membership.Parameters.AddWithValue(left);
+            membership.Parameters.AddWithValue(right);
+            var current = await membership.ExecuteScalarAsync(cancellationToken);
+            if (current is not Guid activeId)
+                throw TrustException.NotConnected();
+            if (activeId != connectionId)
+                throw TrustException.ConnectionChanged();
+        }
+        await using (var revoke = new NpgsqlCommand(
+            "UPDATE trust.memberships SET status = 'revoked' WHERE person_a = $1 AND person_b = $2 AND status = 'active' AND membership_id = $3;",
+            connection, transaction))
+        {
+            revoke.Parameters.AddWithValue(left);
+            revoke.Parameters.AddWithValue(right);
+            revoke.Parameters.AddWithValue(connectionId);
+            if (await revoke.ExecuteNonQueryAsync(cancellationToken) != 1)
+                throw TrustException.ConnectionChanged();
+        }
+        await using (var grants = new NpgsqlCommand(
+            "DELETE FROM trust.presence_grants WHERE (subject_id = $1 AND trustee_id = $2) OR (subject_id = $2 AND trustee_id = $1);",
+            connection, transaction))
+        {
+            grants.Parameters.AddWithValue(a);
+            grants.Parameters.AddWithValue(b);
+            await grants.ExecuteNonQueryAsync(cancellationToken);
+        }
         await transaction.CommitAsync(cancellationToken);
     }
 
@@ -270,7 +338,7 @@ public sealed class PostgresTrustStore(string connectionString) : ITrustStore
     {
         await using var connection = await OpenAsync(cancellationToken);
         await using var command = new NpgsqlCommand(
-            "SELECT resting, pause_until, restores_to FROM trust.shares WHERE grantor_id = $1 AND grantee_id = $2;",
+            "SELECT resting, pause_until, restores_to, revision FROM trust.shares WHERE grantor_id = $1 AND grantee_id = $2;",
             connection);
         command.Parameters.AddWithValue(grantor);
         command.Parameters.AddWithValue(grantee);
@@ -283,7 +351,8 @@ public sealed class PostgresTrustStore(string connectionString) : ITrustStore
         return new ShareState(
             ParseResting(reader.GetString(0)),
             reader.IsDBNull(1) ? null : reader.GetFieldValue<DateTimeOffset>(1),
-            reader.IsDBNull(2) ? null : ParseResting(reader.GetString(2)));
+            reader.IsDBNull(2) ? null : ParseResting(reader.GetString(2)),
+            reader.GetInt64(3));
     }
 
     public async Task UpsertShareAsync(Guid grantor, Guid grantee, ShareState state, CancellationToken cancellationToken)
@@ -291,12 +360,13 @@ public sealed class PostgresTrustStore(string connectionString) : ITrustStore
         await using var connection = await OpenAsync(cancellationToken);
         await using var command = new NpgsqlCommand(
             """
-            INSERT INTO trust.shares (grantor_id, grantee_id, resting, pause_until, restores_to)
-            VALUES ($1, $2, $3, $4, $5)
+            INSERT INTO trust.shares (grantor_id, grantee_id, resting, pause_until, restores_to, revision)
+            VALUES ($1, $2, $3, $4, $5, $6)
             ON CONFLICT (grantor_id, grantee_id) DO UPDATE
                 SET resting = EXCLUDED.resting,
                     pause_until = EXCLUDED.pause_until,
-                    restores_to = EXCLUDED.restores_to;
+                    restores_to = EXCLUDED.restores_to,
+                    revision = GREATEST(trust.shares.revision + 1, EXCLUDED.revision);
             """,
             connection);
         command.Parameters.AddWithValue(grantor);
@@ -304,7 +374,71 @@ public sealed class PostgresTrustStore(string connectionString) : ITrustStore
         command.Parameters.AddWithValue(FormatResting(state.Resting));
         command.Parameters.AddWithValue((object?)state.PauseUntil ?? DBNull.Value);
         command.Parameters.AddWithValue(state.RestoresTo is { } restores ? FormatResting(restores) : DBNull.Value);
+        command.Parameters.AddWithValue(state.Revision);
         await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task SetShareForConnectionAsync(Guid grantor, Guid grantee, Guid? connectionId, long? expectedRevision, ShareState state, bool isOff, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        // Serialize with removal/reconnection before validating and mutating the pair-scoped row.
+        await LockAccountsAsync(connection, transaction, grantor, grantee, cancellationToken);
+        await using (var membership = new NpgsqlCommand(
+            "SELECT membership_id FROM trust.memberships WHERE person_a = LEAST($1,$2) AND person_b = GREATEST($1,$2) AND status = 'active';",
+            connection, transaction))
+        {
+            membership.Parameters.AddWithValue(grantor);
+            membership.Parameters.AddWithValue(grantee);
+            var active = await membership.ExecuteScalarAsync(cancellationToken);
+            if (active is not Guid activeId)
+                throw TrustException.NotConnected();
+            if (connectionId is { } expectedConnection && activeId != expectedConnection)
+                throw TrustException.ConnectionChanged();
+        }
+
+        ShareState currentState;
+        await using (var current = new NpgsqlCommand(
+            "SELECT resting, pause_until, restores_to, revision FROM trust.shares WHERE grantor_id = $1 AND grantee_id = $2 FOR UPDATE;",
+            connection, transaction))
+        {
+            current.Parameters.AddWithValue(grantor);
+            current.Parameters.AddWithValue(grantee);
+            await using var reader = await current.ExecuteReaderAsync(cancellationToken);
+            currentState = await reader.ReadAsync(cancellationToken)
+                ? new ShareState(ParseResting(reader.GetString(0)),
+                    reader.IsDBNull(1) ? null : reader.GetFieldValue<DateTimeOffset>(1),
+                    reader.IsDBNull(2) ? null : ParseResting(reader.GetString(2)),
+                    reader.GetInt64(3))
+                : ShareState.Default;
+        }
+        if (!isOff && (connectionId is null || expectedRevision is null))
+            throw TrustException.ClientUpdateRequired();
+        if (!isOff && currentState.Revision != expectedRevision)
+            throw TrustException.StaleShareIntent();
+        var updated = state with { Revision = currentState.Revision + 1 };
+
+        await using (var share = new NpgsqlCommand(
+            """
+            INSERT INTO trust.shares (grantor_id, grantee_id, resting, pause_until, restores_to, revision)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            ON CONFLICT (grantor_id, grantee_id) DO UPDATE
+                SET resting = EXCLUDED.resting,
+                    pause_until = EXCLUDED.pause_until,
+                    restores_to = EXCLUDED.restores_to,
+                    revision = EXCLUDED.revision;
+            """,
+            connection, transaction))
+        {
+            share.Parameters.AddWithValue(grantor);
+            share.Parameters.AddWithValue(grantee);
+            share.Parameters.AddWithValue(FormatResting(updated.Resting));
+            share.Parameters.AddWithValue((object?)updated.PauseUntil ?? DBNull.Value);
+            share.Parameters.AddWithValue(updated.RestoresTo is { } restores ? FormatResting(restores) : DBNull.Value);
+            share.Parameters.AddWithValue(updated.Revision);
+            await share.ExecuteNonQueryAsync(cancellationToken);
+        }
+        await transaction.CommitAsync(cancellationToken);
     }
 
     public async Task RestoreExpiredPausesAsync(DateTimeOffset now, CancellationToken cancellationToken)
@@ -318,7 +452,8 @@ public sealed class PostgresTrustStore(string connectionString) : ITrustStore
                     ELSE 'until_they_look'
                 END,
                 pause_until = NULL,
-                restores_to = NULL
+                restores_to = NULL,
+                revision = revision + 1
             WHERE resting = 'paused'
               AND pause_until IS NOT NULL
               AND pause_until <= $1;
@@ -620,7 +755,7 @@ public sealed class PostgresTrustStore(string connectionString) : ITrustStore
                 var accounts = await LoadConnectionAccountsAsync(connection, transaction, creatorId, joiningAccountId, cancellationToken);
                 if (await ActiveMembershipCountAsync(connection, transaction, creatorId, cancellationToken) >= (accounts[creatorId].HasCircle ? TrustRules.ProSeats : TrustRules.FreeSeats)
                     || await ActiveMembershipCountAsync(connection, transaction, joiningAccountId, cancellationToken) >= (accounts[joiningAccountId].HasCircle ? TrustRules.ProSeats : TrustRules.FreeSeats)) throw TrustException.SeatLimit();
-                await using (var membership = new NpgsqlCommand("INSERT INTO trust.memberships (membership_id,person_a,person_b,status,created_at) VALUES ($1,LEAST($2,$3),GREATEST($2,$3),'active',$4) ON CONFLICT (person_a,person_b) DO UPDATE SET status='active';", connection, transaction))
+                await using (var membership = new NpgsqlCommand("INSERT INTO trust.memberships (membership_id,person_a,person_b,status,created_at) VALUES ($1,LEAST($2,$3),GREATEST($2,$3),'active',$4) ON CONFLICT (person_a,person_b) DO UPDATE SET membership_id=EXCLUDED.membership_id,status='active';", connection, transaction))
                 {
                     membership.Parameters.AddWithValue(Guid.NewGuid()); membership.Parameters.AddWithValue(creatorId); membership.Parameters.AddWithValue(joiningAccountId); membership.Parameters.AddWithValue(now);
                     await membership.ExecuteNonQueryAsync(cancellationToken);
@@ -677,6 +812,8 @@ public sealed class PostgresTrustStore(string connectionString) : ITrustStore
             "DELETE FROM trust.storekit_transactions WHERE account_id = $1;",
             "DELETE FROM trust.storekit_subscription_owners WHERE account_id = $1;",
             "DELETE FROM trust.storekit_account_tokens WHERE account_id = $1;",
+            "DELETE FROM trust.age_assurance_app_transactions WHERE account_id = $1;",
+            "DELETE FROM trust.age_assurance_blocked_accounts WHERE account_id = $1;",
             "DELETE FROM trust.home_promises WHERE subject_id = $1 OR trustee_id = $1;",
             "DELETE FROM trust.current_home_presence WHERE account_id = $1;",
             "DELETE FROM trust.home_places WHERE account_id = $1;",
@@ -923,7 +1060,7 @@ public sealed class PostgresTrustStore(string connectionString) : ITrustStore
                     if (!accounts[senderId].Ready || !accounts[recipientId].Ready) throw TrustException.PhoneVerificationRequired();
                     if (await ActiveMembershipCountAsync(connection, transaction, senderId, cancellationToken) >= (accounts[senderId].HasCircle ? TrustRules.ProSeats : TrustRules.FreeSeats)
                         || await ActiveMembershipCountAsync(connection, transaction, recipientId, cancellationToken) >= (accounts[recipientId].HasCircle ? TrustRules.ProSeats : TrustRules.FreeSeats)) throw TrustException.SeatLimit();
-                    await using (var membership = new NpgsqlCommand("INSERT INTO trust.memberships (membership_id,person_a,person_b,status,created_at) VALUES ($1,LEAST($2,$3),GREATEST($2,$3),'active',$4) ON CONFLICT (person_a,person_b) DO UPDATE SET status='active';", connection, transaction))
+                await using (var membership = new NpgsqlCommand("INSERT INTO trust.memberships (membership_id,person_a,person_b,status,created_at) VALUES ($1,LEAST($2,$3),GREATEST($2,$3),'active',$4) ON CONFLICT (person_a,person_b) DO UPDATE SET membership_id=EXCLUDED.membership_id,status='active';", connection, transaction))
                     {
                         membership.Parameters.AddWithValue(Guid.NewGuid()); membership.Parameters.AddWithValue(senderId); membership.Parameters.AddWithValue(recipientId); membership.Parameters.AddWithValue(now);
                         await membership.ExecuteNonQueryAsync(cancellationToken);
@@ -971,6 +1108,17 @@ public sealed class PostgresTrustStore(string connectionString) : ITrustStore
         if (count != 2) throw TrustException.RequestNotFound();
     }
 
+    private static async Task LockAccountAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, Guid accountId, CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand(
+            "SELECT account_id FROM trust.accounts WHERE account_id = $1 FOR UPDATE;",
+            connection,
+            transaction);
+        command.Parameters.AddWithValue(accountId);
+        if (await command.ExecuteScalarAsync(cancellationToken) is null)
+            throw TrustException.RequestNotFound();
+    }
+
     private static async Task<Dictionary<Guid, (bool HasCircle, bool Ready)>> LoadConnectionAccountsAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, Guid a, Guid b, CancellationToken cancellationToken)
     {
         await using var command = new NpgsqlCommand("SELECT account_id,has_circle,(handle IS NOT NULL AND phone_verified_at IS NOT NULL) FROM trust.accounts WHERE account_id = ANY($1) ORDER BY account_id;", connection, transaction);
@@ -990,7 +1138,7 @@ public sealed class PostgresTrustStore(string connectionString) : ITrustStore
 
     private static async Task UpsertOffShareAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, Guid grantor, Guid grantee, CancellationToken cancellationToken)
     {
-        await using var command = new NpgsqlCommand("INSERT INTO trust.shares (grantor_id,grantee_id,resting,pause_until,restores_to) VALUES ($1,$2,'off',NULL,NULL) ON CONFLICT (grantor_id,grantee_id) DO UPDATE SET resting='off',pause_until=NULL,restores_to=NULL;", connection, transaction);
+        await using var command = new NpgsqlCommand("INSERT INTO trust.shares (grantor_id,grantee_id,resting,pause_until,restores_to,revision) VALUES ($1,$2,'off',NULL,NULL,1) ON CONFLICT (grantor_id,grantee_id) DO UPDATE SET resting='off',pause_until=NULL,restores_to=NULL,revision=trust.shares.revision+1;", connection, transaction);
         command.Parameters.AddWithValue(grantor); command.Parameters.AddWithValue(grantee);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
@@ -1308,28 +1456,78 @@ public sealed class PostgresTrustStore(string connectionString) : ITrustStore
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    public async Task SetPresenceGrantAsync(
+    public async Task<PresenceGrantWriteResult> SetPresenceGrantAsync(
         Guid subjectId,
         Guid trusteeId,
+        Guid connectionId,
         bool enabled,
+        long? expectedRevision,
         DateTimeOffset updatedAt,
         CancellationToken cancellationToken)
     {
         await using var connection = await OpenAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        // Match revoke/remove and reconnect: lock both account rows in GUID order
+        // before examining membership or touching the pair-scoped grant.
+        await LockAccountsAsync(connection, transaction, subjectId, trusteeId, cancellationToken);
+        Guid? activeConnectionId;
+        await using (var membership = new NpgsqlCommand(
+            "SELECT membership_id FROM trust.memberships WHERE person_a = LEAST($1,$2) AND person_b = GREATEST($1,$2) AND status = 'active';",
+            connection,
+            transaction))
+        {
+            membership.Parameters.AddWithValue(subjectId);
+            membership.Parameters.AddWithValue(trusteeId);
+            var value = await membership.ExecuteScalarAsync(cancellationToken);
+            activeConnectionId = value is Guid id ? id : null;
+            if (activeConnectionId is null)
+            {
+                await transaction.CommitAsync(cancellationToken);
+                return new PresenceGrantWriteResult(PresenceGrantWriteStatus.NotConnected, 0);
+            }
+            if (activeConnectionId != connectionId)
+            {
+                await transaction.CommitAsync(cancellationToken);
+                return new PresenceGrantWriteResult(PresenceGrantWriteStatus.ConnectionChanged, 0);
+            }
+        }
+
+        long currentRevision;
+        await using (var currentGrant = new NpgsqlCommand(
+            "SELECT revision FROM trust.presence_grants WHERE subject_id = $1 AND trustee_id = $2 FOR UPDATE;",
+            connection, transaction))
+        {
+            currentGrant.Parameters.AddWithValue(subjectId);
+            currentGrant.Parameters.AddWithValue(trusteeId);
+            var value = await currentGrant.ExecuteScalarAsync(cancellationToken);
+            currentRevision = value is long revision ? revision : 0;
+        }
+        if (enabled && (expectedRevision is null || expectedRevision != currentRevision))
+        {
+            await transaction.CommitAsync(cancellationToken);
+            return new PresenceGrantWriteResult(PresenceGrantWriteStatus.StaleRevision, currentRevision);
+        }
+
         await using var command = new NpgsqlCommand(
             """
-            INSERT INTO trust.presence_grants (subject_id, trustee_id, enabled, updated_at)
-            VALUES ($1, $2, $3, $4)
+            INSERT INTO trust.presence_grants (subject_id, trustee_id, enabled, updated_at, revision)
+            VALUES ($1, $2, $3, $4, $5)
             ON CONFLICT (subject_id, trustee_id) DO UPDATE SET
                 enabled = EXCLUDED.enabled,
-                updated_at = EXCLUDED.updated_at;
+                updated_at = EXCLUDED.updated_at,
+                revision = trust.presence_grants.revision + 1
+            RETURNING revision;
             """,
-            connection);
+            connection,
+            transaction);
         command.Parameters.AddWithValue(subjectId);
         command.Parameters.AddWithValue(trusteeId);
         command.Parameters.AddWithValue(enabled);
         command.Parameters.AddWithValue(updatedAt);
-        await command.ExecuteNonQueryAsync(cancellationToken);
+        command.Parameters.AddWithValue(currentRevision + 1);
+        var committedRevision = (long)(await command.ExecuteScalarAsync(cancellationToken))!;
+        await transaction.CommitAsync(cancellationToken);
+        return new PresenceGrantWriteResult(PresenceGrantWriteStatus.Updated, committedRevision);
     }
 
     public async Task<PresenceGrant?> GetPresenceGrantAsync(
@@ -1340,7 +1538,7 @@ public sealed class PostgresTrustStore(string connectionString) : ITrustStore
         await using var connection = await OpenAsync(cancellationToken);
         await using var command = new NpgsqlCommand(
             """
-            SELECT subject_id, trustee_id, enabled, updated_at
+            SELECT subject_id, trustee_id, enabled, updated_at, revision
             FROM trust.presence_grants
             WHERE subject_id = $1 AND trustee_id = $2;
             """,
@@ -1357,13 +1555,16 @@ public sealed class PostgresTrustStore(string connectionString) : ITrustStore
             reader.GetGuid(0),
             reader.GetGuid(1),
             reader.GetBoolean(2),
-            reader.GetFieldValue<DateTimeOffset>(3));
+            reader.GetFieldValue<DateTimeOffset>(3),
+            reader.GetInt64(4));
     }
 
     public async Task UpsertHomePlaceAsync(HomePlace place, CancellationToken cancellationToken)
     {
         await using var connection = await OpenAsync(cancellationToken);
-        await using var command = new NpgsqlCommand(
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        await LockAccountAsync(connection, transaction, place.AccountId, cancellationToken);
+        await using (var command = new NpgsqlCommand(
             """
             INSERT INTO trust.home_places (account_id, place_id, label, updated_at)
             VALUES ($1, $2, $3, $4)
@@ -1372,12 +1573,51 @@ public sealed class PostgresTrustStore(string connectionString) : ITrustStore
                 label = EXCLUDED.label,
                 updated_at = EXCLUDED.updated_at;
             """,
-            connection);
-        command.Parameters.AddWithValue(place.AccountId);
-        command.Parameters.AddWithValue(place.PlaceId);
-        command.Parameters.AddWithValue(place.Label);
-        command.Parameters.AddWithValue(place.UpdatedAt);
-        await command.ExecuteNonQueryAsync(cancellationToken);
+            connection, transaction))
+        {
+            command.Parameters.AddWithValue(place.AccountId);
+            command.Parameters.AddWithValue(place.PlaceId);
+            command.Parameters.AddWithValue(place.Label);
+            command.Parameters.AddWithValue(place.UpdatedAt);
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+        await using (var presence = new NpgsqlCommand(
+            "UPDATE trust.current_home_presence SET place_id = $2, transition_id = gen_random_uuid() WHERE account_id = $1 AND place_id IS DISTINCT FROM $2;",
+            connection, transaction))
+        {
+            presence.Parameters.AddWithValue(place.AccountId);
+            presence.Parameters.AddWithValue(place.PlaceId);
+            await presence.ExecuteNonQueryAsync(cancellationToken);
+        }
+        await using (var initialize = new NpgsqlCommand(
+            "INSERT INTO trust.current_home_presence (account_id, place_id, state, last_changed_at, last_signal_at, transition_id) VALUES ($1, $2, 'unknown', $3, NULL, gen_random_uuid()) ON CONFLICT (account_id) DO NOTHING;",
+            connection, transaction))
+        {
+            initialize.Parameters.AddWithValue(place.AccountId);
+            initialize.Parameters.AddWithValue(place.PlaceId);
+            initialize.Parameters.AddWithValue(place.UpdatedAt);
+            await initialize.ExecuteNonQueryAsync(cancellationToken);
+        }
+        await transaction.CommitAsync(cancellationToken);
+    }
+
+    public async Task ClearHomePlaceAsync(Guid accountId, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        await LockAccountAsync(connection, transaction, accountId, cancellationToken);
+        await using (var place = new NpgsqlCommand("DELETE FROM trust.home_places WHERE account_id = $1;", connection, transaction))
+        {
+            place.Parameters.AddWithValue(accountId);
+            await place.ExecuteNonQueryAsync(cancellationToken);
+        }
+        await using (var presence = new NpgsqlCommand(
+            "UPDATE trust.current_home_presence SET place_id = NULL, transition_id = gen_random_uuid() WHERE account_id = $1 AND place_id IS NOT NULL;", connection, transaction))
+        {
+            presence.Parameters.AddWithValue(accountId);
+            await presence.ExecuteNonQueryAsync(cancellationToken);
+        }
+        await transaction.CommitAsync(cancellationToken);
     }
 
     public async Task<HomePlace?> GetHomePlaceAsync(Guid accountId, CancellationToken cancellationToken)
@@ -1407,13 +1647,14 @@ public sealed class PostgresTrustStore(string connectionString) : ITrustStore
         await using var connection = await OpenAsync(cancellationToken);
         await using var command = new NpgsqlCommand(
             """
-            INSERT INTO trust.current_home_presence (account_id, place_id, state, last_changed_at, last_signal_at)
-            VALUES ($1, $2, $3, $4, $5)
+            INSERT INTO trust.current_home_presence (account_id, place_id, state, last_changed_at, last_signal_at, transition_id)
+            VALUES ($1, $2, $3, $4, $5, COALESCE($6, gen_random_uuid()))
             ON CONFLICT (account_id) DO UPDATE SET
                 place_id = EXCLUDED.place_id,
                 state = EXCLUDED.state,
                 last_changed_at = EXCLUDED.last_changed_at,
-                last_signal_at = EXCLUDED.last_signal_at;
+                last_signal_at = EXCLUDED.last_signal_at,
+                transition_id = COALESCE($6, trust.current_home_presence.transition_id);
             """,
             connection);
         command.Parameters.AddWithValue(presence.AccountId);
@@ -1421,6 +1662,7 @@ public sealed class PostgresTrustStore(string connectionString) : ITrustStore
         command.Parameters.AddWithValue(FormatHomeState(presence.State));
         command.Parameters.AddWithValue(presence.LastChangedAt);
         command.Parameters.AddWithValue((object?)presence.LastSignalAt ?? DBNull.Value);
+        command.Parameters.AddWithValue(presence.TransitionId == Guid.Empty ? DBNull.Value : presence.TransitionId);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -1431,7 +1673,7 @@ public sealed class PostgresTrustStore(string connectionString) : ITrustStore
         await using var connection = await OpenAsync(cancellationToken);
         await using var command = new NpgsqlCommand(
             """
-            SELECT account_id, place_id, state, last_changed_at, last_signal_at
+            SELECT account_id, place_id, state, last_changed_at, last_signal_at, transition_id
             FROM trust.current_home_presence
             WHERE account_id = $1;
             """,
@@ -1448,7 +1690,127 @@ public sealed class PostgresTrustStore(string connectionString) : ITrustStore
             reader.IsDBNull(1) ? null : reader.GetGuid(1),
             ParseHomeState(reader.GetString(2)),
             reader.GetFieldValue<DateTimeOffset>(3),
-            reader.IsDBNull(4) ? null : reader.GetFieldValue<DateTimeOffset>(4));
+            reader.IsDBNull(4) ? null : reader.GetFieldValue<DateTimeOffset>(4),
+            reader.GetGuid(5));
+    }
+
+    public async Task<HomePresenceSignalResult> RecordHomePresenceSignalAsync(
+        Guid accountId,
+        Guid? expectedPlaceId,
+        HomePresenceState state,
+        DateTimeOffset signaledAt,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        await LockAccountAsync(connection, transaction, accountId, cancellationToken);
+
+        Guid? currentPlaceId;
+        await using (var place = new NpgsqlCommand(
+            "SELECT place_id FROM trust.home_places WHERE account_id = $1;",
+            connection, transaction))
+        {
+            place.Parameters.AddWithValue(accountId);
+            var value = await place.ExecuteScalarAsync(cancellationToken);
+            currentPlaceId = value is Guid id ? id : null;
+        }
+
+        CurrentHomePresence? previous = null;
+        await using (var query = new NpgsqlCommand(
+            "SELECT account_id, place_id, state, last_changed_at, last_signal_at, transition_id FROM trust.current_home_presence WHERE account_id = $1 FOR UPDATE;",
+            connection, transaction))
+        {
+            query.Parameters.AddWithValue(accountId);
+            await using var reader = await query.ExecuteReaderAsync(cancellationToken);
+            if (await reader.ReadAsync(cancellationToken))
+            {
+                previous = new CurrentHomePresence(
+                    reader.GetGuid(0),
+                    reader.IsDBNull(1) ? null : reader.GetGuid(1),
+                    ParseHomeState(reader.GetString(2)),
+                    reader.GetFieldValue<DateTimeOffset>(3),
+                    reader.IsDBNull(4) ? null : reader.GetFieldValue<DateTimeOffset>(4),
+                    reader.GetGuid(5));
+            }
+        }
+
+        if (expectedPlaceId is { } expected && currentPlaceId != expected)
+        {
+            await transaction.CommitAsync(cancellationToken);
+            return new HomePresenceSignalResult(false, false, previous?.TransitionId ?? Guid.Empty);
+        }
+        if (previous?.LastSignalAt is { } lastSignal && signaledAt < lastSignal)
+        {
+            await transaction.CommitAsync(cancellationToken);
+            return new HomePresenceSignalResult(false, false, previous.TransitionId);
+        }
+
+        var arrivedHome = state == HomePresenceState.Home && previous?.State != HomePresenceState.Home;
+        var changed = previous is null || previous.State != state;
+        var transitionId = changed || previous?.TransitionId == Guid.Empty
+            ? Guid.NewGuid()
+            : previous!.TransitionId;
+        var current = new CurrentHomePresence(
+            accountId,
+            currentPlaceId,
+            state,
+            changed ? signaledAt : previous!.LastChangedAt,
+            signaledAt,
+            transitionId);
+        await using (var write = new NpgsqlCommand(
+            """
+            INSERT INTO trust.current_home_presence (account_id, place_id, state, last_changed_at, last_signal_at, transition_id)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            ON CONFLICT (account_id) DO UPDATE SET
+                place_id = EXCLUDED.place_id,
+                state = EXCLUDED.state,
+                last_changed_at = EXCLUDED.last_changed_at,
+                last_signal_at = EXCLUDED.last_signal_at,
+                transition_id = EXCLUDED.transition_id;
+            """,
+            connection, transaction))
+        {
+            write.Parameters.AddWithValue(current.AccountId);
+            write.Parameters.AddWithValue((object?)current.PlaceId ?? DBNull.Value);
+            write.Parameters.AddWithValue(FormatHomeState(current.State));
+            write.Parameters.AddWithValue(current.LastChangedAt);
+            write.Parameters.AddWithValue((object?)current.LastSignalAt ?? DBNull.Value);
+            write.Parameters.AddWithValue(current.TransitionId);
+            await write.ExecuteNonQueryAsync(cancellationToken);
+        }
+        await transaction.CommitAsync(cancellationToken);
+        return new HomePresenceSignalResult(true, arrivedHome, transitionId);
+    }
+
+    public async Task<bool> IsHomeTransitionEligibleAsync(
+        Guid subjectId, Guid viewerId, Guid connectionId, Guid expectedTransitionId,
+        DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(
+            """
+            SELECT EXISTS (
+                SELECT 1
+                FROM trust.memberships m
+                JOIN trust.current_home_presence h ON h.account_id = $1
+                JOIN trust.presence_grants g ON g.subject_id = $1 AND g.trustee_id = $2 AND g.enabled
+                LEFT JOIN trust.shares s ON s.grantor_id = $1 AND s.grantee_id = $2
+                WHERE m.person_a = LEAST($1, $2) AND m.person_b = GREATEST($1, $2)
+                  AND m.status = 'active' AND m.membership_id = $3
+                  AND h.state = 'home' AND h.transition_id = $4
+                  AND COALESCE(
+                      s.resting IN ('always', 'until_they_look')
+                      OR (s.resting = 'paused' AND (s.pause_until IS NULL OR s.pause_until <= $5)
+                          AND s.restores_to IN ('always', 'until_they_look')),
+                      false)
+            );
+            """, connection);
+        command.Parameters.AddWithValue(subjectId);
+        command.Parameters.AddWithValue(viewerId);
+        command.Parameters.AddWithValue(connectionId);
+        command.Parameters.AddWithValue(expectedTransitionId);
+        command.Parameters.AddWithValue(now);
+        return (bool)(await command.ExecuteScalarAsync(cancellationToken))!;
     }
 
     public async Task InsertPromiseAsync(HomePromise promise, CancellationToken cancellationToken)

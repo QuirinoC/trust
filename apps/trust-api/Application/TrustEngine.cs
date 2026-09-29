@@ -1,8 +1,12 @@
 using TrustApi.Domain;
+using TrustApi.Infrastructure.AgeAssurance;
 
 namespace TrustApi.Application;
 
-public sealed class TrustEngine(ITrustStore store, TimeProvider time)
+public sealed class TrustEngine(
+    ITrustStore store,
+    TimeProvider time,
+    IAgeAssuranceAccountStore? ageAssurance = null)
 {
     public async Task<Account> SignInAsync(
         string provider,
@@ -48,13 +52,20 @@ public sealed class TrustEngine(ITrustStore store, TimeProvider time)
         var now = time.GetUtcNow();
         await store.RestoreExpiredPausesAsync(now, cancellationToken);
         var connected = await store.ListConnectedAsync(accountId, cancellationToken);
-        var coverage = CoverageOf(you, connected);
+        var visibleConnected = new List<Account>(connected.Count);
+        foreach (var person in connected)
+        {
+            if (!await IsAccountBlockedAsync(person.Id, cancellationToken)) visibleConnected.Add(person);
+        }
+        var coverage = CoverageOf(you, visibleConnected);
         var members = new List<CircleMember>();
         var yourHome = await store.GetHomePlaceAsync(you.Id, cancellationToken);
         var yourPresence = await store.GetCurrentHomePresenceAsync(you.Id, cancellationToken);
 
-        foreach (var person in connected)
+        foreach (var person in visibleConnected)
         {
+            var connectionId = await store.GetActiveMembershipIdAsync(you.Id, person.Id, cancellationToken);
+            if (connectionId is not { } activeConnectionId) continue;
             var outbound = await store.GetShareAsync(you.Id, person.Id, cancellationToken);
             var inbound = await store.GetShareAsync(person.Id, you.Id, cancellationToken);
             var inboundLive = inbound.RevealsLive(now);
@@ -78,10 +89,11 @@ public sealed class TrustEngine(ITrustStore store, TimeProvider time)
 
             VisibleHomePresence? homePresence = null;
             var current = await store.GetCurrentHomePresenceAsync(person.Id, cancellationToken);
-            // Home/Away presence follows the same outbound share mode as location:
-            // Sealed and Always reveal it; Off and an active Pause do not.
-            // Hidden remains distinct from no signal, and the per-pair grant field is independent.
+            // Status and arrival notifications require both independent permissions:
+            // the subject's explicit grant and this pair's effective share mode.
+            // Hidden remains distinct from no signal and never becomes visible.
             if (inbound.AcceptsLocation(now)
+                && inboundGrant?.Enabled == true
                 && current is not null
                 && current.State is HomePresenceState.Home or HomePresenceState.Away)
             {
@@ -96,12 +108,14 @@ public sealed class TrustEngine(ITrustStore store, TimeProvider time)
 
             members.Add(new CircleMember(
                 person,
+                activeConnectionId,
                 presence,
                 outbound,
                 inbound,
                 inboundLive,
                 live,
                 outboundPresenceGranted,
+                outboundGrant?.Revision ?? 0,
                 inboundPresenceGranted,
                 homePresence,
                 promiseView));
@@ -110,6 +124,8 @@ public sealed class TrustEngine(ITrustStore store, TimeProvider time)
         var since = now.AddDays(-coverage.LookLogDays);
         var log = await store.ListLooksAsync(you.Id, since, cancellationToken);
         var allLog = await store.ListLooksAsync(you.Id, DateTimeOffset.MinValue, cancellationToken);
+        log = await RemoveBlockedSubjectsAsync(log, cancellationToken);
+        allLog = await RemoveBlockedSubjectsAsync(allLog, cancellationToken);
         var invite = await store.FindPendingInviteAsync(you.Id, cancellationToken);
 
         return new CircleSnapshot(
@@ -195,10 +211,28 @@ public sealed class TrustEngine(ITrustStore store, TimeProvider time)
         CancellationToken cancellationToken)
     {
         var you = await RequireAccount(accountId, cancellationToken);
-        if (!await store.AreConnectedAsync(you.Id, granteeId, cancellationToken))
-        {
-            throw TrustException.NotConnected();
-        }
+        var connectionId = await store.GetActiveMembershipIdAsync(you.Id, granteeId, cancellationToken)
+            ?? throw TrustException.NotConnected();
+        await store.RestoreExpiredPausesAsync(time.GetUtcNow(), cancellationToken);
+        var current = await store.GetShareAsync(you.Id, granteeId, cancellationToken);
+        await SetShareAsync(accountId, granteeId, connectionId, current.Revision, resting, pause, cancellationToken);
+    }
+
+    public async Task SetShareAsync(
+        Guid accountId,
+        Guid granteeId,
+        Guid? connectionId,
+        long? expectedRevision,
+        ShareResting? resting,
+        PauseDuration? pause,
+        CancellationToken cancellationToken)
+    {
+        var you = await RequireAccount(accountId, cancellationToken);
+
+        if (resting is null && pause is null) return;
+        var isOff = resting == ShareResting.Off && pause is null;
+        if (!isOff && (connectionId is null || expectedRevision is null))
+            throw TrustException.ClientUpdateRequired();
 
         var now = time.GetUtcNow();
         await store.RestoreExpiredPausesAsync(now, cancellationToken);
@@ -218,10 +252,13 @@ public sealed class TrustEngine(ITrustStore store, TimeProvider time)
                     "pause_requires_share",
                     "Pause only applies while you are sharing.")
             };
-            await store.UpsertShareAsync(
+            await store.SetShareForConnectionAsync(
                 you.Id,
                 granteeId,
+                connectionId,
+                expectedRevision,
                 new ShareState(ShareResting.Paused, PauseShare.EndAt(duration, now), restores),
+                false,
                 cancellationToken);
             return;
         }
@@ -243,10 +280,13 @@ public sealed class TrustEngine(ITrustStore store, TimeProvider time)
             throw new TrustException("pause_required", "Choose how long to pause.");
         }
 
-        await store.UpsertShareAsync(
+        await store.SetShareForConnectionAsync(
             you.Id,
             granteeId,
+            connectionId,
+            expectedRevision,
             new ShareState(resting.Value),
+            isOff,
             cancellationToken);
 
         if (resting == ShareResting.Off)
@@ -261,6 +301,7 @@ public sealed class TrustEngine(ITrustStore store, TimeProvider time)
         CancellationToken cancellationToken)
     {
         var viewer = await RequireAccount(viewerId, cancellationToken);
+        await RequireNotRevokedSubjectAsync(subjectId, cancellationToken);
         if (!await store.AreConnectedAsync(viewer.Id, subjectId, cancellationToken))
         {
             throw TrustException.NotConnected();
@@ -508,20 +549,29 @@ public sealed class TrustEngine(ITrustStore store, TimeProvider time)
 
     public async Task DeleteAccountAsync(Guid accountId, CancellationToken cancellationToken)
     {
-        await RequireAccount(accountId, cancellationToken);
+        if (await store.FindAccountAsync(accountId, cancellationToken) is null)
+        {
+            return;
+        }
+
         await store.DeleteAccountAsync(accountId, cancellationToken);
     }
 
     public async Task RevokeAsync(Guid accountId, Guid otherId, CancellationToken cancellationToken)
     {
-        if (!await store.AreConnectedAsync(accountId, otherId, cancellationToken))
-        {
-            throw TrustException.NotConnected();
-        }
+        var connectionId = await store.GetActiveMembershipIdAsync(accountId, otherId, cancellationToken)
+            ?? throw TrustException.NotConnected();
+        await RevokeAsync(accountId, otherId, connectionId, cancellationToken);
+    }
+
+    public async Task RevokeAsync(Guid accountId, Guid otherId, Guid? connectionId, CancellationToken cancellationToken)
+    {
+        if (connectionId is null) throw TrustException.ClientUpdateRequired();
 
         var you = await RequireAccount(accountId, cancellationToken);
         var other = await RequireAccount(otherId, cancellationToken);
         var now = time.GetUtcNow();
+        await store.RevokeMembershipForConnectionAsync(accountId, otherId, connectionId.Value, cancellationToken);
         await store.InsertLookEventAsync(
             new LookEvent(
                 Guid.NewGuid(),
@@ -534,7 +584,6 @@ public sealed class TrustEngine(ITrustStore store, TimeProvider time)
                 false,
                 LookKind.Removed),
             cancellationToken);
-        await store.RevokeMembershipAsync(accountId, otherId, cancellationToken);
         if (await store.ActiveMembershipCountAsync(accountId, cancellationToken) == 0)
         {
             await store.ClearLocationsAsync(accountId, cancellationToken);
@@ -629,6 +678,7 @@ public sealed class TrustEngine(ITrustStore store, TimeProvider time)
         var other = await store.FindByHandleAsync(handle, cancellationToken);
         // Keep missing, self, and not-yet-discoverable accounts indistinguishable.
         if (other is null || other.Id == accountId || !other.OnboardingComplete) return null;
+        if (await IsAccountBlockedAsync(other.Id, cancellationToken)) return null;
         var match = await store.GetConnectionRelationshipAsync(accountId, other.Id, time.GetUtcNow(), cancellationToken);
         return new PersonLookup(other.Id, other.Handle!, match.Relationship, match.RequestId);
     }
@@ -646,6 +696,7 @@ public sealed class TrustEngine(ITrustStore store, TimeProvider time)
             ? await store.FindByVerifiedPhoneAsync(phoneE164!, cancellationToken)
             : await store.FindByHandleAsync(normalizedHandle!, cancellationToken);
         if (other is null || other.Id == accountId || !other.OnboardingComplete) return null;
+        if (await IsAccountBlockedAsync(other.Id, cancellationToken)) return null;
         if (byPhone && !other.DiscoveryEnabled) return null;
 
         var match = await store.GetConnectionRelationshipAsync(accountId, other.Id, time.GetUtcNow(), cancellationToken);
@@ -661,7 +712,10 @@ public sealed class TrustEngine(ITrustStore store, TimeProvider time)
     public async Task<ConnectionRequestLists> ListConnectionRequestsAsync(Guid accountId, CancellationToken cancellationToken)
     {
         _ = await RequireAccount(accountId, cancellationToken);
-        return await store.ListConnectionRequestsAsync(accountId, time.GetUtcNow(), cancellationToken);
+        var lists = await store.ListConnectionRequestsAsync(accountId, time.GetUtcNow(), cancellationToken);
+        return new ConnectionRequestLists(
+            await RemoveBlockedPartiesAsync(lists.Incoming, cancellationToken),
+            await RemoveBlockedPartiesAsync(lists.Sent, cancellationToken));
     }
 
     public async Task<ConnectionRequest> CreateConnectionRequestAsync(Guid accountId, Guid recipientId, CancellationToken cancellationToken)
@@ -670,6 +724,7 @@ public sealed class TrustEngine(ITrustStore store, TimeProvider time)
         RequireConnectionRequestEligibility(you);
         var recipient = await store.FindAccountAsync(recipientId, cancellationToken);
         if (recipient is null || !recipient.OnboardingComplete || recipientId == accountId) throw TrustException.RequestNotFound();
+        await RequireNotRevokedSubjectAsync(recipientId, cancellationToken);
         return await store.CreateConnectionRequestAsync(accountId, recipientId, time.GetUtcNow(), cancellationToken);
     }
 
@@ -677,6 +732,9 @@ public sealed class TrustEngine(ITrustStore store, TimeProvider time)
     {
         var you = await RequireAccount(accountId, cancellationToken);
         RequireConnectionRequestEligibility(you);
+        var incoming = await store.ListConnectionRequestsAsync(accountId, time.GetUtcNow(), cancellationToken);
+        var request = incoming.Incoming.FirstOrDefault(entry => entry.Request.Id == requestId);
+        if (request is not null) await RequireNotRevokedSubjectAsync(request.OtherParty.Id, cancellationToken);
         await store.AcceptConnectionRequestAsync(requestId, accountId, time.GetUtcNow(), cancellationToken);
     }
 
@@ -704,20 +762,28 @@ public sealed class TrustEngine(ITrustStore store, TimeProvider time)
         return await store.LooksTodayAsync(viewerId, start, cancellationToken);
     }
 
-    public async Task SetPresenceGrantAsync(
+    public async Task<long> SetPresenceGrantAsync(
         Guid subjectId,
         Guid trusteeId,
+        Guid connectionId,
         bool enabled,
+        long? expectedRevision,
         CancellationToken cancellationToken)
     {
         var you = await RequireAccount(subjectId, cancellationToken);
         await RequireAccount(trusteeId, cancellationToken);
-        if (!await store.AreConnectedAsync(you.Id, trusteeId, cancellationToken))
+        var result = await store.SetPresenceGrantAsync(you.Id, trusteeId, connectionId, enabled, expectedRevision, time.GetUtcNow(), cancellationToken);
+        if (result.Status == PresenceGrantWriteStatus.NotConnected)
         {
             throw TrustException.NotConnected();
         }
-
-        await store.SetPresenceGrantAsync(you.Id, trusteeId, enabled, time.GetUtcNow(), cancellationToken);
+        if (result.Status == PresenceGrantWriteStatus.ConnectionChanged)
+        {
+            throw TrustException.ConnectionChanged();
+        }
+        if (result.Status == PresenceGrantWriteStatus.StaleRevision)
+            throw TrustException.StalePresenceGrant();
+        return result.Revision;
     }
 
     public async Task SetHomePlaceAsync(
@@ -735,47 +801,52 @@ public sealed class TrustEngine(ITrustStore store, TimeProvider time)
 
         var now = time.GetUtcNow();
         await store.UpsertHomePlaceAsync(new HomePlace(you.Id, placeId, trimmed, now), cancellationToken);
-        var current = await store.GetCurrentHomePresenceAsync(you.Id, cancellationToken);
-        if (current is null)
-        {
-            await store.UpsertCurrentHomePresenceAsync(
-                new CurrentHomePresence(you.Id, placeId, HomePresenceState.Unknown, now, null),
-                cancellationToken);
-        }
     }
 
-    public async Task<bool> PostHomePresenceAsync(
+    public async Task ClearHomePlaceAsync(Guid accountId, CancellationToken cancellationToken)
+    {
+        var you = await RequireAccount(accountId, cancellationToken);
+        // Preserve the independent manual home/away/hidden state; only remove its place association.
+        await store.ClearHomePlaceAsync(you.Id, cancellationToken);
+    }
+
+    public Task<HomePresenceSignalResult> PostHomePresenceAsync(
         Guid accountId,
         HomePresenceState state,
         DateTimeOffset? signaledAt,
+        CancellationToken cancellationToken) =>
+        PostHomePresenceAsync(accountId, state, signaledAt, null, cancellationToken);
+
+    public async Task<HomePresenceSignalResult> PostHomePresenceAsync(
+        Guid accountId,
+        HomePresenceState state,
+        DateTimeOffset? signaledAt,
+        Guid? expectedPlaceId,
         CancellationToken cancellationToken)
     {
         var you = await RequireAccount(accountId, cancellationToken);
         // Home|Away|Hidden is a manual, global triad — it does not require Home to be set.
         // A Home place only adds the label shown alongside Home/Away for those who have one.
-        var place = await store.GetHomePlaceAsync(you.Id, cancellationToken);
         var now = time.GetUtcNow();
         var at = signaledAt ?? now;
-        if (at > now.AddMinutes(2))
+        if (at > now)
         {
             at = now;
         }
 
-        var previous = await store.GetCurrentHomePresenceAsync(you.Id, cancellationToken);
-        var arrivedHome = state == HomePresenceState.Home && previous?.State != HomePresenceState.Home;
-        var changedAt = previous is not null && previous.State == state
-            ? previous.LastChangedAt
-            : at;
-        await store.UpsertCurrentHomePresenceAsync(
-            new CurrentHomePresence(you.Id, place?.PlaceId, state, changedAt, at),
+        var result = await store.RecordHomePresenceSignalAsync(
+            you.Id,
+            expectedPlaceId,
+            state,
+            at,
             cancellationToken);
 
-        if (state == HomePresenceState.Home)
+        if (result.Accepted && state == HomePresenceState.Home)
         {
             await ResolvePromisesOnArrivalAsync(you.Id, at, cancellationToken);
         }
 
-        return arrivedHome;
+        return result;
     }
 
     public async Task<HomePromise> CreatePromiseAsync(
@@ -900,7 +971,9 @@ public sealed class TrustEngine(ITrustStore store, TimeProvider time)
             riley.Id, you.Id, new ShareState(ShareResting.Paused, now.AddMinutes(47), ShareResting.UntilTheyLook), cancellationToken);
 
         // Riley: Hidden presence — grant is on, but the state itself must never surface to you.
-        await store.SetPresenceGrantAsync(riley.Id, you.Id, true, now, cancellationToken);
+        var rileyConnectionId = await store.GetActiveMembershipIdAsync(riley.Id, you.Id, cancellationToken);
+        if (rileyConnectionId is { } connectionId)
+            _ = await store.SetPresenceGrantAsync(riley.Id, you.Id, connectionId, true, 0, now, cancellationToken);
         await store.UpsertHomePlaceAsync(new HomePlace(riley.Id, Guid.NewGuid(), "Home", now), cancellationToken);
         await store.UpsertCurrentHomePresenceAsync(
             new CurrentHomePresence(riley.Id, null, HomePresenceState.Hidden, now, now),
@@ -1045,9 +1118,50 @@ public sealed class TrustEngine(ITrustStore store, TimeProvider time)
         await store.ClearLocationsAsync(accountId, cancellationToken);
     }
 
-    private async Task<Account> RequireAccount(Guid id, CancellationToken cancellationToken) =>
-        await store.FindAccountAsync(id, cancellationToken)
-        ?? throw TrustException.Unauthorized();
+    private async Task<bool> IsAccountBlockedAsync(Guid accountId, CancellationToken cancellationToken) =>
+        ageAssurance is not null
+        && (await ageAssurance.IsAccountBlockedAsync(accountId, cancellationToken)
+            || await ageAssurance.IsAccountPrivacyHeldAsync(accountId, cancellationToken));
+
+    private async Task RequireNotRevokedSubjectAsync(Guid accountId, CancellationToken cancellationToken)
+    {
+        if (await IsAccountBlockedAsync(accountId, cancellationToken)) throw TrustException.NotConnected();
+    }
+
+    private async Task<IReadOnlyList<LookEvent>> RemoveBlockedSubjectsAsync(
+        IReadOnlyList<LookEvent> looks,
+        CancellationToken cancellationToken)
+    {
+        if (ageAssurance is null || looks.Count == 0) return looks;
+        var visible = new List<LookEvent>(looks.Count);
+        foreach (var look in looks)
+        {
+            if (!await IsAccountBlockedAsync(look.SubjectId, cancellationToken)
+                && !await IsAccountBlockedAsync(look.ViewerId, cancellationToken)) visible.Add(look);
+        }
+        return visible;
+    }
+
+    private async Task<IReadOnlyList<ConnectionRequestEntry>> RemoveBlockedPartiesAsync(
+        IReadOnlyList<ConnectionRequestEntry> requests,
+        CancellationToken cancellationToken)
+    {
+        if (ageAssurance is null || requests.Count == 0) return requests;
+        var visible = new List<ConnectionRequestEntry>(requests.Count);
+        foreach (var request in requests)
+        {
+            if (!await IsAccountBlockedAsync(request.OtherParty.Id, cancellationToken)) visible.Add(request);
+        }
+        return visible;
+    }
+
+    private async Task<Account> RequireAccount(Guid id, CancellationToken cancellationToken)
+    {
+        var account = await store.FindAccountAsync(id, cancellationToken)
+            ?? throw TrustException.Unauthorized();
+        await RequireNotRevokedSubjectAsync(id, cancellationToken);
+        return account;
+    }
 
     private static string MakeInviteCode()
     {

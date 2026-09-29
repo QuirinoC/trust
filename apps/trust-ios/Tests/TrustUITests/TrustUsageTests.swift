@@ -117,7 +117,7 @@ final class TrustUsageTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["add-person-explanation"].exists, "Explain that connecting does not start sharing, without repeating phone-format guidance.")
         let handle = app.textFields["connection-handle"]
         XCTAssertTrue(handle.waitForExistence(timeout: 5))
-        XCTAssertEqual(handle.placeholderValue as? String, "Handle or phone number")
+        XCTAssertEqual(handle.placeholderValue, "Handle or phone number")
         let addScreenshot = XCTAttachment(screenshot: app.screenshot())
         addScreenshot.name = "Add someone - redesigned empty state"
         addScreenshot.lifetime = .keepAlways

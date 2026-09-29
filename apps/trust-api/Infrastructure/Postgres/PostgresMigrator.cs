@@ -39,24 +39,29 @@ public static class PostgresMigrator
 
             foreach (var migration in LoadMigrations())
             {
+                await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
                 await using var exists = new NpgsqlCommand(
                     "SELECT 1 FROM trust.schema_migrations WHERE name = $1;",
-                    connection);
+                    connection,
+                    transaction);
                 exists.Parameters.AddWithValue(migration.Name);
                 var applied = await exists.ExecuteScalarAsync(cancellationToken);
                 if (applied is not null)
                 {
+                    await transaction.CommitAsync(cancellationToken);
                     continue;
                 }
 
-                await using var apply = new NpgsqlCommand(migration.Sql, connection);
+                await using var apply = new NpgsqlCommand(migration.Sql, connection, transaction);
                 await apply.ExecuteNonQueryAsync(cancellationToken);
                 await using var record = new NpgsqlCommand(
                     "INSERT INTO trust.schema_migrations (name, applied_at) VALUES ($1, $2);",
-                    connection);
+                    connection,
+                    transaction);
                 record.Parameters.AddWithValue(migration.Name);
                 record.Parameters.AddWithValue(DateTimeOffset.UtcNow);
                 await record.ExecuteNonQueryAsync(cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
             }
         }
         finally

@@ -75,16 +75,19 @@ public sealed record ShareDto(
     string Resting,
     DateTimeOffset? PauseUntil,
     string Presentation,
-    string? RevertsTo);
+    string? RevertsTo,
+    long Revision);
 
 public sealed record MemberDto(
     PersonDto Person,
+    Guid ConnectionId,
     PresenceDto? Presence,
     ShareDto Share,
     ShareDto InboundShare,
     bool InboundLive,
     LocationDto? Live,
     bool OutboundPresenceGranted,
+    long OutboundPresenceRevision,
     bool InboundPresenceGranted,
     HomePresenceDto? HomePresence,
     PromiseDto? Promise);
@@ -145,13 +148,16 @@ public sealed record ViewRequest(Guid SubjectId);
 
 public sealed record ViewResponse(bool Logged, LookEventDto? Event);
 
-public sealed record ShareRequest(string? Resting, string? Pause);
+public sealed record ShareRequest(Guid? ConnectionId, long? Revision, string? Resting, string? Pause);
 
-public sealed record PresenceGrantRequest(bool Enabled);
+public sealed record RevokeRequest(Guid? ConnectionId);
+
+public sealed record PresenceGrantRequest(Guid ConnectionId, long? Revision, bool Enabled);
+public sealed record PresenceGrantResponse(long Revision);
 
 public sealed record SetHomePlaceRequest(Guid PlaceId, string? Label);
 
-public sealed record HomePresenceRequest(string State, DateTimeOffset? SignaledAt);
+public sealed record HomePresenceRequest(string State, DateTimeOffset? SignaledAt, Guid? PlaceId = null);
 
 public sealed record CreatePromiseRequest(Guid TrusteeId, DateTimeOffset DeadlineAt);
 
@@ -210,6 +216,7 @@ public sealed record StoreKitAccountTokenResponse(Guid AppAccountToken);
 public sealed record VerifyStoreKitTransactionRequest(string SignedTransactionInfo);
 
 public sealed record StoreKitNotificationRequest(string SignedPayload);
+public sealed record RegisterAgeAssuranceAppTransactionRequest(string SignedAppTransactionInfo);
 
 public sealed record PushDeviceRequest(
     Guid InstallationId,
@@ -287,14 +294,15 @@ public static class ContractMap
         var presentation = state.Presentation(now);
         return presentation switch
         {
-            SharePresentation.Always => new ShareDto("always", null, "always", null),
-            SharePresentation.Off => new ShareDto("off", null, "off", null),
+            SharePresentation.Always => new ShareDto("always", null, "always", null, state.Revision),
+            SharePresentation.Off => new ShareDto("off", null, "off", null, state.Revision),
             SharePresentation.Paused paused => new ShareDto(
                 "paused",
                 paused.Ends,
                 "paused",
-                RestingName(paused.RevertsTo)),
-            _ => new ShareDto("untilTheyLook", null, "untilTheyLook", null)
+                RestingName(paused.RevertsTo),
+                state.Revision),
+            _ => new ShareDto("untilTheyLook", null, "untilTheyLook", null, state.Revision)
         };
     }
 
@@ -337,12 +345,14 @@ public static class ContractMap
             Person(snapshot.You, includeDiscoveryEnabled: true),
             snapshot.Members.Select(member => new MemberDto(
                 Person(member.Person),
+                member.ConnectionId,
                 Presence(member.Presence),
                 Share(member.OutboundShare, now),
                 Share(member.InboundShare, now),
                 member.InboundLive,
                 Location(member.Live),
                 member.OutboundPresenceGranted,
+                member.OutboundPresenceGrantRevision,
                 member.InboundPresenceGranted,
                 HomePresence(member.HomePresence),
                 Promise(member.Promise))).ToList(),

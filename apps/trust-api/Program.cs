@@ -13,6 +13,7 @@ using TrustApi.Application;
 using TrustApi.Configuration;
 using TrustApi.Domain;
 using TrustApi.Infrastructure;
+using TrustApi.Infrastructure.AgeAssurance;
 using TrustApi.Infrastructure.Identity;
 using TrustApi.Infrastructure.Notifications;
 using TrustApi.Infrastructure.Phone;
@@ -47,6 +48,7 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 });
 
 builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddScoped<RevokedAccountEndpointFilter>();
 builder.Services.AddRazorPages();
 
 // Auth hygiene: coarse per-IP rate limits on session issuance, invites, location ingest, and
@@ -156,6 +158,7 @@ if (string.Equals(storeMode, "memory", StringComparison.OrdinalIgnoreCase))
 {
     builder.Services.AddSingleton<ITrustStore, MemoryTrustStore>();
     builder.Services.AddSingleton<IPushDeviceStore, MemoryPushDeviceStore>();
+    builder.Services.AddSingleton<IAgeAssuranceAccountStore, MemoryAgeAssuranceAccountStore>();
     builder.Services.AddSingleton<IStoreKitEntitlementStore>(services =>
         new MemoryStoreKitEntitlementStore(services.GetRequiredService<ITrustStore>()));
     builder.Services.AddHealthChecks().AddCheck("memory", () =>
@@ -167,6 +170,7 @@ else
         ?? throw new InvalidOperationException("ConnectionStrings:Postgres is required when Trust:Store=postgres.");
     builder.Services.AddSingleton<ITrustStore>(_ => new PostgresTrustStore(connectionString));
     builder.Services.AddSingleton<IPushDeviceStore>(_ => new PostgresPushDeviceStore(connectionString));
+    builder.Services.AddSingleton<IAgeAssuranceAccountStore>(_ => new PostgresAgeAssuranceAccountStore(connectionString));
     builder.Services.AddSingleton<IStoreKitEntitlementStore>(_ => new PostgresStoreKitEntitlementStore(connectionString));
     builder.Services.AddHealthChecks().AddCheck("postgres", () =>
     {
@@ -193,6 +197,7 @@ builder.Services.AddSingleton<ISmsOtpSender, TwilioSmsSender>();
 builder.Services.AddSingleton<PhoneVerificationService>();
 builder.Services.AddSingleton<TrustEngine>();
 builder.Services.AddHostedService<TrustSweepService>();
+builder.Services.AddHostedService<AgeAssuranceRevocationCleanupWorker>();
 
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)

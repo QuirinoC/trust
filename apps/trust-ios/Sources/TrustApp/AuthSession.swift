@@ -61,8 +61,14 @@ final class AuthSession: ObservableObject {
     private static let nameKey = "trust.displayName"
     private static let appleUserKey = "trust.appleUserID"
     private static let tokenKey = "trust.sessionToken"
+    private static let privacyHoldSessionKey = "trust.age.privacy-hold-session"
 
     var isAuthenticated: Bool { sessionToken != nil && account != nil }
+
+    var isCurrentSessionPrivacyHeld: Bool {
+        guard let sessionToken else { return false }
+        return TrustKeychain.get(account: Self.privacyHoldSessionKey) == Self.fingerprint(sessionToken)
+    }
 
     init() {
         restore()
@@ -96,6 +102,9 @@ final class AuthSession: ObservableObject {
     func persist(account: AuthAccount, token: String) {
         self.account = account
         sessionToken = token
+        if TrustKeychain.get(account: Self.privacyHoldSessionKey) != Self.fingerprint(token) {
+            TrustKeychain.delete(account: Self.privacyHoldSessionKey)
+        }
         let defaults = UserDefaults.standard
         defaults.set(true, forKey: Self.authenticatedKey)
         defaults.set(account.provider.rawValue, forKey: Self.providerKey)
@@ -120,10 +129,16 @@ final class AuthSession: ObservableObject {
         defaults.removeObject(forKey: Self.nameKey)
         defaults.removeObject(forKey: Self.tokenKey)
         TrustKeychain.delete(account: Self.tokenKey)
+        TrustKeychain.delete(account: Self.privacyHoldSessionKey)
     }
 
-    func validateRestoredAppleCredential() async {
-        guard account?.provider == .apple, let userID = account?.appleUserID else { return }
+    func markCurrentSessionPrivacyHeld() {
+        guard let sessionToken else { return }
+        TrustKeychain.set(Self.fingerprint(sessionToken), account: Self.privacyHoldSessionKey)
+    }
+
+    func validateRestoredAppleCredential() async -> Bool {
+        guard account?.provider == .apple, let userID = account?.appleUserID else { return false }
         let provider = ASAuthorizationAppleIDProvider()
         do {
             let state: ASAuthorizationAppleIDProvider.CredentialState = try await withCheckedThrowingContinuation { continuation in
@@ -138,11 +153,13 @@ final class AuthSession: ObservableObject {
             switch state {
             case .revoked, .notFound:
                 signOut()
+                return true
             default:
-                break
+                return false
             }
         } catch {
             // Keep the local session if Apple is unreachable.
+            return false
         }
     }
 
@@ -199,6 +216,12 @@ final class AuthSession: ObservableObject {
             return given
         }
         return nil
+    }
+
+    private static func fingerprint(_ token: String) -> String {
+        SHA256.hash(data: Data(token.utf8))
+            .map { String(format: "%02x", $0) }
+            .joined()
     }
 }
 

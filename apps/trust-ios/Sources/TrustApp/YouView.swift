@@ -193,6 +193,7 @@ struct YouView: View {
                     .buttonStyle(.plain)
                     .accessibilityLabel(TrustCopy.copyHandle)
                     .accessibilityIdentifier("copy-own-handle")
+                    .accessibilityValue("@\(handle)")
                 }
                 VStack(alignment: .leading, spacing: 5) {
                     Toggle(TrustCopy.discoveryEnabledLabel, isOn: Binding(
@@ -309,6 +310,7 @@ struct YouView: View {
             Text(model.location.homeIsSet ? TrustCopy.homeIsSetLabel : TrustCopy.homeNotSetLabel)
                 .trustFont(13, weight: .semibold)
                 .foregroundStyle(palette.ink)
+                .accessibilityIdentifier("home-place-status")
             if model.location.homeIsSet, !model.location.hasAlways {
                 Text(TrustCopy.homeNeedsAlways)
                     .trustFont(12)
@@ -320,9 +322,17 @@ struct YouView: View {
             HStack(spacing: 12) {
                 Button(TrustCopy.setHomeHere) { model.setHomeFromCurrentLocation() }
                     .buttonStyle(TrustOutlineButtonStyle(compact: true))
+                    .disabled(model.isSettingHome)
+                    .accessibilityIdentifier("home-set-button")
+                if model.isSettingHome {
+                    ProgressView()
+                        .controlSize(.small)
+                        .accessibilityLabel(TrustCopy.setHomeHere)
+                }
                 if model.location.homeIsSet {
                     Button(TrustCopy.clearHome) { model.clearHomePlace() }
                         .buttonStyle(TrustTextButtonStyle(color: palette.danger))
+                        .accessibilityIdentifier("home-clear-button")
                 }
             }
         }

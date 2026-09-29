@@ -5,7 +5,7 @@ Usage:
   python3 apps/trust-api/scripts/e2e_two_account_http.py
 
 Env:
-  TRUST_API_BASE   default http://127.0.0.1:5088
+  TRUST_API_BASE   required; use the isolated local API on http://127.0.0.1:5090
   TRUST_PG_*       for pause restore + presence delete checks via docker exec
 """
 
@@ -22,7 +22,7 @@ from urllib.parse import urlsplit
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-BASE = os.environ.get("TRUST_API_BASE", "http://127.0.0.1:5088").rstrip("/")
+BASE = os.environ.get("TRUST_API_BASE", "").rstrip("/")
 PG_CONTAINER = os.environ.get("TRUST_PG_CONTAINER", "trust-api-postgres-1")
 CREATED_SESSIONS: list[tuple[str, str]] = []
 
@@ -46,6 +46,17 @@ def req(
     body: Any = None,
     expect: int | None = None,
 ) -> tuple[int, Any]:
+    # Share writes are scoped to the exact active connection. Resolve that
+    # connection from the sender's current circle so this E2E remains realistic.
+    is_share_write = method == "PATCH" and path.startswith("/api/v1/people/") and path.endswith("/share")
+    is_revoke = method == "POST" and path.startswith("/api/v1/people/") and path.endswith("/revoke")
+    if token and (is_share_write or is_revoke):
+        person_id = path.removeprefix("/api/v1/people/").removesuffix("/share").removesuffix("/revoke").strip("/")
+        target = member(circle(token), person_id)
+        body = dict(body or {})
+        body.setdefault("connectionId", target["connectionId"])
+        if is_share_write:
+            body.setdefault("revision", target["share"]["revision"])
     data = None if body is None else json.dumps(body).encode()
     headers = {"Content-Type": "application/json", "Accept": "application/json"}
     if token:
@@ -152,9 +163,26 @@ def grant_plus(token: str) -> None:
 
 
 def main() -> int:
+    if not BASE:
+        print("Refusing to run: set TRUST_API_BASE to the isolated loopback API at http://127.0.0.1:5090.", file=sys.stderr)
+        return 2
+
     parsed_base = urlsplit(BASE)
-    if parsed_base.hostname not in {"127.0.0.1", "localhost", "::1"}:
-        print("Refusing to run destructive E2E checks against a non-loopback API host.", file=sys.stderr)
+    if (
+        parsed_base.scheme != "http"
+        or parsed_base.hostname not in {"127.0.0.1", "localhost", "::1"}
+        or parsed_base.port != 5090
+        or parsed_base.username is not None
+        or parsed_base.password is not None
+        or parsed_base.path not in {"", "/"}
+        or parsed_base.query
+        or parsed_base.fragment
+    ):
+        print(
+            "Refusing to run: destructive E2E checks require exactly the isolated local API on port 5090 "
+            "(http://127.0.0.1:5090).",
+            file=sys.stderr,
+        )
         return 2
 
     suffix = uuid.uuid4().hex[:10]
@@ -761,12 +789,13 @@ def main() -> int:
     )
 
     # --- 7 Presence ---
+    sam_connection_id = member(circle(sam_tok), jordan_id)["connectionId"]
     req(
         "PUT",
         f"/api/v1/people/{jordan_id}/presence-grant",
         token=sam_tok,
-        body={"enabled": True},
-        expect=204,
+        body={"connectionId": sam_connection_id, "revision": member(circle(sam_tok), jordan_id)["outboundPresenceRevision"], "enabled": True},
+        expect=200,
     )
     req(
         "POST",

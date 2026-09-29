@@ -103,6 +103,8 @@ public sealed class StoreKitTransactionVerifierTests
         var notificationId = Guid.NewGuid();
         var notification = CreateSignedPayload(certificates, new
         {
+            version = "2.0",
+            signedDate = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
             notificationType = "DID_RENEW",
             notificationUUID = notificationId,
             data = new
@@ -126,6 +128,8 @@ public sealed class StoreKitTransactionVerifierTests
         var verifier = CreateVerifier(certificates);
         var notification = CreateSignedPayload(certificates, new
         {
+            version = "2.0",
+            signedDate = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
             notificationType = "DID_CHANGE_RENEWAL_STATUS",
             notificationUUID = Guid.NewGuid(),
             data = new
@@ -138,6 +142,77 @@ public sealed class StoreKitTransactionVerifierTests
 
         Assert.True(result.IsValid, result.Error);
         Assert.Null(result.Transaction);
+    }
+
+    [Fact]
+    public void VerifyNotificationAcceptsConsentRevocationWithMatchingAppTransaction()
+    {
+        using var certificates = TestCertificates.Create();
+        var verifier = CreateVerifier(certificates);
+        const string appTransactionId = "apple-app-transaction-123";
+        var appTransaction = CreateSignedPayload(certificates, new
+        {
+            appTransactionId,
+            bundleId = BundleId,
+            environment = "Sandbox",
+            signedDate = DateTimeOffset.UtcNow.AddMinutes(-1).ToUnixTimeMilliseconds()
+        });
+        var notificationId = Guid.NewGuid();
+        var signedAt = DateTimeOffset.UtcNow.AddSeconds(-10);
+        var notification = CreateSignedPayload(certificates, new
+        {
+            version = "2.0",
+            signedDate = signedAt.ToUnixTimeMilliseconds(),
+            notificationType = "RESCIND_CONSENT",
+            notificationUUID = notificationId,
+            appData = new
+            {
+                bundleId = BundleId,
+                environment = "sandbox",
+                signedAppTransactionInfo = appTransaction
+            }
+        });
+
+        var result = verifier.VerifyNotification(notification);
+
+        Assert.True(result.IsValid, result.Error);
+        Assert.Equal(notificationId, result.NotificationId);
+        Assert.Equal("RESCIND_CONSENT", result.NotificationType);
+        Assert.Null(result.Transaction);
+        Assert.Equal(appTransactionId, result.RevokedAppTransaction?.AppTransactionId);
+        Assert.Equal("Sandbox", result.RevokedAppTransaction?.Environment);
+        Assert.Equal(signedAt.ToUnixTimeMilliseconds(), result.SignedAt?.ToUnixTimeMilliseconds());
+    }
+
+    [Fact]
+    public void VerifyNotificationRejectsConsentRevocationForAnotherBundle()
+    {
+        using var certificates = TestCertificates.Create();
+        var verifier = CreateVerifier(certificates);
+        var appTransaction = CreateSignedPayload(certificates, new
+        {
+            appTransactionId = "apple-app-transaction-123",
+            bundleId = "com.example.other",
+            environment = "Sandbox"
+        });
+        var notification = CreateSignedPayload(certificates, new
+        {
+            version = "2.0",
+            signedDate = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+            notificationType = "RESCIND_CONSENT",
+            notificationUUID = Guid.NewGuid(),
+            appData = new
+            {
+                bundleId = BundleId,
+                environment = "Sandbox",
+                signedAppTransactionInfo = appTransaction
+            }
+        });
+
+        var result = verifier.VerifyNotification(notification);
+
+        Assert.False(result.IsValid);
+        Assert.Null(result.RevokedAppTransaction);
     }
 
     private static StoreKitTransactionVerifier CreateVerifier(TestCertificates certificates) =>

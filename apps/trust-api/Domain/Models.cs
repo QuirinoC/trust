@@ -49,7 +49,18 @@ public sealed record PresenceGrant(
     Guid SubjectId,
     Guid TrusteeId,
     bool Enabled,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    long Revision = 0);
+
+public sealed record PresenceGrantWriteResult(PresenceGrantWriteStatus Status, long Revision);
+
+public enum PresenceGrantWriteStatus
+{
+    Updated,
+    NotConnected,
+    ConnectionChanged,
+    StaleRevision
+}
 
 public sealed record HomePlace(
     Guid AccountId,
@@ -62,7 +73,10 @@ public sealed record CurrentHomePresence(
     Guid? PlaceId,
     HomePresenceState State,
     DateTimeOffset LastChangedAt,
-    DateTimeOffset? LastSignalAt);
+    DateTimeOffset? LastSignalAt,
+    Guid TransitionId = default);
+
+public sealed record HomePresenceSignalResult(bool Accepted, bool ArrivedHome, Guid TransitionId);
 
 public sealed record HomePromise(
     Guid Id,
@@ -252,7 +266,8 @@ public enum ShareResting
 public sealed record ShareState(
     ShareResting Resting,
     DateTimeOffset? PauseUntil = null,
-    ShareResting? RestoresTo = null)
+    ShareResting? RestoresTo = null,
+    long Revision = 0)
 {
     /// Join default is Off/Off — invite is not permission.
     public static ShareState Default { get; } = new(ShareResting.Off);
@@ -373,12 +388,14 @@ public sealed record PromiseView(
 
 public sealed record CircleMember(
     Account Person,
+    Guid ConnectionId,
     Presence? Presence,
     ShareState OutboundShare,
     ShareState InboundShare,
     bool InboundLive,
     LocationFix? Live,
     bool OutboundPresenceGranted,
+    long OutboundPresenceGrantRevision,
     bool InboundPresenceGranted,
     VisibleHomePresence? HomePresence,
     PromiseView? Promise);
@@ -448,6 +465,18 @@ public sealed class TrustException : Exception
 
     public static TrustException NotConnected() =>
         new("not_connected", "This person is not connected to you.");
+
+    public static TrustException ConnectionChanged() =>
+        new("connection_changed", "This connection changed. Refresh the list and try again.");
+
+    public static TrustException StaleShareIntent() =>
+        new("share_state_changed", "Sharing changed on another device. Refresh and choose again.");
+
+    public static TrustException StalePresenceGrant() =>
+        new("presence_state_changed", "Presence permission changed on another device. Refresh and choose again.");
+
+    public static TrustException ClientUpdateRequired() =>
+        new("client_update_required", "Update Trust to change sharing safely.");
 
     public static TrustException PairInactive() =>
         new("pair_inactive", "This pair is no longer active.");
@@ -547,11 +576,14 @@ public interface ITrustStore
     Task<IReadOnlyList<Account>> ListConnectedAsync(Guid accountId, CancellationToken cancellationToken);
     Task<int> ActiveMembershipCountAsync(Guid accountId, CancellationToken cancellationToken);
     Task<bool> AreConnectedAsync(Guid a, Guid b, CancellationToken cancellationToken);
+    Task<Guid?> GetActiveMembershipIdAsync(Guid a, Guid b, CancellationToken cancellationToken);
     Task InsertMembershipAsync(Guid a, Guid b, CancellationToken cancellationToken);
     Task<bool> ConnectAccountsWithOffSharesAsync(Guid a, Guid b, DateTimeOffset now, CancellationToken cancellationToken);
     Task RevokeMembershipAsync(Guid a, Guid b, CancellationToken cancellationToken);
+    Task RevokeMembershipForConnectionAsync(Guid a, Guid b, Guid connectionId, CancellationToken cancellationToken);
     Task<ShareState> GetShareAsync(Guid grantor, Guid grantee, CancellationToken cancellationToken);
     Task UpsertShareAsync(Guid grantor, Guid grantee, ShareState state, CancellationToken cancellationToken);
+    Task SetShareForConnectionAsync(Guid grantor, Guid grantee, Guid? connectionId, long? expectedRevision, ShareState state, bool isOff, CancellationToken cancellationToken);
     /// Rewrites expired pauses back to <see cref="ShareState.RestoresTo"/>.
     Task RestoreExpiredPausesAsync(DateTimeOffset now, CancellationToken cancellationToken);
     Task<Presence> GetPresenceAsync(Guid accountId, DateTimeOffset fallbackNow, CancellationToken cancellationToken);
@@ -600,12 +632,17 @@ public interface ITrustStore
     Task<SmsSendBudget?> GetSmsSendBudgetAsync(string scopeKey, CancellationToken cancellationToken);
     Task UpsertSmsSendBudgetAsync(SmsSendBudget budget, CancellationToken cancellationToken);
 
-    Task SetPresenceGrantAsync(Guid subjectId, Guid trusteeId, bool enabled, DateTimeOffset updatedAt, CancellationToken cancellationToken);
+    /// Writes a grant only while the accounts are actively connected; the membership
+    /// check and write are atomic with membership revocation/removal.
+    Task<PresenceGrantWriteResult> SetPresenceGrantAsync(Guid subjectId, Guid trusteeId, Guid connectionId, bool enabled, long? expectedRevision, DateTimeOffset updatedAt, CancellationToken cancellationToken);
     Task<PresenceGrant?> GetPresenceGrantAsync(Guid subjectId, Guid trusteeId, CancellationToken cancellationToken);
     Task UpsertHomePlaceAsync(HomePlace place, CancellationToken cancellationToken);
+    Task ClearHomePlaceAsync(Guid accountId, CancellationToken cancellationToken);
     Task<HomePlace?> GetHomePlaceAsync(Guid accountId, CancellationToken cancellationToken);
     Task UpsertCurrentHomePresenceAsync(CurrentHomePresence presence, CancellationToken cancellationToken);
+    Task<HomePresenceSignalResult> RecordHomePresenceSignalAsync(Guid accountId, Guid? expectedPlaceId, HomePresenceState state, DateTimeOffset signaledAt, CancellationToken cancellationToken);
     Task<CurrentHomePresence?> GetCurrentHomePresenceAsync(Guid accountId, CancellationToken cancellationToken);
+    Task<bool> IsHomeTransitionEligibleAsync(Guid subjectId, Guid viewerId, Guid connectionId, Guid expectedTransitionId, DateTimeOffset now, CancellationToken cancellationToken);
     Task InsertPromiseAsync(HomePromise promise, CancellationToken cancellationToken);
     Task UpdatePromiseAsync(HomePromise promise, CancellationToken cancellationToken);
     Task<HomePromise?> GetPromiseAsync(Guid promiseId, CancellationToken cancellationToken);

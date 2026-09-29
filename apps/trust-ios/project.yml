@@ -34,12 +34,18 @@ targets:
         product: TrustCore
       - sdk: AuthenticationServices.framework
       - sdk: MapKit.framework
+      - sdk: DeclaredAgeRange.framework
+        weak: true
+      - sdk: PermissionKit.framework
+        weak: true
+      - sdk: _PermissionKit_SwiftUI.framework
+        weak: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.collapsetechnologies.trust
         PRODUCT_NAME: Trust
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        CURRENT_PROJECT_VERSION: 32
+        CURRENT_PROJECT_VERSION: 34
         MARKETING_VERSION: 1.0
         ENABLE_USER_SCRIPT_SANDBOXING: YES
         SWIFT_STRICT_CONCURRENCY: targeted
@@ -121,12 +127,18 @@ targets:
         product: TrustCore
       - sdk: AuthenticationServices.framework
       - sdk: MapKit.framework
+      - sdk: DeclaredAgeRange.framework
+        weak: true
+      - sdk: PermissionKit.framework
+        weak: true
+      - sdk: _PermissionKit_SwiftUI.framework
+        weak: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.collapsetechnologies.trust
         PRODUCT_NAME: Trust
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        CURRENT_PROJECT_VERSION: 32
+        CURRENT_PROJECT_VERSION: 34
         MARKETING_VERSION: 1.0
         ENABLE_USER_SCRIPT_SANDBOXING: YES
         SWIFT_STRICT_CONCURRENCY: targeted

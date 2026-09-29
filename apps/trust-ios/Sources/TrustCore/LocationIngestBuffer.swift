@@ -39,3 +39,80 @@ public struct LocationIngestBuffer: Equatable, Codable, Sendable {
         Array(points.prefix(Self.maximumBatchSize))
     }
 }
+
+public struct LocationIngestBatch: Equatable, Sendable {
+    public let queueIdentity: UUID
+    public let points: [LocationPoint]
+
+    public init(queueIdentity: UUID, points: [LocationPoint]) {
+        self.queueIdentity = queueIdentity
+        self.points = points
+    }
+}
+
+/// Binds pending GPS points and in-flight acknowledgements to one account scope.
+public struct AccountScopedLocationIngestBuffer: Equatable, Sendable {
+    public private(set) var accountID: String?
+    public private(set) var identity = UUID()
+    public private(set) var buffer: LocationIngestBuffer
+
+    public var points: [LocationPoint] { buffer.points }
+
+    public init(accountID: String? = nil, points: [LocationPoint] = []) {
+        self.accountID = accountID?.lowercased()
+        self.buffer = LocationIngestBuffer(points: points)
+    }
+
+    public mutating func setAccountScope(_ accountID: String?, points: [LocationPoint] = []) {
+        let next = accountID?.lowercased()
+        guard next != self.accountID else { return }
+        self.accountID = next
+        buffer = LocationIngestBuffer(points: points)
+        identity = UUID()
+    }
+
+    public mutating func append(_ points: [LocationPoint], now: Date = .now) {
+        buffer.append(points, now: now)
+    }
+
+    public func nextBatch() -> LocationIngestBatch {
+        LocationIngestBatch(queueIdentity: identity, points: buffer.nextBatch())
+    }
+
+    @discardableResult
+    public mutating func acknowledge(_ batch: LocationIngestBatch) -> Bool {
+        guard batch.queueIdentity == identity,
+              !batch.points.isEmpty,
+              Array(buffer.points.prefix(batch.points.count)) == batch.points else { return false }
+        buffer.removePrefix(batch.points.count)
+        return true
+    }
+
+    public mutating func clear() {
+        buffer = LocationIngestBuffer()
+        identity = UUID()
+    }
+}
+
+/// Sends and acknowledges one API-sized prefix at a time. A failed/cancelled
+/// send leaves that exact prefix (and all later points) queued for retry.
+public enum LocationIngestBatchDrain {
+    @MainActor
+    public static func run(
+        canContinue: () -> Bool,
+        nextBatch: () -> LocationIngestBatch,
+        send: (LocationIngestBatch) async throws -> Void,
+        acknowledge: (LocationIngestBatch) -> Bool
+    ) async throws {
+        while canContinue() {
+            let batch = nextBatch()
+            guard !batch.points.isEmpty else { return }
+            try await send(batch)
+            try Task.checkCancellation()
+            // Recheck sharing and account scope after the suspension. Never
+            // acknowledge a batch after removal, sign-out, or queue retirement.
+            guard canContinue() else { return }
+            guard acknowledge(batch) else { return }
+        }
+    }
+}

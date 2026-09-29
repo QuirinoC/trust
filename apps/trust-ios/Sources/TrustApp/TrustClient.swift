@@ -1,5 +1,6 @@
 import Foundation
 import OSLog
+import StoreKit
 import TrustCore
 import UIKit
 
@@ -117,15 +118,22 @@ struct ShareDTO: Decodable {
     var pauseUntil: Date?
     var presentation: String
     var revertsTo: String?
+    var revision: Int64?
+}
+
+struct PresenceGrantResponse: Decodable {
+    var revision: Int64
 }
 
 struct MemberDTO: Decodable {
     var person: PersonDTO
+    var connectionId: UUID?
     var presence: PresenceDTO?
     var share: ShareDTO
     var inboundLive: Bool
     var live: LocationDTO?
     var outboundPresenceGranted: Bool?
+    var outboundPresenceRevision: Int64?
     var inboundPresenceGranted: Bool?
     var homePresence: HomePresenceDTO?
     var promise: PromiseDTO?
@@ -208,6 +216,14 @@ struct CircleSnapshot {
     var yourHomeState: HomePresenceKind?
     /// When this snapshot was fetched. Set from the disk cache when offline.
     var fetchedAt: Date = Date()
+}
+
+/// A decoded response that has not yet been committed. AppModel owns the final
+/// generation check so a response cannot overwrite a relationship mutation that
+/// completed while this request was in flight.
+struct CircleRefreshResult {
+    let snapshot: CircleSnapshot
+    let responseData: Data
 }
 
 enum TrustClientError: LocalizedError {
@@ -294,6 +310,34 @@ enum CircleCache {
         guard let fileURL else { return }
         try? FileManager.default.removeItem(at: fileURL)
     }
+
+    static func updateShare(
+        accountID: UUID,
+        personID: UUID,
+        connectionID: UUID,
+        share: PersonShareState
+    ) {
+        guard let cached = load(),
+              let updated = TrustCircleCacheMutation.updatingShare(
+                in: cached.data,
+                accountID: accountID,
+                personID: personID,
+                connectionID: connectionID,
+                share: share
+              ) else { return }
+        save(updated)
+    }
+
+    static func removeMember(accountID: UUID, personID: UUID, connectionID: UUID) {
+        guard let cached = load(),
+              let updated = TrustCircleCacheMutation.removing(
+                from: cached.data,
+                accountID: accountID,
+                personID: personID,
+                connectionID: connectionID
+              ) else { return }
+        save(updated)
+    }
 }
 
 @MainActor
@@ -302,6 +346,8 @@ final class TrustClient {
 
     var token: String?
     var snapshot: CircleSnapshot?
+    var onConsentRevoked: (() -> Void)?
+    var onPrivacyHoldDetected: (() -> Void)?
     private(set) var resolvedBaseURL: URL = AppConfiguration.apiBaseURL
     private(set) var reachabilityNotice: String?
 
@@ -391,24 +437,50 @@ final class TrustClient {
     }
     #endif
 
-    func refreshCircle() async throws -> CircleSnapshot {
-        let request = try makeRequest(path: "/api/v1/circle", method: "GET", authorized: true)
+    func refreshCircle(
+        operation: TrustAccountOperation,
+        currentOperation: @MainActor () -> TrustAccountOperation?
+    ) async throws -> CircleRefreshResult {
+        var request = try makeRequest(path: "/api/v1/circle", method: "GET", authorized: true, tokenOverride: operation.token)
+        request.cachePolicy = .reloadIgnoringLocalCacheData
         let data: Data = try await sendRaw(request)
+        guard let responseOperation = currentOperation(), operation == responseOperation else {
+            throw CancellationError()
+        }
         let payload: CirclePayload
         do {
             payload = try decoder.decode(CirclePayload.self, from: data)
         } catch {
             throw TrustClientError.decoding
         }
-        CircleCache.save(data)
-        let snapshot = payload.snapshot
-        self.snapshot = snapshot
-        return snapshot
+        guard TrustSessionIdentity.accountID(from: operation.token) == payload.you.id else {
+            throw TrustClientError.decoding
+        }
+        guard operation == responseOperation else {
+            throw CancellationError()
+        }
+        return CircleRefreshResult(snapshot: payload.snapshot, responseData: data)
     }
 
-    /// Last good circle from disk, for offline launch. Nil when nothing was ever fetched.
-    func cachedCircle() -> CircleSnapshot? {
+    /// Commits only after AppModel has checked its confirmed-mutation barrier.
+    /// This method is synchronous on MainActor, so the model and disk cache move
+    /// forward together without yielding to another mutation between the check
+    /// and publication.
+    func commitCircleRefresh(
+        _ result: CircleRefreshResult,
+        operation: TrustAccountOperation,
+        currentOperation: @MainActor () -> TrustAccountOperation?
+    ) -> Bool {
+        operation.commitIfCurrent(currentOperation: currentOperation()) {
+            CircleCache.save(result.responseData)
+            self.snapshot = result.snapshot
+        }
+    }
+
+    /// Last good circle from disk, for offline launch. It is usable only for its authenticated owner.
+    func cachedCircle(forAccountID accountID: UUID) -> CircleSnapshot? {
         guard let cached = CircleCache.load(),
+              TrustCircleCacheMutation.belongsToAccount(cached.data, accountID: accountID),
               let payload = try? decoder.decode(CirclePayload.self, from: cached.data) else {
             return nil
         }
@@ -421,6 +493,14 @@ final class TrustClient {
         CircleCache.clear()
         avatarImages.removeAll()
         snapshot = nil
+    }
+
+    func persistConfirmedShareState(accountID: UUID, personID: UUID, connectionID: UUID, share: PersonShareState) {
+        CircleCache.updateShare(accountID: accountID, personID: personID, connectionID: connectionID, share: share)
+    }
+
+    func persistConfirmedRemoval(accountID: UUID, personID: UUID, connectionID: UUID) {
+        CircleCache.removeMember(accountID: accountID, personID: personID, connectionID: connectionID)
     }
 
     func setAvatarPreset(_ presetID: String) async throws -> AvatarDescriptor {
@@ -463,11 +543,11 @@ final class TrustClient {
         return image
     }
 
-    func ingest(_ point: LocationPoint, battery: Int?, charging: Bool?) async throws {
-        try await ingest(points: [point], battery: battery, charging: charging)
+    func ingest(_ point: LocationPoint, battery: Int?, charging: Bool?, token: String? = nil) async throws {
+        try await ingest(points: [point], battery: battery, charging: charging, token: token)
     }
 
-    func ingest(points: [LocationPoint], battery: Int?, charging: Bool?) async throws {
+    func ingest(points: [LocationPoint], battery: Int?, charging: Bool?, token: String? = nil) async throws {
         guard let last = points.last else { return }
         struct Point: Encodable {
             var timestamp: Date
@@ -491,13 +571,14 @@ final class TrustClient {
                 batteryPercent: battery,
                 isCharging: charging,
                 points: points.map { Point(timestamp: $0.timestamp, latitude: $0.latitude, longitude: $0.longitude) }
-            )
+            ),
+            authorizedToken: token
         )
     }
 
     /// Sealed only. One snapshot; the subject gets a receipt push.
     /// 409 `share_off` / `look_requires_sealed` / `no_location` surface as `.api`.
-    func look(subjectID: UUID, confirmed: Bool) async throws -> LookSession {
+    func look(subjectID: UUID, confirmed: Bool, authorizedToken: String) async throws -> LookSession {
         struct Body: Encodable {
             var subjectId: UUID
             var confirmed: Bool
@@ -505,19 +586,19 @@ final class TrustClient {
         let payload: LookSessionDTO = try await post(
             path: "/api/v1/looks",
             body: Body(subjectId: subjectID, confirmed: confirmed),
-            authorized: true
+            authorizedToken: authorizedToken
         )
         return payload.model
     }
 
     /// Available only. Logs a `view` (deduped server-side), never pushes.
     /// 409 `view_requires_available` surfaces as `.api`.
-    func view(subjectID: UUID) async throws -> (logged: Bool, event: LookEvent?) {
+    func view(subjectID: UUID, authorizedToken: String) async throws -> (logged: Bool, event: LookEvent?) {
         struct Body: Encodable { var subjectId: UUID }
         let payload: ViewPayload = try await post(
             path: "/api/v1/views",
             body: Body(subjectId: subjectID),
-            authorized: true
+            authorizedToken: authorizedToken
         )
         return (payload.logged, payload.event?.model)
     }
@@ -533,40 +614,65 @@ final class TrustClient {
 
     /// Resting `off|untilTheyLook|always`, or pause `1h|8h|1d|2d|3d`.
     /// Always without Plus → 402 `pro_required`. Pause is free and stored on the server.
-    func setShare(personID: UUID, resting: ShareRestingMode?, pause: PauseDuration?) async throws {
+    func setShare(personID: UUID, connectionID: UUID?, expectedRevision: Int64?, resting: ShareRestingMode?, pause: PauseDuration?, authorizedToken: String) async throws {
         struct Body: Encodable {
+            var connectionId: UUID?
+            var revision: Int64?
             var resting: String?
             var pause: String?
         }
         try await patchEmpty(
             path: "/api/v1/people/\(personID.uuidString)/share",
-            body: Body(resting: resting?.apiValue, pause: pause.map(TrustProductRules.pauseWireValue))
+            body: Body(connectionId: connectionID, revision: expectedRevision, resting: resting?.apiValue, pause: pause.map(TrustProductRules.pauseWireValue)),
+            authorizedToken: authorizedToken
         )
     }
 
-    func history(personID: UUID) async throws -> [LocationPoint] {
+    /// Grants this connected person access to coarse Home/Away presence. This is
+    /// independent of location sharing; Off/Pause/Hidden still suppress visibility.
+    func setPresenceGrant(personID: UUID, connectionID: UUID, revision: Int64?, enabled: Bool, authorizedToken: String) async throws -> Int64 {
+        struct Body: Encodable { var connectionId: UUID; var revision: Int64?; var enabled: Bool }
+        var request = try makeRequest(
+            path: "/api/v1/people/\(personID.uuidString)/presence-grant",
+            method: "PUT",
+            authorized: true,
+            tokenOverride: authorizedToken
+        )
+        request.httpBody = try encoder.encode(Body(connectionId: connectionID, revision: revision, enabled: enabled))
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let response: PresenceGrantResponse = try await send(request)
+        return response.revision
+    }
+
+    func history(personID: UUID, authorizedToken: String) async throws -> [LocationPoint] {
         struct Payload: Decodable { var points: [LocationDTO] }
-        let payload: Payload = try await get(path: "/api/v1/people/\(personID.uuidString)/history")
+        let payload: Payload = try await get(path: "/api/v1/people/\(personID.uuidString)/history", authorizedToken: authorizedToken)
         return payload.points.map(\.model)
     }
 
-    func setHomePlace(placeID: UUID, label: String) async throws {
+    func setHomePlace(placeID: UUID, label: String, token: String) async throws {
         struct Body: Encodable {
             var placeId: UUID
             var label: String
         }
-        try await putEmpty(path: "/api/v1/me/home", body: Body(placeId: placeID, label: label))
+        try await putEmpty(path: "/api/v1/me/home", body: Body(placeId: placeID, label: label), authorizedToken: token)
+    }
+
+    func clearHomePlace(token: String) async throws {
+        try await deleteEmpty(path: "/api/v1/me/home", authorizedToken: token)
     }
 
     /// Global presence triad — `home|away|hidden`. Hidden is omitted from everyone's circle.
-    func postHomePresence(state: HomePresenceKind, signaledAt: Date? = nil) async throws {
+    func postHomePresence(state: HomePresenceKind, signaledAt: Date? = nil, placeID: UUID? = nil, token: String? = nil) async throws {
         struct Body: Encodable {
             var state: String
             var signaledAt: Date?
+            var placeId: UUID?
         }
         try await postEmpty(
             path: "/api/v1/me/home/presence",
-            body: Body(state: state.rawValue, signaledAt: signaledAt)
+            body: Body(state: state.rawValue, signaledAt: signaledAt, placeId: placeID),
+            authorizedToken: token
         )
     }
 
@@ -591,8 +697,9 @@ final class TrustClient {
         try await postEmpty(path: "/api/v1/invites/accept", body: Body(code: code))
     }
 
-    func revoke(personID: UUID) async throws {
-        try await postEmpty(path: "/api/v1/people/\(personID.uuidString)/revoke", body: EmptyBody())
+    func revoke(personID: UUID, connectionID: UUID, authorizedToken: String) async throws {
+        struct Body: Encodable { var connectionId: UUID }
+        try await postEmpty(path: "/api/v1/people/\(personID.uuidString)/revoke", body: Body(connectionId: connectionID), authorizedToken: authorizedToken)
     }
 
     func grantCircle(reviewUnlock: Bool, productID: String?, signedTransactionInfo: String?) async throws {
@@ -621,7 +728,7 @@ final class TrustClient {
         )
     }
 
-    func registerPushDevice(installationId: UUID, token: String, environment: String) async throws {
+    func registerPushDevice(installationId: UUID, token: String, environment: String, authorizedToken: String? = nil) async throws {
         struct Body: Encodable {
             var installationId: UUID
             var token: String
@@ -635,16 +742,17 @@ final class TrustClient {
                 token: token,
                 environment: environment,
                 bundleId: AppConfiguration.bundleIdentifier
-            )
+            ),
+            authorizedToken: authorizedToken
         )
     }
 
-    func removePushDevice(installationId: UUID) async throws {
-        try await deleteEmpty(path: "/api/v1/push/devices/\(installationId.uuidString)")
+    func removePushDevice(installationId: UUID, authorizedToken: String? = nil) async throws {
+        try await deleteEmpty(path: "/api/v1/push/devices/\(installationId.uuidString)", authorizedToken: authorizedToken)
     }
 
-    func deleteAccount() async throws {
-        try await deleteEmpty(path: "/api/v1/account")
+    func deleteAccount(authorizedToken: String? = nil) async throws {
+        try await deleteEmpty(path: "/api/v1/account", authorizedToken: authorizedToken)
     }
 
     func rename(_ name: String) async throws {
@@ -740,6 +848,11 @@ final class TrustClient {
         return try await send(request)
     }
 
+    private func get<T: Decodable>(path: String, authorizedToken: String) async throws -> T {
+        let request = try makeRequest(path: path, method: "GET", authorized: true, tokenOverride: authorizedToken)
+        return try await send(request)
+    }
+
     private func post<T: Decodable, B: Encodable>(path: String, body: B, authorized: Bool) async throws -> T {
         var request = try makeRequest(path: path, method: "POST", authorized: authorized)
         if !(body is EmptyBody) {
@@ -749,8 +862,17 @@ final class TrustClient {
         return try await send(request)
     }
 
-    private func postEmpty<B: Encodable>(path: String, body: B) async throws {
-        var request = try makeRequest(path: path, method: "POST", authorized: true)
+    private func post<T: Decodable, B: Encodable>(path: String, body: B, authorizedToken: String) async throws -> T {
+        var request = try makeRequest(path: path, method: "POST", authorized: true, tokenOverride: authorizedToken)
+        if !(body is EmptyBody) {
+            request.httpBody = try encoder.encode(body)
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        }
+        return try await send(request)
+    }
+
+    private func postEmpty<B: Encodable>(path: String, body: B, authorizedToken: String? = nil) async throws {
+        var request = try makeRequest(path: path, method: "POST", authorized: true, tokenOverride: authorizedToken)
         if !(body is EmptyBody) {
             request.httpBody = try encoder.encode(body)
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -758,26 +880,64 @@ final class TrustClient {
         let _: EmptyPayload = try await send(request, allowEmpty: true)
     }
 
-    private func patchEmpty<B: Encodable>(path: String, body: B) async throws {
-        var request = try makeRequest(path: path, method: "PATCH", authorized: true)
+    private func patchEmpty<B: Encodable>(path: String, body: B, authorizedToken: String? = nil) async throws {
+        var request = try makeRequest(path: path, method: "PATCH", authorized: true, tokenOverride: authorizedToken)
         request.httpBody = try encoder.encode(body)
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         let _: EmptyPayload = try await send(request, allowEmpty: true)
     }
 
-    private func putEmpty<B: Encodable>(path: String, body: B) async throws {
-        var request = try makeRequest(path: path, method: "PUT", authorized: true)
+    private func putEmpty<B: Encodable>(path: String, body: B, authorizedToken: String? = nil) async throws {
+        var request = try makeRequest(path: path, method: "PUT", authorized: true, tokenOverride: authorizedToken)
         request.httpBody = try encoder.encode(body)
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         let _: EmptyPayload = try await send(request, allowEmpty: true)
     }
 
-    private func deleteEmpty(path: String) async throws {
-        let request = try makeRequest(path: path, method: "DELETE", authorized: true)
+    func registerCurrentAppTransaction(
+        authorizedToken: String,
+        operationIsCurrent: @MainActor () -> Bool
+    ) async throws {
+        let result = try await AppTransaction.shared
+        // StoreKit can suspend while another account signs in. Recheck before dispatch
+        // and always use the token captured by the caller, never the mutable token field.
+        guard operationIsCurrent(), token == authorizedToken else { throw CancellationError() }
+        guard case .verified = result else {
+            throw TrustClientError.server(TrustCopy.ageGateUnavailableBody)
+        }
+
+        struct Body: Encodable {
+            var signedAppTransactionInfo: String
+        }
+
+        try await putEmpty(
+            path: "/api/v1/age-assurance/app-transaction",
+            body: Body(signedAppTransactionInfo: result.jwsRepresentation),
+            authorizedToken: authorizedToken
+        )
+    }
+
+    func reportCurrentAccountAgePrivacyHold(
+        authorizedToken: String,
+        operationIsCurrent: @MainActor () -> Bool
+    ) async throws {
+        // This endpoint takes no body: only the authenticated account can be held, and
+        // the server supplies its fixed reason and policy version.
+        guard operationIsCurrent(), token == authorizedToken else { throw CancellationError() }
+        try await postEmpty(
+            path: "/api/v1/age-assurance/privacy-hold",
+            body: EmptyBody(),
+            authorizedToken: authorizedToken
+        )
+        guard operationIsCurrent(), token == authorizedToken else { throw CancellationError() }
+    }
+
+    private func deleteEmpty(path: String, authorizedToken: String? = nil) async throws {
+        let request = try makeRequest(path: path, method: "DELETE", authorized: true, tokenOverride: authorizedToken)
         let _: EmptyPayload = try await send(request, allowEmpty: true)
     }
 
-    private func makeRequest(path: String, method: String, authorized: Bool) throws -> URLRequest {
+    private func makeRequest(path: String, method: String, authorized: Bool, tokenOverride: String? = nil) throws -> URLRequest {
         guard let url = URL(string: path, relativeTo: resolvedBaseURL)?.absoluteURL else {
             throw TrustClientError.unreachable
         }
@@ -786,8 +946,8 @@ final class TrustClient {
         request.timeoutInterval = AppConfiguration.requestTimeout
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         if authorized {
-            guard let token, !token.isEmpty else { throw TrustClientError.unauthorized }
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            guard let requestToken = tokenOverride ?? token, !requestToken.isEmpty else { throw TrustClientError.unauthorized }
+            request.setValue("Bearer \(requestToken)", forHTTPHeaderField: "Authorization")
         }
         return request
     }
@@ -831,6 +991,11 @@ final class TrustClient {
                 Self.networkLogger.error("GET /api/v1/circle failed before response: clientError=\(String(describing: type(of: error)), privacy: .public) elapsedMs=\(Self.elapsedMilliseconds(since: startedAt), privacy: .public)")
             }
             throw error
+        } catch let error as URLError where error.code == .cancelled {
+            if isCircleRequest {
+                Self.networkLogger.info("GET /api/v1/circle cancelled before response elapsedMs=\(Self.elapsedMilliseconds(since: startedAt), privacy: .public)")
+            }
+            throw CancellationError()
         } catch let error as URLError where error.code == .timedOut {
             if isCircleRequest {
                 Self.networkLogger.error("GET /api/v1/circle failed before response: urlErrorCode=\(error.code.rawValue, privacy: .public) elapsedMs=\(Self.elapsedMilliseconds(since: startedAt), privacy: .public)")
@@ -840,7 +1005,7 @@ final class TrustClient {
             if isCircleRequest {
                 Self.networkLogger.error("GET /api/v1/circle cancelled before response elapsedMs=\(Self.elapsedMilliseconds(since: startedAt), privacy: .public)")
             }
-            throw TrustClientError.timeout
+            throw CancellationError()
         } catch let error as URLError {
             if isCircleRequest {
                 Self.networkLogger.error("GET /api/v1/circle failed before response: urlErrorCode=\(error.code.rawValue, privacy: .public) elapsedMs=\(Self.elapsedMilliseconds(since: startedAt), privacy: .public)")
@@ -862,6 +1027,8 @@ final class TrustClient {
         if http.statusCode == 401 {
             if let error = try? decoder.decode(APIErrorPayload.self, from: data),
                let code = error.code, code != "unauthorized" {
+                notifyCurrentAccountIfConsentWasRevoked(code: code, request: request)
+                notifyCurrentAccountIfPrivacyHold(code: code, request: request)
                 throw TrustClientError.api(code: code, message: TrustCopy.apiError(code: code, fallback: error.message))
             }
             throw TrustClientError.unauthorized
@@ -870,6 +1037,8 @@ final class TrustClient {
             return data
         }
         if let error = try? decoder.decode(APIErrorPayload.self, from: data) {
+            notifyCurrentAccountIfConsentWasRevoked(code: error.code, request: request)
+            notifyCurrentAccountIfPrivacyHold(code: error.code, request: request)
             let message = TrustCopy.apiError(code: error.code, fallback: error.message)
             if let code = error.code, !code.isEmpty {
                 throw TrustClientError.api(code: code, message: message)
@@ -877,6 +1046,33 @@ final class TrustClient {
             throw TrustClientError.server(message)
         }
         throw TrustClientError.server(TrustCopy.requestFailedStatus(http.statusCode))
+    }
+
+    private func notifyCurrentAccountIfConsentWasRevoked(code: String?, request: URLRequest) {
+        let authorization = request.value(forHTTPHeaderField: "Authorization")
+        let requestToken = authorization.flatMap { value -> String? in
+            guard value.hasPrefix("Bearer ") else { return nil }
+            return String(value.dropFirst("Bearer ".count))
+        }
+        guard TrustAgePolicy.isCurrentAccountConsentRevocation(
+            apiCode: code,
+            requestToken: requestToken,
+            activeToken: token
+        ) else { return }
+        onConsentRevoked?()
+    }
+
+    private func notifyCurrentAccountIfPrivacyHold(code: String?, request: URLRequest) {
+        let authorization = request.value(forHTTPHeaderField: "Authorization")
+        let requestToken = authorization.flatMap { value -> String? in
+            guard value.hasPrefix("Bearer ") else { return nil }
+            return String(value.dropFirst("Bearer ".count))
+        }
+        guard TrustAccountPrivacyHoldState.isCurrentAccountHoldResponse(
+            apiCode: code,
+            requestToken: requestToken,
+            activeToken: token) else { return }
+        onPrivacyHoldDetected?()
     }
 
     private static func elapsedMilliseconds(since start: UInt64) -> Int {
@@ -998,7 +1194,7 @@ extension ShareDTO {
         case "untiltheylook", "sealed": restores = .untilTheyLook
         default: restores = nil
         }
-        return PersonShareState(resting: mode, pauseUntil: pauseUntil, restoresTo: restores)
+        return PersonShareState(resting: mode, pauseUntil: pauseUntil, restoresTo: restores, revision: revision)
     }
 
     var presentationModel: SharePresentation {
@@ -1027,11 +1223,13 @@ extension MemberDTO {
     var model: TrustedPerson {
         TrustedPerson(
             person: person.model,
+            connectionID: connectionId,
             presence: presence?.model ?? .sealed,
             share: share.model,
             inboundLive: inboundLive,
             livePoint: inboundLive ? live?.model : nil,
             outboundPresenceGranted: outboundPresenceGranted ?? false,
+            outboundPresenceRevision: outboundPresenceRevision,
             inboundPresenceGranted: inboundPresenceGranted ?? false,
             homePresence: homePresence?.model,
             promise: promise?.model,

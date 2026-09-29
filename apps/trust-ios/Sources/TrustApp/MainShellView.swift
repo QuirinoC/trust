@@ -48,20 +48,39 @@ struct MainShellView: View {
         // waking up, one request can fail and briefly show the offline banner while
         // the queued request succeeds. Keep the shell lifecycle path freshness-gated.
         .onAppear {
+            routePendingPushDestination()
             Task {
-                await model.refreshIfStale()
-                await model.refreshConnectionRequests()
+                let refreshed = await model.refreshIfStale()
+                if !refreshed { await model.refreshConnectionRequests() }
             }
         }
+        .onChange(of: model.pendingPushDestination) { _, destination in
+            guard destination != nil else { return }
+            routePendingPushDestination()
+        }
         .onChange(of: model.selectedTab) { _, tab in
-            Task { await model.refreshIfStale() }
-            if tab == .sharing { Task { await model.refreshConnectionRequests() } }
+            Task {
+                // Sharing is where a newly accepted relationship must become visible.
+                // The ordinary freshness throttle can skip this read when acceptance
+                // happens shortly after launch, so entering this tab always fetches the
+                // circle once. Other tabs retain the throttle to avoid noisy requests.
+                if tab == .sharing {
+                    await model.refresh()
+                } else if tab == .circle {
+                    // A person can change sharing mode on another device while
+                    // this app is in the background or on another tab. Refresh
+                    // before opening People so Sealed/Always state is current.
+                    await model.refresh()
+                } else {
+                    await model.refreshIfStale()
+                }
+            }
         }
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }
             Task {
-                await model.refreshIfStale()
-                await model.refreshConnectionRequests()
+                let refreshed = await model.refreshIfStale()
+                if !refreshed { await model.refreshConnectionRequests() }
             }
         }
         .task(id: scenePhase) {
@@ -109,6 +128,16 @@ struct MainShellView: View {
                 .presentationDragIndicator(.visible)
                 .presentationBackground(palette.sheet)
                 .trustFormSheet()
+        }
+    }
+
+    private func routePendingPushDestination() {
+        guard let destination = model.consumePendingPushDestination() else { return }
+        let tab: MainTab = destination == .activity ? .log : .circle
+        if model.selectedTab == tab {
+            Task { await model.refresh() }
+        } else {
+            model.selectedTab = tab
         }
     }
 

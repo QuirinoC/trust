@@ -9,9 +9,11 @@ using TrustApi.Application;
 using TrustApi.Configuration;
 using TrustApi.Contracts.V1;
 using TrustApi.Domain;
+using TrustApi.Infrastructure.AgeAssurance;
 using TrustApi.Infrastructure.Identity;
 using TrustApi.Infrastructure.Notifications;
 using TrustApi.Infrastructure.StoreKit;
+using TrustApi.Infrastructure.Phone;
 using SkiaSharp;
 using PhoneNumbers;
 
@@ -38,8 +40,21 @@ public static class TrustEndpoints
         api.MapPost("/session/apple", AppleSessionAsync).RequireRateLimiting(RateLimitPolicies.Auth);
         api.MapPost("/session/google", GoogleSessionAsync).RequireRateLimiting(RateLimitPolicies.Auth);
         api.MapPost("/session/development", DevelopmentSessionAsync).RequireRateLimiting(RateLimitPolicies.Auth);
+        api.MapGet("/local-test-capabilities", (
+            IHostEnvironment environment,
+            IOptions<AuthOptions> auth,
+            ISmsOtpSender sms) =>
+        {
+            if (!environment.IsDevelopment()) return Results.NotFound();
+            return Results.Ok(new
+            {
+                developmentOtpWithoutSms = auth.Value.AllowDevelopmentSignIn && !sms.IsConfigured
+            });
+        });
 
-        var auth = api.MapGroup(string.Empty).RequireAuthorization();
+        var auth = api.MapGroup(string.Empty)
+            .RequireAuthorization()
+            .AddEndpointFilter<RevokedAccountEndpointFilter>();
         auth.MapGet("/circle", GetCircleAsync);
         auth.MapPut("/me/avatar/preset", SetAvatarPresetAsync);
         auth.MapPut("/me/avatar/photo", SetAvatarPhotoAsync).RequireRateLimiting(RateLimitPolicies.Avatar);
@@ -71,11 +86,14 @@ public static class TrustEndpoints
         auth.MapPost("/presence/place-ping", PlacePingAsync);
         auth.MapPut("/people/{personId:guid}/presence-grant", SetPresenceGrantAsync);
         auth.MapPut("/me/home", SetHomePlaceAsync);
+        auth.MapDelete("/me/home", ClearHomePlaceAsync);
         auth.MapPost("/me/home/presence", PostHomePresenceAsync);
         auth.MapPost("/promises", CreatePromiseAsync);
         auth.MapPost("/circle/entitlement", EntitlementAsync);
         auth.MapGet("/storekit/account-token", StoreKitAccountTokenAsync);
         auth.MapPost("/storekit/transactions", VerifyStoreKitTransactionAsync);
+        auth.MapPut("/age-assurance/app-transaction", RegisterAgeAssuranceAppTransactionAsync);
+        auth.MapPost("/age-assurance/privacy-hold", PlaceAccountPrivacyHoldAsync);
         api.MapPost("/storekit/notifications", StoreKitNotificationAsync);
         auth.MapPost("/push/devices", RegisterPushDeviceAsync);
         auth.MapDelete("/push/devices/{installationId:guid}", RemovePushDeviceAsync);
@@ -204,8 +222,10 @@ public static class TrustEndpoints
         TrustEngine engine,
         IOptions<AuthOptions> auth,
         IOptions<StoreKitOptions> storeKit,
+        HttpContext httpContext,
         CancellationToken cancellationToken)
     {
+        httpContext.Response.Headers.CacheControl = "private, no-store";
         var accountId = AccountClaims.AccountId(principal);
         if (accountId is null)
         {
@@ -305,10 +325,16 @@ public static class TrustEndpoints
         HttpContext context,
         ClaimsPrincipal principal,
         ITrustStore store,
+        IAgeAssuranceAccountStore ageAssurance,
         CancellationToken cancellationToken)
     {
         var viewerId = AccountClaims.AccountId(principal);
         if (viewerId is null) return Results.Unauthorized();
+        if (await ageAssurance.IsAccountBlockedAsync(personId, cancellationToken)
+            || await ageAssurance.IsAccountPrivacyHeldAsync(personId, cancellationToken))
+        {
+            return Results.NotFound();
+        }
         if (viewerId != personId && !await store.AreConnectedAsync(viewerId.Value, personId, cancellationToken))
         {
             return Results.NotFound();
@@ -838,6 +864,8 @@ public static class TrustEndpoints
             (id, ct) => engine.SetShareAsync(
                 id,
                 personId,
+                request.ConnectionId,
+                request.Revision,
                 ContractMap.ParseResting(request.Resting),
                 ContractMap.ParsePause(request.Pause),
                 ct),
@@ -869,11 +897,18 @@ public static class TrustEndpoints
 
     public static async Task<IResult> RevokeAsync(
         Guid personId,
+        RevokeRequest request,
         ClaimsPrincipal principal,
         TrustEngine engine,
         CancellationToken cancellationToken)
     {
-        return await RunAsync(principal, engine, (id, ct) => engine.RevokeAsync(id, personId, ct), cancellationToken);
+        return await RunAsync(
+            principal,
+            engine,
+            (id, ct) => request.ConnectionId is { } connectionId
+                ? engine.RevokeAsync(id, personId, connectionId, ct)
+                : engine.RevokeAsync(id, personId, ct),
+            cancellationToken);
     }
 
     public static async Task<IResult> IngestAsync(
@@ -981,11 +1016,15 @@ public static class TrustEndpoints
         TrustEngine engine,
         CancellationToken cancellationToken)
     {
-        return await RunAsync(
-            principal,
-            engine,
-            (id, ct) => engine.SetPresenceGrantAsync(id, personId, request.Enabled, ct),
-            cancellationToken);
+        var accountId = AccountClaims.AccountId(principal);
+        if (accountId is null) return Results.Unauthorized();
+        try
+        {
+            var revision = await engine.SetPresenceGrantAsync(accountId.Value, personId, request.ConnectionId,
+                request.Enabled, request.Revision, cancellationToken);
+            return Results.Ok(new PresenceGrantResponse(revision));
+        }
+        catch (TrustException exception) { return Map(exception); }
     }
 
     public static async Task<IResult> SetHomePlaceAsync(
@@ -999,6 +1038,24 @@ public static class TrustEndpoints
             engine,
             (id, ct) => engine.SetHomePlaceAsync(id, request.PlaceId, request.Label ?? "Home", ct),
             cancellationToken);
+    }
+
+    public static async Task<IResult> ClearHomePlaceAsync(
+        ClaimsPrincipal principal,
+        TrustEngine engine,
+        CancellationToken cancellationToken)
+    {
+        var accountId = AccountClaims.AccountId(principal);
+        if (accountId is null) return Results.Unauthorized();
+        try
+        {
+            await engine.ClearHomePlaceAsync(accountId.Value, cancellationToken);
+            return Results.NoContent();
+        }
+        catch (TrustException exception)
+        {
+            return Map(exception);
+        }
     }
 
     public static async Task<IResult> PostHomePresenceAsync(
@@ -1022,10 +1079,10 @@ public static class TrustEndpoints
 
         try
         {
-            var arrivedHome = await engine.PostHomePresenceAsync(accountId.Value, state.Value, request.SignaledAt, cancellationToken);
-            if (arrivedHome)
+            var result = await engine.PostHomePresenceAsync(accountId.Value, state.Value, request.SignaledAt, request.PlaceId, cancellationToken);
+            if (result.Accepted && result.ArrivedHome)
             {
-                await receipts.NotifyHomeArrivalAsync(accountId.Value, cancellationToken);
+                await receipts.NotifyHomeArrivalAsync(accountId.Value, result.TransitionId, cancellationToken);
             }
 
             return Results.NoContent();
@@ -1160,17 +1217,13 @@ public static class TrustEndpoints
         StoreKitNotificationRequest request,
         IStoreKitTransactionVerifier verifier,
         IStoreKitEntitlementStore store,
+        IAgeAssuranceAccountStore ageAssurance,
+        IPushDeviceStore devices,
+        ITrustStore accounts,
         IOptions<StoreKitOptions> storeKit,
         ILoggerFactory loggerFactory,
         CancellationToken cancellationToken)
     {
-        if (!storeKit.Value.Enabled)
-        {
-            return Results.Json(
-                new ApiError("storekit_unavailable", "StoreKit is not enabled on this server."),
-                statusCode: StatusCodes.Status503ServiceUnavailable);
-        }
-
         var notification = verifier.VerifyNotification(request.SignedPayload);
         if (!notification.IsValid)
         {
@@ -1180,6 +1233,51 @@ public static class TrustEndpoints
         }
 
         var logger = loggerFactory.CreateLogger(typeof(TrustEndpoints));
+        if (notification.RevokedAppTransaction is { } revokedAppTransaction)
+        {
+            var accountIds = await ageAssurance.RecordConsentRevocationAsync(
+                notification.NotificationId!.Value,
+                revokedAppTransaction,
+                notification.SignedAt!.Value,
+                cancellationToken);
+
+            var cleanupFailed = false;
+            foreach (var accountId in accountIds)
+            {
+                // The tombstone makes linked accounts fail closed before cleanup starts.
+                // Keep mappings until deletion succeeds so a repeated notification retries.
+                var deleted = await TryDeleteRevokedAccountAsync(
+                    accountId,
+                    token => accounts.DeleteAccountAsync(accountId, token),
+                    devices,
+                    ageAssurance,
+                    logger,
+                    cancellationToken);
+                cleanupFailed |= !deleted;
+            }
+
+            if (accountIds.Count > 0)
+            {
+                logger.LogInformation(
+                    "Applied App Store consent revocation {NotificationId} to {AccountCount} Trust account(s).",
+                    notification.NotificationId,
+                    accountIds.Count);
+            }
+
+            return cleanupFailed
+                ? Results.Json(
+                    new ApiError("consent_cleanup_pending", "Consent was revoked; account cleanup will be retried."),
+                    statusCode: StatusCodes.Status503ServiceUnavailable)
+                : Results.NoContent();
+        }
+
+        if (!storeKit.Value.Enabled)
+        {
+            return Results.Json(
+                new ApiError("storekit_unavailable", "StoreKit is not enabled on this server."),
+                statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
+
         if (notification.Transaction is not null
             && !await store.ApplyNotificationAsync(notification.Transaction, cancellationToken))
         {
@@ -1189,6 +1287,102 @@ public static class TrustEndpoints
         }
 
         return Results.NoContent();
+    }
+
+    public static async Task<IResult> RegisterAgeAssuranceAppTransactionAsync(
+        RegisterAgeAssuranceAppTransactionRequest request,
+        ClaimsPrincipal principal,
+        IStoreKitTransactionVerifier verifier,
+        IAgeAssuranceAccountStore ageAssurance,
+        ITrustStore accounts,
+        IPushDeviceStore devices,
+        ILogger<TrustEngine> logger,
+        CancellationToken cancellationToken)
+    {
+        var accountId = AccountClaims.AccountId(principal);
+        if (accountId is null)
+        {
+            return Results.Unauthorized();
+        }
+
+        if (await accounts.FindAccountAsync(accountId.Value, cancellationToken) is null)
+        {
+            return Results.Unauthorized();
+        }
+
+        var appTransaction = verifier.VerifyAppTransaction(request.SignedAppTransactionInfo);
+        if (!appTransaction.IsValid)
+        {
+            return Results.BadRequest(new ApiError(
+                "invalid_app_transaction",
+                appTransaction.Error ?? "The App Store transaction could not be verified."));
+        }
+
+        var linked = await ageAssurance.TryRegisterAppTransactionLinkAsync(
+            accountId.Value,
+            appTransaction.AppTransaction!,
+            cancellationToken);
+        if (linked == AppTransactionLinkResult.ConsentRevoked)
+        {
+            // TryRegister atomically created a durable blocked-account association before
+            // returning ConsentRevoked. Keep it until account deletion has succeeded.
+            await TryDeleteRevokedAccountAsync(
+                accountId.Value,
+                token => accounts.DeleteAccountAsync(accountId.Value, token),
+                devices,
+                ageAssurance,
+                logger,
+                cancellationToken);
+            return Results.Conflict(new ApiError(
+                "consent_revoked",
+                "Consent for this Apple app transaction has been revoked."));
+        }
+        return Results.NoContent();
+    }
+
+    public static async Task<IResult> PlaceAccountPrivacyHoldAsync(
+        ClaimsPrincipal principal,
+        ITrustStore accounts,
+        IAgeAssuranceAccountStore ageAssurance,
+        TimeProvider timeProvider,
+        CancellationToken cancellationToken)
+    {
+        var accountId = AccountClaims.AccountId(principal);
+        if (accountId is null || await accounts.FindAccountAsync(accountId.Value, cancellationToken) is null)
+        {
+            return Results.Unauthorized();
+        }
+
+        // The endpoint intentionally accepts no target ID, age, range, or reason from
+        // the client. The fixed server reason records only that the app reported a
+        // policy restriction; it is not a verified age or consent assertion.
+        await ageAssurance.PlaceAccountPrivacyHoldAsync(
+            accountId.Value,
+            timeProvider.GetUtcNow(),
+            cancellationToken);
+        return Results.NoContent();
+    }
+
+    public static async Task<bool> TryDeleteRevokedAccountAsync(
+        Guid accountId,
+        Func<CancellationToken, Task> deleteAccount,
+        IPushDeviceStore devices,
+        IAgeAssuranceAccountStore ageAssurance,
+        ILogger logger,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await devices.RemoveAllAsync(accountId, cancellationToken);
+            await deleteAccount(cancellationToken);
+            await ageAssurance.CompleteAccountDeletionAsync(accountId, cancellationToken);
+            return true;
+        }
+        catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            logger.LogError(exception, "Could not delete account {AccountId} after consent revocation; it remains blocked and cleanup will retry.", accountId);
+            return false;
+        }
     }
 
     public static async Task<IResult> RegisterPushDeviceAsync(
@@ -1245,6 +1439,7 @@ public static class TrustEndpoints
         ClaimsPrincipal principal,
         TrustEngine engine,
         IPushDeviceStore devices,
+        IAgeAssuranceAccountStore ageAssurance,
         CancellationToken cancellationToken)
     {
         var accountId = AccountClaims.AccountId(principal);
@@ -1255,6 +1450,7 @@ public static class TrustEndpoints
 
         await devices.RemoveAllAsync(accountId.Value, cancellationToken);
         await engine.DeleteAccountAsync(accountId.Value, cancellationToken);
+        await ageAssurance.CompleteAccountDeletionAsync(accountId.Value, cancellationToken);
         return Results.NoContent();
     }
 
@@ -1422,7 +1618,8 @@ public static class TrustEndpoints
             Results.BadRequest(new ApiError(exception.Code, exception.Message)),
         "verification_required" => Results.Json(new ApiError(exception.Code, exception.Message), statusCode: StatusCodes.Status403Forbidden),
         "request_not_found" => Results.NotFound(new ApiError(exception.Code, exception.Message)),
-        "request_expired" or "request_declined_recently" or "request_limit" =>
+        "request_expired" or "request_declined_recently" or "request_limit"
+            or "connection_changed" or "share_state_changed" or "presence_state_changed" or "client_update_required" =>
             Results.Json(new ApiError(exception.Code, exception.Message), statusCode: StatusCodes.Status409Conflict),
         "otp_not_configured" or "otp_send_failed" =>
             Results.Json(new ApiError(exception.Code, exception.Message), statusCode: StatusCodes.Status503ServiceUnavailable),

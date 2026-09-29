@@ -31,6 +31,7 @@
 		36CD510268DA16335A9EAD0A /* TrustKeychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 706E76871CAC53B051985DCC /* TrustKeychain.swift */; };
 		373F339637D3D5870BB2CA6C /* LookConfirmSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = D82E8777B7F80A59F2D53EFE /* LookConfirmSheet.swift */; };
 		3C26CE6415D9270C449CCEB9 /* TrustTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5980035418744C890C9440B9 /* TrustTheme.swift */; };
+		412ADFE9A9631597D4063BE9 /* _PermissionKit_SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9616640E4E521FA6F45A24DE /* _PermissionKit_SwiftUI.framework */; settings = {ATTRIBUTES = (Weak, ); }; };
 		427A81CC58EC6AE2E97AA9E5 /* SpaceGrotesk-Variable.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 6BCC3CAB70FB747A74A2A255 /* SpaceGrotesk-Variable.ttf */; };
 		42D582439AE244465775A887 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DD39690718850F57B59DFBA /* RootView.swift */; };
 		4393758321BEDD27F92398FA /* HomePlaceStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6AEC0BF1A6640B58DEED252 /* HomePlaceStore.swift */; };
@@ -51,14 +52,18 @@
 		6A892FDA221785F31F67CDD9 /* LocationIngestStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EC0AFA3E5CFC1D9047DE372 /* LocationIngestStore.swift */; };
 		6B26BDB753D5451C9B9FB8DB /* TrustApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 913C99EC0D7E0E081DA468B0 /* TrustApp.swift */; };
 		6B6B1D78FCA327FF3C9D1B06 /* MainShellView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74231FF47EE26FCD87F0BE18 /* MainShellView.swift */; };
+		6FAF34A737DD063468C2A97B /* DeclaredAgeRange.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7526B1C396A531BB1264D7D4 /* DeclaredAgeRange.framework */; settings = {ATTRIBUTES = (Weak, ); }; };
 		6FC27E68E657E2CE7C543470 /* AuthenticationServices.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B9D76A913BE410AB908D7AB0 /* AuthenticationServices.framework */; };
 		7420B5E2CC729280CA5F7B2A /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B07B3706D2CCD8A7AC80B91D /* Assets.xcassets */; };
 		7741DAD6C809D8CB47ABE90F /* AuthenticationServices.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B9D76A913BE410AB908D7AB0 /* AuthenticationServices.framework */; };
+		777CDBA1D2E5481FBCBE5DE1 /* _PermissionKit_SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9616640E4E521FA6F45A24DE /* _PermissionKit_SwiftUI.framework */; settings = {ATTRIBUTES = (Weak, ); }; };
 		782D4136776A2EC066ADCDC6 /* LocationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47B487800F3DADB918917BA8 /* LocationCoordinator.swift */; };
 		7841602D93EE1A9F61026567 /* HomePlaceStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6AEC0BF1A6640B58DEED252 /* HomePlaceStore.swift */; };
 		78BBDD0445054AB429F6766E /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = CC2380F09F1CF772604EADCB /* Localizable.strings */; };
 		7CB75B07FEA94DC19C75750C /* SharingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93DD05E4CE1F61BF819BD58D /* SharingView.swift */; };
+		80F014BD58164432FB0BE10B /* TrustAgeGateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22D943C757DCC8579D80D2C5 /* TrustAgeGateTests.swift */; };
 		8429423DCAF6058479671748 /* TrustUsageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5A777201D5537C1D7D029F3 /* TrustUsageTests.swift */; };
+		8621177DE5918B97A7A632E5 /* DeclaredAgeRange.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7526B1C396A531BB1264D7D4 /* DeclaredAgeRange.framework */; settings = {ATTRIBUTES = (Weak, ); }; };
 		863B5887EB707AD2B4A82126 /* YouView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A8356A446C938EFA37466BE /* YouView.swift */; };
 		86AF23F721D59EF2A6C0BCCB /* IBMPlexMono-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 1A43013E81099AA3717EC066 /* IBMPlexMono-Medium.ttf */; };
 		89382677C827E997231126DE /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 63242874F15C117B93D74C2D /* InfoPlist.strings */; };
@@ -66,10 +71,12 @@
 		8CB775A757CC7C8EF6DE0A2E /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B07B3706D2CCD8A7AC80B91D /* Assets.xcassets */; };
 		8D923C0A5271D91381623F02 /* StoreManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A764AB895F51BD53D38551D7 /* StoreManager.swift */; };
 		8EBFAA09C67AE6703DF64EE5 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DD39690718850F57B59DFBA /* RootView.swift */; };
+		923A84716E8CC7679543E31D /* PermissionKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9A0293AEE98FCEA8FA92356D /* PermissionKit.framework */; settings = {ATTRIBUTES = (Weak, ); }; };
 		97E605EA1CADA01C0A8D1B94 /* IBMPlexMono-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 1A43013E81099AA3717EC066 /* IBMPlexMono-Medium.ttf */; };
 		998C3D952BFB8E194461E822 /* PlusPaywall.swift in Sources */ = {isa = PBXBuildFile; fileRef = 536A9B0B5FFE1F350CE3E140 /* PlusPaywall.swift */; };
 		9B21E0BECA136CCADA4150DE /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = D08EA0C8184116A2084F89DF /* InfoPlist.strings */; };
 		9B3BC2CDC57D376500E9B698 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 5BDC5D2F3934AD105418EDE7 /* InfoPlist.strings */; };
+		A0715ABB2E26D8AA0A07EC5E /* AgeAssuranceCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35620E6EF77E541AD03BCD66 /* AgeAssuranceCoordinator.swift */; };
 		A13CE8F38B1CD3B9DACB8E2E /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED1688A0F63E95BC3BD349AD /* AppModel.swift */; };
 		A1E928DF92CDC40F7B07952E /* LookReceiptNotifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = F84BA6FBFFF34D5A92798BF4 /* LookReceiptNotifier.swift */; };
 		A2B2EDD696A928FBEFF041C2 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 6A37121DEAA99065100C6667 /* Localizable.strings */; };
@@ -81,6 +88,7 @@
 		AB72B73FF8BA53E9B1936171 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = BF4B0475D551D63F000821DA /* Localizable.strings */; };
 		AEB82731796BB364BA081E6C /* TrustComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8863CE33D489634538BAC18E /* TrustComponents.swift */; };
 		B19D2AB1C4FC8FFE2598C835 /* InviteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD364338836BC73381136435 /* InviteView.swift */; };
+		B2C01F65BA75F564AF16A791 /* AgeGateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57B898D038C6021727ABDACD /* AgeGateView.swift */; };
 		B54974F68A38E7221D995E39 /* AuthSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FD7594384721372A16D9E19 /* AuthSession.swift */; };
 		B558CE36A3BD455267334253 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 66B76ABCAC45B392F6A35D09 /* PrivacyInfo.xcprivacy */; };
 		B8F11E617B00F06C1B266714 /* TrustApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 913C99EC0D7E0E081DA468B0 /* TrustApp.swift */; };
@@ -97,7 +105,10 @@
 		D3C213AB13032F840DEB0B8C /* ProfileAvatarPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = A144B075570E3EC71B3A9E9E /* ProfileAvatarPicker.swift */; };
 		D84B6840C62B0F8AAA3F4435 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 4C699BBDA4EB0CC57ED36887 /* Localizable.strings */; };
 		DAA3141A7D1F052C736060A3 /* ViewScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDAA41799C1A974BBE1DF210 /* ViewScreen.swift */; };
+		DB9ED407C7588BAB29C8EFAD /* AgeAssuranceCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35620E6EF77E541AD03BCD66 /* AgeAssuranceCoordinator.swift */; };
 		E1F12F6A594D0140C2929F41 /* LocationIngestStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EC0AFA3E5CFC1D9047DE372 /* LocationIngestStore.swift */; };
+		EAEEA02218F48B35D5332C3E /* PermissionKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9A0293AEE98FCEA8FA92356D /* PermissionKit.framework */; settings = {ATTRIBUTES = (Weak, ); }; };
+		EDCFA9A1DC37C2B3CE09D820 /* AgeGateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57B898D038C6021727ABDACD /* AgeGateView.swift */; };
 		F073EE1FC303C57F678D770D /* MainShellView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74231FF47EE26FCD87F0BE18 /* MainShellView.swift */; };
 		F42C31560334B370446854B3 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 5508C24A56E81A67A0FC1D03 /* InfoPlist.strings */; };
 		FB5A039144351F60575D8744 /* AppConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE3763646FBA2DF7BEE36D79 /* AppConfiguration.swift */; };
@@ -121,6 +132,8 @@
 		0FD7594384721372A16D9E19 /* AuthSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthSession.swift; sourceTree = "<group>"; };
 		1A43013E81099AA3717EC066 /* IBMPlexMono-Medium.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "IBMPlexMono-Medium.ttf"; sourceTree = "<group>"; };
 		1C0D44DBC8538A89711936F4 /* TrustClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrustClient.swift; sourceTree = "<group>"; };
+		22D943C757DCC8579D80D2C5 /* TrustAgeGateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrustAgeGateTests.swift; sourceTree = "<group>"; };
+		35620E6EF77E541AD03BCD66 /* AgeAssuranceCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgeAssuranceCoordinator.swift; sourceTree = "<group>"; };
 		3DD39690718850F57B59DFBA /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		47B487800F3DADB918917BA8 /* LocationCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationCoordinator.swift; sourceTree = "<group>"; };
 		482B3013C3B6C0C8532F5DE6 /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
@@ -131,6 +144,7 @@
 		536A9B0B5FFE1F350CE3E140 /* PlusPaywall.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlusPaywall.swift; sourceTree = "<group>"; };
 		5508C24A56E81A67A0FC1D03 /* InfoPlist.strings */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = InfoPlist.strings; path = de.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		56F2274E2243FEC94CADC02A /* TrustUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = TrustUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		57B898D038C6021727ABDACD /* AgeGateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgeGateView.swift; sourceTree = "<group>"; };
 		5980035418744C890C9440B9 /* TrustTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrustTheme.swift; sourceTree = "<group>"; };
 		5BDC5D2F3934AD105418EDE7 /* InfoPlist.strings */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = InfoPlist.strings; path = ja.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		5EC0AFA3E5CFC1D9047DE372 /* LocationIngestStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationIngestStore.swift; sourceTree = "<group>"; };
@@ -140,9 +154,12 @@
 		6BCC3CAB70FB747A74A2A255 /* SpaceGrotesk-Variable.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "SpaceGrotesk-Variable.ttf"; sourceTree = "<group>"; };
 		706E76871CAC53B051985DCC /* TrustKeychain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrustKeychain.swift; sourceTree = "<group>"; };
 		74231FF47EE26FCD87F0BE18 /* MainShellView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainShellView.swift; sourceTree = "<group>"; };
+		7526B1C396A531BB1264D7D4 /* DeclaredAgeRange.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = DeclaredAgeRange.framework; path = System/Library/Frameworks/DeclaredAgeRange.framework; sourceTree = SDKROOT; };
 		8863CE33D489634538BAC18E /* TrustComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrustComponents.swift; sourceTree = "<group>"; };
 		913C99EC0D7E0E081DA468B0 /* TrustApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrustApp.swift; sourceTree = "<group>"; };
 		93DD05E4CE1F61BF819BD58D /* SharingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharingView.swift; sourceTree = "<group>"; };
+		9616640E4E521FA6F45A24DE /* _PermissionKit_SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = _PermissionKit_SwiftUI.framework; path = System/Library/Frameworks/_PermissionKit_SwiftUI.framework; sourceTree = SDKROOT; };
+		9A0293AEE98FCEA8FA92356D /* PermissionKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = PermissionKit.framework; path = System/Library/Frameworks/PermissionKit.framework; sourceTree = SDKROOT; };
 		A144B075570E3EC71B3A9E9E /* ProfileAvatarPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileAvatarPicker.swift; sourceTree = "<group>"; };
 		A5FADBF71283343C63339724 /* trust-ios */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "trust-ios"; path = .; sourceTree = SOURCE_ROOT; };
 		A764AB895F51BD53D38551D7 /* StoreManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreManager.swift; sourceTree = "<group>"; };
@@ -184,6 +201,9 @@
 				AB1369C7286F2EAD6C9E6E79 /* TrustCore in Frameworks */,
 				7741DAD6C809D8CB47ABE90F /* AuthenticationServices.framework in Frameworks */,
 				67217F4E367E03AC88AFF7D7 /* MapKit.framework in Frameworks */,
+				8621177DE5918B97A7A632E5 /* DeclaredAgeRange.framework in Frameworks */,
+				923A84716E8CC7679543E31D /* PermissionKit.framework in Frameworks */,
+				777CDBA1D2E5481FBCBE5DE1 /* _PermissionKit_SwiftUI.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -194,6 +214,9 @@
 				A3B85FA87D3F11B02F7A4B0C /* TrustCore in Frameworks */,
 				6FC27E68E657E2CE7C543470 /* AuthenticationServices.framework in Frameworks */,
 				681EDD0BAF595CBD804C6090 /* MapKit.framework in Frameworks */,
+				6FAF34A737DD063468C2A97B /* DeclaredAgeRange.framework in Frameworks */,
+				EAEEA02218F48B35D5332C3E /* PermissionKit.framework in Frameworks */,
+				412ADFE9A9631597D4063BE9 /* _PermissionKit_SwiftUI.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -213,8 +236,11 @@
 		214C9B83B77B07DFA7E7E1D8 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				9616640E4E521FA6F45A24DE /* _PermissionKit_SwiftUI.framework */,
 				B9D76A913BE410AB908D7AB0 /* AuthenticationServices.framework */,
+				7526B1C396A531BB1264D7D4 /* DeclaredAgeRange.framework */,
 				0D907524021AC2732B10CC12 /* MapKit.framework */,
+				9A0293AEE98FCEA8FA92356D /* PermissionKit.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -251,6 +277,8 @@
 		6D8909A703521D7E860A2DE0 /* TrustApp */ = {
 			isa = PBXGroup;
 			children = (
+				35620E6EF77E541AD03BCD66 /* AgeAssuranceCoordinator.swift */,
+				57B898D038C6021727ABDACD /* AgeGateView.swift */,
 				AE3763646FBA2DF7BEE36D79 /* AppConfiguration.swift */,
 				ED1688A0F63E95BC3BD349AD /* AppModel.swift */,
 				0FD7594384721372A16D9E19 /* AuthSession.swift */,
@@ -293,6 +321,7 @@
 		859AB1766E8063820758CFF7 /* TrustUITests */ = {
 			isa = PBXGroup;
 			children = (
+				22D943C757DCC8579D80D2C5 /* TrustAgeGateTests.swift */,
 				D0929D5A5788EE4C0AB1DF23 /* TrustRealAPIFeatureTests.swift */,
 				D5A777201D5537C1D7D029F3 /* TrustUsageTests.swift */,
 			);
@@ -527,6 +556,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				DB9ED407C7588BAB29C8EFAD /* AgeAssuranceCoordinator.swift in Sources */,
+				EDCFA9A1DC37C2B3CE09D820 /* AgeGateView.swift in Sources */,
 				FB5A039144351F60575D8744 /* AppConfiguration.swift in Sources */,
 				A13CE8F38B1CD3B9DACB8E2E /* AppModel.swift in Sources */,
 				B54974F68A38E7221D995E39 /* AuthSession.swift in Sources */,
@@ -561,6 +592,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				80F014BD58164432FB0BE10B /* TrustAgeGateTests.swift in Sources */,
 				8ABAC708AFCFF13717C9F880 /* TrustRealAPIFeatureTests.swift in Sources */,
 				8429423DCAF6058479671748 /* TrustUsageTests.swift in Sources */,
 			);
@@ -570,6 +602,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A0715ABB2E26D8AA0A07EC5E /* AgeAssuranceCoordinator.swift in Sources */,
+				B2C01F65BA75F564AF16A791 /* AgeGateView.swift in Sources */,
 				C66C2CA89604A2D5F1B526B9 /* AppConfiguration.swift in Sources */,
 				CE01EB4E572A9DEEB10D7C54 /* AppModel.swift in Sources */,
 				187663D82E2A11219A0F304B /* AuthSession.swift in Sources */,
@@ -626,7 +660,7 @@
 				CODE_SIGN_ENTITLEMENTS = Trust.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 32;
+				CURRENT_PROJECT_VERSION = 34;
 				DEVELOPMENT_TEAM = 3S529795M9;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				INFOPLIST_FILE = "Internal-Info.plist";
@@ -718,7 +752,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = Trust.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 32;
+				CURRENT_PROJECT_VERSION = 34;
 				DEVELOPMENT_TEAM = 3S529795M9;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				INFOPLIST_FILE = Info.plist;
@@ -794,7 +828,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = Trust.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 32;
+				CURRENT_PROJECT_VERSION = 34;
 				DEVELOPMENT_TEAM = 3S529795M9;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				INFOPLIST_FILE = Info.plist;
@@ -820,7 +854,7 @@
 				CODE_SIGN_ENTITLEMENTS = Trust.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 32;
+				CURRENT_PROJECT_VERSION = 34;
 				DEVELOPMENT_TEAM = 3S529795M9;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				INFOPLIST_FILE = "Internal-Info.plist";

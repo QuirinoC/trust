@@ -7,7 +7,7 @@
     <div class="brand">Collapse<br />Technologies</div>
     <h1>Privacy</h1>
     <div class="rule"></div>
-    <p class="muted">Last updated 21 September 2026. This policy covers the Trust iOS app and this API.</p>
+    <p class="muted">Last updated 28 September 2026. This policy covers the Trust iOS app and this API.</p>
     <h2>Who we are</h2>
     <p>Trust is operated by Collapse Technologies. Contact <a href="mailto:hello@collapsetechnologies.com">hello@collapsetechnologies.com</a>.</p>
     <h2>What we collect</h2>
@@ -21,7 +21,13 @@
         <li>Look-event records, including who looked and when. These records do not contain coordinates.</li>
         <li>Share settings per person (Sealed, Always, Pause, or Off).</li>
         <li>Plus subscription status from StoreKit. We receive an entitlement, not your card number. Plus is this account only.</li>
+        <li>A one-way hash of Apple’s signed app transaction identifier, linked to your Trust account so we can apply Apple consent-withdrawal notifications. We do not store the signed transaction or an age category.</li>
+        <li>If the app places a signed-in account on an age-related privacy hold, the API stores the account association, time, policy version, and a fixed reason that the app reported a restriction. It does not receive or store the person's age range.</li>
     </ul>
+    <h2>Age assurance</h2>
+    <p>Age-related requirements vary by region. The normal app does not ask for a birth date or apply a global age gate. On supported iOS versions, Trust requests an Apple age range only when Apple's signals indicate a relevant regional requirement; the range is evaluated on device and is not sent to or stored by the Trust API. Apple age-related significant-update actions are shown when Apple signals they are required. Acknowledgment of the current significant update is stored in Apple's iCloud Key-Value Store for the current Apple account and update ID; it may sync to that account's devices. Trust does not store the age range or acknowledgement on its servers. Before iOS 26.2, Apple's regional eligibility signal is unavailable, so Trust does not infer a global requirement. Trust has not designed parent-managed accounts for children under 13; this statement does not resolve Trust's legal audience classification or launch-market obligations.</p>
+    <p>If the app applies an age-related restriction to an existing signed-in account, it asks the Trust API to place that account on a privacy hold. The API receives no age range and cannot independently verify the app's report. The hold blocks normal account access and location sharing. Trust retains only the account association, hold time, policy version, and fixed report reason until the account is deleted. Deleting the account removes the hold and account data.</p>
+    <p>To apply consent-withdrawal notifications, the app sends Apple’s signed app transaction to Trust’s API for verification; Trust stores only a one-way hash of its identifier and links that hash to your account. If Apple sends a verified notice that consent was withdrawn, Trust removes the linked account and its data, including push registrations. Apple may also prevent the app from launching for that child.</p>
     <h2>What we do not do</h2>
     <ul>
         <li>We do not sell location. There are no ads and no data brokerage.</li>
@@ -29,6 +35,7 @@
         <li>Looking is never silent. The other person gets a receipt.</li>
     </ul>
     <h2>Retention</h2>
+    <p>For a verified Apple consent withdrawal, Trust retains a permanent revocation record and the hashed app transaction identifier needed to prevent the withdrawn app transaction from being linked to a Trust account again. The Trust account link is removed after account data is deleted. A later app session does not clear or reverse this revocation; Trust has no re-consent restoration path in the current implementation.</p>
     <ul>
         <li>Location points are retained for up to 30 days while stored. A viewer can read history only while you share Always with them: up to 24 hours for a Free viewer or 30 days for a Plus viewer. If you have no one left you share with, your location is cleared.</li>
         <li>Only your current profile photo is stored. Replacing it with another photo or a profile icon, or removing it, deletes the previous photo.</li>

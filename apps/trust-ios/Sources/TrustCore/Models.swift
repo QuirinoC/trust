@@ -386,15 +386,20 @@ public struct PersonShareState: Equatable, Codable, Sendable {
     public var resting: ShareRestingMode
     public var pauseUntil: Date?
     public var restoresTo: ShareRestingMode?
+    /// Monotonic server revision for this one outbound consent direction.
+    /// Nil means an older server payload and cannot authorize an enabled mutation.
+    public var revision: Int64?
 
     public init(
         resting: ShareRestingMode = .off,
         pauseUntil: Date? = nil,
-        restoresTo: ShareRestingMode? = nil
+        restoresTo: ShareRestingMode? = nil,
+        revision: Int64? = nil
     ) {
         self.resting = resting
         self.pauseUntil = pauseUntil
         self.restoresTo = restoresTo
+        self.revision = revision
     }
 
     public func presentation(at now: Date) -> SharePresentation {
@@ -524,6 +529,8 @@ public enum TrustProductRules {
 
 public struct TrustedPerson: Identifiable, Equatable, Sendable {
     public var person: Person
+    /// Server-issued membership incarnation. Nil only for older API payloads/demo fixtures.
+    public var connectionID: UUID?
     public var presence: PresenceSnapshot
     /// Your outbound share toward this person.
     public var share: PersonShareState
@@ -532,6 +539,8 @@ public struct TrustedPerson: Identifiable, Equatable, Sendable {
     /// Coordinates only when this person is visible to you. Always nil when sealed.
     public var livePoint: LocationPoint?
     public var outboundPresenceGranted: Bool
+    /// Revision for this account's grant toward this person; nil until read from a server snapshot.
+    public var outboundPresenceRevision: Int64?
     public var inboundPresenceGranted: Bool
     /// Nil when they are Hidden, have no signal yet, or have not granted presence.
     public var homePresence: HomePresenceSnapshot?
@@ -563,11 +572,13 @@ public struct TrustedPerson: Identifiable, Equatable, Sendable {
 
     public init(
         person: Person,
+        connectionID: UUID? = nil,
         presence: PresenceSnapshot,
         share: PersonShareState,
         inboundLive: Bool,
         livePoint: LocationPoint? = nil,
         outboundPresenceGranted: Bool = false,
+        outboundPresenceRevision: Int64? = nil,
         inboundPresenceGranted: Bool = false,
         homePresence: HomePresenceSnapshot? = nil,
         promise: PromiseSnapshot? = nil,
@@ -575,11 +586,13 @@ public struct TrustedPerson: Identifiable, Equatable, Sendable {
         locationHistory: [LocationVisit] = []
     ) {
         self.person = person
+        self.connectionID = connectionID
         self.presence = presence
         self.share = share
         self.inboundLive = inboundLive
         self.livePoint = inboundLive ? livePoint : nil
         self.outboundPresenceGranted = outboundPresenceGranted
+        self.outboundPresenceRevision = outboundPresenceRevision
         self.inboundPresenceGranted = inboundPresenceGranted
         self.homePresence = homePresence
         self.promise = promise

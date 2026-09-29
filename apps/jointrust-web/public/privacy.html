@@ -27,7 +27,7 @@
     <main>
       <h1>Privacy</h1>
       <div class="rule" aria-hidden="true"></div>
-      <p>Last updated 24 September 2026. Trust is made and operated by Collapse Technologies. This policy covers the Trust iOS app and jointrust.app. Contact <a href="mailto:hello@collapsetechnologies.com">hello@collapsetechnologies.com</a>.</p>
+      <p>Last updated 28 September 2026. Trust is made and operated by Collapse Technologies. This policy covers the Trust iOS app and jointrust.app. Contact <a href="mailto:hello@collapsetechnologies.com">hello@collapsetechnologies.com</a>.</p>
 
       <h2>What we collect</h2>
       <ul>
@@ -40,6 +40,7 @@
         <li>Look receipts: who looked, when, and the history window. A receipt does not contain coordinates.</li>
         <li>An app installation ID and an Apple push token. The service attempts to send a receipt notification when someone looks; delivery can be delayed or may not occur.</li>
         <li>Plus subscription status from Apple. We receive an entitlement, never your card number.</li>
+        <li>If the app places a signed-in account on an age-related privacy hold, the API stores the account association, time, policy version, and a fixed reason that the app reported a restriction. It does not receive or store the person's age range.</li>
       </ul>
 
       <h2>How looking works</h2>
@@ -69,8 +70,9 @@
       <h2>Delete your account</h2>
       <p>In the Trust iOS app, open You and choose Delete account. That removes your identity, handle, profile photo, location, people and connection requests, share settings, looks, push tokens, and Plus records on this service. Contact us if you need help.</p>
 
-      <h2>Age</h2>
-      <p>Trust can be used by a household, including family. It is not a children’s app and is not directed at children under 13.</p>
+      <h2>Age assurance</h2>
+      <p>Age-related requirements vary by region. On supported iOS versions, the app requests an age range from Apple only when Apple's signals indicate a relevant regional requirement. The app evaluates the range on the device; it is not sent to or stored by Trust. Trust does not ask for a birth date or apply a global age gate.</p>
+      <p>If the app applies an age-related restriction to an existing signed-in account, it asks the Trust API to place that account on a privacy hold. The API receives no age range and cannot independently verify the app's report. The hold blocks normal account access and location sharing. Trust retains only the account association, hold time, policy version, and fixed report reason until the account is deleted. Deleting the account removes the hold and account data. Trust has not designed parent-managed accounts for children under 13; this statement does not resolve Trust's legal audience classification or launch-market obligations.</p>
     </main>
     <footer>
       <p><a href="/">Trust</a></p>

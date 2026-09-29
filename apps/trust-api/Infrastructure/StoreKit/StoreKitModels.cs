@@ -17,12 +17,26 @@ public sealed record StoreKitVerificationResult(
     public bool IsValid => Transaction is not null;
 }
 
+public sealed record VerifiedStoreKitAppTransaction(
+    string AppTransactionId,
+    string BundleId,
+    string Environment);
+
+public sealed record StoreKitAppTransactionVerificationResult(
+    VerifiedStoreKitAppTransaction? AppTransaction,
+    string? Error)
+{
+    public bool IsValid => AppTransaction is not null;
+}
+
 public sealed record StoreKitNotificationVerificationResult(
     bool IsValid,
     Guid? NotificationId,
     string? NotificationType,
     VerifiedStoreKitTransaction? Transaction,
-    string? Error);
+    string? Error,
+    VerifiedStoreKitAppTransaction? RevokedAppTransaction = null,
+    DateTimeOffset? SignedAt = null);
 
 public enum StoreKitApplyOutcome
 {
@@ -34,6 +48,8 @@ public enum StoreKitApplyOutcome
 public interface IStoreKitTransactionVerifier
 {
     StoreKitVerificationResult Verify(string signedTransaction);
+
+    StoreKitAppTransactionVerificationResult VerifyAppTransaction(string signedAppTransaction);
 
     StoreKitNotificationVerificationResult VerifyNotification(string signedPayload);
 }

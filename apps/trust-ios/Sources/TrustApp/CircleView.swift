@@ -276,8 +276,8 @@ struct CircleView: View {
                 }
                 .refreshable {
                     await model.refresh()
-                    await model.refreshConnectionRequests()
                 }
+                .accessibilityIdentifier("people-list")
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
@@ -327,8 +327,8 @@ struct CircleView: View {
                 }
                     .refreshable {
                         await model.refresh()
-                        await model.refreshConnectionRequests()
                     }
+                    .accessibilityIdentifier("people-list")
             }
         }
     }
@@ -747,6 +747,7 @@ struct PersonScreen: View {
                     }
                     .padding(.vertical, 12)
                     .accessibilityElement(children: .combine)
+                    .accessibilityIdentifier("person-history-visit-\(index)")
                     TrustRowDivider()
                 }
             }

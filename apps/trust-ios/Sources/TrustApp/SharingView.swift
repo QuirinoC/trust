@@ -95,11 +95,13 @@ struct SharingView: View {
                 // full open-Duo canvas instead of anchoring them to the right edge.
                 .frame(maxWidth: isWide ? 760 : TrustTheme.readableWidth, alignment: .leading)
                 .frame(maxWidth: .infinity, alignment: .center)
+                // Keep the short, empty Sharing state scrollable enough for the native
+                // pull-to-refresh gesture to work before anyone has been added.
+                .frame(minHeight: geometry.size.height, alignment: .top)
             }
             .background(palette.paper.ignoresSafeArea())
             .refreshable {
                 await model.refresh()
-                await model.refreshConnectionRequests()
             }
             .sheet(isPresented: Binding(
                 get: { model.pauseSheetPersonID != nil },
@@ -258,10 +260,17 @@ struct OutboundRow: View {
                 TrustAvatar(name: member.person.displayName, seed: seed, size: 40, avatar: member.person.avatar, personID: member.id)
             }
             VStack(alignment: .leading, spacing: 2) {
-                Text(member.person.displayName)
-                    .trustFont(14, weight: .semibold)
-                    .foregroundStyle(palette.ink)
-                    .lineLimit(1)
+                HStack(spacing: 5) {
+                    Text(member.person.displayName)
+                        .trustFont(14, weight: .semibold)
+                        .foregroundStyle(palette.ink)
+                        .lineLimit(1)
+                    if model.isUpdatingShare(personID: member.id) {
+                        ProgressView()
+                            .controlSize(.mini)
+                            .accessibilityHidden(true)
+                    }
+                }
                 if case .paused = presentation {
                     Text(summary)
                         .trustFont(11)
@@ -285,8 +294,22 @@ struct OutboundRow: View {
 
     private var actionsMenu: some View {
         Menu {
+            Section {
+                Button {
+                    model.togglePresenceGrant(personID: member.id)
+                } label: {
+                    Label(
+                        TrustCopy.presenceGrantLabel(member.firstName),
+                        systemImage: member.outboundPresenceGranted ? "checkmark.circle.fill" : "circle"
+                    )
+                }
+                .disabled(model.isDemoMode || model.isUpdatingPresenceGrant(personID: member.id))
+                .accessibilityIdentifier("presence-grant-\(member.firstName.lowercased())")
+                .accessibilityAddTraits(member.outboundPresenceGranted ? [.isSelected] : [])
+                Text(TrustCopy.presenceGrantExplanation)
+            }
             Button(TrustCopy.pause, action: onPause)
-                .disabled(presentation.isOff)
+                .disabled(presentation.isOff || model.isUpdatingShare(personID: member.id))
                 .accessibilityIdentifier("pause-sharing-\(member.firstName.lowercased())")
             Button(TrustCopy.removePerson, role: .destructive, action: onRemove)
                 .accessibilityIdentifier("remove-person-action-\(member.firstName.lowercased())")
@@ -304,7 +327,12 @@ struct OutboundRow: View {
     private func modeButton(_ mode: Mode, label: String, locked: Bool = false) -> some View {
         let selected = selection == mode
         return Button {
-            if selected { return }
+            if selected {
+                if mode == .off, model.isUpdatingShare(personID: member.id) {
+                    onStopSharing()
+                }
+                return
+            }
             if locked { model.showingPaywall = true; return }
             switch mode {
             case .off:
@@ -326,6 +354,7 @@ struct OutboundRow: View {
         .accessibilityLabel(locked ? "Always. \(TrustCopy.plus)" : label)
         .accessibilityIdentifier("sharing-mode-\(mode)-\(member.firstName.lowercased())")
         .accessibilityAddTraits(selected ? [.isSelected] : [])
+        .disabled(mode != .off && model.isUpdatingShare(personID: member.id))
     }
 
 }
