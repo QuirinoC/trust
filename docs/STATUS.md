@@ -1,40 +1,26 @@
 # Trust project status
 
-Updated 2026-09-27. This is a dated evidence snapshot; verify live service and App Store Connect state before relying on it.
+Updated 2026-09-29. This is a dated evidence snapshot; verify live service and App Store Connect state before relying on it.
 
-## Current source
+## Current release evidence
 
-The release-prep changes are committed and pushed to `origin/main` (release-prep commit `8417445`); the latest main commit is `6e13108`, which stabilizes an appearance-menu UI assertion. The current working branch, `codex/rebrand-launch-brief`, starts from that main head and contains a draft website/listing/screenshot copy refresh. Those branch changes are not deployed to jointrust.app or App Store Connect.
+Stable Xcode 27.0 produced version 1.0 build 34 from the current source. The local archive is `/tmp/Trust-1.0-34-AppStore-20260929.xcarchive`; the exported App Store IPA is `/tmp/Trust-1.0-34-AppStore-Export-20260929/Trust.ipa`. The export is signed by Apple Distribution team `3S529795M9`, has production APNs and `get-task-allow=false`, and has phone-verification bypass disabled. Its production API URL is `https://trust-api-u0ft.onrender.com`. It has not been uploaded. App Store Connect still has a draft selecting build 27. Its English (U.S.) name is now `Trust: Location Sharing`, with current subtitle, qualified description, keywords, URLs, and matching beta description verified through Apple’s API. Its English (U.S.) iPhone 6.9, iPhone 6.5, and iPad 13 screenshot sets now contain six current images each, ordered 01–06 and confirmed `COMPLETE` at target dimensions; no build selection or submission state was changed.
 
-The current design direction and actual palette tokens are in [DESIGN.md](DESIGN.md). The app icon redesign remains paused.
+The paired UI run passed 1/1 with no skips on both devices: Alice `/tmp/trust-pair-alice34-20260929.xcresult` and Bob `/tmp/trust-pair-bob34-20260929.xcresult`. It exercised reciprocal Home/Away presence grants through both native UIs, including Duo, plus onboarding, invitation/acceptance, Home and movement updates/clear, Hidden, Stop, remove/re-add, and fresh default-Off state. Swift tests passed 77/77 and API tests passed 183/183. The account-owned cache isolation fix has been reviewed by Sol.
 
-## Verification evidence
+## Production and release decision
 
-- Swift package tests: **33/33 passed**.
-- Stable iPhone 17 Pro Xcode UI suite: **41/41 passed** (33 core + 8 UI).
-- API suite: **132/132 passed**.
-- Website tests: **3/3 passed**; localization validation found **470 keys across five translated locales**.
-- Real-API onboarding, phone lookup, invite sharing, request acceptance, default-Off sharing, and stopping sharing passed once on stable iOS 26.5 and once on iOS 27.1 beta Duo.
-- Local development API health, Cloudflare Wrangler authentication, and a website deploy dry run were verified.
-- App Store screenshot assets were regenerated from the current Debug app for six panels at iPhone 6.9-inch, iPhone 6.5-inch, and iPad 13-inch sizes. The capture script explicitly uses Light appearance and removes its temporary simulators. The assets are local; they have not been uploaded to the App Store listing.
-- Rebrand-brief branch checks: Swift package tests **33/33 passed**, website tests **3/3 passed**, and localization validation **470 keys across five translated locales**. Screenshot capture built the Debug app and recaptured iPhone and iPad UI. GitHub workflow [36302191437](https://github.com/QuirinoC/trust/actions/runs/36302191437) passed web, API, and localization jobs; the iOS simulator build/test step was still running at the last check and is not counted as passed.
-- Build 32 was archived from `codex/rebrand-launch-brief` with the `Trust-Internal` scheme, checked to contain `TRUST_SKIP_PHONE_VERIFICATION=true`, and uploaded with the internal-only export configuration. App Store Connect lists build 32 as **Testing** in the `iPhone Juan` internal group (one tester). The group page confirms it is available to that tester; physical installation and feature checks remain outstanding.
-- GitHub CI run [36299412303](https://github.com/QuirinoC/trust/actions/runs/36299412303) passed API, web, and localization checks but failed one iOS UI assertion: XCTest expected a SwiftUI appearance-menu item to disappear from the accessibility tree. The check now waits for that item to become non-hittable; the focused UI test passes locally on the iPhone 17 Pro simulator. The later workflow dispatch on the rebrand branch is linked above.
+**Public release remains NO-GO.** The last recorded production observation was Render commit `c3401cf` (26 September): `/health/ready` was healthy and unauthenticated `PUT /api/v1/age-assurance/app-transaction` returned 404. Recheck before acting; migrations 014–020 and corresponding API routes were not deployed in that observation. The full API suite passed 183/183 locally. A synthetic 013→020 migration rehearsal and a twice-applied migration on a private local restore of the Render backup reached ledger 001–020 with all 20 pre-existing business-table row counts unchanged. Rollback and build-32 client compatibility remain unverified; no live production database write was made.
 
-On Duo's iOS 27.1 beta, XCTest could not close the system share sheet with its close-button tap; a swipe-down closed it and the rest of the real-API flow passed. Simulator checks do not establish physical SMS, Sign in with Apple, APNs delivery, background location, or TestFlight behavior.
+The one remaining App Store group, Trust Family Auto, is internal and has `hasAccessToAllBuilds=true`; all three testers remain in it. Duplicate groups iPhone Juan, Trust Internal Testers, and Family Test were removed after a protected metadata backup and verification that their combined membership matched the retained group. Deploy the reviewed backend, verify health, migration state, and protected routes, and only then upload build 34; upload automatically exposes it to Trust Family Auto. No upload or deployment is claimed here. Build 32 remains internal-only; it has the phone-verification bypass and its exact Off/Remove/Delete compatibility is limited to the documented API behavior, without build-32 UI proof.
 
-## Release state
+## Remaining release work
 
-- The latest merged app work and release-prep changes are committed and pushed to `origin/main`.
-- Build 32 is processed and assigned to the existing `iPhone Juan` internal TestFlight group. Confirm the tester can see and install build 32 on the physical iPhone.
-- App Store listing artwork is not updated. The refreshed screenshot sets are staged locally, and the current listing icon/screenshots still need an App Store Connect review and update.
-- The rebrand-brief working branch updates the website's English marketing copy, proposed listing copy, and six-panel artwork only. The website changes have not been deployed. Its beta-access link still opens an email draft; a real waitlist needs an approved collection flow and matching privacy disclosure.
-- The production Render API and Cloudflare site were previously observed on an earlier release; deploy and health-check current server/site changes separately.
-- Reconcile the Send code disclosure with Twilio campaign records and public SMS evidence. Do not claim carrier SMS consent language is registered until verified.
-- Push delivery has not been end-to-end verified. APNs delivery is best effort; a successful server publish does not prove delivery to a device.
+- Deterministically test delayed stale reads, failed post-mutation refresh, Stop/Remove/partial Stop All through relaunch, and delayed Look/History while the peer stops, removes, and re-adds.
+- Complete physical-device checks for SMS, background location, APNs permission/token/presentation/taps, StoreKit purchase/restore/expiry/refund, and account deletion. Apple Sandbox behavior and first-login Offline/Retry handling also need evidence.
+- Verify production API deployment and build compatibility before upload; then verify App Store Connect build processing/assignment and reconcile listing metadata, uploaded screenshots, privacy/age answers, agreements, reviewer access, and legal claims against the exact binary.
+- Resolve audience classification and launch-market age requirements with counsel. Keep the public no-go until these release gates have evidence.
 
-## Remaining product and release work
+Both simulator lanes used isolated Development + Memory API on loopback port 5089, reserved fictional 555-01xx numbers, and Development OTP. No SMS was sent, and no simulator push registration proves APNs delivery. The website and public marketing changes are not evidence of deployment. Do not claim public availability or purchase app-install traffic before the release gates pass.
 
-Complete physical two-account TestFlight checks for SMS, background location, notification receipt, StoreKit purchase/restore, and account deletion. Reproduce the first-login Offline/Retry report against the release API, verify custom API hostname TLS before changing clients, and resolve server-side Home-place removal before public release (`clearHomePlace()` currently clears local device state without clearing the server's saved Home presence). Complete App Review metadata and agreement checks before public submission.
-
-The current visual direction and screen intent live in [DESIGN.md](DESIGN.md); feature evidence and limits are in [FEATURE-E2E-PLAN.md](FEATURE-E2E-PLAN.md); deployment procedure is in [DEPLOYMENT.md](DEPLOYMENT.md); broader scale requirements remain in [PRODUCTION-READINESS.md](PRODUCTION-READINESS.md).
+The design direction and palette are in [DESIGN.md](DESIGN.md). The detailed local interaction evidence is in [LOCAL-TWO-ACCOUNT-E2E.md](LOCAL-TWO-ACCOUNT-E2E.md), and the verification plan is in [PRODUCTION-READINESS.md](PRODUCTION-READINESS.md).

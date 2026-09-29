@@ -1,6 +1,6 @@
 # App Store listing copy
 
-**Working draft — not approved for submission.** This copy follows the September 26, 2026 launch brief and describes the current app vocabulary. It is not a record of the live App Store Connect listing. The working name and subtitle are proposals; repo changes do not change App Store Connect.
+**App Store Connect draft updated 2026-09-29; not submitted for review.** The English (U.S.) name, subtitle, promotional text, description, keywords, and URLs below were applied and re-read through Apple’s API. Beta description was updated to match. Public release gates remain open.
 
 ## Proposed metadata
 
@@ -36,6 +36,9 @@ Always is separate. While someone has chosen Always, selected connected people c
 Find accounts by handle or, when phone discovery is enabled, by a complete phone number. Accepting a connection does not turn sharing on.
 
 Trust Plus includes additional features. Review the in-app offer for current features, availability, price, and subscription terms.
+
+Terms of Use: https://www.apple.com/legal/internet-services/itunes/dev/stdeula/
+Privacy: https://jointrust.app/privacy
 ```
 
 ### Keywords (proposal, under 100 characters)
@@ -55,14 +58,14 @@ Reconfirm the primary and secondary categories, supported platforms, territory a
 
 ## Release blockers
 
-- **Live listing:** the latest recorded App Store Connect state still has the earlier product name and old listing artwork. Verify current state directly; this draft has not been copied into App Store Connect.
-- **Build:** build 31 is internal-only and includes the TestFlight phone-verification skip. Do not select it for public App Review.
-- **Screenshots:** the six-screen set in `Screenshots/2026-09/` is proposed local artwork, not uploaded store content. Review at storefront size and against the exact public-release build before upload.
-- **Age policy:** the earlier 18+ listing draft conflicts with the current Terms/Privacy language, which excludes children under 13 while permitting household use. Decide and align product, legal pages, recruitment, and App Store age answers before public release.
+- **Live listing:** App Store Connect's 1.0 draft still selects build 27 and retains the earlier product name and other unverified listing metadata. Current English (U.S.) screenshots are uploaded in the iPhone 6.9, iPhone 6.5, and iPad 13 sets; this draft copy has not been copied into App Store Connect.
+- **Build:** build 32 is the observed internal TestFlight build and includes the phone-verification skip; keep it internal and do not select it for public App Review. Build 34 is the current ordinary Trust export with the bypass disabled; its local archive and IPA have not been uploaded. Trust Family Auto is the sole remaining internal group and auto-receives all builds, so deploy and verify the reviewed backend before uploading. It remains a public-review candidate only after build-32 compatibility and release checks pass and the exact App Store Connect draft is updated.
+- **Screenshots:** current images in `Screenshots/2026-09/{iphone-69,iphone-65,ipad-13}/` are uploaded to the matching English (U.S.) sets for version 1.0. Review storefront presentation and confirm visible content against the exact public-release build before submission.
+- **Age assurance:** The normal app has no global birth-date screen. It uses Apple age and significant-update flows when Apple signals they apply on supported OS versions. Trust’s COPPA audience classification and jurisdiction-specific obligations remain unresolved; review the shipped product and launch markets with counsel before release. See [`docs/AGE-ASSURANCE.md`](../../../docs/AGE-ASSURANCE.md).
 - **Privacy disclosures:** reconcile the live App Privacy answers, privacy manifest, client behavior, API storage/retention, phone verification, profile photos, and analytics. `REVIEW-READINESS.md` is a checklist, not evidence those answers are complete.
 - **Subscription details:** verify the live Trust Plus products, territories, prices, eligibility, trial, and included features. The old draft's exact prices and feature bundle are intentionally omitted here.
 - **Waitlist:** the website's current beta link opens an email draft; it is not a functioning waitlist. Do not label it a waitlist until there is a reviewed, working collection flow and a matching privacy disclosure.
-- **Legal:** this copy refresh does not modify Terms, Privacy, SMS consent, age policy, or subscription terms.
+- **Legal:** Terms and Privacy describe the Apple-signaled age-assurance flow and its current OS limitations. Confirm the legal pages, SMS consent, subscription terms, and App Store answers against current behavior before public release.
 
 ## Review notes to prepare after release checks
 

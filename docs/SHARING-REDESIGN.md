@@ -27,6 +27,8 @@ The API does not send SMS or push notifications for a connection request. The re
 
 Contact-book upload, automatic Trust-sent SMS, QR codes, and deferred-install attribution are out of scope. Phone discovery is an explicit opt-in using one complete verified phone number at a time; Trust does not upload contacts or send invitations by text. Profile photos can appear as small inline previews for opted-in discovery and remain fully available to active connections. No public photo URL is returned.
 
-## Known adjacent issue
+## Home behavior and remaining device decision
 
-`AppModel.clearHomePlace()` currently clears only device storage. Confirm and fix server-side Home/Away deletion before public release so a cleared Home location cannot remain visible to a connected person.
+Home removal is implemented locally and on the server. Clearing Home removes the server place and derived place association while preserving independent manual presence. Home coordinates remain device-only and account-scoped; they are not uploaded. The API stores only a place ID/label and coarse presence.
+
+Still decide and test what happens when the same account is active on two devices with different local Home regions. Presence is account-wide today, so the most recent device event can change the status seen by every connection. Define whether one device is the location source, whether presence is per device, or whether local Home monitoring is limited to one signed-in device before treating multi-device Home/Away behavior as production-ready. See the open second-device lane in [FEATURE-E2E-PLAN.md](FEATURE-E2E-PLAN.md).
