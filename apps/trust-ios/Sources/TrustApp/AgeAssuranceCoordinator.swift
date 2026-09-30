@@ -172,10 +172,15 @@ final class AgeAssuranceCoordinator {
                 var upperBound: Int?
                 if #available(iOS 26.4, *) {
                     regulatorySignalsAvailable = true
-                    let regulatoryFeatures = try await service.requiredRegulatoryFeatures
-                    guard evaluationIsCurrent() else { return .unavailable }
                     let eligible = try await service.isEligibleForAgeFeatures
                     guard evaluationIsCurrent() else { return .unavailable }
+                    let regulatoryFeatures: Set<AgeRangeService.RegulatoryFeature>
+                    if eligible {
+                        regulatoryFeatures = try await service.requiredRegulatoryFeatures
+                        guard evaluationIsCurrent() else { return .unavailable }
+                    } else {
+                        regulatoryFeatures = []
+                    }
                     ageRangeRequired = eligible || regulatoryFeatures.contains(.declaredAgeRangeRequired)
                     ageRangeRequiredForCurrentPerson = ageRangeRequired
                     requiresAdultAcknowledgement = regulatoryFeatures.contains(.significantAppChangeRequiresAdultNotification)
