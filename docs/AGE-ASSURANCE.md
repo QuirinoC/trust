@@ -18,7 +18,7 @@ Trust does not impose a blanket 13+ age gate just because other family-location 
 ## Launch gaps
 
 - The current age flow does not provide a parent-managed child account or first-use parental-consent path. Do not market Trust as supporting child accounts until the audience classification and legal obligations are reviewed and any required flow is implemented.
-- Apple Sandbox age-range and parental-approval scenarios have not been proven on a signed physical device. The latest TestFlight feedback (build 35, iOS 27.0) shows “We can't complete the required check.” The screenshot cannot identify whether Apple's age service or authenticated App Transaction registration failed. The API receipt parsing fix is live; the iOS eligibility-call order is corrected in the build-36 source and archive, which are not yet uploaded. A physical retry on that new build is required to confirm.
+- Apple Sandbox age-range and parental-approval scenarios have not been proven on a signed physical device. The latest TestFlight feedback (build 35, iOS 27.0) shows “We can't complete the required check.” The screenshot cannot identify whether Apple's age service or authenticated App Transaction registration failed. The API receipt parsing fix is live; build 36 includes the corrected iOS eligibility-call order and is available in internal TestFlight. A physical retry is required to confirm the fix.
 - The local six-test age-gate suite uses fixtures; it does not call Apple's live age service. See [release status](STATUS.md) and [App Store review readiness](../apps/trust-ios/AppStore/REVIEW-READINESS.md) for current build and CI evidence.
 
 ## References

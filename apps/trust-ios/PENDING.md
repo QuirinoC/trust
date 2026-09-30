@@ -1,17 +1,11 @@
-# iOS open work
+# iOS work index
 
-This is an index, not a second release-status snapshot. Current local evidence and dated external observations live in [docs/STATUS.md](../../docs/STATUS.md). App Store Connect claims must be rechecked in App Store Connect before acting.
+Use [docs/STATUS.md](../../docs/STATUS.md) as the single dated source for current delivery, CI, App Store Connect, backend, and release blockers. Do not use older statements in this file as current evidence. The current behavior is documented in [DESIGN.md](../../docs/DESIGN.md); two-account coverage is in [FEATURE-E2E-PLAN.md](../../docs/FEATURE-E2E-PLAN.md).
 
-Current gate (29 September 2026): the local build 33 App Store export is distribution-signed but not uploaded; it requires an API route that production does not have yet. Do not treat it as a usable TestFlight build. The full API suite passes 178/178 against isolated PostgreSQL 16 with migrations 001–020. See the release decision in [project status](../../docs/STATUS.md) for the compatibility, migration, age-policy, notification, physical-device, and listing blockers.
+## Current handoff — 30 September 2026
 
-- App Store Connect check on 27 September 2026: `alpha.collapse@proton.me` is in the `Trust Family Auto` internal group, and App Store Connect reports build 32 installed on that tester's iPhone 13. Build 32's internal-only `TRUST_SKIP_PHONE_VERIFICATION` skips the iOS phone-entry step; it does not set `phone_verified_at` in the production API. Production sharing and connection actions still require a real SMS-verified number. Do not seed or mark a fabricated phone as verified in production; use a real number for TestFlight or a local Development API fixture for fake-number testing.
-- The September screenshot sets now contain six locally regenerated panels for iPhone 6.9-inch, iPhone 6.5-inch, and iPad 13-inch. Review them against the exact public build and upload only after approval; App Store Connect artwork remains unchanged. Keep the draft version unsubmitted.
-- `codex/rebrand-launch-brief` contains a proposed English marketing/listing refresh. It has not been deployed. The website CTA is an email link, not a waitlist; implement a waitlist only with an approved collection and retention flow.
-- Reconcile the current Send code consent disclosure with Twilio campaign records and public SMS evidence.
-- Complete physical two-account TestFlight checks, including SMS, location permissions/background behavior, APNs receipt, StoreKit purchase/restore, and account deletion. No physical APNs receipt has been verified yet.
-- Complete remaining App Review metadata checks: privacy answers, age policy, reviewer access, agreements, availability, platform scope, and subscription review status.
-- Home-place removal is implemented through the server contract and covered by API regression tests; the paired simulator record also covers set/update/clear. Physical TestFlight verification remains open ([feature evidence](../../docs/FEATURE-E2E-PLAN.md)).
-- Reproduce and resolve the first-login Offline/Retry report against the release API.
-- Verify custom API hostname TLS before changing client configuration.
-
-See [FEATURE-E2E-PLAN.md](../../docs/FEATURE-E2E-PLAN.md) for the test matrix, [REVIEW-READINESS.md](AppStore/REVIEW-READINESS.md) for the last App Store audit, and [PRODUCTION-READINESS.md](../../docs/PRODUCTION-READINESS.md) for post-beta work.
+- Build 35 feedback (iPhone 16 Pro, iOS 27.0, 23-second uptime) shows “We can’t complete the required check.” App Store Connect has no crash-feedback entries.
+- Build 36 fixes the Apple age-assurance call order, is distribution-signed, and is `VALID` in the internal Trust Family Auto group. ASC shows three invitations and no installs yet.
+- Hosted CI run `36655526974` passed all jobs: API/Postgres 189/189, iOS 23 UI tests with 9 loopback-API cases skipped and zero failures, and website tests. The age-gate UI fixtures passed 6/6; they do not call Apple's live service.
+- Install build 36 and retry the required check on the same physical iPhone. Then continue the outstanding physical two-account checks for SMS, background location, APNs, StoreKit, and account deletion.
+- Public App Review remains blocked on reviewer access, App Privacy categories, subscription metadata/evidence, Paid Apps agreement, Send code campaign/HELP/STOP verification, age/audience legal review, and physical release-path evidence. See `REVIEW-READINESS.md` for the detailed gate list.
