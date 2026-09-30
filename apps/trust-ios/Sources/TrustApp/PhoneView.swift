@@ -69,7 +69,7 @@ struct PhoneView: View {
 
                     Button {
                         focused = nil
-                        Task { await model.sendPhoneCode() }
+                        Task { await model.sendPhoneCode(action: .sendCode) }
                     } label: {
                         HStack(spacing: 8) {
                             if model.isSendingPhone { ProgressView().tint(palette.accentOn) }
@@ -158,7 +158,7 @@ struct PhoneView: View {
                         Spacer(minLength: 0)
                         Button(TrustCopy.resendCode) {
                             focused = nil
-                            Task { await model.sendPhoneCode() }
+                            Task { await model.sendPhoneCode(action: .resendCode) }
                         }
                         .font(TrustTheme.ui(13, weight: .medium))
                         .foregroundStyle(palette.accent)

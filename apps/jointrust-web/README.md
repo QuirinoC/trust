@@ -7,10 +7,15 @@ Privacy, terms, support, and the verification-text opt-in live on this host: `/p
 
 ## Deploy
 
-Direct upload — no git commit required:
+Direct upload is explicit and preserves dashboard-configured variables:
 
 ```bash
-npx wrangler deploy --config apps/jointrust-web/wrangler.jsonc
+cd apps/jointrust-web
+npm ci
+npm test
+npm run deploy
 ```
+
+Deploy the updated privacy page with the API migration that starts recording the SMS consent events it describes.
 
 Apex and `www` are Worker custom domains (proxied). `www` 301s to `https://jointrust.app`.

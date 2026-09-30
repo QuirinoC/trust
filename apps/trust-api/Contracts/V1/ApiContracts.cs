@@ -175,7 +175,10 @@ public sealed record HandleAvailabilityResponse(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     string? Code);
 
-public sealed record SendPhoneCodeRequest(string Phone);
+public sealed record SendPhoneCodeRequest(
+    string Phone,
+    int? ConsentVersion = null,
+    string? ConsentAction = null);
 
 public sealed record VerifyPhoneCodeRequest(string Phone, string Code);
 

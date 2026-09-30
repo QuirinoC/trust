@@ -19,7 +19,10 @@ The app's configured production API URL is in `apps/trust-ios/Sources/TrustApp/A
 The canonical website lives in `apps/jointrust-web`; deploy using `apps/jointrust-web/wrangler.jsonc` and the authenticated Wrangler account:
 
 ```sh
-npx wrangler deploy --config apps/jointrust-web/wrangler.jsonc
+cd apps/jointrust-web
+npm ci
+npm test
+npm run deploy
 ```
 
 Verify the landing, `/privacy`, `/terms`, `/support`, `/sms`, `/sms-opt-in.png`, invite route, and `/.well-known/apple-app-site-association` after deployment. Compare legal/SMS consent text with actual app behavior and the registered Twilio campaign; the updated campaign registration has not yet been verified.
@@ -30,8 +33,8 @@ Verify the landing, `/privacy`, `/terms`, `/support`, `/sms`, `/sms-opt-in.png`,
 2. Run the API and iOS checks required by [AGENTS.md](../AGENTS.md) for the changed components.
 3. Generate the Xcode project from `apps/trust-ios/project.yml` with `xcodegen generate` if it is out of date.
 4. For internal phone-verification testing only, archive the dedicated `Trust-Internal` target/scheme and export with [ExportOptions-Internal.plist](../apps/trust-ios/AppStore/ExportOptions-Internal.plist), which sets Apple's `testFlightInternalTestingOnly=true`. Confirm the resulting app's `TRUST_SKIP_PHONE_VERIFICATION` value is `true`. The app-only skip does not verify phone ownership on the server; internal builds must complete real verification before using handle discovery or connection requests. This archive must never be submitted for external TestFlight or App Store review. The regular `Trust` target embeds `false` and is the only release lane.
-5. In Organizer, confirm bundle ID, marketing version, incremented build number, signing team, entitlements, and archive contents. Validate before upload.
-6. Only after the reviewed backend is deployed and health, migration state, and protected routes are verified, upload the exact reviewed regular Trust build and wait for App Store Connect processing. As of 30 September 2026, build 36 is `VALID` and available in Trust Family Auto; ASC shows no installs yet. Because the group automatically receives all builds, perform each upload only after the API is ready. Install that exact build on physical devices and record actual results. An archive or successful upload alone does not prove installation or feature delivery.
+5. Export the regular `Trust` archive with [ExportOptions-AppStore.plist](../apps/trust-ios/AppStore/ExportOptions-AppStore.plist). It uses App Store Connect distribution, keeps the project build number unchanged, and explicitly leaves `testFlightInternalTestingOnly` off. Confirm the exported IPA is Apple Distribution signed, uses the production API, has `get-task-allow=false`, and has phone-verification bypass disabled. Validate before upload.
+6. Only after the reviewed backend is deployed and health, migration state, and protected routes are verified, upload the exact reviewed regular Trust build and wait for App Store Connect processing. Build 36 is the latest recorded `VALID` build in Trust Family Auto; ASC records Diana's iPhone 12/iOS 26.6 install with 11 sessions but no build-36 feedback/crash. Build 37 is the pending consent-audit candidate and has not been uploaded. Because the group automatically receives all builds, perform each upload only after the API is ready. Verify the exact flow under investigation on the installed build; installation and sessions alone do not prove feature success.
 7. Before public submission, reconcile listing copy, screenshots, privacy disclosures, age rating/legal pages, reviewer access, paid-app agreement, availability, platform support, and subscription metadata.
 
 ## Production safeguards

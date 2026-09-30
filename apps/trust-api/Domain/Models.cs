@@ -224,6 +224,15 @@ public sealed record PhoneChallenge(
     int SendCount,
     DateTimeOffset WindowStartedAt);
 
+public sealed record PhoneSmsConsentEvent(
+    Guid AccountId,
+    string PhoneE164,
+    string? DisclosureKey,
+    int? DisclosureVersion,
+    DateTimeOffset ConsentedAt,
+    string Source,
+    string? Action);
+
 /// SMS budget for verification texts. Account and phone keys roll every hour.
 /// Account-day and global-day keys roll every 24 hours.
 public sealed record SmsSendBudget(
@@ -508,6 +517,15 @@ public sealed class TrustException : Exception
     public static TrustException InvalidPhone() =>
         new("invalid_phone", "Enter a valid phone number, including country code.");
 
+    public static TrustException InvalidPhoneConsentVersion() =>
+        new("invalid_phone_consent_version", "Unsupported phone verification consent version.");
+
+    public static TrustException InvalidPhoneConsentAction() =>
+        new("invalid_phone_consent_action", "Unsupported phone verification consent action.");
+
+    public static TrustException InvalidPhoneConsentMetadata() =>
+        new("invalid_phone_consent_metadata", "Phone verification consent details must include both version and action.");
+
     public static TrustException OtpNotConfigured() =>
         new("otp_not_configured", "Phone verification is not configured on this server.");
 
@@ -626,6 +644,8 @@ public interface ITrustStore
     Task<PhoneChallenge?> GetPhoneChallengeAsync(Guid accountId, CancellationToken cancellationToken);
     Task UpsertPhoneChallengeAsync(PhoneChallenge challenge, CancellationToken cancellationToken);
     Task ClearPhoneChallengeAsync(Guid accountId, CancellationToken cancellationToken);
+    Task RecordPhoneSmsConsentAsync(PhoneSmsConsentEvent consentEvent, CancellationToken cancellationToken);
+    Task<IReadOnlyList<PhoneSmsConsentEvent>> ListPhoneSmsConsentEventsAsync(Guid accountId, CancellationToken cancellationToken);
     Task<bool> TryReserveSmsAsync(IReadOnlyList<SmsSendBudget> budgets, DateTimeOffset now, CancellationToken cancellationToken);
     Task<int?> IncrementPhoneChallengeFailureAsync(Guid accountId, string phoneE164, DateTimeOffset now, int maxAttempts, CancellationToken cancellationToken);
     Task<bool> TryCompletePhoneChallengeAsync(Guid accountId, string phoneE164, string codeHash, DateTimeOffset verifiedAt, int maxAttempts, CancellationToken cancellationToken);

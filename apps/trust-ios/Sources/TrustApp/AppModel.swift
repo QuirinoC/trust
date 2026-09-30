@@ -3067,7 +3067,7 @@ final class AppModel: ObservableObject {
         return .home
     }
 
-    func sendPhoneCode() async {
+    func sendPhoneCode(action: PhoneConsentAction) async {
         phoneNotice = nil
         phoneNoticeIsConflict = false
         let phone = phoneDraft.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -3085,7 +3085,7 @@ final class AppModel: ObservableObject {
             }
         }
         do {
-            let sent = try await client.sendPhoneCode(phone: phone)
+            let sent = try await client.sendPhoneCode(phone: phone, consentAction: action)
             guard generation == phoneSendGeneration,
                   phoneDraft.trimmingCharacters(in: .whitespacesAndNewlines) == phone else { return }
             phoneCodeSent = true

@@ -788,11 +788,21 @@ final class TrustClient {
         )
     }
 
-    func sendPhoneCode(phone: String) async throws -> SendPhoneCodePayload {
-        struct Body: Encodable { var phone: String }
+    func sendPhoneCode(
+        phone: String,
+        consentAction: PhoneConsentAction
+    ) async throws -> SendPhoneCodePayload {
+        struct Body: Encodable {
+            var phone: String
+            var consentVersion: Int
+            var consentAction: String
+        }
         return try await post(
             path: "/api/v1/me/phone/send",
-            body: Body(phone: phone),
+            body: Body(
+                phone: phone,
+                consentVersion: TrustCopy.phoneConsentDetailsVersion,
+                consentAction: consentAction.rawValue),
             authorized: true
         )
     }

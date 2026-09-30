@@ -3,6 +3,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test"
+    "test": "node --test",
+    "deploy": "wrangler deploy --config wrangler.jsonc --keep-vars"
+  },
+  "devDependencies": {
+    "wrangler": "^4.144.0"
   }
 }
