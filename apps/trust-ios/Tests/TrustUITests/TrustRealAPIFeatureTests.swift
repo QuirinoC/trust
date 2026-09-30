@@ -1175,14 +1175,14 @@ final class TrustRealAPIFeatureTests: XCTestCase {
         XCTAssertTrue(waitUntil(timeout: 12) { !app.descendants(matching: .any)[memberID].exists }, "The removed relationship must remain absent after relaunch.")
     }
 
-    func testStopAllKeepsAcknowledgedOffAndFailedPeerSealedAfterRelaunch() throws {
+    func testStopAllFailureDoesNotPartiallyStopAndRetryPersistsAfterRelaunch() throws {
         guard api.raceProxyState() != nil else {
             throw XCTSkip("This regression requires the loopback fault proxy on port 5089, forwarding to the isolated Development API on port 5090.")
         }
         let suffix = UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
         let mainName = "AllMain\(suffix.prefix(5))"
+        let mainHandle = "am\(suffix.prefix(8))"
         let mainDeviceID = "trust-stop-all-main-\(suffix)"
-        let mainHandle = "sa\(suffix.prefix(8))"
         let phones = Array(LocalTrustAPI.reservedPhonePool().shuffled().prefix(3))
         let main = try makeTestAccount(displayName: mainName, deviceID: mainDeviceID, handle: mainHandle, phone: "+1\(phones[0])")
         let firstName = "AllAlpha\(suffix.prefix(5))"
@@ -1207,50 +1207,59 @@ final class TrustRealAPIFeatureTests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)[firstID].waitForExistence(timeout: 15), app.debugDescription)
         XCTAssertTrue(app.descendants(matching: .any)[secondID].waitForExistence(timeout: 15), app.debugDescription)
 
-        XCTAssertTrue(api.armStopAllFailure(), "The proxy must fail the second share write after acknowledging the first.")
-        let stopAll = app.buttons["stop-all-sharing"]
-        XCTAssertTrue(scrollUpUntilHittable(stopAll, in: app), "Stop All should be reachable in Sharing.\n\(app.debugDescription)")
-        stopAll.tap()
-        let confirm = app.buttons.matching(identifier: "stop-all-sharing-confirm")
-        XCTAssertTrue(confirm.firstMatch.waitForExistence(timeout: 5))
-        // SwiftUI can expose two automation aliases for this one alert action.
-        confirm.element(boundBy: 0).tap()
-        XCTAssertTrue(waitForProxyState(timeout: 12) {
-            ($0["share_ack_count"] as? Int ?? 0) == 1 && ($0["share_failure_count"] as? Int ?? 0) == 1
-        }, "Stop All should receive one server acknowledgement and one injected write failure. Proxy state: \(api.raceProxyState() ?? [:])")
+        func confirmStopAll() {
+            let stopAll = app.buttons["stop-all-sharing"]
+            XCTAssertTrue(scrollUpUntilHittable(stopAll, in: app), "Stop All should be reachable in Sharing.\n\(app.debugDescription)")
+            stopAll.tap()
+            let confirm = app.buttons.matching(identifier: "stop-all-sharing-confirm")
+            XCTAssertTrue(confirm.firstMatch.waitForExistence(timeout: 5))
+            // SwiftUI can expose two automation aliases for this one alert action.
+            confirm.element(boundBy: 0).tap()
+        }
 
-        let state = try XCTUnwrap(api.raceProxyState())
-        let acknowledgedID = try XCTUnwrap((state["share_ack_person_ids"] as? [String])?.first)
-        let failedID = try XCTUnwrap((state["share_failed_person_ids"] as? [String])?.first)
-        let acknowledgedIDKey = acknowledgedID.lowercased()
-        let failedIDKey = failedID.lowercased()
-        let firstIDKey = first.personID.lowercased()
-        let secondIDKey = second.personID.lowercased()
-        XCTAssertNotEqual(acknowledgedIDKey, failedIDKey)
-        let acknowledgedName = acknowledgedIDKey == firstIDKey ? firstName : secondName
-        let failedName = failedIDKey == firstIDKey ? firstName : secondName
-        let acknowledgedFixtureID = acknowledgedIDKey == firstIDKey ? first.personID : second.personID
-        let failedFixtureID = failedIDKey == firstIDKey ? first.personID : second.personID
-        XCTAssertTrue([firstIDKey, secondIDKey].contains(acknowledgedIDKey), "ACK id \(acknowledgedID) should identify one of the fixture people.")
-        XCTAssertTrue([firstIDKey, secondIDKey].contains(failedIDKey), "Failed id \(failedID) should identify one of the fixture people.")
-        XCTAssertEqual(outboundPresentation(personID: acknowledgedFixtureID, token: main.token), "off")
-        XCTAssertEqual(outboundPresentation(personID: failedFixtureID, token: main.token), "untilTheyLook")
-        XCTAssertTrue(waitUntil(timeout: 12) { app.buttons["sharing-mode-off-\(acknowledgedName.lowercased())"].isSelected }, "The acknowledged member must be Off after Stop All reconciliation.")
-        XCTAssertTrue(app.buttons["sharing-mode-sealed-\(failedName.lowercased())"].isSelected, "The failed member must stay Sealed instead of being optimistically shown Off.")
+        XCTAssertTrue(api.armStopAllFailure(), "The proxy should fail the next atomic Stop All request.")
+        confirmStopAll()
+        XCTAssertTrue(waitForProxyState(timeout: 12) {
+            ($0["stop_all_failure_count"] as? Int ?? 0) == 1
+        }, "The proxy must observe one failed atomic Stop All request. State: \(api.raceProxyState() ?? [:])")
+        XCTAssertEqual(api.raceProxyState()?["stop_all_ack_count"] as? Int, 0)
+        XCTAssertEqual(outboundPresentation(personID: first.personID, token: main.token), "untilTheyLook")
+        XCTAssertEqual(outboundPresentation(personID: second.personID, token: main.token), "untilTheyLook")
+        XCTAssertTrue(app.buttons["sharing-mode-sealed-\(firstName.lowercased())"].isSelected)
+        XCTAssertTrue(app.buttons["sharing-mode-sealed-\(secondName.lowercased())"].isSelected)
 
         app.terminate()
         app.launch()
         XCTAssertTrue(app.buttons["tab-sharing"].waitForExistence(timeout: 15))
         app.buttons["tab-you"].tap()
         let ownHandle = app.buttons["copy-own-handle"]
-        XCTAssertTrue(ownHandle.waitForExistence(timeout: 12))
+        XCTAssertTrue(ownHandle.waitForExistence(timeout: 12), "Relaunch must restore the same main account.")
         XCTAssertEqual(ownHandle.value as? String, "@\(mainHandle)")
         app.buttons["tab-sharing"].tap()
-        XCTAssertTrue(app.staticTexts["sharing-intro"].waitForExistence(timeout: 12))
-        XCTAssertTrue(waitUntil(timeout: 12) { app.buttons["sharing-mode-off-\(acknowledgedName.lowercased())"].isSelected }, "The acknowledged Off state must survive relaunch.")
-        XCTAssertTrue(waitUntil(timeout: 12) { app.buttons["sharing-mode-sealed-\(failedName.lowercased())"].isSelected }, "The failed Sealed state must survive relaunch.")
-        XCTAssertEqual(outboundPresentation(personID: acknowledgedFixtureID, token: main.token), "off")
-        XCTAssertEqual(outboundPresentation(personID: failedFixtureID, token: main.token), "untilTheyLook")
+        XCTAssertTrue(waitUntil(timeout: 12) { app.buttons["sharing-mode-sealed-\(firstName.lowercased())"].isSelected })
+        XCTAssertTrue(waitUntil(timeout: 12) { app.buttons["sharing-mode-sealed-\(secondName.lowercased())"].isSelected })
+
+        api.resetRaceProxy()
+        confirmStopAll()
+        XCTAssertTrue(waitForProxyState(timeout: 12) {
+            ($0["stop_all_ack_count"] as? Int ?? 0) == 1
+        }, "The retry must commit one atomic Stop All request. State: \(api.raceProxyState() ?? [:])")
+        XCTAssertEqual(outboundPresentation(personID: first.personID, token: main.token), "off")
+        XCTAssertEqual(outboundPresentation(personID: second.personID, token: main.token), "off")
+        XCTAssertTrue(waitUntil(timeout: 12) { app.buttons["sharing-mode-off-\(firstName.lowercased())"].isSelected })
+        XCTAssertTrue(waitUntil(timeout: 12) { app.buttons["sharing-mode-off-\(secondName.lowercased())"].isSelected })
+
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(app.buttons["tab-sharing"].waitForExistence(timeout: 15))
+        app.buttons["tab-you"].tap()
+        XCTAssertTrue(app.buttons["copy-own-handle"].waitForExistence(timeout: 12))
+        XCTAssertEqual(app.buttons["copy-own-handle"].value as? String, "@\(mainHandle)")
+        app.buttons["tab-sharing"].tap()
+        XCTAssertTrue(waitUntil(timeout: 12) { app.buttons["sharing-mode-off-\(firstName.lowercased())"].isSelected })
+        XCTAssertTrue(waitUntil(timeout: 12) { app.buttons["sharing-mode-off-\(secondName.lowercased())"].isSelected })
+        XCTAssertEqual(outboundPresentation(personID: first.personID, token: main.token), "off")
+        XCTAssertEqual(outboundPresentation(personID: second.personID, token: main.token), "off")
     }
 
     func testDelayedLookResponseIsDiscardedAfterReplacementRelationship() throws {
