@@ -2,7 +2,7 @@
 
 **App Store Connect draft updated 2026-09-29; not submitted for review.** The English (U.S.) name, subtitle, promotional text, description, keywords, and URLs below were applied and re-read through Apple’s API. Beta description was updated to match. Public release gates remain open.
 
-## Proposed metadata
+## Current English (U.S.) draft metadata
 
 ### Name (23 characters)
 
@@ -41,7 +41,7 @@ Terms of Use: https://www.apple.com/legal/internet-services/itunes/dev/stdeula/
 Privacy: https://jointrust.app/privacy
 ```
 
-### Keywords (proposal, under 100 characters)
+### Keywords (under 100 characters)
 
 ```text
 location,sharing,privacy,activity,check,live,phone,friend,partner,snapshot
@@ -56,16 +56,14 @@ Reconfirm the primary and secondary categories, supported platforms, territory a
 - Privacy: https://jointrust.app/privacy
 - Terms: https://jointrust.app/terms
 
-## Release blockers
+## Remaining release checks
 
-- **Live listing:** App Store Connect's 1.0 draft still selects build 27 and retains the earlier product name and other unverified listing metadata. Current English (U.S.) screenshots are uploaded in the iPhone 6.9, iPhone 6.5, and iPad 13 sets; this draft copy has not been copied into App Store Connect.
-- **Build:** build 32 is the observed internal TestFlight build and includes the phone-verification skip; keep it internal and do not select it for public App Review. Build 34 is the current ordinary Trust export with the bypass disabled; its local archive and IPA have not been uploaded. Trust Family Auto is the sole remaining internal group and auto-receives all builds, so deploy and verify the reviewed backend before uploading. It remains a public-review candidate only after build-32 compatibility and release checks pass and the exact App Store Connect draft is updated.
-- **Screenshots:** current images in `Screenshots/2026-09/{iphone-69,iphone-65,ipad-13}/` are uploaded to the matching English (U.S.) sets for version 1.0. Review storefront presentation and confirm visible content against the exact public-release build before submission.
-- **Age assurance:** The normal app has no global birth-date screen. It uses Apple age and significant-update flows when Apple signals they apply on supported OS versions. Trust’s COPPA audience classification and jurisdiction-specific obligations remain unresolved; review the shipped product and launch markets with counsel before release. See [`docs/AGE-ASSURANCE.md`](../../../docs/AGE-ASSURANCE.md).
-- **Privacy disclosures:** reconcile the live App Privacy answers, privacy manifest, client behavior, API storage/retention, phone verification, profile photos, and analytics. `REVIEW-READINESS.md` is a checklist, not evidence those answers are complete.
-- **Subscription details:** verify the live Trust Plus products, territories, prices, eligibility, trial, and included features. The old draft's exact prices and feature bundle are intentionally omitted here.
-- **Waitlist:** the website's current beta link opens an email draft; it is not a functioning waitlist. Do not label it a waitlist until there is a reviewed, working collection flow and a matching privacy disclosure.
-- **Legal:** Terms and Privacy describe the Apple-signaled age-assurance flow and its current OS limitations. Confirm the legal pages, SMS consent, subscription terms, and App Store answers against current behavior before public release.
+- **Build:** build 34 is the sole active TestFlight build, available in the automatic internal group and selected in the 1.0 draft. It uses normal phone verification. The backend is live on the reviewed source. Contacts and Device ID additions to the privacy manifest still need a new signed candidate; build 34 does not contain those additions.
+- **Screenshots:** six current English (U.S.) images are uploaded and complete in each iPhone 6.9, iPhone 6.5, and iPad 13 set. Confirm their visible content against the final selected candidate.
+- **Privacy:** Coarse Location setup has been published. Contacts and Photos or Videos still need per-category setup and publication in App Store Connect. Email was removed because the app does not collect it. Recheck all answers against the final manifest and actual behavior.
+- **Review and distribution:** the draft is US-only with pre-order and automatic new territories disabled; release stays manual. Usable reviewer access remains unresolved. Verify paid agreements and physical purchase/restore before submission. No App Review submission has been made.
+- **Age assurance and legal:** the app uses Apple-signaled age and significant-update flows on supported OS versions. The App Store questionnaire now declares age-assurance use. Audience classification and launch-market obligations still need legal review; see [AGE-ASSURANCE.md](../../../docs/AGE-ASSURANCE.md). Confirm SMS consent and subscription terms against the shipped behavior.
+- **Beta website:** the current beta link opens an email draft. It is not a waitlist or public App Store download link.
 
 ## Review notes to prepare after release checks
 

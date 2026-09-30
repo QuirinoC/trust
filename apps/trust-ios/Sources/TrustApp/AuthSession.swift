@@ -285,7 +285,8 @@ private final class AppleAuthorizationCoordinator: NSObject,
 
     private func start() {
         let request = ASAuthorizationAppleIDProvider().createRequest()
-        // Display name is captured once for the account. Apple email is never used or stored.
+        // The app requests only fullName. The API may derive a fallback display name from an
+        // email claim, but it stores no separate email address.
         request.requestedScopes = [.fullName]
         request.nonce = hashedNonce
         let controller = ASAuthorizationController(authorizationRequests: [request])

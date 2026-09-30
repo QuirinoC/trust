@@ -5,12 +5,14 @@ enum TrustKeychain {
     private static let service = "com.collapsetechnologies.trust.session"
 
     /// Xcode's ad hoc simulator signature has no application-identifier entitlement,
-    /// so Security returns errSecMissingEntitlement. UI tests use isolated disposable
-    /// accounts; keep their persistence behavior testable without changing Release or
+    /// so Security returns errSecMissingEntitlement. UI tests and age-gate fixtures use
+    /// isolated disposable accounts; keep persistence testable without changing Release or
     /// ordinary Debug keychain behavior.
     private static var usesUITestStorage: Bool {
         #if DEBUG
-        ProcessInfo.processInfo.environment["TRUST_UI_TEST"] == "1"
+        let environment = ProcessInfo.processInfo.environment
+        return environment["TRUST_UI_TEST"] == "1"
+            || environment["TRUST_AGE_TEST_MODE"] == "1"
         #else
         false
         #endif
