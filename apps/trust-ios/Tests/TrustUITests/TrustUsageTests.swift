@@ -1,3 +1,4 @@
+import UIKit
 import XCTest
 
 /// Safe, fixture-backed app use. These flows stay inside the DEBUG demo and never send SMS,
@@ -33,6 +34,28 @@ final class TrustUsageTests: XCTestCase {
 
         app.buttons["map-back-to-people"].tap()
         XCTAssertTrue(app.buttons["person-row-maya"].waitForExistence(timeout: 5), "Look should return to the People list.")
+    }
+
+    func testEmptyHistoryFillsPersonScreenInBothAppearances() {
+        var centerColors: [UInt32] = []
+        for dark in [false, true] {
+            let app = launchDemo(dark: dark, route: "empty")
+            XCTAssertTrue(app.staticTexts["No recent places"].waitForExistence(timeout: 20), app.debugDescription)
+            guard let image = app.screenshot().image.cgImage else {
+                XCTFail("Expected a simulator screenshot to inspect the screen background.")
+                app.terminate()
+                continue
+            }
+            let x = image.width / 12
+            let top = pixelColor(image, x: x, y: image.height / 5)
+            let center = pixelColor(image, x: x, y: image.height / 2)
+            let bottom = pixelColor(image, x: x, y: image.height * 4 / 5)
+            XCTAssertEqual(top, center, "The history screen should not leave a top letterbox.")
+            XCTAssertEqual(bottom, center, "The history screen should not leave a bottom letterbox.")
+            centerColors.append(center)
+            app.terminate()
+        }
+        XCTAssertNotEqual(centerColors.first, centerColors.last, "The test should cover both light and dark appearances.")
     }
 
     func testPauseResumeOffAndRemoveAreSeparateActions() {
@@ -171,14 +194,7 @@ final class TrustUsageTests: XCTestCase {
             picker.tap()
             let choice = app.buttons[option]
             XCTAssertTrue(choice.waitForExistence(timeout: 5), "The picker should offer the \(option) appearance.")
-            let choiceHittable = XCTNSPredicateExpectation(
-                predicate: NSPredicate(format: "hittable == true"),
-                object: choice)
-            XCTAssertEqual(
-                XCTWaiter.wait(for: [choiceHittable], timeout: 5),
-                .completed,
-                "The \(option) appearance choice should be hittable before selection. \(app.debugDescription)")
-            choice.tap()
+            tapVisibleMenuOption(choice, in: app)
 
             // The collapsed native Picker can keep the selected option's label hittable, so
             // verify the value itself rather than infer menu dismissal from that label.
@@ -254,7 +270,7 @@ final class TrustUsageTests: XCTestCase {
         picker.tap()
         let french = app.buttons["Français"]
         XCTAssertTrue(french.waitForExistence(timeout: 5))
-        french.tap()
+        tapVisibleMenuOption(french, in: app)
         changedLanguage = true
 
         let selected = XCTNSPredicateExpectation(
@@ -315,17 +331,32 @@ final class TrustUsageTests: XCTestCase {
         add(screenshot)
     }
 
-    private func launchDemo(dark: Bool = false, route: String? = nil, forceEnglish: Bool = true) -> XCUIApplication {
+    private func launchDemo(dark: Bool? = nil, route: String? = nil, forceEnglish: Bool = true) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchEnvironment["TRUST_DEMO"] = "1"
         app.launchEnvironment["TRUST_UI_TEST"] = "1"
         if let route { app.launchEnvironment["TRUST_SCREENSHOT"] = route }
-        if dark { app.launchArguments += ["-uiUserInterfaceStyle", "Dark"] }
+        if let dark { app.launchArguments += ["-appearancePreference", dark ? "dark" : "light"] }
         // Demo tests assert English copy. The argument-domain override makes each launch
         // independent of the persistent language preference left by other simulator runs.
         if forceEnglish { app.launchArguments += ["-trust.appLanguage", "en"] }
         app.launch()
         return app
+    }
+
+    private func pixelColor(_ image: CGImage, x: Int, y: Int) -> UInt32 {
+        guard image.bitsPerPixel == 32,
+              let data = image.dataProvider?.data,
+              let bytes = CFDataGetBytePtr(data) else {
+            XCTFail("Expected a 32-bit simulator screenshot.")
+            return 0
+        }
+        let bytesPerPixel = image.bitsPerPixel / 8
+        let offset = y * image.bytesPerRow + x * bytesPerPixel
+        return UInt32(bytes[offset]) << 24
+            | UInt32(bytes[offset + 1]) << 16
+            | UInt32(bytes[offset + 2]) << 8
+            | UInt32(bytes[offset + 3])
     }
 
     private func selectSystemLanguage(in app: XCUIApplication) {
@@ -336,16 +367,7 @@ final class TrustUsageTests: XCTestCase {
             NSPredicate(format: "label CONTAINS[c] %@", "iPhone")
         ).firstMatch
         XCTAssertTrue(systemOption.waitForExistence(timeout: 5), "The language menu should offer the system-language option.")
-        let systemOptionHittable = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "hittable == true"),
-            object: systemOption
-        )
-        XCTAssertEqual(
-            XCTWaiter.wait(for: [systemOptionHittable], timeout: 5),
-            .completed,
-            "The system-language option should finish appearing before it is selected. \(app.debugDescription)"
-        )
-        systemOption.tap()
+        tapVisibleMenuOption(systemOption, in: app)
         let restored = XCTNSPredicateExpectation(
             predicate: NSPredicate(format: "value CONTAINS[c] %@", "iPhone"),
             object: app.descendants(matching: .any)["language-preference"]
@@ -367,5 +389,26 @@ final class TrustUsageTests: XCTestCase {
             XCTWaiter.wait(for: [dismissed], timeout: 5),
             .completed,
             "The confirmation dialog should dismiss before the next sharing action.")
+    }
+
+    /// Native SwiftUI menu pickers can expose an on-screen option while XCTest reports
+    /// its backing collection cell as non-hittable (or gives that cell an invalid frame).
+    /// Tap the visible option itself by its reported center, then let each test verify that
+    /// the selected value actually changed.
+    private func tapVisibleMenuOption(_ option: XCUIElement, in app: XCUIApplication) {
+        let frame = option.frame
+        let center = CGPoint(x: frame.midX, y: frame.midY)
+        let screen = app.frame
+        guard frame.width.isFinite,
+              frame.height.isFinite,
+              frame.width > 0,
+              frame.height > 0,
+              center.x.isFinite,
+              center.y.isFinite,
+              screen.contains(center) else {
+            XCTFail("The menu option has no visible screen frame. \(option.debugDescription)")
+            return
+        }
+        option.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
     }
 }
