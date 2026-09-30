@@ -702,6 +702,19 @@ final class TrustClient {
         try await postEmpty(path: "/api/v1/people/\(personID.uuidString)/revoke", body: Body(connectionId: connectionID), authorizedToken: authorizedToken)
     }
 
+    func stopAllSharing(
+        authorizedToken: String,
+        operationIsCurrent: @MainActor () -> Bool
+    ) async throws {
+        guard operationIsCurrent(), token == authorizedToken else { throw CancellationError() }
+        try await postEmpty(
+            path: "/api/v1/me/sharing/stop-all",
+            body: EmptyBody(),
+            authorizedToken: authorizedToken
+        )
+        guard operationIsCurrent(), token == authorizedToken else { throw CancellationError() }
+    }
+
     func grantCircle(reviewUnlock: Bool, productID: String?, signedTransactionInfo: String?) async throws {
         struct Body: Encodable {
             var productId: String?

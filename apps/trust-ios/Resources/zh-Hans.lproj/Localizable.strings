@@ -23,6 +23,13 @@
 "age_gate_checking" = "正在检查年龄要求…";
 "age_gate_continue" = "继续";
 "age_gate_retry" = "重试";
+"age_gate_stop_all" = "停止与所有人共享";
+"age_gate_stop_all_confirm_body" = "这会关闭你与所有已连接人员的位置共享。你们的连接关系会保留。";
+"age_gate_stop_all_confirm_title" = "停止与所有人共享？";
+"age_gate_stop_all_error" = "无法确认共享已停止。共享可能仍处于开启状态，请重试。";
+"age_gate_stop_all_pending" = "正在停止共享…";
+"age_gate_stop_all_retry" = "重试停止共享";
+"age_gate_stop_all_success" = "已停止与所有人共享。完成所需检查前，你的账户仍会保持锁定。";
 "age_gate_title" = "加入前请先确认";
 "age_gate_try_apple_range" = "尝试使用 Apple 年龄范围";
 "age_gate_unavailable_body" = "请检查网络连接或 Apple 设置，然后重试。";
@@ -248,9 +255,11 @@
 "location_access_status" = "位置权限：%@";
 "location_always" = "Trust 在后台使用您的位置，因此当应用程序关闭时，Look 仍然有效。记录确认的外观并请求通知。信任不会出售您的位置。";
 "location_denied_body" = "位置已关闭。你还是可以看看。在您允许之前，不会共享您的位置。";
+"location_may_be_stale" = "可能已过期 · %@";
 "location_permission_heading" = "位置权限";
 "location_precise" = "信任需要精确的位置，因此“外观”即可显示当前位置。大概位置还不够。";
 "location_reduced_accuracy" = "大致位置已开启。共享需要精确的位置。";
+"location_unavailable" = "位置不可用";
 "location_when_in_use" = "Trust 在应用程序打开时使用您的位置，以便您可以在地图上看到自己并查看与您共享的人。信任不会出售您的位置。";
 "log" = "活动";
 "log_they_looked" = "%@ 看着你。";

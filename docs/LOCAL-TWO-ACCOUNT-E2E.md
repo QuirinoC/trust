@@ -1,8 +1,10 @@
 # Local two-account E2E evidence
 
-This document records completed local interaction evidence and the safe way to rerun the simulator lane. The latest local interaction evidence is from 29 September 2026; current merged API and deployment evidence elsewhere in this document is later and is tracked in [STATUS.md](STATUS.md). This document does not describe production behavior.
+This document records completed local interaction evidence and the safe way to rerun the simulator lane. The latest local interaction evidence includes a 30 September current-branch Stop All failure/retry run; paired two-app account lifecycle evidence is from 29 September 2026. Production service evidence is tracked separately in [STATUS.md](STATUS.md). This document does not describe production behavior.
 
 ## Latest completed simulator evidence
+
+On 30 September 2026, the current branch's atomic Stop All retry flow passed **1/1 with no skips or failures** on iPhone 17 Pro/iOS 26.5: `/tmp/Trust-StopAll-UI-20260930-corrected.xcresult`. The app connected to two API-created fictional peers through the loopback-only fault proxy and isolated Development + Memory API. The proxy returned a 503 for the first atomic Stop All request; the app kept both peers Sealed in the UI and server after relaunch. A retry succeeded, both peers became Off, and the Off state remained after a second relaunch. Reserved fictional 555-01xx values and Development OTP were used; no SMS or StoreKit/review bypass was used. The proxy and API were stopped after the run.
 
 At the 2026-09-29 source checkpoint, the paired run passed **1/1 with no skips on each device**: Alice `/tmp/trust-pair-alice34-20260929.xcresult` on iPhone 17 Pro/iOS 26.5 and Bob `/tmp/trust-pair-bob34-20260929.xcresult` on Duo/iOS 27.1. Both apps performed the reciprocal Home/Away presence grants through their native UIs, including Bob's grant through Duo. The run also covered Development OTP onboarding, phone discovery/request/acceptance, removal and re-invite, Sealed Look with map and Activity receipt, Home/Away consent and movement, Home update/clear, Hidden suppression and its visible label on Duo, Stop, and fresh default-Off after re-add.
 

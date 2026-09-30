@@ -7,6 +7,19 @@ import SwiftUI
 import TrustCore
 import UIKit
 
+enum AgeUnavailableStopAllState: Equatable {
+    case idle
+    case confirming
+    case pending
+    case success
+    case error(String)
+
+    var isError: Bool {
+        if case .error = self { return true }
+        return false
+    }
+}
+
 enum AppPhase: Equatable {
     case ageChecking
     case ageGate
@@ -88,13 +101,20 @@ final class AppModel: ObservableObject {
     private var ingestFlushTask: Task<Void, Never>?
     private var pendingPrivacyHoldOperation: TrustAccountOperation?
 
-    @Published var phase: AppPhase
+    @Published var phase: AppPhase {
+        didSet {
+            if oldValue == .ageCheckUnavailable && phase != .ageCheckUnavailable {
+                ageUnavailableStopAllState = .idle
+            }
+        }
+    }
     @Published var selectedTab: MainTab = .circle
     @Published var pendingPushDestination: TrustPushDestination?
     @Published var circlePath: [CircleRoute] = []
     @Published var snapshot: CircleSnapshot?
     @Published private(set) var isOffline = false
     @Published private(set) var privacyHoldSubmission = TrustAccountPrivacyHoldState()
+    @Published private(set) var ageUnavailableStopAllState: AgeUnavailableStopAllState = .idle
     @Published private(set) var isRefreshing = false
     @Published private(set) var isSettingHome = false
     @Published var toast: TrustToast?
@@ -224,6 +244,7 @@ final class AppModel: ObservableObject {
         ageAssurance.invalidatePendingUpdate()
         ageUpdateQuestion = nil
         let preservePendingInvite = auth.sessionToken == nil
+        ageUnavailableStopAllState = .idle
         accountGeneration &+= 1
         lastRefreshAttemptAt = nil
         setAccountDataScope(nil)
@@ -497,6 +518,9 @@ final class AppModel: ObservableObject {
             auth.signOut()
             client.token = nil
         }
+        if env["TRUST_AGE_TEST_MODE"] == "1", env["TRUST_AGE_TEST_AUTHENTICATED"] == "1" {
+            auth.prepareAgeGateUITestSession()
+        }
 #endif
         if auth.isCurrentSessionPrivacyHeld {
             client.token = auth.sessionToken
@@ -506,6 +530,12 @@ final class AppModel: ObservableObject {
         }
 #if DEBUG
         if env["TRUST_AGE_TEST_MODE"] == "1" {
+            if env["TRUST_AGE_TEST_UNAVAILABLE"] == "1" {
+                ageAccessState.setAllowedOutsideEvaluation(false)
+                isAgeAccessAllowed = false
+                phase = .ageCheckUnavailable
+                return
+            }
             if env["TRUST_AGE_TEST_CONSENT_REVOKED"] == "1" {
                 isAgeAccessAllowed = false
                 phase = .ageConsentRevoked
@@ -745,6 +775,7 @@ final class AppModel: ObservableObject {
     /// Stop location, ingest, snapshots and cached account data synchronously before
     /// starting network I/O. The retained bearer token is used only to submit this hold.
     private func clearAccountDataForLocalPrivacyHold() {
+        ageUnavailableStopAllState = .idle
         accountGeneration &+= 1
         client.clearCache()
         snapshot = nil
@@ -850,7 +881,69 @@ final class AppModel: ObservableObject {
     }
 
     func retryAgeCheck() {
+#if DEBUG
+        let env = ProcessInfo.processInfo.environment
+        if env["TRUST_AGE_TEST_MODE"] == "1", env["TRUST_AGE_TEST_RECHECK_UNAVAILABLE"] == "1" {
+            phase = .ageChecking
+            phase = .ageCheckUnavailable
+            return
+        }
+#endif
         Task { await checkAgeAndContinue(forceAppleAgeRange: canTryAppleAgeRangeAfterUnderage) }
+    }
+
+    var canStopAllFromUnavailableAgeCheck: Bool {
+        phase == .ageCheckUnavailable && auth.isAuthenticated && auth.sessionToken != nil
+    }
+
+    func requestAgeUnavailableStopAll() {
+        guard canStopAllFromUnavailableAgeCheck,
+              ageUnavailableStopAllState == .idle || ageUnavailableStopAllState.isError else { return }
+        ageUnavailableStopAllState = .confirming
+    }
+
+    func cancelAgeUnavailableStopAll() {
+        guard ageUnavailableStopAllState == .confirming else { return }
+        ageUnavailableStopAllState = .idle
+    }
+
+    func confirmAgeUnavailableStopAll() {
+        guard ageUnavailableStopAllState == .confirming,
+              phase == .ageCheckUnavailable,
+              let token = auth.sessionToken else { return }
+        let operation = TrustAccountOperation(token: token, generation: accountGeneration)
+        client.token = operation.token
+        ageUnavailableStopAllState = .pending
+        Task { [weak self] in
+            guard let self, self.isCurrentAccount(operation: operation), self.phase == .ageCheckUnavailable else { return }
+#if DEBUG
+            if ProcessInfo.processInfo.environment["TRUST_AGE_TEST_STOP_ALL_HOLD"] == "1" {
+                try? await Task.sleep(nanoseconds: 60_000_000_000)
+                return
+            }
+            if ProcessInfo.processInfo.environment["TRUST_AGE_TEST_STOP_ALL_SUCCESS"] == "1" {
+                self.ageUnavailableStopAllState = .success
+                return
+            }
+            if ProcessInfo.processInfo.environment["TRUST_AGE_TEST_ACCOUNT_CHANGE_ON_STOP"] == "1" {
+                self.handleAppleAccountChange(isForeground: false)
+                return
+            }
+#endif
+            do {
+                try await self.client.stopAllSharing(authorizedToken: operation.token) { [weak self] in
+                    guard let self else { return false }
+                    return operation.matches(token: self.auth.sessionToken, generation: self.accountGeneration)
+                }
+                guard self.isCurrentAccount(operation: operation), self.phase == .ageCheckUnavailable else { return }
+                self.ageUnavailableStopAllState = .success
+            } catch is CancellationError {
+                return
+            } catch {
+                guard self.isCurrentAccount(operation: operation), self.phase == .ageCheckUnavailable else { return }
+                self.ageUnavailableStopAllState = .error(self.plainMessage(for: error))
+            }
+        }
     }
 
     func retryAppleAgeRangeAfterUnderage() {
@@ -933,7 +1026,8 @@ final class AppModel: ObservableObject {
         // Explicit debug UI lanes model age/account state deterministically. Ignore
         // incidental simulator/iCloud notifications so they cannot replace a test
         // fixture with an Apple live-service request during the run.
-        if isUITestLaunch || ProcessInfo.processInfo.environment["TRUST_AGE_TEST_MODE"] == "1" { return }
+        let ageTestAccountChange = ProcessInfo.processInfo.environment["TRUST_AGE_TEST_ACCOUNT_CHANGE_ON_STOP"] == "1"
+        if isUITestLaunch || (ProcessInfo.processInfo.environment["TRUST_AGE_TEST_MODE"] == "1" && !ageTestAccountChange) { return }
 #endif
         guard isAgeAccessAllowed || phase == .ageChecking || phase == .ageWaitingForParent || phase == .ageCheckUnavailable || phase == .ageRangeBlocked else { return }
         let isForeground = foregroundHint ?? (UIApplication.shared.applicationState == .active)
@@ -941,6 +1035,7 @@ final class AppModel: ObservableObject {
         isAgeAccessAllowed = false
         ageAssurance.resetPersonScopedStateForAppleAccountChange()
         ageUpdateQuestion = nil
+        ageUnavailableStopAllState = .idle
         accountGeneration &+= 1
         lastRefreshAttemptAt = nil
         connectionLookupGeneration &+= 1
@@ -1277,6 +1372,7 @@ final class AppModel: ObservableObject {
     private func clearAccountSession(preservingPrivacyHoldDeletionSession: Bool = false) {
         let pushRemovalToken = client.token ?? auth.sessionToken
         accountGeneration &+= 1
+        ageUnavailableStopAllState = .idle
         ageAssurance.resetAccountAttestations()
         Task { await receipts.unregister(authorizedToken: pushRemovalToken) }
         store.clearAfterSignOut()
@@ -2319,29 +2415,26 @@ final class AppModel: ObservableObject {
                 publishDemoSnapshot()
             } else {
                 guard let operation, isCurrentAccount(operation: operation) else { return }
-                var firstFailure: Error?
-                for member in membersToStop {
+                do {
+                    try await client.stopAllSharing(authorizedToken: operation.token) { [weak self] in
+                        guard let self else { return false }
+                        return operation.matches(token: self.auth.sessionToken, generation: self.accountGeneration)
+                    }
                     guard isCurrentAccount(operation: operation) else { return }
-                    do {
-                        guard let connectionID = member.connectionID else {
-                            throw TrustClientError.api(code: "connection_changed", message: "This connection changed. Refresh and try again.")
-                        }
-                        try await client.setShare(personID: member.id, connectionID: connectionID, expectedRevision: member.share.revision, resting: .off, pause: nil, authorizedToken: operation.token)
+                    for member in membersToStop {
+                        guard let connectionID = member.connectionID else { continue }
                         _ = applyConfirmedShareMutation(
                             personID: member.id,
                             connectionID: connectionID,
                             share: PersonShareState(resting: .off, revision: nil)
                         )
-                    } catch {
-                        if firstFailure == nil { firstFailure = error }
                     }
-                }
-                guard isCurrentAccount(operation: operation) else { return }
-                syncLocationSharing()
-                await refresh()
-                guard isCurrentAccount(operation: operation) else { return }
-                if let firstFailure {
-                    showToast(plainMessage(for: firstFailure))
+                    syncLocationSharing()
+                    await refresh()
+                    guard isCurrentAccount(operation: operation) else { return }
+                } catch {
+                    guard isCurrentAccount(operation: operation) else { return }
+                    showToast(plainMessage(for: error))
                     return
                 }
             }

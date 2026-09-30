@@ -159,14 +159,21 @@ struct CircleView: View {
             UserAnnotation()
             ForEach(pins) { pin in
                 Annotation(pin.name, coordinate: pin.point.coordinate) {
-                    Button {
-                        if let member = model.member(pin.id) { model.openView(member) }
-                    } label: {
-                        TrustMapPin(initials: pin.name.trustInitials, live: pin.live)
+                    TimelineView(.periodic(from: .now, by: 60)) { context in
+                        Button {
+                            if let member = model.member(pin.id) { model.openView(member) }
+                        } label: {
+                            TrustMapPin(
+                                initials: pin.name.trustInitials,
+                                live: pin.live,
+                                stale: pin.live && LocationFreshness.status(timestamp: pin.point.timestamp, now: context.date) == .stale,
+                                ageCaption: pin.live ? TrustCopy.locationAgeCaption(timestamp: pin.point.timestamp, now: context.date) : nil
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(TrustCopy.pinAccessibility(name: pin.name, live: pin.live, timestamp: pin.point.timestamp, now: context.date))
+                        .accessibilityHint(TrustCopy.viewLocation(name: pin.name.trustFirstName))
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(TrustCopy.pinAccessibility(name: pin.name, live: pin.live))
-                    .accessibilityHint(TrustCopy.viewLocation(name: pin.name.trustFirstName))
                 }
             }
         }
@@ -518,31 +525,33 @@ struct CirclePersonRow: View {
     }
 
     private func personButton(multiline: Bool) -> some View {
-        Button {
-            model.openPerson(member)
-        } label: {
-            HStack(alignment: .center, spacing: 12) {
-                TrustAvatar(name: member.person.displayName, seed: seed, size: 44, avatar: member.person.avatar, personID: member.id)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(member.person.displayName)
-                        .trustFont(16, weight: .semibold)
-                        .foregroundStyle(palette.ink)
-                        .lineLimit(multiline ? 2 : 1)
-                        .fixedSize(horizontal: false, vertical: multiline)
-                    Text(statusText)
-                        .trustFont(13)
-                        .foregroundStyle(palette.muted)
-                        .lineLimit(multiline ? 2 : 1)
-                        .fixedSize(horizontal: false, vertical: multiline)
+        TimelineView(.periodic(from: .now, by: 60)) { context in
+            Button {
+                model.openPerson(member)
+            } label: {
+                HStack(alignment: .center, spacing: 12) {
+                    TrustAvatar(name: member.person.displayName, seed: seed, size: 44, avatar: member.person.avatar, personID: member.id)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(member.person.displayName)
+                            .trustFont(16, weight: .semibold)
+                            .foregroundStyle(palette.ink)
+                            .lineLimit(multiline ? 2 : 1)
+                            .fixedSize(horizontal: false, vertical: multiline)
+                        Text(statusText(at: context.date))
+                            .trustFont(13)
+                            .foregroundStyle(palette.muted)
+                            .lineLimit(multiline ? 2 : 1)
+                            .fixedSize(horizontal: false, vertical: multiline)
+                    }
+                    Spacer(minLength: 8)
                 }
-                Spacer(minLength: 8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .contentShape(Rectangle())
+            .buttonStyle(.plain)
+            .accessibilityLabel("\(member.person.displayName). \(statusText(at: context.date))")
+            .accessibilityIdentifier("person-row-\(member.firstName.lowercased())")
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel("\(member.person.displayName). \(statusText)")
-        .accessibilityIdentifier("person-row-\(member.firstName.lowercased())")
     }
 
     @ViewBuilder
@@ -566,7 +575,15 @@ struct CirclePersonRow: View {
         .accessibilityIdentifier("person-peek-\(member.firstName.lowercased())")
     }
 
-    private var statusText: String {
+    private func statusText(at now: Date) -> String {
+        if member.isAvailable {
+            return TrustCopy.availableLocationStatus(
+                timestamp: member.livePoint?.timestamp,
+                now: now,
+                viewerHasPlus: model.coverage.isCovered,
+                presence: member.visiblePresence?.label
+            )
+        }
         if member.isPaused { return TrustCopy.pause }
         if isNotSharing { return TrustCopy.choseOff(name: member.firstName) }
         if let presence = member.visiblePresence { return presence.label }

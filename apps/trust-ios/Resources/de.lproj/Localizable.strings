@@ -23,6 +23,13 @@
 "age_gate_checking" = "Altersanforderungen werden geprüft …";
 "age_gate_continue" = "Weiter";
 "age_gate_retry" = "Erneut versuchen";
+"age_gate_stop_all" = "Standortfreigabe für alle beenden";
+"age_gate_stop_all_confirm_body" = "Damit wird deine Standortfreigabe für alle verbundenen Personen ausgeschaltet. Deine Verbindungen bleiben bestehen.";
+"age_gate_stop_all_confirm_title" = "Standortfreigabe für alle beenden?";
+"age_gate_stop_all_error" = "Wir konnten nicht bestätigen, dass die Standortfreigabe beendet wurde. Sie ist möglicherweise noch aktiv. Versuche es erneut.";
+"age_gate_stop_all_pending" = "Standortfreigabe wird beendet …";
+"age_gate_stop_all_retry" = "Standortfreigabe erneut beenden";
+"age_gate_stop_all_success" = "Die Standortfreigabe ist für alle ausgeschaltet. Dein Konto bleibt gesperrt, bis die erforderliche Prüfung abgeschlossen ist.";
 "age_gate_title" = "Bevor du Trust nutzt";
 "age_gate_try_apple_range" = "Apple-Altersbereich prüfen";
 "age_gate_unavailable_body" = "Prüfe deine Verbindung oder die Apple-Einstellungen zur Altersfreigabe und versuche es erneut.";
@@ -248,9 +255,11 @@
 "location_access_status" = "Standortzugriff: %@";
 "location_always" = "Trust verwendet Ihren Standort im Hintergrund, sodass ein Look auch dann funktioniert, wenn die App geschlossen ist. Ein bestätigter Blick wird aufgezeichnet und fordert eine Benachrichtigung. Vertrauen verkauft Ihren Standort nicht.";
 "location_denied_body" = "Der Standort ist deaktiviert. Sie können immer noch schauen. Ihr Standort wird erst weitergegeben, wenn Sie dies zulassen.";
+"location_may_be_stale" = "Möglicherweise nicht aktuell · %@";
 "location_permission_heading" = "Standortberechtigung";
 "location_precise" = "Vertrauen benötigt einen genauen Standort, damit ein Blick den aktuellen Standort anzeigt. Der ungefähre Standort reicht nicht aus.";
 "location_reduced_accuracy" = "Der ungefähre Standort ist aktiviert. Das Teilen erfordert einen genauen Standort.";
+"location_unavailable" = "Standort nicht verfügbar";
 "location_when_in_use" = "Trust verwendet Ihren Standort, während die App geöffnet ist, sodass Sie sich selbst auf der Karte sehen und Personen sehen können, die etwas mit Ihnen teilen. Vertrauen verkauft Ihren Standort nicht.";
 "log" = "Aktivität";
 "log_they_looked" = "%@ sah dich an.";

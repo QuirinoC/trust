@@ -1699,3 +1699,43 @@ final class TrustHandleTests: XCTestCase {
         XCTAssertEqual(TrustHandle.suggest(from: "Jordan"), "jordan")
     }
 }
+
+final class LocationFreshnessTests: XCTestCase {
+    func testRecentYesterdayMissingAndTimeProgression() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        XCTAssertEqual(LocationFreshness.status(timestamp: now.addingTimeInterval(-60), now: now), .recent)
+        XCTAssertEqual(LocationFreshness.status(timestamp: now.addingTimeInterval(-86_400), now: now), .stale)
+        XCTAssertEqual(LocationFreshness.status(timestamp: nil, now: now), .unavailable)
+
+        let pointTime = now.addingTimeInterval(-240)
+        XCTAssertEqual(LocationFreshness.status(timestamp: pointTime, now: now), .recent)
+        XCTAssertEqual(LocationFreshness.status(timestamp: pointTime, now: now.addingTimeInterval(61)), .stale)
+    }
+
+    func testStaleCueBeginsAfterFiveMinutes() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        XCTAssertEqual(LocationFreshness.status(timestamp: now.addingTimeInterval(-300), now: now), .recent)
+        XCTAssertEqual(LocationFreshness.status(timestamp: now.addingTimeInterval(-301), now: now), .stale)
+    }
+
+    func testMissingAlwaysPointDistinguishesUnavailableFromPlusAccessAndKeepsPresence() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        XCTAssertEqual(
+            TrustCopy.availableLocationStatus(timestamp: nil, now: now, viewerHasPlus: true),
+            TrustCopy.locationUnavailable
+        )
+        let freeViewer = TrustCopy.availableLocationStatus(timestamp: nil, now: now, viewerHasPlus: false, presence: "Home")
+        XCTAssertTrue(freeViewer.contains("Home"))
+        XCTAssertTrue(freeViewer.contains(TrustCopy.plusLockHint))
+        XCTAssertFalse(freeViewer.contains(TrustCopy.locationUnavailable))
+    }
+}
+
+final class TrustAccountOperationTests: XCTestCase {
+    func testAgeGateStopCompletionIsDiscardedAfterAccountSwitch() {
+        let pending = TrustAccountOperation(token: "account-a", generation: 10)
+        XCTAssertTrue(pending.matches(token: "account-a", generation: 10))
+        XCTAssertFalse(pending.matches(token: "account-b", generation: 11))
+        XCTAssertFalse(pending.matches(token: "account-a", generation: 11))
+    }
+}

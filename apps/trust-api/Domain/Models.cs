@@ -602,11 +602,13 @@ public interface ITrustStore
     Task<ShareState> GetShareAsync(Guid grantor, Guid grantee, CancellationToken cancellationToken);
     Task UpsertShareAsync(Guid grantor, Guid grantee, ShareState state, CancellationToken cancellationToken);
     Task SetShareForConnectionAsync(Guid grantor, Guid grantee, Guid? connectionId, long? expectedRevision, ShareState state, bool isOff, CancellationToken cancellationToken);
+    Task StopAllOutboundSharingAsync(Guid accountId, CancellationToken cancellationToken);
     /// Rewrites expired pauses back to <see cref="ShareState.RestoresTo"/>.
     Task RestoreExpiredPausesAsync(DateTimeOffset now, CancellationToken cancellationToken);
     Task<Presence> GetPresenceAsync(Guid accountId, DateTimeOffset fallbackNow, CancellationToken cancellationToken);
     Task UpsertPresenceAsync(Guid accountId, Presence presence, CancellationToken cancellationToken);
     Task IngestLocationAsync(Guid accountId, LocationFix fix, CancellationToken cancellationToken);
+    Task<bool> TryIngestLocationWhileSharingAsync(Guid accountId, LocationFix fix, DateTimeOffset now, IReadOnlyDictionary<Guid, long> observedOutboundRevisions, CancellationToken cancellationToken);
     Task PruneLocationsAsync(Guid accountId, DateTimeOffset olderThan, CancellationToken cancellationToken);
     Task ClearLocationsAsync(Guid accountId, CancellationToken cancellationToken);
     Task<IReadOnlyList<LocationFix>> UnlockLocationsAsync(

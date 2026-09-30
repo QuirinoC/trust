@@ -336,6 +336,15 @@ final class TrustUsageTests: XCTestCase {
             NSPredicate(format: "label CONTAINS[c] %@", "iPhone")
         ).firstMatch
         XCTAssertTrue(systemOption.waitForExistence(timeout: 5), "The language menu should offer the system-language option.")
+        let systemOptionHittable = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "hittable == true"),
+            object: systemOption
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [systemOptionHittable], timeout: 5),
+            .completed,
+            "The system-language option should finish appearing before it is selected. \(app.debugDescription)"
+        )
         systemOption.tap()
         let restored = XCTNSPredicateExpectation(
             predicate: NSPredicate(format: "value CONTAINS[c] %@", "iPhone"),

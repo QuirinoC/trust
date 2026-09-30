@@ -21,14 +21,13 @@ STATE = {
     "hold_next_look": False,
     "fail_circle_after_release": False,
     "fail_next_circle": False,
-    "fail_share_after_first_ack": False,
-    "fail_next_share": False,
+    "fail_next_stop_all": False,
     "holding": False,
     "held_resource": None,
     "share_ack_count": 0,
-    "share_failure_count": 0,
     "share_ack_person_ids": [],
-    "share_failed_person_ids": [],
+    "stop_all_ack_count": 0,
+    "stop_all_failure_count": 0,
     "revoke_ack_count": 0,
     "stale_release_count": 0,
     "circle_failure_count": 0,
@@ -77,14 +76,13 @@ class Handler(BaseHTTPRequestHandler):
                     "hold_next_look": False,
                     "fail_circle_after_release": True,
                     "fail_next_circle": False,
-                    "fail_share_after_first_ack": False,
-                    "fail_next_share": False,
+                    "fail_next_stop_all": False,
                     "holding": False,
                     "held_resource": None,
                     "share_ack_count": 0,
-                    "share_failure_count": 0,
                     "share_ack_person_ids": [],
-                    "share_failed_person_ids": [],
+                    "stop_all_ack_count": 0,
+                    "stop_all_failure_count": 0,
                     "revoke_ack_count": 0,
                     "stale_release_count": 0,
                     "circle_failure_count": 0,
@@ -136,14 +134,13 @@ class Handler(BaseHTTPRequestHandler):
                     "hold_next_look": False,
                     "fail_circle_after_release": False,
                     "fail_next_circle": False,
-                    "fail_share_after_first_ack": True,
-                    "fail_next_share": False,
+                    "fail_next_stop_all": True,
                     "holding": False,
                     "held_resource": None,
                     "share_ack_count": 0,
-                    "share_failure_count": 0,
                     "share_ack_person_ids": [],
-                    "share_failed_person_ids": [],
+                    "stop_all_ack_count": 0,
+                    "stop_all_failure_count": 0,
                 })
             self.respond_json(200, {"armed": True})
             return
@@ -187,6 +184,7 @@ class Handler(BaseHTTPRequestHandler):
         is_history = self.command == "GET" and path.split("?", 1)[0].startswith("/api/v1/people/") and path.endswith("/history")
         is_look = self.command == "POST" and path.split("?", 1)[0] == "/api/v1/looks"
         is_share = self.command == "PATCH" and path.split("?", 1)[0].startswith("/api/v1/people/") and path.endswith("/share")
+        is_stop_all = self.command == "POST" and path.split("?", 1)[0] == "/api/v1/me/sharing/stop-all"
         person_id = path.split("/api/v1/people/", 1)[1].split("/", 1)[0] if "/api/v1/people/" in path else None
 
         with LOCK:
@@ -203,14 +201,13 @@ class Handler(BaseHTTPRequestHandler):
             hold_this_look = is_look and STATE["hold_next_look"]
             if hold_this_look:
                 STATE["hold_next_look"] = False
-            fail_this_share = is_share and STATE["fail_next_share"]
-            if fail_this_share:
-                STATE["fail_next_share"] = False
-                STATE["share_failure_count"] += 1
-                STATE["share_failed_person_ids"].append(person_id)
+            fail_this_stop_all = is_stop_all and STATE["fail_next_stop_all"]
+            if fail_this_stop_all:
+                STATE["fail_next_stop_all"] = False
+                STATE["stop_all_failure_count"] += 1
 
-        if fail_this_share:
-            self.respond_json(503, {"error": "deterministic-test-share-write-failure"})
+        if fail_this_stop_all:
+            self.respond_json(503, {"error": "deterministic-test-stop-all-failure"})
             return
 
         if fail_this_circle:
@@ -259,8 +256,8 @@ class Handler(BaseHTTPRequestHandler):
                 if is_share:
                     STATE["share_ack_count"] += 1
                     STATE["share_ack_person_ids"].append(person_id)
-                    if STATE["fail_share_after_first_ack"] and STATE["share_ack_count"] == 1:
-                        STATE["fail_next_share"] = True
+                if is_stop_all:
+                    STATE["stop_all_ack_count"] += 1
                 if self.command == "POST" and path.split("?", 1)[0].startswith("/api/v1/people/") and path.endswith("/revoke"):
                     STATE["revoke_ack_count"] += 1
 

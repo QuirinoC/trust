@@ -23,6 +23,13 @@
 "age_gate_checking" = "Verificando os requisitos de idade…";
 "age_gate_continue" = "Continuar";
 "age_gate_retry" = "Tentar novamente";
+"age_gate_stop_all" = "Parar de compartilhar com todos";
+"age_gate_stop_all_confirm_body" = "Isso desativa o compartilhamento da sua localização com todas as pessoas conectadas. Suas conexões permanecem.";
+"age_gate_stop_all_confirm_title" = "Parar de compartilhar com todos?";
+"age_gate_stop_all_error" = "Não foi possível confirmar que o compartilhamento foi interrompido. Ele ainda pode estar ativo. Tente novamente.";
+"age_gate_stop_all_pending" = "Parando o compartilhamento…";
+"age_gate_stop_all_retry" = "Tentar parar o compartilhamento novamente";
+"age_gate_stop_all_success" = "O compartilhamento foi desativado para todos. Sua conta continuará bloqueada até que a verificação necessária seja concluída.";
 "age_gate_title" = "Antes de entrar";
 "age_gate_try_apple_range" = "Tentar usar a faixa etária da Apple";
 "age_gate_unavailable_body" = "Confira sua conexão ou os ajustes da Apple e tente novamente.";
@@ -248,9 +255,11 @@
 "location_access_status" = "Acesso à localização: %@";
 "location_always" = "O Trust usa sua localização em segundo plano para que um Olhar funcione mesmo com o app fechado. Um Olhar confirmado fica registrado e solicita uma notificação. O Trust não vende sua localização.";
 "location_denied_body" = "A localização está desativada. Você ainda pode olhar. Sua localização não é compartilhada até você permitir.";
+"location_may_be_stale" = "Pode estar desatualizada · %@";
 "location_permission_heading" = "Permissão de localização";
 "location_precise" = "O Trust precisa de localização precisa para que um Olhar mostre o lugar atual. A localização aproximada não é suficiente.";
 "location_reduced_accuracy" = "A localização aproximada está ativada. O compartilhamento precisa de localização precisa.";
+"location_unavailable" = "Localização indisponível";
 "location_when_in_use" = "O Trust usa sua localização enquanto o app está aberto para você se ver no mapa e olhar a localização de quem compartilha com você. O Trust não vende sua localização.";
 "log" = "Atividade";
 "log_they_looked" = "%@ olhou você.";

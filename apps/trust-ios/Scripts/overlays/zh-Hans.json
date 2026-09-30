@@ -507,5 +507,14 @@
   "age_privacy_held_title": "此账户处于隐私保护状态",
   "age_privacy_held_body": "Trust 已收到 App 提交的隐私限制报告，并已保护此账户。这不是年龄验证。请联系支持团队。",
   "api_account_privacy_hold": "此 Trust 账户处于隐私保护状态。请联系支持团队。",
-  "age_rating_and_update_description": "Trust 的年龄保障要求和 App Store 年龄分级均已更改。请确认这两项更改后继续使用 Trust。"
+  "age_rating_and_update_description": "Trust 的年龄保障要求和 App Store 年龄分级均已更改。请确认这两项更改后继续使用 Trust。",
+  "age_gate_stop_all": "停止与所有人共享",
+  "age_gate_stop_all_retry": "重试停止共享",
+  "age_gate_stop_all_confirm_title": "停止与所有人共享？",
+  "age_gate_stop_all_confirm_body": "这会关闭你与所有已连接人员的位置共享。你们的连接关系会保留。",
+  "age_gate_stop_all_pending": "正在停止共享…",
+  "age_gate_stop_all_success": "已停止与所有人共享。完成所需检查前，你的账户仍会保持锁定。",
+  "age_gate_stop_all_error": "无法确认共享已停止。共享可能仍处于开启状态，请重试。",
+  "location_unavailable": "位置不可用",
+  "location_may_be_stale": "可能已过期 · %@"
 }

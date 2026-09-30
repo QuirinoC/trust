@@ -21,7 +21,7 @@ public sealed class LookReceiptPublisher(
         NotifyQuietCoreAsync(
             look.SubjectId,
             look.ViewerName + " looked at your location",
-            "One snapshot of your current place.",
+            "One snapshot of the latest location available to Trust.",
             "look",
             null,
             look.ViewerId,

@@ -180,6 +180,13 @@ public enum TrustCopy {
         value("age_gate_unavailable_body", defaultValue: "Check your connection or Apple settings, then try again.")
     }
     public static var ageGateRetry: String { value("age_gate_retry", defaultValue: "Try again") }
+    public static var ageGateStopAll: String { value("age_gate_stop_all", defaultValue: "Stop sharing with everyone") }
+    public static var ageGateStopAllRetry: String { value("age_gate_stop_all_retry", defaultValue: "Try stopping sharing again") }
+    public static var ageGateStopAllConfirmTitle: String { value("age_gate_stop_all_confirm_title", defaultValue: "Stop sharing with everyone?") }
+    public static var ageGateStopAllConfirmBody: String { value("age_gate_stop_all_confirm_body", defaultValue: "This turns off your location sharing with every connected person. Your connections remain.") }
+    public static var ageGateStopAllPending: String { value("age_gate_stop_all_pending", defaultValue: "Stopping sharing…") }
+    public static var ageGateStopAllSuccess: String { value("age_gate_stop_all_success", defaultValue: "Sharing is off for everyone. Your account stays locked until the required check completes.") }
+    public static var ageGateStopAllError: String { value("age_gate_stop_all_error", defaultValue: "We couldn’t confirm that sharing stopped. It may still be on. Try again.") }
     public static var ageGateTryAppleRange: String {
         value("age_gate_try_apple_range", defaultValue: "Try Apple age range")
     }
@@ -353,6 +360,30 @@ public enum TrustCopy {
     public static var circleMap: String { value("circle_map", defaultValue: "People map") }
     public static func snapshotAt(_ time: String) -> String { format("snapshot_at", defaultValue: "Snapshot · %@", time) }
     public static func updatedAt(_ time: String) -> String { format("updated_at", defaultValue: "Updated %@", time) }
+    public static var locationUnavailable: String { value("location_unavailable", defaultValue: "Location unavailable") }
+    public static func locationFreshness(timestamp: Date, now: Date) -> String {
+        let updated = updatedAt(timestamp.formatted(.relative(presentation: .named)))
+        guard LocationFreshness.status(timestamp: timestamp, now: now) == .stale else { return updated }
+        return format("location_may_be_stale", defaultValue: "May be out of date · %@", updated)
+    }
+    public static func locationAgeCaption(timestamp: Date, now: Date) -> String {
+        timestamp.formatted(.relative(presentation: .named))
+    }
+    public static func availableLocationStatus(
+        timestamp: Date?,
+        now: Date,
+        viewerHasPlus: Bool,
+        presence: String? = nil
+    ) -> String {
+        let location = timestamp.map { locationFreshness(timestamp: $0, now: now) }
+            ?? (viewerHasPlus ? locationUnavailable : plusLockHint)
+        return presence.map { "\($0) · \(location)" } ?? location
+    }
+    public static func pinAccessibility(name: String, live: Bool, timestamp: Date?, now: Date) -> String {
+        guard let timestamp else { return "\(name), \(locationUnavailable)" }
+        let status = live ? locationFreshness(timestamp: timestamp, now: now) : snapshotAt(timestamp.formatted(date: .abbreviated, time: .shortened))
+        return "\(name), \(status)"
+    }
     public static func distanceFromYou(_ distance: String) -> String {
         format("distance_from_you", defaultValue: "%@ from you", distance)
     }

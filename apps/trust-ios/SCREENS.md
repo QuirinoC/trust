@@ -14,13 +14,14 @@ Current screen inventory for the app in `Sources/TrustApp`. The home navigation 
 
 | Tab or destination | View | Behavior |
 | --- | --- | --- |
-| People | `CircleView` | Map and people sheet. A Sealed person can receive a confirmed Look; an Always person can be Viewed. |
+| People | `CircleView` | Map and people sheet. A Sealed person can receive a confirmed Look; an Always person can be Viewed. Always rows retain permitted Home/Away status and show the latest point's age; points older than five minutes are marked as possibly out of date. |
 | Sharing | `SharingView` | Manage per-person sharing, incoming and sent connection requests, and add someone by exact handle or phone number. |
 | Activity | `ViewLogView` | Chronological Look, View, and removal events in both directions. This is not location history. |
 | You | `YouView` | Profile, presence, on-device Home place, Plus, account, and policy controls. |
 | Person | `PersonScreen` in `CircleView.swift` | Presence and recent places only while that person shares Always. |
-| View | `ViewScreen` | One snapshot from a confirmed Look or current location while Available. A Sealed snapshot is not a history grant. |
-| Map | `MapScreen` | Available people and snapshots opened in the current session. Sealed people without a Look snapshot are not pins. |
+| View | `ViewScreen` | One latest-available location from a confirmed Look or an Always share. Always points show age, with a possible-staleness cue after five minutes; an entitled viewer with no point sees “Location unavailable.” A Sealed snapshot is labeled with its date and time and is not a history grant. |
+| Map | `MapScreen` | Available people and snapshots opened in the current session. Live pins show a short age caption and a possible-staleness cue after five minutes. Sealed people without a Look snapshot are not pins. |
+| Age check unavailable | `AgeGateView` | An authenticated account can explicitly confirm Stop sharing with everyone. Pending, success, and unconfirmed failure are shown; a successful stop does not unlock the account. |
 
 ## Add someone and sharing rules
 

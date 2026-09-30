@@ -507,5 +507,14 @@
   "age_privacy_held_title": "Dieses Konto ist gesperrt",
   "age_privacy_held_body": "Trust hat die von der App gemeldete Datenschutzeinschränkung erhalten und dieses Konto gesperrt. Dies ist keine Altersverifizierung. Wende dich an den Support.",
   "api_account_privacy_hold": "Dieses Trust-Konto ist gesperrt. Wende dich an den Support.",
-  "age_rating_and_update_description": "Die Altersicherungsanforderungen von Trust und die Altersfreigabe im App Store haben sich geändert. Bitte bestätigen Sie beide Änderungen, um Trust weiter zu nutzen."
+  "age_rating_and_update_description": "Die Altersicherungsanforderungen von Trust und die Altersfreigabe im App Store haben sich geändert. Bitte bestätigen Sie beide Änderungen, um Trust weiter zu nutzen.",
+  "age_gate_stop_all": "Standortfreigabe für alle beenden",
+  "age_gate_stop_all_retry": "Standortfreigabe erneut beenden",
+  "age_gate_stop_all_confirm_title": "Standortfreigabe für alle beenden?",
+  "age_gate_stop_all_confirm_body": "Damit wird deine Standortfreigabe für alle verbundenen Personen ausgeschaltet. Deine Verbindungen bleiben bestehen.",
+  "age_gate_stop_all_pending": "Standortfreigabe wird beendet …",
+  "age_gate_stop_all_success": "Die Standortfreigabe ist für alle ausgeschaltet. Dein Konto bleibt gesperrt, bis die erforderliche Prüfung abgeschlossen ist.",
+  "age_gate_stop_all_error": "Wir konnten nicht bestätigen, dass die Standortfreigabe beendet wurde. Sie ist möglicherweise noch aktiv. Versuche es erneut.",
+  "location_unavailable": "Standort nicht verfügbar",
+  "location_may_be_stale": "Möglicherweise nicht aktuell · %@"
 }

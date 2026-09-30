@@ -234,6 +234,29 @@ public sealed class MemoryTrustStore : ITrustStore
         return Task.CompletedTask;
     }
 
+    public Task StopAllOutboundSharingAsync(Guid accountId, CancellationToken cancellationToken)
+    {
+        lock (_gate)
+        {
+            var outboundDirections = _shares.Keys
+                .Where(key => key.Grantor == accountId)
+                .Select(key => key.Grantee)
+                .Concat(_memberships
+                    .Where(pair => pair.Value.Status == "active" && (pair.Key.A == accountId || pair.Key.B == accountId))
+                    .Select(pair => pair.Key.A == accountId ? pair.Key.B : pair.Key.A))
+                .Distinct()
+                .ToArray();
+            foreach (var grantee in outboundDirections)
+            {
+                var current = _shares.GetValueOrDefault((accountId, grantee), ShareState.Default);
+                // Invalidate enable requests that observed Off before this operation too.
+                _shares[(accountId, grantee)] = new ShareState(ShareResting.Off, Revision: current.Revision + 1);
+            }
+            _locations.TryRemove(accountId, out _);
+        }
+        return Task.CompletedTask;
+    }
+
     public Task RestoreExpiredPausesAsync(DateTimeOffset now, CancellationToken cancellationToken)
     {
         lock (_gate)
@@ -278,6 +301,23 @@ public sealed class MemoryTrustStore : ITrustStore
         }
 
         return Task.CompletedTask;
+    }
+
+    public Task<bool> TryIngestLocationWhileSharingAsync(Guid accountId, LocationFix fix, DateTimeOffset now, IReadOnlyDictionary<Guid, long> observedOutboundRevisions, CancellationToken cancellationToken)
+    {
+        lock (_gate)
+        {
+            if (!observedOutboundRevisions.Any(observed =>
+                    _shares.TryGetValue((accountId, observed.Key), out var current)
+                    && current.Revision == observed.Value
+                    && _memberships.TryGetValue(Order(accountId, observed.Key), out var membership)
+                    && membership.Status == "active"
+                    && current.AcceptsLocation(now)))
+                return Task.FromResult(false);
+            var list = _locations.GetOrAdd(accountId, _ => []);
+            list.Add(fix);
+            return Task.FromResult(true);
+        }
     }
 
     public Task PruneLocationsAsync(Guid accountId, DateTimeOffset olderThan, CancellationToken cancellationToken)

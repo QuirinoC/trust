@@ -1,6 +1,7 @@
 using TrustApi.Application;
 using TrustApi.Domain;
 using TrustApi.Infrastructure.Postgres;
+using Npgsql;
 
 namespace TrustApi.Tests;
 
@@ -91,6 +92,128 @@ public sealed class PostgresHistoryTests
 
         await afterRestart.DeleteAccountAsync(sam.Id, CancellationToken.None);
         await afterRestart.DeleteAccountAsync(jordan.Id, CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task StopAllSerializesPostgresIngestAndInvalidatesPreStopRevisionsAfterReenable()
+    {
+        try
+        {
+            await PostgresMigrator.ApplyAsync(Connection);
+        }
+        catch (Exception exception)
+        {
+            Console.WriteLine($"Skipping Postgres Stop All race test; docker Postgres is not on 5433 ({exception.Message}).");
+            return;
+        }
+
+        var store = new PostgresTrustStore(Connection);
+        var engine = new TrustEngine(store, TimeProvider.System);
+        var suffix = Guid.NewGuid().ToString("N");
+        var sam = await engine.SignInAsync("development", $"pg-stop-sam-{suffix}", "Sam", CancellationToken.None);
+        var jordan = await engine.SignInAsync("development", $"pg-stop-jordan-{suffix}", "Jordan", CancellationToken.None);
+        var invite = await engine.CreateInviteAsync(sam.Id, CancellationToken.None);
+        await engine.AcceptInviteAsync(jordan.Id, invite.Code, CancellationToken.None);
+        await engine.GrantCircleAsync(sam.Id, "test", CancellationToken.None);
+        await engine.SetShareAsync(sam.Id, jordan.Id, ShareResting.Always, null, CancellationToken.None);
+
+        var beforeStop = await store.GetShareAsync(sam.Id, jordan.Id, CancellationToken.None);
+        var observed = new Dictionary<Guid, long> { [jordan.Id] = beforeStop.Revision };
+        var point = new LocationFix(DateTimeOffset.UtcNow, 37.3, -122.0);
+        Assert.True(await store.TryIngestLocationWhileSharingAsync(sam.Id, point, DateTimeOffset.UtcNow, observed, CancellationToken.None));
+
+        await engine.StopAllOutboundSharingAsync(sam.Id, CancellationToken.None);
+        var stopped = await store.GetShareAsync(sam.Id, jordan.Id, CancellationToken.None);
+        var connectionId = await store.GetActiveMembershipIdAsync(sam.Id, jordan.Id, CancellationToken.None);
+        await engine.SetShareAsync(sam.Id, jordan.Id, connectionId, stopped.Revision, ShareResting.Always, null, CancellationToken.None);
+
+        Assert.False(await store.TryIngestLocationWhileSharingAsync(
+            sam.Id, point with { Timestamp = point.Timestamp.AddSeconds(1) }, DateTimeOffset.UtcNow, observed, CancellationToken.None));
+        Assert.Null(await store.LatestLocationAsync(sam.Id, CancellationToken.None));
+        Assert.Equal(ShareResting.Always, (await store.GetShareAsync(sam.Id, jordan.Id, CancellationToken.None)).Resting);
+        Assert.True(await store.AreConnectedAsync(sam.Id, jordan.Id, CancellationToken.None));
+        Assert.True(stopped.Revision > beforeStop.Revision);
+    }
+
+    [Fact]
+    public async Task StopAllAdvancesAnAlreadyOffDirectionAndCreatesMissingActiveDirectionRows()
+    {
+        try
+        {
+            await PostgresMigrator.ApplyAsync(Connection);
+        }
+        catch (Exception exception)
+        {
+            Console.WriteLine($"Skipping Postgres missing-share Stop All test; local Postgres is unavailable ({exception.Message}).");
+            return;
+        }
+
+        var store = new PostgresTrustStore(Connection);
+        var engine = new TrustEngine(store, TimeProvider.System);
+        var suffix = Guid.NewGuid().ToString("N");
+        var sam = await engine.SignInAsync("development", $"pg-off-stop-sam-{suffix}", "Sam", CancellationToken.None);
+        var jordan = await engine.SignInAsync("development", $"pg-off-stop-jordan-{suffix}", "Jordan", CancellationToken.None);
+        var invite = await engine.CreateInviteAsync(sam.Id, CancellationToken.None);
+        await engine.AcceptInviteAsync(jordan.Id, invite.Code, CancellationToken.None);
+        await engine.GrantCircleAsync(sam.Id, "test", CancellationToken.None);
+        var connectionId = await store.GetActiveMembershipIdAsync(sam.Id, jordan.Id, CancellationToken.None);
+
+        await using (var connection = new NpgsqlConnection(Connection))
+        {
+            await connection.OpenAsync();
+            await using var delete = new NpgsqlCommand(
+                "DELETE FROM trust.shares WHERE grantor_id = $1 AND grantee_id = $2;", connection);
+            delete.Parameters.AddWithValue(sam.Id);
+            delete.Parameters.AddWithValue(jordan.Id);
+            await delete.ExecuteNonQueryAsync();
+        }
+        var observedOffRevision = await store.GetShareAsync(sam.Id, jordan.Id, CancellationToken.None);
+        Assert.Equal(ShareState.Default.Revision, observedOffRevision.Revision);
+
+        await engine.StopAllOutboundSharingAsync(sam.Id, CancellationToken.None);
+
+        var stopped = await store.GetShareAsync(sam.Id, jordan.Id, CancellationToken.None);
+        Assert.Equal(ShareResting.Off, stopped.Resting);
+        Assert.True(stopped.Revision > observedOffRevision.Revision);
+        var staleEnable = await Assert.ThrowsAsync<TrustException>(() =>
+            engine.SetShareAsync(sam.Id, jordan.Id, connectionId, observedOffRevision.Revision, ShareResting.Always, null, CancellationToken.None));
+        Assert.Equal("share_state_changed", staleEnable.Code);
+        Assert.True(await store.AreConnectedAsync(sam.Id, jordan.Id, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task PostgresDelayedIngestCannotRestorePointsAfterRemovingTheLastPeer()
+    {
+        try
+        {
+            await PostgresMigrator.ApplyAsync(Connection);
+        }
+        catch (Exception exception)
+        {
+            Console.WriteLine($"Skipping Postgres remove/ingest race test; local Postgres is unavailable ({exception.Message}).");
+            return;
+        }
+
+        var store = new PostgresTrustStore(Connection);
+        var engine = new TrustEngine(store, TimeProvider.System);
+        var suffix = Guid.NewGuid().ToString("N");
+        var sam = await engine.SignInAsync("development", $"pg-remove-sam-{suffix}", "Sam", CancellationToken.None);
+        var jordan = await engine.SignInAsync("development", $"pg-remove-jordan-{suffix}", "Jordan", CancellationToken.None);
+        var invite = await engine.CreateInviteAsync(sam.Id, CancellationToken.None);
+        await engine.AcceptInviteAsync(jordan.Id, invite.Code, CancellationToken.None);
+        await engine.SetShareAsync(sam.Id, jordan.Id, ShareResting.UntilTheyLook, null, CancellationToken.None);
+        var revision = (await store.GetShareAsync(sam.Id, jordan.Id, CancellationToken.None)).Revision;
+        var observed = new Dictionary<Guid, long> { [jordan.Id] = revision };
+        var point = new LocationFix(DateTimeOffset.UtcNow, 37.3, -122.0);
+        Assert.True(await store.TryIngestLocationWhileSharingAsync(sam.Id, point, DateTimeOffset.UtcNow, observed, CancellationToken.None));
+
+        await engine.RevokeAsync(sam.Id, jordan.Id, CancellationToken.None);
+
+        Assert.Null(await store.LatestLocationAsync(sam.Id, CancellationToken.None));
+        Assert.False(await store.TryIngestLocationWhileSharingAsync(
+            sam.Id, point with { Timestamp = point.Timestamp.AddSeconds(1) }, DateTimeOffset.UtcNow, observed, CancellationToken.None));
+        Assert.Null(await store.LatestLocationAsync(sam.Id, CancellationToken.None));
+        Assert.False(await store.AreConnectedAsync(sam.Id, jordan.Id, CancellationToken.None));
     }
 
     [Fact]

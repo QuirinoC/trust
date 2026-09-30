@@ -102,11 +102,19 @@ struct MapScreen: View {
         Map(position: $position, selection: $selectedID) {
             ForEach(pins) { pin in
                 Annotation(pin.name, coordinate: pin.point.coordinate) {
-                    TrustMapPin(initials: pin.name.trustInitials, live: pin.live, selected: selected?.id == pin.id)
+                    TimelineView(.periodic(from: .now, by: 60)) { context in
+                        TrustMapPin(
+                            initials: pin.name.trustInitials,
+                            live: pin.live,
+                            selected: selected?.id == pin.id,
+                            stale: pin.live && LocationFreshness.status(timestamp: pin.point.timestamp, now: context.date) == .stale,
+                            ageCaption: pin.live ? TrustCopy.locationAgeCaption(timestamp: pin.point.timestamp, now: context.date) : nil
+                        )
                         .onTapGesture { selectedID = pin.id }
-                        .accessibilityLabel(TrustCopy.pinAccessibility(name: pin.name, live: pin.live))
+                        .accessibilityLabel(TrustCopy.pinAccessibility(name: pin.name, live: pin.live, timestamp: pin.point.timestamp, now: context.date))
                         .accessibilityAddTraits(.isButton)
                         .accessibilityAddTraits(selected?.id == pin.id ? [.isSelected] : [])
+                    }
                 }
                 .tag(pin.id)
             }
@@ -187,9 +195,12 @@ struct MapScreen: View {
                     Text(member.person.displayName)
                         .trustFont(15, weight: .semibold)
                         .foregroundStyle(palette.ink)
-                    Text(subtitle(pin, member))
-                        .trustFont(12)
-                        .foregroundStyle(palette.muted)
+                    TimelineView(.periodic(from: .now, by: 60)) { context in
+                        Text(subtitle(pin, member, now: context.date))
+                            .trustFont(12)
+                            .foregroundStyle(palette.muted)
+                            .accessibilityIdentifier("map-selected-location-time")
+                    }
                 }
                 Spacer()
                 TrustBadge(glyph: pin.live ? "eye" : "lock", text: pin.live ? TrustCopy.always : TrustCopy.oneLook)
@@ -208,10 +219,13 @@ struct MapScreen: View {
         .accessibilityElement(children: .combine)
     }
 
-    private func subtitle(_ pin: AppModel.MapPin, _ member: TrustedPerson) -> String {
+    private func subtitle(_ pin: AppModel.MapPin, _ member: TrustedPerson, now: Date) -> String {
         let presence = member.visiblePresence?.label ?? TrustCopy.presenceHiddenBadge
-        let time = pin.point.timestamp.formatted(date: .omitted, time: .shortened)
-        return "\(presence) · \(pin.live ? TrustCopy.updatedAt(time) : TrustCopy.snapshot)"
+        let time = pin.point.timestamp.formatted(date: .abbreviated, time: .shortened)
+        let locationStatus = pin.live
+            ? TrustCopy.locationFreshness(timestamp: pin.point.timestamp, now: now)
+            : TrustCopy.snapshotAt(time)
+        return "\(presence) · \(locationStatus)"
     }
 
     private func fitAll() {

@@ -114,6 +114,38 @@ public sealed class PushDeviceApiTests : IClassFixture<TrustApiFactory>
     }
 
     [Fact]
+    public async Task LookPushDescribesTheLatestAvailableLocationWithoutClaimingItIsCurrent()
+    {
+        var accountId = Guid.NewGuid();
+        using var ecdsa = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var handler = new RecordingPushHandler();
+        using var httpClient = new HttpClient(handler);
+        var apns = new ApnsClient(httpClient, Options.Create(new ApnsOptions
+        {
+            Enabled = true,
+            KeyId = "unit-test-key",
+            TeamId = "unit-test-team",
+            PrivateKey = Convert.ToBase64String(ecdsa.ExportPkcs8PrivateKey()),
+            BundleId = BundleId
+        }));
+        var publisher = new LookReceiptPublisher(
+            new SinglePushDeviceStore(accountId),
+            new MemoryTrustStore(),
+            apns,
+            NullLogger<LookReceiptPublisher>.Instance);
+
+        await publisher.NotifyLookAsync(new LookEvent(
+            Guid.NewGuid(), Guid.NewGuid(), "Viewer", accountId, "Subject",
+            DateTimeOffset.UtcNow, 0, true), CancellationToken.None);
+
+        Assert.NotNull(handler.Body);
+        using var payload = JsonDocument.Parse(handler.Body);
+        Assert.Equal(
+            "One snapshot of the latest location available to Trust.",
+            payload.RootElement.GetProperty("aps").GetProperty("alert").GetProperty("body").GetString());
+    }
+
+    [Fact]
     public async Task RevokedAccountDoesNotReceiveLookOrQuietNotificationsOrTriggerHomeAlerts()
     {
         var ageAssurance = new MemoryAgeAssuranceAccountStore();
@@ -458,6 +490,18 @@ public sealed class PushDeviceApiTests : IClassFixture<TrustApiFactory>
         }
     }
 
+    private sealed class SinglePushDeviceStore(Guid accountId) : IPushDeviceStore
+    {
+        public Task RegisterAsync(Guid accountId, Guid installationId, string token, string environment, string bundleId, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task RemoveAsync(Guid accountId, Guid installationId, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task RemoveAllAsync(Guid accountId, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task InvalidateTokenAsync(string token, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task<IReadOnlyList<PushDevice>> ListActiveAsync(Guid requestedAccountId, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<PushDevice>>([
+                new PushDevice(Guid.NewGuid(), accountId, "test-device-token", "sandbox", BundleId, true)
+            ]);
+    }
+
     private sealed class ConsentRevokingPushDeviceStore(
         Guid accountId,
         Func<Guid, CancellationToken, Task> revokeConsent) : IPushDeviceStore
@@ -480,11 +524,13 @@ public sealed class PushDeviceApiTests : IClassFixture<TrustApiFactory>
     private sealed class RecordingPushHandler : HttpMessageHandler
     {
         public int RequestCount { get; private set; }
+        public string? Body { get; private set; }
 
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             RequestCount++;
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK));
+            Body = await request.Content!.ReadAsStringAsync(cancellationToken);
+            return new HttpResponseMessage(HttpStatusCode.OK);
         }
     }
 
