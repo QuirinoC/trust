@@ -40,7 +40,7 @@ public sealed class PostgresAgeAssuranceAccountStoreTests
                 signedAt,
                 CancellationToken.None);
             Assert.Equal(new[] { accountId }, first);
-            Assert.Contains(accountId, await firstStore.ListAccountsPendingDeletionAsync(50, CancellationToken.None));
+            Assert.Contains(accountId, await firstStore.ListAccountsPendingDeletionAsync(500, CancellationToken.None));
 
             var restartedStore = new PostgresAgeAssuranceAccountStore(Connection);
             var duplicate = await restartedStore.RecordConsentRevocationAsync(
@@ -66,7 +66,7 @@ public sealed class PostgresAgeAssuranceAccountStoreTests
                 appTransaction,
                 CancellationToken.None);
             Assert.Contains(replayAccountId, await new PostgresAgeAssuranceAccountStore(Connection)
-                .ListAccountsPendingDeletionAsync(50, CancellationToken.None));
+                .ListAccountsPendingDeletionAsync(500, CancellationToken.None));
             var laterRescind = await new PostgresAgeAssuranceAccountStore(Connection).RecordConsentRevocationAsync(
                 Guid.NewGuid(),
                 appTransaction,
