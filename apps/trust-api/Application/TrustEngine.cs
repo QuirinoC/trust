@@ -218,6 +218,12 @@ public sealed class TrustEngine(
         await SetShareAsync(accountId, granteeId, connectionId, current.Revision, resting, pause, cancellationToken);
     }
 
+    public async Task StopAllOutboundSharingAsync(Guid accountId, CancellationToken cancellationToken)
+    {
+        _ = await RequireAccount(accountId, cancellationToken);
+        await store.StopAllOutboundSharingAsync(accountId, cancellationToken);
+    }
+
     public async Task SetShareAsync(
         Guid accountId,
         Guid granteeId,
@@ -351,12 +357,14 @@ public sealed class TrustEngine(
         // If every outbound share is Off, wipe what's stored.
         var acceptsLocation = false;
         var keepsTrail = false;
+        var acceptingShareRevisions = new Dictionary<Guid, long>();
         foreach (var person in connected)
         {
             var outbound = await store.GetShareAsync(you.Id, person.Id, cancellationToken);
             if (outbound.AcceptsLocation(now))
             {
                 acceptsLocation = true;
+                acceptingShareRevisions[person.Id] = outbound.Revision;
             }
 
             if (outbound.KeepsTrail(now))
@@ -391,7 +399,10 @@ public sealed class TrustEngine(
             }
 
             var fix = raw with { Timestamp = recorded };
-            await store.IngestLocationAsync(you.Id, fix, cancellationToken);
+            if (!await store.TryIngestLocationWhileSharingAsync(you.Id, fix, now, acceptingShareRevisions, cancellationToken))
+            {
+                return;
+            }
             latest = fix;
         }
 

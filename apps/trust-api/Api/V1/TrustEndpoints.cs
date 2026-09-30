@@ -60,6 +60,7 @@ public static class TrustEndpoints
         auth.MapPut("/me/avatar/photo", SetAvatarPhotoAsync).RequireRateLimiting(RateLimitPolicies.Avatar);
         auth.MapDelete("/me/avatar", ClearAvatarAsync);
         auth.MapPatch("/me", RenameAsync);
+        auth.MapPost("/me/sharing/stop-all", StopAllSharingAsync);
         auth.MapGet("/handles/available", CheckHandleAvailableAsync);
         auth.MapPut("/me/handle", SetHandleAsync);
         auth.MapPut("/me/discovery", SetDiscoveryAsync);
@@ -876,6 +877,12 @@ public static class TrustEndpoints
                 ct),
             cancellationToken);
     }
+
+    public static Task<IResult> StopAllSharingAsync(
+        ClaimsPrincipal principal,
+        TrustEngine engine,
+        CancellationToken cancellationToken) =>
+        RunAsync(principal, engine, engine.StopAllOutboundSharingAsync, cancellationToken);
 
     public static async Task<IResult> HistoryAsync(
         Guid personId,

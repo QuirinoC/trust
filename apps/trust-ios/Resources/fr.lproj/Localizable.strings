@@ -23,6 +23,13 @@
 "age_gate_checking" = "Vérification des exigences d’âge…";
 "age_gate_continue" = "Continuer";
 "age_gate_retry" = "Réessayer";
+"age_gate_stop_all" = "Arrêter le partage avec tout le monde";
+"age_gate_stop_all_confirm_body" = "Cela désactive le partage de votre position avec toutes les personnes connectées. Vos relations restent en place.";
+"age_gate_stop_all_confirm_title" = "Arrêter le partage avec tout le monde ?";
+"age_gate_stop_all_error" = "Nous n’avons pas pu confirmer l’arrêt du partage. Il est peut-être toujours actif. Réessayez.";
+"age_gate_stop_all_pending" = "Arrêt du partage…";
+"age_gate_stop_all_retry" = "Réessayer d’arrêter le partage";
+"age_gate_stop_all_success" = "Le partage est désactivé pour tout le monde. Votre compte reste verrouillé jusqu’à la fin de la vérification requise.";
 "age_gate_title" = "Avant de rejoindre Trust";
 "age_gate_try_apple_range" = "Essayer la tranche d’âge Apple";
 "age_gate_unavailable_body" = "Vérifiez votre connexion ou les réglages Apple, puis réessayez.";
@@ -248,9 +255,11 @@
 "location_access_status" = "Accès à la position : %@";
 "location_always" = "Trust utilise votre position en arrière-plan afin qu'un Look fonctionne toujours lorsque l'application est fermée. Un Look confirmé est enregistré et demande une notification. Trust ne vend pas votre emplacement.";
 "location_denied_body" = "L'emplacement est désactivé. Vous pouvez toujours regarder. Votre position n'est pas partagée tant que vous ne l'autorisez pas.";
+"location_may_be_stale" = "Peut ne plus être à jour · %@";
 "location_permission_heading" = "Autorisation de localisation";
 "location_precise" = "La confiance a besoin d'un emplacement précis, donc un look montre l'endroit actuel. Une localisation approximative ne suffit pas.";
 "location_reduced_accuracy" = "La localisation approximative est activée. Le partage nécessite une localisation précise.";
+"location_unavailable" = "Emplacement indisponible";
 "location_when_in_use" = "Trust utilise votre position lorsque l'application est ouverte afin que vous puissiez vous voir sur la carte et voir les personnes qui partagent avec vous. Trust ne vend pas votre emplacement.";
 "log" = "Activité";
 "log_they_looked" = "%@ vous a regardé.";

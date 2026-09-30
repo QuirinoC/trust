@@ -18,7 +18,7 @@ struct ViewScreen: View {
     private var isAvailable: Bool { member?.isAvailable ?? false }
 
     private var point: LocationPoint? {
-        if isAvailable, let live = member?.livePoint { return live }
+        if isAvailable { return member?.livePoint }
         return snapshot?.live
     }
 
@@ -29,6 +29,10 @@ struct ViewScreen: View {
                     content(member)
                 } else if member.isSealed, snapshot == nil {
                     sealed(member)
+                } else if member.isAvailable {
+                    TrustEmptyState(glyph: "location.slash", title: TrustCopy.locationUnavailable, message: TrustCopy.noLocationBody, actionTitle: TrustCopy.backToCircle) {
+                        model.circlePath = []
+                    }
                 } else {
                     TrustEmptyState(glyph: "location.slash", title: TrustCopy.noLocationYet, message: TrustCopy.noLocationBody, actionTitle: TrustCopy.backToCircle) {
                         model.circlePath = []
@@ -111,9 +115,12 @@ struct ViewScreen: View {
                 .padding(.bottom, 8)
                 .accessibilityElement(children: .combine)
 
-                Text(metaLine)
-                    .trustFont(13)
-                    .foregroundStyle(palette.muted)
+                TimelineView(.periodic(from: .now, by: 60)) { context in
+                    Text(metaLine(at: context.date))
+                        .trustFont(13)
+                        .foregroundStyle(palette.muted)
+                        .accessibilityIdentifier("view-location-freshness")
+                }
 
                 HStack(spacing: 8) {
                     Image(systemName: "checkmark")
@@ -194,15 +201,16 @@ struct ViewScreen: View {
         }
     }
 
-    private var metaLine: String {
+    private func metaLine(at now: Date) -> String {
         var parts: [String] = []
         if let distance = distanceFromYou {
             parts.append(TrustCopy.distanceFromYou(distance))
         }
         if let point {
             let time = point.timestamp.formatted(date: .abbreviated, time: .shortened)
-            let freshness = point.timestamp.formatted(.relative(presentation: .named))
-            parts.append(isAvailable ? "Updated \(freshness) · \(time)" : TrustCopy.snapshotAt(time))
+            parts.append(isAvailable
+                ? "\(TrustCopy.locationFreshness(timestamp: point.timestamp, now: now)) · \(time)"
+                : TrustCopy.snapshotAt(time))
         }
         return parts.joined(separator: " · ")
     }
@@ -240,7 +248,15 @@ struct ViewScreen: View {
     private func pinMap(_ point: LocationPoint, name: String) -> some View {
         Map(position: $position, interactionModes: [.pan, .zoom]) {
             Annotation(name, coordinate: point.coordinate) {
-                TrustMapPin(initials: name.trustInitials, live: isAvailable)
+                TimelineView(.periodic(from: .now, by: 60)) { context in
+                    TrustMapPin(
+                        initials: name.trustInitials,
+                        live: isAvailable,
+                        stale: isAvailable && LocationFreshness.status(timestamp: point.timestamp, now: context.date) == .stale,
+                        ageCaption: isAvailable ? TrustCopy.locationAgeCaption(timestamp: point.timestamp, now: context.date) : nil
+                    )
+                    .accessibilityLabel(TrustCopy.pinAccessibility(name: name, live: isAvailable, timestamp: point.timestamp, now: context.date))
+                }
             }
         }
         .mapStyle(.standard(elevation: .flat, emphasis: .muted, pointsOfInterest: .excludingAll))
@@ -295,17 +311,41 @@ struct TrustMapPin: View {
     let initials: String
     var live = true
     var selected = false
+    var stale = false
+    var ageCaption: String?
     @Environment(\.trustPalette) private var palette
 
     var body: some View {
-        Text(initials)
-            .font(TrustTheme.chrome(13, weight: .bold))
-            .foregroundStyle(palette.accentOn)
-            .frame(width: 40, height: 40)
-            .background(live ? palette.pinLive : palette.pinLook)
-            .clipShape(Circle())
-            .overlay(Circle().stroke(selected ? palette.accent : palette.chrome, lineWidth: 3))
-            .shadow(color: .black.opacity(0.22), radius: 5, y: 2)
+        VStack(spacing: 2) {
+            Text(initials)
+                .font(TrustTheme.chrome(13, weight: .bold))
+                .foregroundStyle(palette.accentOn)
+                .frame(width: 40, height: 40)
+                .background(live ? palette.pinLive : palette.pinLook)
+                .clipShape(Circle())
+                .overlay(Circle().stroke(selected ? palette.accent : palette.chrome, lineWidth: 3))
+                .overlay(alignment: .topTrailing) {
+                    if stale {
+                        Image(systemName: "clock.fill")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(palette.danger)
+                            .frame(width: 16, height: 16)
+                            .background(palette.chrome, in: Circle())
+                            .offset(x: 3, y: -2)
+                            .accessibilityHidden(true)
+                    }
+                }
+                .shadow(color: .black.opacity(0.22), radius: 5, y: 2)
+            if let ageCaption {
+                Text(ageCaption)
+                    .font(TrustTheme.chrome(9, weight: .semibold))
+                    .foregroundStyle(palette.ink)
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 2)
+                    .background(palette.paper.opacity(0.94), in: Capsule())
+                    .lineLimit(1)
+            }
+        }
     }
 }
 

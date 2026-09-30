@@ -53,6 +53,170 @@ public sealed class LegacyClientPrivacyControlTests
     }
 
     [Fact]
+    public async Task UnlinkedStopAllIsAuthenticatedAtomicIdempotentAndOnlyStopsOutboundDirections()
+    {
+        await using var api = await ProductionApi.StartAsync();
+        var (alice, bob) = await api.CreateConnectedPairAsync();
+        var (carol, _) = await api.CreateConnectedPairAsync();
+        var (dave, _) = await api.CreateConnectedPairAsync();
+        var (erin, _) = await api.CreateConnectedPairAsync();
+        await api.Store.UpsertShareAsync(alice.Id, bob.Id,
+            new ShareState(ShareResting.Paused, DateTimeOffset.UtcNow.AddHours(1), ShareResting.Always, 4), CancellationToken.None);
+        await api.Store.UpsertShareAsync(alice.Id, carol.Id,
+            new ShareState(ShareResting.UntilTheyLook, Revision: 2), CancellationToken.None);
+        await api.Store.UpsertShareAsync(alice.Id, dave.Id,
+            new ShareState(ShareResting.Always, Revision: 8), CancellationToken.None);
+        await api.Store.UpsertShareAsync(alice.Id, erin.Id,
+            new ShareState(ShareResting.Off, Revision: 11), CancellationToken.None);
+        await api.Store.UpsertShareAsync(bob.Id, alice.Id,
+            new ShareState(ShareResting.Always, Revision: 7), CancellationToken.None);
+        await api.Store.IngestLocationAsync(alice.Id, new LocationFix(DateTimeOffset.UtcNow, 37.3, -122.0), CancellationToken.None);
+        var pausedBeforeStop = await api.Store.GetShareAsync(alice.Id, bob.Id, CancellationToken.None);
+        var alwaysBeforeStop = await api.Store.GetShareAsync(alice.Id, dave.Id, CancellationToken.None);
+        var inboundBeforeStop = await api.Store.GetShareAsync(bob.Id, alice.Id, CancellationToken.None);
+
+        using var unauthenticated = new HttpRequestMessage(HttpMethod.Post, "/api/v1/me/sharing/stop-all");
+        using var unauthenticatedResponse = await api.Client.SendAsync(unauthenticated);
+        Assert.Equal(HttpStatusCode.Unauthorized, unauthenticatedResponse.StatusCode);
+
+        using var stop = api.Authorized(HttpMethod.Post, "/api/v1/me/sharing/stop-all", alice.Id);
+        using var response = await api.Client.SendAsync(stop);
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        var stopped = await api.Store.GetShareAsync(alice.Id, bob.Id, CancellationToken.None);
+        Assert.Equal(ShareResting.Off, stopped.Resting);
+        Assert.Equal(pausedBeforeStop.Revision + 1, stopped.Revision);
+        Assert.Null(stopped.PauseUntil);
+        Assert.Null(stopped.RestoresTo);
+        Assert.Equal(ShareResting.Off, (await api.Store.GetShareAsync(alice.Id, carol.Id, CancellationToken.None)).Resting);
+        Assert.Equal(ShareResting.Off, (await api.Store.GetShareAsync(alice.Id, dave.Id, CancellationToken.None)).Resting);
+        Assert.Equal(alwaysBeforeStop.Revision + 1, (await api.Store.GetShareAsync(alice.Id, dave.Id, CancellationToken.None)).Revision);
+        Assert.Equal(ShareResting.Off, (await api.Store.GetShareAsync(alice.Id, erin.Id, CancellationToken.None)).Resting);
+        Assert.Equal(12, (await api.Store.GetShareAsync(alice.Id, erin.Id, CancellationToken.None)).Revision);
+        Assert.Equal(inboundBeforeStop.Revision, (await api.Store.GetShareAsync(bob.Id, alice.Id, CancellationToken.None)).Revision);
+        Assert.True(await api.Store.AreConnectedAsync(alice.Id, bob.Id, CancellationToken.None));
+        Assert.Null(await api.Store.LatestLocationAsync(alice.Id, CancellationToken.None));
+
+        using var secondStop = api.Authorized(HttpMethod.Post, "/api/v1/me/sharing/stop-all", alice.Id);
+        using var secondResponse = await api.Client.SendAsync(secondStop);
+        Assert.Equal(HttpStatusCode.NoContent, secondResponse.StatusCode);
+        Assert.Equal(stopped.Revision + 1, (await api.Store.GetShareAsync(alice.Id, bob.Id, CancellationToken.None)).Revision);
+    }
+
+    [Fact]
+    public async Task StopAllOnMissingLinkDoesNotBypassHoldOrRevocationOrEnableWrites()
+    {
+        await using var api = await ProductionApi.StartAsync();
+        var (unlinked, peer) = await api.CreateConnectedPairAsync();
+        using var read = api.Authorized(HttpMethod.Get, "/api/v1/circle", unlinked.Id);
+        using var readResponse = await api.Client.SendAsync(read);
+        Assert.Equal("age_assurance_link_required", await ProductionApi.ErrorCodeAsync(readResponse));
+        using var enable = api.Authorized(HttpMethod.Patch, $"/api/v1/people/{peer.Id}/share", unlinked.Id);
+        enable.Content = JsonContent.Create(new { resting = "always", pause = (string?)null });
+        using var enableResponse = await api.Client.SendAsync(enable);
+        Assert.Equal("age_assurance_link_required", await ProductionApi.ErrorCodeAsync(enableResponse));
+        await api.AgeAssurance.PlaceAccountPrivacyHoldAsync(unlinked.Id, DateTimeOffset.UtcNow, CancellationToken.None);
+        using var heldStop = api.Authorized(HttpMethod.Post, "/api/v1/me/sharing/stop-all", unlinked.Id);
+        using var heldResponse = await api.Client.SendAsync(heldStop);
+        Assert.Equal((HttpStatusCode)423, heldResponse.StatusCode);
+
+        var (revoked, revokedPeer) = await api.CreateConnectedPairAsync();
+        var transaction = new VerifiedStoreKitAppTransaction("stop-all-revoked", "com.collapsetechnologies.trust", "Sandbox");
+        await api.AgeAssurance.TryRegisterAppTransactionLinkAsync(revoked.Id, transaction, CancellationToken.None);
+        await api.AgeAssurance.RecordConsentRevocationAsync(Guid.NewGuid(), transaction, DateTimeOffset.UtcNow, CancellationToken.None);
+        using var revokedStop = api.Authorized(HttpMethod.Post, "/api/v1/me/sharing/stop-all", revoked.Id);
+        using var revokedResponse = await api.Client.SendAsync(revokedStop);
+        Assert.Equal(HttpStatusCode.Conflict, revokedResponse.StatusCode);
+        Assert.Equal("consent_revoked", await ProductionApi.ErrorCodeAsync(revokedResponse));
+        Assert.True(await api.Store.AreConnectedAsync(revoked.Id, revokedPeer.Id, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task StopAllWinsRaceWithStalePerPersonEnable()
+    {
+        await using var api = await ProductionApi.StartAsync();
+        var (alice, bob) = await api.CreateConnectedPairAsync();
+        await api.Engine.GrantCircleAsync(alice.Id, "test", CancellationToken.None);
+        var connection = await api.ConnectionIdAsync(alice.Id, bob.Id);
+        var revision = (await api.Store.GetShareAsync(alice.Id, bob.Id, CancellationToken.None)).Revision;
+        var staleEnable = api.Engine.SetShareAsync(alice.Id, bob.Id, connection, revision, ShareResting.Always, null, CancellationToken.None);
+        using var stop = api.Authorized(HttpMethod.Post, "/api/v1/me/sharing/stop-all", alice.Id);
+        var stopRequest = api.Client.SendAsync(stop);
+        try { await staleEnable; }
+        catch (TrustException exception) { Assert.Equal("share_state_changed", exception.Code); }
+        using var response = await stopRequest;
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Assert.Equal(ShareResting.Off, (await api.Store.GetShareAsync(alice.Id, bob.Id, CancellationToken.None)).Resting);
+    }
+
+    [Fact]
+    public async Task StopAllInvalidatesAnEnableThatObservedAnAlreadyOffDirection()
+    {
+        await using var api = await ProductionApi.StartAsync();
+        var (alice, bob) = await api.CreateConnectedPairAsync();
+        await api.Engine.GrantCircleAsync(alice.Id, "test", CancellationToken.None);
+        var connection = await api.ConnectionIdAsync(alice.Id, bob.Id);
+        var observedOffRevision = (await api.Store.GetShareAsync(alice.Id, bob.Id, CancellationToken.None)).Revision;
+
+        await api.Engine.StopAllOutboundSharingAsync(alice.Id, CancellationToken.None);
+
+        var staleEnable = await Assert.ThrowsAsync<TrustException>(() =>
+            api.Engine.SetShareAsync(alice.Id, bob.Id, connection, observedOffRevision, ShareResting.Always, null, CancellationToken.None));
+        Assert.Equal("share_state_changed", staleEnable.Code);
+        var after = await api.Store.GetShareAsync(alice.Id, bob.Id, CancellationToken.None);
+        Assert.Equal(ShareResting.Off, after.Resting);
+        Assert.True(after.Revision > observedOffRevision);
+    }
+
+    [Fact]
+    public async Task DelayedLocationIngestCannotRecreatePointsAfterStopAll()
+    {
+        await using var api = await ProductionApi.StartAsync();
+        var (alice, bob) = await api.CreateConnectedPairAsync();
+        await api.Store.UpsertShareAsync(alice.Id, bob.Id, new ShareState(ShareResting.Always, Revision: 2), CancellationToken.None);
+        await api.Engine.GrantCircleAsync(alice.Id, "test", CancellationToken.None);
+        var delayedPoint = new LocationFix(DateTimeOffset.UtcNow, 37.3, -122.0);
+        var beforeStopRevision = (await api.Store.GetShareAsync(alice.Id, bob.Id, CancellationToken.None)).Revision;
+        var observedShares = new Dictionary<Guid, long> { [bob.Id] = beforeStopRevision };
+        Assert.True(await api.Store.TryIngestLocationWhileSharingAsync(alice.Id, delayedPoint, DateTimeOffset.UtcNow, observedShares, CancellationToken.None));
+
+        await api.Engine.StopAllOutboundSharingAsync(alice.Id, CancellationToken.None);
+        var stopped = await api.Store.GetShareAsync(alice.Id, bob.Id, CancellationToken.None);
+        var connectionId = await api.ConnectionIdAsync(alice.Id, bob.Id);
+        await api.Engine.SetShareAsync(alice.Id, bob.Id, connectionId, stopped.Revision, ShareResting.Always, null, CancellationToken.None);
+
+        // This is the write stage of an ingest that observed the prior Always revision.
+        // Re-enabling is a new consent revision and cannot revive its delayed point.
+        Assert.False(await api.Store.TryIngestLocationWhileSharingAsync(
+            alice.Id,
+            delayedPoint with { Timestamp = delayedPoint.Timestamp.AddSeconds(1) },
+            DateTimeOffset.UtcNow,
+            observedShares,
+            CancellationToken.None));
+        Assert.Null(await api.Store.LatestLocationAsync(alice.Id, CancellationToken.None));
+        Assert.Equal(ShareResting.Always, (await api.Store.GetShareAsync(alice.Id, bob.Id, CancellationToken.None)).Resting);
+    }
+
+    [Fact]
+    public async Task DelayedLocationIngestCannotRecreatePointsAfterRemovingTheLastPeer()
+    {
+        await using var api = await ProductionApi.StartAsync();
+        var (alice, bob) = await api.CreateConnectedPairAsync();
+        await api.Store.UpsertShareAsync(alice.Id, bob.Id, new ShareState(ShareResting.Always), CancellationToken.None);
+        var oldRevision = (await api.Store.GetShareAsync(alice.Id, bob.Id, CancellationToken.None)).Revision;
+        var observed = new Dictionary<Guid, long> { [bob.Id] = oldRevision };
+        var delayedPoint = new LocationFix(DateTimeOffset.UtcNow, 37.3, -122.0);
+        Assert.True(await api.Store.TryIngestLocationWhileSharingAsync(alice.Id, delayedPoint, DateTimeOffset.UtcNow, observed, CancellationToken.None));
+
+        await api.Engine.RevokeAsync(alice.Id, bob.Id, CancellationToken.None);
+
+        Assert.Null(await api.Store.LatestLocationAsync(alice.Id, CancellationToken.None));
+        Assert.False(await api.Store.TryIngestLocationWhileSharingAsync(
+            alice.Id, delayedPoint with { Timestamp = delayedPoint.Timestamp.AddSeconds(1) }, DateTimeOffset.UtcNow, observed, CancellationToken.None));
+        Assert.Null(await api.Store.LatestLocationAsync(alice.Id, CancellationToken.None));
+        Assert.False(await api.Store.AreConnectedAsync(alice.Id, bob.Id, CancellationToken.None));
+    }
+
+    [Fact]
     public async Task UnlinkedAccountStillNeedsLinkForReadsEnablingPauseAndMalformedModes()
     {
         await using var api = await ProductionApi.StartAsync();
@@ -158,11 +322,13 @@ public sealed class LegacyClientPrivacyControlTests
             Client = app.GetTestClient();
             Store = app.Services.GetRequiredService<ITrustStore>();
             AgeAssurance = app.Services.GetRequiredService<IAgeAssuranceAccountStore>();
+            Engine = app.Services.GetRequiredService<TrustEngine>();
         }
 
         public HttpClient Client { get; }
         public ITrustStore Store { get; }
         public IAgeAssuranceAccountStore AgeAssurance { get; }
+        public TrustEngine Engine { get; }
 
         public static async Task<ProductionApi> StartAsync()
         {
@@ -189,11 +355,14 @@ public sealed class LegacyClientPrivacyControlTests
                 TrustEndpoints.GetCircleAsync;
             Func<Guid, ShareRequest, ClaimsPrincipal, TrustEngine, CancellationToken, Task<IResult>> setShare =
                 TrustEndpoints.SetShareAsync;
+            Func<ClaimsPrincipal, TrustEngine, CancellationToken, Task<IResult>> stopAll =
+                TrustEndpoints.StopAllSharingAsync;
             Func<Guid, RevokeRequest, ClaimsPrincipal, TrustEngine, CancellationToken, Task<IResult>> revoke =
                 TrustEndpoints.RevokeAsync;
             Func<ClaimsPrincipal, TrustEngine, IPushDeviceStore, IAgeAssuranceAccountStore, CancellationToken, Task<IResult>> deleteAccount =
                 TrustEndpoints.DeleteAccountAsync;
             api.MapGet("/circle", getCircle);
+            api.MapPost("/me/sharing/stop-all", stopAll);
             api.MapPatch("/people/{personId:guid}/share", setShare);
             api.MapPost("/people/{personId:guid}/revoke", revoke);
             api.MapDelete("/account", deleteAccount);

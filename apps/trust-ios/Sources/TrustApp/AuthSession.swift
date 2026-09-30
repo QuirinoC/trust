@@ -118,6 +118,13 @@ final class AuthSession: ObservableObject {
         }
     }
 
+#if DEBUG
+    func prepareAgeGateUITestSession() {
+        account = AuthAccount(provider: .apple, displayName: "Age Gate Test", appleUserID: "age-gate-ui-test")
+        sessionToken = "age-gate-ui-test-token"
+    }
+#endif
+
     func signOut() {
         account = nil
         notice = nil

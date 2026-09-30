@@ -507,5 +507,14 @@
   "age_privacy_held_title": "Esta conta está em proteção de privacidade",
   "age_privacy_held_body": "O Trust recebeu o aviso de restrição de privacidade do app e colocou esta conta em proteção. Isso não é uma verificação de idade. Fale com o suporte.",
   "api_account_privacy_hold": "Esta conta do Trust está em proteção de privacidade. Fale com o suporte.",
-  "age_rating_and_update_description": "Os requisitos de garantia de idade do Trust e sua classificação etária na App Store mudaram. Confirme ambas as mudanças para continuar usando o Trust."
+  "age_rating_and_update_description": "Os requisitos de garantia de idade do Trust e sua classificação etária na App Store mudaram. Confirme ambas as mudanças para continuar usando o Trust.",
+  "age_gate_stop_all": "Parar de compartilhar com todos",
+  "age_gate_stop_all_retry": "Tentar parar o compartilhamento novamente",
+  "age_gate_stop_all_confirm_title": "Parar de compartilhar com todos?",
+  "age_gate_stop_all_confirm_body": "Isso desativa o compartilhamento da sua localização com todas as pessoas conectadas. Suas conexões permanecem.",
+  "age_gate_stop_all_pending": "Parando o compartilhamento…",
+  "age_gate_stop_all_success": "O compartilhamento foi desativado para todos. Sua conta continuará bloqueada até que a verificação necessária seja concluída.",
+  "age_gate_stop_all_error": "Não foi possível confirmar que o compartilhamento foi interrompido. Ele ainda pode estar ativo. Tente novamente.",
+  "location_unavailable": "Localização indisponível",
+  "location_may_be_stale": "Pode estar desatualizada · %@"
 }

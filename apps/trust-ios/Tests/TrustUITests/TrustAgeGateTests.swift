@@ -18,6 +18,116 @@ final class TrustAgeGateTests: XCTestCase {
         XCTAssertFalse(app.textFields["age-birth-month"].exists)
     }
 
+    func testUnavailableAgeCheckStopAllRequiresConfirmationAndReportsUnconfirmedFailure()
+    {
+        let app = XCUIApplication()
+        app.launchEnvironment["TRUST_AGE_TEST_MODE"] = "1"
+        app.launchEnvironment["TRUST_AGE_TEST_RESET_AUTH"] = "1"
+        app.launchEnvironment["TRUST_AGE_TEST_AUTHENTICATED"] = "1"
+        app.launchEnvironment["TRUST_AGE_TEST_UNAVAILABLE"] = "1"
+        app.launchEnvironment["TRUST_BASE_URL"] = "http://127.0.0.1:59999"
+        app.launch()
+
+        let stop = element("age-stop-all-sharing", in: app)
+        XCTAssertTrue(stop.waitForExistence(timeout: 15))
+        XCTAssertFalse(element("age-stop-all-status", in: app).exists)
+
+        stop.tap()
+        let cancel = app.buttons.matching(identifier: "age-stop-all-cancel").firstMatch
+        XCTAssertTrue(cancel.waitForExistence(timeout: 5))
+        cancel.tap()
+        XCTAssertFalse(element("age-stop-all-status", in: app).exists, "Cancel must not submit the request or show success.")
+
+        stop.tap()
+        let confirm = app.buttons.matching(identifier: "age-stop-all-confirm").firstMatch
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        confirm.tap()
+
+        let status = element("age-stop-all-status", in: app)
+        XCTAssertTrue(status.waitForExistence(timeout: 30))
+        XCTAssertTrue(status.label.localizedCaseInsensitiveContains("confirm"))
+        XCTAssertTrue(status.label.localizedCaseInsensitiveContains("may still be on"))
+        XCTAssertTrue(element("age-gate-title", in: app).exists, "A failed stop request must leave the age gate closed.")
+        XCTAssertFalse(element("local-api-sign-in", in: app).exists)
+    }
+
+    func testPendingAgeGateStopAllDisablesRetryUntilRequestSettles() {
+        let app = XCUIApplication()
+        app.launchEnvironment["TRUST_AGE_TEST_MODE"] = "1"
+        app.launchEnvironment["TRUST_AGE_TEST_RESET_AUTH"] = "1"
+        app.launchEnvironment["TRUST_AGE_TEST_AUTHENTICATED"] = "1"
+        app.launchEnvironment["TRUST_AGE_TEST_UNAVAILABLE"] = "1"
+        app.launchEnvironment["TRUST_AGE_TEST_STOP_ALL_HOLD"] = "1"
+        app.launchEnvironment["TRUST_BASE_URL"] = "http://127.0.0.1:59999"
+        app.launch()
+
+        let stop = element("age-stop-all-sharing", in: app)
+        XCTAssertTrue(stop.waitForExistence(timeout: 15))
+        stop.tap()
+        let confirm = app.buttons.matching(identifier: "age-stop-all-confirm").firstMatch
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        confirm.tap()
+
+        let pending = element("age-stop-all-status", in: app)
+        XCTAssertTrue(pending.waitForExistence(timeout: 5))
+        let retry = element("age-gate-retry", in: app)
+        XCTAssertTrue(retry.exists)
+        XCTAssertFalse(retry.isEnabled, "Age-check retry must not move the screen while Stop All is pending.")
+    }
+
+    func testAppleAccountChangeClearsPendingStopAllStatus() {
+        let app = XCUIApplication()
+        app.launchEnvironment["TRUST_AGE_TEST_MODE"] = "1"
+        app.launchEnvironment["TRUST_AGE_TEST_RESET_AUTH"] = "1"
+        app.launchEnvironment["TRUST_AGE_TEST_AUTHENTICATED"] = "1"
+        app.launchEnvironment["TRUST_AGE_TEST_UNAVAILABLE"] = "1"
+        app.launchEnvironment["TRUST_AGE_TEST_ACCOUNT_CHANGE_ON_STOP"] = "1"
+        app.launch()
+
+        let stop = element("age-stop-all-sharing", in: app)
+        XCTAssertTrue(stop.waitForExistence(timeout: 15))
+        stop.tap()
+        let confirm = app.buttons.matching(identifier: "age-stop-all-confirm").firstMatch
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        confirm.tap()
+
+        XCTAssertTrue(element("age-gate-title", in: app).waitForExistence(timeout: 5))
+        let stopDisappears = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == false"),
+            object: stop
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [stopDisappears], timeout: 5), .completed)
+        XCTAssertFalse(element("age-stop-all-status", in: app).exists)
+    }
+
+    func testPreviousStopSuccessClearsWhenAgeCheckStartsANewUnavailableEpisode() {
+        let app = XCUIApplication()
+        app.launchEnvironment["TRUST_AGE_TEST_MODE"] = "1"
+        app.launchEnvironment["TRUST_AGE_TEST_RESET_AUTH"] = "1"
+        app.launchEnvironment["TRUST_AGE_TEST_AUTHENTICATED"] = "1"
+        app.launchEnvironment["TRUST_AGE_TEST_UNAVAILABLE"] = "1"
+        app.launchEnvironment["TRUST_AGE_TEST_STOP_ALL_SUCCESS"] = "1"
+        app.launchEnvironment["TRUST_AGE_TEST_RECHECK_UNAVAILABLE"] = "1"
+        app.launch()
+
+        let stop = element("age-stop-all-sharing", in: app)
+        XCTAssertTrue(stop.waitForExistence(timeout: 15))
+        stop.tap()
+        let confirm = app.buttons.matching(identifier: "age-stop-all-confirm").firstMatch
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        confirm.tap()
+        let status = element("age-stop-all-status", in: app)
+        XCTAssertTrue(status.waitForExistence(timeout: 5))
+        XCTAssertTrue(element("age-gate-title", in: app).exists, "Stop success must not unlock the account.")
+        XCTAssertFalse(element("local-api-sign-in", in: app).exists, "Stop success must not navigate to sign-in.")
+        XCTAssertFalse(element("tab-circle", in: app).exists, "Stop success must not open the app home.")
+
+        element("age-gate-retry", in: app).tap()
+
+        XCTAssertTrue(stop.waitForExistence(timeout: 5))
+        XCTAssertFalse(status.exists, "A new age-check episode must not reuse the previous stop result.")
+    }
+
     func testUnder13AppleRangeExplainsRestrictionWithoutClaimingConsentFlow() {
         let app = XCUIApplication()
         app.launchEnvironment["TRUST_AGE_TEST_MODE"] = "1"

@@ -441,6 +441,48 @@ public sealed class PostgresTrustStore(string connectionString) : ITrustStore
         await transaction.CommitAsync(cancellationToken);
     }
 
+    public async Task StopAllOutboundSharingAsync(Guid accountId, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+
+        // Use the same globally sorted account-lock order as per-person share writes.
+        // This makes Stop All the final write when it races an already-started share change.
+        await using (var lockAccounts = new NpgsqlCommand(
+            "SELECT account_id FROM trust.accounts WHERE account_id = $1 OR account_id IN (SELECT grantee_id FROM trust.shares WHERE grantor_id = $1 UNION SELECT CASE WHEN person_a = $1 THEN person_b ELSE person_a END FROM trust.memberships WHERE status = 'active' AND (person_a = $1 OR person_b = $1)) ORDER BY account_id FOR UPDATE;",
+            connection, transaction))
+        {
+            lockAccounts.Parameters.AddWithValue(accountId);
+            await using var reader = await lockAccounts.ExecuteReaderAsync(cancellationToken);
+            var foundAccount = false;
+            while (await reader.ReadAsync(cancellationToken)) foundAccount |= reader.GetGuid(0) == accountId;
+            if (!foundAccount) throw TrustException.RequestNotFound();
+        }
+
+        await using (var stop = new NpgsqlCommand(
+            "UPDATE trust.shares SET resting = 'off', pause_until = NULL, restores_to = NULL, revision = revision + 1 WHERE grantor_id = $1;",
+            connection, transaction))
+        {
+            stop.Parameters.AddWithValue(accountId);
+            await stop.ExecuteNonQueryAsync(cancellationToken);
+        }
+        await using (var ensureDirections = new NpgsqlCommand(
+            "INSERT INTO trust.shares (grantor_id, grantee_id, resting, pause_until, restores_to, revision) SELECT $1, CASE WHEN person_a = $1 THEN person_b ELSE person_a END, 'off', NULL, NULL, 1 FROM trust.memberships WHERE status = 'active' AND (person_a = $1 OR person_b = $1) ON CONFLICT (grantor_id, grantee_id) DO NOTHING;",
+            connection, transaction))
+        {
+            ensureDirections.Parameters.AddWithValue(accountId);
+            await ensureDirections.ExecuteNonQueryAsync(cancellationToken);
+        }
+        await using (var clear = new NpgsqlCommand(
+            "DELETE FROM trust.location_points WHERE account_id = $1;",
+            connection, transaction))
+        {
+            clear.Parameters.AddWithValue(accountId);
+            await clear.ExecuteNonQueryAsync(cancellationToken);
+        }
+        await transaction.CommitAsync(cancellationToken);
+    }
+
     public async Task RestoreExpiredPausesAsync(DateTimeOffset now, CancellationToken cancellationToken)
     {
         await using var connection = await OpenAsync(cancellationToken);
@@ -522,6 +564,43 @@ public sealed class PostgresTrustStore(string connectionString) : ITrustStore
         command.Parameters.AddWithValue(fix.Latitude);
         command.Parameters.AddWithValue(fix.Longitude);
         await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task<bool> TryIngestLocationWhileSharingAsync(Guid accountId, LocationFix fix, DateTimeOffset now, IReadOnlyDictionary<Guid, long> observedOutboundRevisions, CancellationToken cancellationToken)
+    {
+        if (observedOutboundRevisions.Count == 0) return false;
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        // Stop All and ordinary share writes take this account row lock too. An ingest
+        // that started before Stop All either commits first and is then cleared, or sees
+        // the stopped directions and is rejected after Stop All commits.
+        await LockAccountAsync(connection, transaction, accountId, cancellationToken);
+        await using (var canShare = new NpgsqlCommand(
+            "SELECT EXISTS (SELECT 1 FROM unnest($2::uuid[], $3::bigint[]) AS expected(grantee_id, revision) JOIN trust.shares s ON s.grantor_id = $1 AND s.grantee_id = expected.grantee_id AND s.revision = expected.revision JOIN trust.memberships m ON m.status = 'active' AND m.person_a = LEAST($1, expected.grantee_id) AND m.person_b = GREATEST($1, expected.grantee_id) WHERE s.resting IN ('always', 'until_they_look') OR (s.resting = 'paused' AND (s.pause_until IS NULL OR s.pause_until <= $4) AND s.restores_to IN ('always', 'until_they_look')));",
+            connection, transaction))
+        {
+            canShare.Parameters.AddWithValue(accountId);
+            canShare.Parameters.AddWithValue(observedOutboundRevisions.Keys.ToArray());
+            canShare.Parameters.AddWithValue(observedOutboundRevisions.Values.ToArray());
+            canShare.Parameters.AddWithValue(now);
+            if (!Convert.ToBoolean(await canShare.ExecuteScalarAsync(cancellationToken)))
+            {
+                await transaction.CommitAsync(cancellationToken);
+                return false;
+            }
+        }
+        await using (var insert = new NpgsqlCommand(
+            "INSERT INTO trust.location_points (account_id, recorded_at, latitude, longitude) VALUES ($1, $2, $3, $4);",
+            connection, transaction))
+        {
+            insert.Parameters.AddWithValue(accountId);
+            insert.Parameters.AddWithValue(fix.Timestamp);
+            insert.Parameters.AddWithValue(fix.Latitude);
+            insert.Parameters.AddWithValue(fix.Longitude);
+            await insert.ExecuteNonQueryAsync(cancellationToken);
+        }
+        await transaction.CommitAsync(cancellationToken);
+        return true;
     }
 
     public async Task PruneLocationsAsync(Guid accountId, DateTimeOffset olderThan, CancellationToken cancellationToken)

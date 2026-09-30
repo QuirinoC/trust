@@ -507,5 +507,14 @@
   "age_privacy_held_title": "このアカウントはプライバシー保護中です",
   "age_privacy_held_body": "Trustはアプリからのプライバシー制限の報告を受け、このアカウントを保護状態にしました。これは年齢確認ではありません。サポートにお問い合わせください。",
   "api_account_privacy_hold": "このTrustアカウントはプライバシー保護中です。サポートにお問い合わせください。",
-  "age_rating_and_update_description": "Trustの年齢確認要件とApp Storeの年齢レーティングが変更されました。Trustを引き続き利用するには、両方の変更を確認してください。"
+  "age_rating_and_update_description": "Trustの年齢確認要件とApp Storeの年齢レーティングが変更されました。Trustを引き続き利用するには、両方の変更を確認してください。",
+  "age_gate_stop_all": "全員との位置情報共有を停止",
+  "age_gate_stop_all_retry": "共有停止をもう一度試す",
+  "age_gate_stop_all_confirm_title": "全員との共有を停止しますか？",
+  "age_gate_stop_all_confirm_body": "接続中の全員に対する位置情報共有をオフにします。つながりは維持されます。",
+  "age_gate_stop_all_pending": "共有を停止しています…",
+  "age_gate_stop_all_success": "全員との共有をオフにしました。必要な確認が完了するまでアカウントはロックされたままです。",
+  "age_gate_stop_all_error": "共有が停止したことを確認できませんでした。まだ有効な可能性があります。もう一度お試しください。",
+  "location_unavailable": "位置情報を利用できません",
+  "location_may_be_stale": "最新ではない可能性があります · %@"
 }

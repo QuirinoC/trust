@@ -162,7 +162,7 @@ struct AgeGateView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .frame(minHeight: 52)
         case .ageCheckUnavailable:
-            VStack(spacing: 8) {
+            VStack(spacing: 10) {
                 Button {
                     model.retryAgeCheck()
                 } label: {
@@ -171,6 +171,65 @@ struct AgeGateView: View {
                 }
                 .buttonStyle(TrustFilledButtonStyle())
                 .accessibilityIdentifier("age-gate-retry")
+                .disabled(model.ageUnavailableStopAllState == .pending)
+
+                if model.canStopAllFromUnavailableAgeCheck {
+                    Button {
+                        model.requestAgeUnavailableStopAll()
+                    } label: {
+                        Text(model.ageUnavailableStopAllState.isError
+                            ? TrustCopy.ageGateStopAllRetry
+                            : TrustCopy.ageGateStopAll)
+                            .frame(maxWidth: .infinity, minHeight: 48)
+                    }
+                    .buttonStyle(TrustOutlineButtonStyle())
+                    .disabled(model.ageUnavailableStopAllState == .pending || model.ageUnavailableStopAllState == .success)
+                    .accessibilityIdentifier("age-stop-all-sharing")
+                    .alert(
+                        TrustCopy.ageGateStopAllConfirmTitle,
+                        isPresented: Binding(
+                            get: { model.ageUnavailableStopAllState == .confirming },
+                            set: { if !$0 { model.cancelAgeUnavailableStopAll() } }
+                        )
+                    ) {
+                        Button(TrustCopy.stopAll, role: .destructive) {
+                            model.confirmAgeUnavailableStopAll()
+                        }
+                        .accessibilityIdentifier("age-stop-all-confirm")
+                        Button(TrustCopy.cancel, role: .cancel) {
+                            model.cancelAgeUnavailableStopAll()
+                        }
+                        .accessibilityIdentifier("age-stop-all-cancel")
+                    } message: {
+                        Text(TrustCopy.ageGateStopAllConfirmBody)
+                    }
+
+                    switch model.ageUnavailableStopAllState {
+                    case .pending:
+                        HStack(spacing: 8) {
+                            ProgressView().tint(palette.accent)
+                            Text(TrustCopy.ageGateStopAllPending)
+                        }
+                        .trustFont(13)
+                        .foregroundStyle(palette.muted)
+                        .frame(maxWidth: .infinity, minHeight: 36)
+                        .accessibilityIdentifier("age-stop-all-status")
+                    case .success:
+                        Text(TrustCopy.ageGateStopAllSuccess)
+                            .trustFont(13)
+                            .foregroundStyle(palette.positive)
+                            .frame(maxWidth: .infinity, minHeight: 36, alignment: .leading)
+                            .accessibilityIdentifier("age-stop-all-status")
+                    case .error(let message):
+                        Text("\(TrustCopy.ageGateStopAllError) \(message)")
+                            .trustFont(13)
+                            .foregroundStyle(palette.danger)
+                            .frame(maxWidth: .infinity, minHeight: 36, alignment: .leading)
+                            .accessibilityIdentifier("age-stop-all-status")
+                    case .idle, .confirming:
+                        EmptyView()
+                    }
+                }
             }
         case .ageRangeBlocked:
             VStack(spacing: 12) {

@@ -95,6 +95,12 @@ public sealed class RevokedAccountEndpointFilter(
             return context.Arguments.OfType<RevokeRequest>().Any();
         }
 
+        if (HttpMethods.IsPost(request.Method)
+            && request.Path.Equals("/api/v1/me/sharing/stop-all", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
         return false;
     }
 

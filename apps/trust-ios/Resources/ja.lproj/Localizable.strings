@@ -23,6 +23,13 @@
 "age_gate_checking" = "年齢要件を確認しています…";
 "age_gate_continue" = "続ける";
 "age_gate_retry" = "再試行";
+"age_gate_stop_all" = "全員との位置情報共有を停止";
+"age_gate_stop_all_confirm_body" = "接続中の全員に対する位置情報共有をオフにします。つながりは維持されます。";
+"age_gate_stop_all_confirm_title" = "全員との共有を停止しますか？";
+"age_gate_stop_all_error" = "共有が停止したことを確認できませんでした。まだ有効な可能性があります。もう一度お試しください。";
+"age_gate_stop_all_pending" = "共有を停止しています…";
+"age_gate_stop_all_retry" = "共有停止をもう一度試す";
+"age_gate_stop_all_success" = "全員との共有をオフにしました。必要な確認が完了するまでアカウントはロックされたままです。";
 "age_gate_title" = "利用を始める前に";
 "age_gate_try_apple_range" = "Appleの年齢範囲を試す";
 "age_gate_unavailable_body" = "インターネット接続またはAppleの設定を確認して、もう一度お試しください。";
@@ -248,9 +255,11 @@
 "location_access_status" = "位置情報へのアクセス：%@";
 "location_always" = "Trustは位置情報を預かり、バックグラウンドでも保持します。信頼できる大人の相手が「見る」とあなたを見つけられます。確認するまで相手には見えず、あなたに通知されます。Trustは位置情報を販売しません。";
 "location_denied_body" = "位置情報はオフです。共有している人を見て、見る操作はできます。ピンは「使用中」を許可するまで待ちます。";
+"location_may_be_stale" = "最新ではない可能性があります · %@";
 "location_permission_heading" = "位置情報の許可";
 "location_precise" = "Trustは、信頼できる大人の相手が「見る」ときに見つけられるよう、正確な位置情報が必要です。おおよその位置では預かりに足りません。";
 "location_reduced_accuracy" = "おおよその位置情報がオンです。預かりには正確な位置情報が必要です。";
+"location_unavailable" = "位置情報を利用できません";
 "location_when_in_use" = "Trustは、アプリを開いているあいだ位置情報を使い、地図上の自分と、共有している人を見るために使います。Trustは位置情報を販売しません。";
 "log" = "アクティビティ";
 "log_they_looked" = "%@さんがあなたをLookしました。";

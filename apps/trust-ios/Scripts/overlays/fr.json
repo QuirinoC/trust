@@ -507,5 +507,14 @@
   "age_privacy_held_title": "Ce compte est en pause de confidentialité",
   "age_privacy_held_body": "Trust a reçu le signalement de restriction de confidentialité de l’app et a mis ce compte en pause. Il ne s’agit pas d’une vérification de l’âge. Contactez l’assistance.",
   "api_account_privacy_hold": "Ce compte Trust est en pause de confidentialité. Contactez l’assistance.",
-  "age_rating_and_update_description": "Les exigences de vérification de l’âge de Trust et sa classification d’âge sur l’App Store ont changé. Veuillez confirmer ces deux changements pour continuer à utiliser Trust."
+  "age_rating_and_update_description": "Les exigences de vérification de l’âge de Trust et sa classification d’âge sur l’App Store ont changé. Veuillez confirmer ces deux changements pour continuer à utiliser Trust.",
+  "age_gate_stop_all": "Arrêter le partage avec tout le monde",
+  "age_gate_stop_all_retry": "Réessayer d’arrêter le partage",
+  "age_gate_stop_all_confirm_title": "Arrêter le partage avec tout le monde ?",
+  "age_gate_stop_all_confirm_body": "Cela désactive le partage de votre position avec toutes les personnes connectées. Vos relations restent en place.",
+  "age_gate_stop_all_pending": "Arrêt du partage…",
+  "age_gate_stop_all_success": "Le partage est désactivé pour tout le monde. Votre compte reste verrouillé jusqu’à la fin de la vérification requise.",
+  "age_gate_stop_all_error": "Nous n’avons pas pu confirmer l’arrêt du partage. Il est peut-être toujours actif. Réessayez.",
+  "location_unavailable": "Emplacement indisponible",
+  "location_may_be_stale": "Peut ne plus être à jour · %@"
 }
