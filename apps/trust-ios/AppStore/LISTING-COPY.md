@@ -1,6 +1,6 @@
 # App Store listing copy
 
-**App Store Connect listing last directly observed 2026-09-30; not submitted for review.** The English (U.S.) draft description was saved with qualified notification language, and version 1.0 selected build 40 and the current icon at the last listing check. The listing page was not re-opened during the latest session; recheck all saved fields and availability before submission. Public release gates remain open.
+**App Store Connect listing last directly observed 2026-09-30; not submitted for review.** The English (U.S.) draft description was saved with qualified notification language, and version 1.0 selected build 40 and the current icon at the last listing check. Build 41 was uploaded at 4:38 PM PDT and Xcode reported it processing; version selection has not been rechecked. Recheck all saved fields and availability before submission. Public release gates remain open.
 
 ## Current English (U.S.) draft metadata
 
@@ -58,7 +58,7 @@ Reconfirm the primary and secondary categories, supported platforms, territory a
 
 ## Remaining release checks
 
-- **Build:** Build 40 is uploaded and appears as `Testing` in `Trust Family Auto`, which has three testers and automatic Xcode-build distribution enabled. The last known physical iPhone 16 Pro feedback on build 35 says “We can't complete the required check”; retry it on build 40.
+- **Build:** Build 40 was last confirmed as `Testing` in `Trust Family Auto`, which had three testers and automatic Xcode-build distribution enabled. Build 41 was uploaded at 4:38 PM PDT and remains unconfirmed in the group while processing. The last known physical iPhone 16 Pro feedback on build 35 says “We can't complete the required check”; retry on build 41 after it becomes available.
 - **Screenshots:** the last App Store Connect observation showed six ordered screenshots in each iPhone 6.9-inch, iPhone 6.5-inch, and iPad 13-inch group. The live 6.5-inch map image matched the local source. Recheck the full set against the final release candidate.
 - **Privacy:** the last draft inspection at 3:43 PM PDT showed the published App Privacy label unchanged; Photos or Videos was configured for App Functionality, linked to identity, and not tracked, with its wizard at Publish. Contacts setup was incomplete. The browser URL guard stopped a later attempt to reopen the privacy tab, so the exact preview is not rechecked. Finish Contacts, verify every data type against source and the privacy policy, and get owner approval before publishing.
 - **Subscriptions:** at 3:53 PM, Trust Plus and both products were `Ready for Review` and already added for review. U.S. prices were $7.99/month and $69.99/year with a seven-day trial shown across 175 selected subscription storefronts. Customer-facing localization was English (U.S.) only. The current product description says “Trust Plus: 20 seats, Always, map, year of log.” Revisit clarity and localization before broad international availability; app territory availability has not been rechecked.

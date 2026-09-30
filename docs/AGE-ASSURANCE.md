@@ -24,7 +24,7 @@ On 30 September 2026, App Store Connect showed a calculated 4+ rating but had a 
 ## Launch gaps
 
 - The current age flow does not provide a parent-managed child account or first-use parental-consent path. Do not market Trust as supporting child accounts until the audience classification and legal obligations are reviewed and any required flow is implemented.
-- Apple age-range and parental-approval scenarios have not been proven on a signed physical device. The latest known feedback remains the build-35 report from iPhone 16 Pro/iOS 27.0: “We can't complete the required check.” Build 40 was uploaded on 2026-09-30 and appears as `Testing` in the `Trust Family Auto` internal group. Retry the required-check flow on that same iPhone using build 40. The avatar and age-gate UI tests use simulator fixtures and do not exercise Apple's live age service.
+- Apple age-range and parental-approval scenarios have not been proven on a signed physical device. The latest known feedback remains the build-35 report from iPhone 16 Pro/iOS 27.0: “We can't complete the required check.” Build 41 was uploaded on 2026-09-30 at 4:38 PM PDT; Xcode reported App Store Connect is processing it. Confirm build 41 appears in the `Trust Family Auto` internal group, then retry the required-check flow on that same iPhone using build 41. The avatar and age-gate UI tests use simulator fixtures and do not exercise Apple's live age service.
 - The local six-test age-gate suite uses fixtures; it does not call Apple's live age service. See [release status](STATUS.md) and [App Store review readiness](../apps/trust-ios/AppStore/REVIEW-READINESS.md) for current build and CI evidence.
 
 ## References

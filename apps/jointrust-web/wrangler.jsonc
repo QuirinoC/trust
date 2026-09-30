@@ -17,6 +17,11 @@
   ],
   "observability": {
     "enabled": true,
-    "head_sampling_rate": 1
+    "head_sampling_rate": 1,
+    "logs": {
+      // Invite codes are path segments in /i/<code>; invocation logs include request URLs.
+      // Keep custom and error logs enabled while preventing persisted invocation URLs.
+      "invocation_logs": false
+    }
   }
 }
