@@ -285,17 +285,12 @@ public sealed class StoreKitTransactionVerifier(
             || appTransactionId.Length > 512
             || !TryGetString(payload, "bundleId", out var bundleId)
             || !string.Equals(bundleId, _options.BundleId, StringComparison.Ordinal)
-            || !TryGetString(payload, "environment", out var rawEnvironment)
-            || !TryNormalizeEnvironment(rawEnvironment, out var environment))
+            || !TryGetString(payload, "receiptType", out var rawEnvironment)
+            || !TryNormalizeEnvironment(rawEnvironment, out var environment)
+            || !TryGetUnixMilliseconds(payload, "receiptCreationDate", out var receiptCreatedAt)
+            || receiptCreatedAt > timeProvider.GetUtcNow().AddMinutes(5))
         {
             return InvalidAppTransaction("The StoreKit app transaction claims are invalid.");
-        }
-
-        if (payload.TryGetProperty("signedDate", out _)
-            && (!TryGetUnixMilliseconds(payload, "signedDate", out var signedAt)
-                || signedAt > timeProvider.GetUtcNow().AddMinutes(5)))
-        {
-            return InvalidAppTransaction("The StoreKit app transaction date is invalid.");
         }
 
         return new StoreKitAppTransactionVerificationResult(
@@ -441,6 +436,7 @@ public sealed class StoreKitTransactionVerifier(
     {
         value = default;
         if (!payload.TryGetProperty(propertyName, out var property)
+            || property.ValueKind != JsonValueKind.Number
             || !property.TryGetInt64(out var milliseconds))
         {
             return false;

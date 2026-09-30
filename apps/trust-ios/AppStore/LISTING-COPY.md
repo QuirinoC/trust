@@ -58,7 +58,7 @@ Reconfirm the primary and secondary categories, supported platforms, territory a
 
 ## Remaining release checks
 
-- **Build:** build 34 is the sole active TestFlight build, available in the automatic internal group and selected in the 1.0 draft. It uses normal phone verification. The backend is live on the reviewed source. Contacts and Device ID additions to the privacy manifest still need a new signed candidate; build 34 does not contain those additions.
+- **Build:** build 35 is the sole active TestFlight build, available in the automatic internal group and selected in the 1.0 draft. It uses normal phone verification. The backend is live on the reviewed source. Build 35 contains the reviewed Contacts and Device ID privacy manifest additions; Apple validated and processed it, and the draft selects it.
 - **Screenshots:** six current English (U.S.) images are uploaded and complete in each iPhone 6.9, iPhone 6.5, and iPad 13 set. Confirm their visible content against the final selected candidate.
 - **Privacy:** Coarse Location setup has been published. Contacts and Photos or Videos still need per-category setup and publication in App Store Connect. Email was removed because the app does not collect it. Recheck all answers against the final manifest and actual behavior.
 - **Review and distribution:** the draft is US-only with pre-order and automatic new territories disabled; release stays manual. Usable reviewer access remains unresolved. Verify paid agreements and physical purchase/restore before submission. No App Review submission has been made.

@@ -1313,6 +1313,9 @@ public static class TrustEndpoints
         var appTransaction = verifier.VerifyAppTransaction(request.SignedAppTransactionInfo);
         if (!appTransaction.IsValid)
         {
+            logger.LogWarning(
+                "Rejected Apple AppTransaction registration because verification failed: {VerificationFailure}.",
+                appTransaction.Error ?? "Unknown verification failure.");
             return Results.BadRequest(new ApiError(
                 "invalid_app_transaction",
                 appTransaction.Error ?? "The App Store transaction could not be verified."));

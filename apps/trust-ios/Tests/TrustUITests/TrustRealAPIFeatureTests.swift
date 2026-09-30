@@ -20,6 +20,14 @@ final class TrustRealAPIFeatureTests: XCTestCase {
         }
     }
 
+    override func tearDown() {
+        if api.raceProxyState()?["holding"] as? Bool == true {
+            _ = api.releaseHeldResponse()
+        }
+        api.resetRaceProxy()
+        super.tearDown()
+    }
+
     /// Paired acceptance prototype. Run this case simultaneously in two independent
     /// XCTest processes with the same pair ID and roles alice/bob. The accounts are
     /// created from their own app UI; the local API resolves the peer's public handle.
@@ -1059,6 +1067,354 @@ final class TrustRealAPIFeatureTests: XCTestCase {
         let peerAfterStop = api.member(personID: mainSession.personID, token: peerSession.token)
         XCTAssertEqual(peerAfterStop?["inboundLive"] as? Bool, false)
         XCTAssertTrue(peerAfterStop?["live"] == nil || peerAfterStop?["live"] is NSNull)
+
+    }
+
+
+    func testStopRemainsOffAcrossStaleCircleResponseAndRelaunch() throws {
+        guard api.raceProxyState() != nil else {
+            throw XCTSkip("This regression requires the loopback race proxy on port 5089, forwarding to the isolated Development API on port 5090.")
+        }
+        let fixture = try makeConnectedFixture(prefix: "stop-race")
+        defer {
+            api.deleteAccount(token: fixture.peer.token)
+            api.deleteAccount(token: fixture.main.token)
+        }
+        let connectionID = try setResting("sealed", personID: fixture.peer.personID, owner: fixture.main)
+
+        let app = launchDevelopmentApp(deviceID: fixture.mainDeviceID, displayName: fixture.mainName)
+        XCTAssertTrue(app.buttons["tab-sharing"].waitForExistence(timeout: 15))
+        app.buttons["tab-sharing"].tap()
+        let memberID = "sharing-mode-group-\(fixture.peerName.lowercased())"
+        XCTAssertTrue(app.descendants(matching: .any)[memberID].waitForExistence(timeout: 15), app.debugDescription)
+        let off = app.buttons["sharing-mode-off-\(fixture.peerName.lowercased())"]
+        XCTAssertTrue(app.buttons["sharing-mode-sealed-\(fixture.peerName.lowercased())"].isSelected)
+
+        app.buttons["tab-you"].tap()
+        XCTAssertTrue(api.armCircleRace(), "The loopback proxy must arm the held circle read.")
+        app.buttons["tab-sharing"].tap()
+        XCTAssertTrue(waitForProxyState(timeout: 8) { $0["holding"] as? Bool == true }, "Tab entry should hold the real pre-Stop circle response.")
+        off.tap()
+        let confirm = app.buttons.matching(identifier: "stop-sharing-confirm")
+        XCTAssertTrue(confirm.firstMatch.waitForExistence(timeout: 5))
+        confirm.element(boundBy: 0).tap()
+        XCTAssertTrue(waitForProxyState(timeout: 8) { ($0["share_ack_count"] as? Int ?? 0) == 1 }, "The proxy must observe the successful Stop acknowledgement before releasing the stale read.")
+        XCTAssertTrue(waitUntil(timeout: 8) { off.isSelected }, "The UI must apply the acknowledged Stop before the stale response is released.")
+        XCTAssertTrue(api.releaseHeldCircle())
+        XCTAssertTrue(waitForProxyState(timeout: 8) { ($0["stale_release_count"] as? Int ?? 0) == 1 && ($0["circle_failure_count"] as? Int ?? 0) == 1 })
+        XCTAssertTrue(waitUntil(timeout: 8) { off.isSelected }, "The acknowledged Stop must remain visibly Off after stale data and a failed refresh.")
+        XCTAssertEqual(outboundPresentation(personID: fixture.peer.personID, token: fixture.main.token), "off")
+        XCTAssertEqual(inboundPresentation(personID: fixture.main.personID, token: fixture.peer.token), "off")
+
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(app.buttons["tab-sharing"].waitForExistence(timeout: 15))
+        app.buttons["tab-you"].tap()
+        let ownHandle = app.buttons["copy-own-handle"]
+        XCTAssertTrue(ownHandle.waitForExistence(timeout: 12), "Relaunch must restore the same main account.")
+        XCTAssertEqual(ownHandle.value as? String, "@\(fixture.mainHandle)")
+        let persisted = api.memberResponse(personID: fixture.peer.personID, token: fixture.main.token)
+        XCTAssertEqual(persisted.status, 200)
+        XCTAssertNotNil(persisted.member)
+        app.buttons["tab-sharing"].tap()
+        XCTAssertTrue(app.staticTexts["sharing-intro"].waitForExistence(timeout: 12))
+        XCTAssertTrue(app.descendants(matching: .any)[memberID].waitForExistence(timeout: 12))
+        XCTAssertTrue(waitUntil(timeout: 10) { app.buttons["sharing-mode-off-\(fixture.peerName.lowercased())"].isSelected }, "The same relationship must remain Off after relaunch.")
+        XCTAssertNotEqual(connectionID, "", "The fixture should retain the connection identity it exercised.")
+    }
+
+    func testRemoveStaysAbsentAfterStaleCircleResponseAndRelaunch() throws {
+        guard api.raceProxyState() != nil else {
+            throw XCTSkip("This regression requires the loopback race proxy on port 5089, forwarding to the isolated Development API on port 5090.")
+        }
+        let fixture = try makeConnectedFixture(prefix: "remove-race")
+        defer {
+            api.deleteAccount(token: fixture.peer.token)
+            api.deleteAccount(token: fixture.main.token)
+        }
+        _ = try setResting("sealed", personID: fixture.peer.personID, owner: fixture.main)
+
+        let app = launchDevelopmentApp(deviceID: fixture.mainDeviceID, displayName: fixture.mainName)
+        XCTAssertTrue(app.buttons["tab-sharing"].waitForExistence(timeout: 15))
+        app.buttons["tab-sharing"].tap()
+        let memberID = "sharing-mode-group-\(fixture.peerName.lowercased())"
+        XCTAssertTrue(app.descendants(matching: .any)[memberID].waitForExistence(timeout: 15), app.debugDescription)
+        app.buttons["tab-you"].tap()
+        XCTAssertTrue(api.armCircleRace(), "The loopback proxy must arm the held circle read.")
+        app.buttons["tab-sharing"].tap()
+        XCTAssertTrue(waitForProxyState(timeout: 8) { $0["holding"] as? Bool == true }, "Tab entry should hold the real pre-Remove circle response.")
+
+        let actions = app.buttons["sharing-actions-\(fixture.peerName.lowercased())"]
+        XCTAssertTrue(actions.waitForExistence(timeout: 5))
+        actions.tap()
+        let remove = app.buttons["remove-person-action-\(fixture.peerName.lowercased())"]
+        XCTAssertTrue(remove.waitForExistence(timeout: 5))
+        remove.tap()
+        let confirm = app.buttons.matching(identifier: "remove-person-confirm")
+        XCTAssertTrue(confirm.firstMatch.waitForExistence(timeout: 5))
+        confirm.element(boundBy: 0).tap()
+        XCTAssertTrue(waitForProxyState(timeout: 8) { ($0["revoke_ack_count"] as? Int ?? 0) == 1 }, "The proxy must observe the successful Remove acknowledgement before releasing the stale read.")
+        XCTAssertTrue(waitUntil(timeout: 8) { !app.descendants(matching: .any)[memberID].exists }, "The UI must apply the acknowledged Remove before the stale response is released.")
+        XCTAssertTrue(api.releaseHeldCircle())
+        XCTAssertTrue(waitForProxyState(timeout: 8) { ($0["stale_release_count"] as? Int ?? 0) == 1 && ($0["circle_failure_count"] as? Int ?? 0) == 1 })
+        XCTAssertTrue(waitUntil(timeout: 8) { !app.descendants(matching: .any)[memberID].exists }, "The acknowledged Remove must stay absent after stale data and a failed refresh.")
+        XCTAssertNil(api.memberResponse(personID: fixture.peer.personID, token: fixture.main.token).member)
+        XCTAssertNil(api.memberResponse(personID: fixture.main.personID, token: fixture.peer.token).member)
+
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(app.buttons["tab-sharing"].waitForExistence(timeout: 15))
+        app.buttons["tab-you"].tap()
+        let ownHandle = app.buttons["copy-own-handle"]
+        XCTAssertTrue(ownHandle.waitForExistence(timeout: 12), "Relaunch must restore the same main account.")
+        XCTAssertEqual(ownHandle.value as? String, "@\(fixture.mainHandle)")
+        XCTAssertNil(api.memberResponse(personID: fixture.peer.personID, token: fixture.main.token).member)
+        XCTAssertNil(api.memberResponse(personID: fixture.main.personID, token: fixture.peer.token).member)
+        app.buttons["tab-sharing"].tap()
+        XCTAssertTrue(app.staticTexts["sharing-intro"].waitForExistence(timeout: 12))
+        XCTAssertTrue(waitUntil(timeout: 12) { !app.descendants(matching: .any)[memberID].exists }, "The removed relationship must remain absent after relaunch.")
+    }
+
+    func testStopAllKeepsAcknowledgedOffAndFailedPeerSealedAfterRelaunch() throws {
+        guard api.raceProxyState() != nil else {
+            throw XCTSkip("This regression requires the loopback fault proxy on port 5089, forwarding to the isolated Development API on port 5090.")
+        }
+        let suffix = UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
+        let mainName = "AllMain\(suffix.prefix(5))"
+        let mainDeviceID = "trust-stop-all-main-\(suffix)"
+        let mainHandle = "sa\(suffix.prefix(8))"
+        let phones = Array(LocalTrustAPI.reservedPhonePool().shuffled().prefix(3))
+        let main = try makeTestAccount(displayName: mainName, deviceID: mainDeviceID, handle: mainHandle, phone: "+1\(phones[0])")
+        let firstName = "AllAlpha\(suffix.prefix(5))"
+        let secondName = "AllZulu\(suffix.prefix(5))"
+        let first = try makeTestAccount(displayName: firstName, deviceID: "trust-stop-all-alpha-\(suffix)", handle: "aa\(suffix.prefix(8))", phone: "+1\(phones[1])")
+        let second = try makeTestAccount(displayName: secondName, deviceID: "trust-stop-all-zulu-\(suffix)", handle: "az\(suffix.prefix(8))", phone: "+1\(phones[2])")
+        defer {
+            api.deleteAccount(token: second.token)
+            api.deleteAccount(token: first.token)
+            api.deleteAccount(token: main.token)
+        }
+        try connect(main, to: first)
+        try connect(main, to: second)
+        _ = try setResting("sealed", personID: first.personID, owner: main)
+        _ = try setResting("sealed", personID: second.personID, owner: main)
+
+        let app = launchDevelopmentApp(deviceID: mainDeviceID, displayName: mainName)
+        XCTAssertTrue(app.buttons["tab-sharing"].waitForExistence(timeout: 15))
+        app.buttons["tab-sharing"].tap()
+        let firstID = "sharing-mode-group-\(firstName.lowercased())"
+        let secondID = "sharing-mode-group-\(secondName.lowercased())"
+        XCTAssertTrue(app.descendants(matching: .any)[firstID].waitForExistence(timeout: 15), app.debugDescription)
+        XCTAssertTrue(app.descendants(matching: .any)[secondID].waitForExistence(timeout: 15), app.debugDescription)
+
+        XCTAssertTrue(api.armStopAllFailure(), "The proxy must fail the second share write after acknowledging the first.")
+        let stopAll = app.buttons["stop-all-sharing"]
+        XCTAssertTrue(scrollUpUntilHittable(stopAll, in: app), "Stop All should be reachable in Sharing.\n\(app.debugDescription)")
+        stopAll.tap()
+        let confirm = app.buttons.matching(identifier: "stop-all-sharing-confirm")
+        XCTAssertTrue(confirm.firstMatch.waitForExistence(timeout: 5))
+        // SwiftUI can expose two automation aliases for this one alert action.
+        confirm.element(boundBy: 0).tap()
+        XCTAssertTrue(waitForProxyState(timeout: 12) {
+            ($0["share_ack_count"] as? Int ?? 0) == 1 && ($0["share_failure_count"] as? Int ?? 0) == 1
+        }, "Stop All should receive one server acknowledgement and one injected write failure. Proxy state: \(api.raceProxyState() ?? [:])")
+
+        let state = try XCTUnwrap(api.raceProxyState())
+        let acknowledgedID = try XCTUnwrap((state["share_ack_person_ids"] as? [String])?.first)
+        let failedID = try XCTUnwrap((state["share_failed_person_ids"] as? [String])?.first)
+        let acknowledgedIDKey = acknowledgedID.lowercased()
+        let failedIDKey = failedID.lowercased()
+        let firstIDKey = first.personID.lowercased()
+        let secondIDKey = second.personID.lowercased()
+        XCTAssertNotEqual(acknowledgedIDKey, failedIDKey)
+        let acknowledgedName = acknowledgedIDKey == firstIDKey ? firstName : secondName
+        let failedName = failedIDKey == firstIDKey ? firstName : secondName
+        let acknowledgedFixtureID = acknowledgedIDKey == firstIDKey ? first.personID : second.personID
+        let failedFixtureID = failedIDKey == firstIDKey ? first.personID : second.personID
+        XCTAssertTrue([firstIDKey, secondIDKey].contains(acknowledgedIDKey), "ACK id \(acknowledgedID) should identify one of the fixture people.")
+        XCTAssertTrue([firstIDKey, secondIDKey].contains(failedIDKey), "Failed id \(failedID) should identify one of the fixture people.")
+        XCTAssertEqual(outboundPresentation(personID: acknowledgedFixtureID, token: main.token), "off")
+        XCTAssertEqual(outboundPresentation(personID: failedFixtureID, token: main.token), "untilTheyLook")
+        XCTAssertTrue(waitUntil(timeout: 12) { app.buttons["sharing-mode-off-\(acknowledgedName.lowercased())"].isSelected }, "The acknowledged member must be Off after Stop All reconciliation.")
+        XCTAssertTrue(app.buttons["sharing-mode-sealed-\(failedName.lowercased())"].isSelected, "The failed member must stay Sealed instead of being optimistically shown Off.")
+
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(app.buttons["tab-sharing"].waitForExistence(timeout: 15))
+        app.buttons["tab-you"].tap()
+        let ownHandle = app.buttons["copy-own-handle"]
+        XCTAssertTrue(ownHandle.waitForExistence(timeout: 12))
+        XCTAssertEqual(ownHandle.value as? String, "@\(mainHandle)")
+        app.buttons["tab-sharing"].tap()
+        XCTAssertTrue(app.staticTexts["sharing-intro"].waitForExistence(timeout: 12))
+        XCTAssertTrue(waitUntil(timeout: 12) { app.buttons["sharing-mode-off-\(acknowledgedName.lowercased())"].isSelected }, "The acknowledged Off state must survive relaunch.")
+        XCTAssertTrue(waitUntil(timeout: 12) { app.buttons["sharing-mode-sealed-\(failedName.lowercased())"].isSelected }, "The failed Sealed state must survive relaunch.")
+        XCTAssertEqual(outboundPresentation(personID: acknowledgedFixtureID, token: main.token), "off")
+        XCTAssertEqual(outboundPresentation(personID: failedFixtureID, token: main.token), "untilTheyLook")
+    }
+
+    func testDelayedLookResponseIsDiscardedAfterReplacementRelationship() throws {
+        guard api.raceProxyState() != nil else {
+            throw XCTSkip("This regression requires the loopback fault proxy on port 5089, forwarding to the isolated Development API on port 5090.")
+        }
+        let fixture = try makeConnectedFixture(prefix: "look-race")
+        defer {
+            api.deleteAccount(token: fixture.peer.token)
+            api.deleteAccount(token: fixture.main.token)
+        }
+        _ = try setResting("sealed", personID: fixture.main.personID, owner: fixture.peer)
+        let oldConnectionID = try XCTUnwrap(activeConnectionID(personID: fixture.main.personID, token: fixture.peer.token))
+        XCTAssertEqual(uploadTestLocation(points: makeLocationPoints(count: 1), token: fixture.peer.token), 204)
+
+        let app = launchDevelopmentApp(deviceID: fixture.mainDeviceID, displayName: fixture.mainName)
+        XCTAssertTrue(app.buttons["tab-circle"].waitForExistence(timeout: 15))
+        let row = app.buttons["person-row-\(fixture.peerName.lowercased())"]
+        XCTAssertTrue(row.waitForExistence(timeout: 15), app.debugDescription)
+        row.tap()
+        let lookAction = app.buttons["person-profile-peek"]
+        XCTAssertTrue(lookAction.waitForExistence(timeout: 12), "The Sealed person screen should offer a Look action.")
+        XCTAssertTrue(api.armLookRace(), "Arm the proxy to capture the Look response body.")
+        lookAction.tap()
+        let confirm = app.buttons["confirm-look-notify"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 8))
+        confirm.tap()
+        XCTAssertTrue(waitForProxyState(timeout: 12) { $0["holding"] as? Bool == true && $0["held_resource"] as? String == "look" }, "Confirming Look should start the held response.")
+        XCTAssertTrue(waitUntil(timeout: 8) { self.api.hasLookEvent(subjectID: fixture.peer.personID, token: fixture.main.token) }, "The server should process the Look before its sensitive response is released.")
+
+        let replacementConnectionID = try replaceConnection(subject: fixture.peer, viewer: fixture.main, newShare: "sealed")
+        XCTAssertNotEqual(replacementConnectionID, oldConnectionID, "Re-adding must create a different relationship identity.")
+        XCTAssertEqual(inboundPresentation(personID: fixture.peer.personID, token: fixture.main.token), "untilTheyLook")
+        XCTAssertTrue(api.releaseHeldResponse(), "Release the old Look response after the server has replaced the relationship.")
+        XCTAssertTrue(waitForProxyState(timeout: 8) { ($0["look_release_count"] as? Int ?? 0) == 1 })
+        XCTAssertTrue(waitUntil(timeout: 8) { !app.buttons["confirm-look-notify"].exists }, "The app must finish handling the delayed Look before the result is checked.")
+        Thread.sleep(forTimeInterval: 0.5) // AppModel delays navigation by 320 ms after a valid Look.
+        XCTAssertFalse(app.buttons["view-open-map"].exists, "A delayed snapshot from the removed relationship must not open on its replacement.")
+        XCTAssertEqual(try XCTUnwrap(activeConnectionID(personID: fixture.main.personID, token: fixture.peer.token)), replacementConnectionID)
+        XCTAssertEqual(api.memberResponse(personID: fixture.peer.personID, token: fixture.main.token).status, 200)
+
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(app.buttons["tab-you"].waitForExistence(timeout: 15))
+        app.buttons["tab-you"].tap()
+        let ownHandle = app.buttons["copy-own-handle"]
+        XCTAssertTrue(ownHandle.waitForExistence(timeout: 12))
+        XCTAssertEqual(ownHandle.value as? String, "@\(fixture.mainHandle)")
+        app.buttons["tab-circle"].tap()
+        let relaunchedRow = app.buttons["person-row-\(fixture.peerName.lowercased())"]
+        XCTAssertTrue(relaunchedRow.waitForExistence(timeout: 12))
+        relaunchedRow.tap()
+        XCTAssertTrue(app.buttons["person-profile-peek"].waitForExistence(timeout: 12))
+        XCTAssertFalse(app.buttons["view-open-map"].exists, "Relaunch must not reveal a snapshot retained from the prior relationship.")
+    }
+
+    private func makeConnectedFixture(prefix: String) throws -> ConnectedTestFixture {
+        let suffix = UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
+        let mainName = "RaceMain\(suffix.prefix(6))"
+        let peerName = "RacePeer\(suffix.prefix(6))"
+        let mainDeviceID = "trust-\(prefix)-main-\(suffix)"
+        let peerDeviceID = "trust-\(prefix)-peer-\(suffix)"
+        let handles = ("ma\(suffix.prefix(8))", "pe\(suffix.prefix(8))")
+        let phones = Array(LocalTrustAPI.reservedPhonePool().shuffled().prefix(2))
+        let main = try makeTestAccount(displayName: mainName, deviceID: mainDeviceID, handle: handles.0, phone: "+1\(phones[0])")
+        let peer = try makeTestAccount(displayName: peerName, deviceID: peerDeviceID, handle: handles.1, phone: "+1\(phones[1])")
+        try connect(main, to: peer)
+        return ConnectedTestFixture(main: main, peer: peer, mainName: mainName, peerName: peerName, mainDeviceID: mainDeviceID, mainHandle: handles.0)
+    }
+
+    private func makeTestAccount(displayName: String, deviceID: String, handle: String, phone: String) throws -> DisposableSession {
+        let session = try XCTUnwrap(api.developmentSession(name: displayName, deviceID: deviceID))
+        XCTAssertEqual(api.putHandle(handle, token: session.token), 204)
+        XCTAssertTrue(api.verifyPhone(phone: phone, token: session.token), "The fixture phone must be verified through the Development OTP path.")
+        return session
+    }
+
+    private func connect(_ requester: DisposableSession, to recipient: DisposableSession) throws {
+        let request = api.request("POST", "/api/v1/connection-requests", token: requester.token, body: ["recipientId": recipient.personID])
+        XCTAssertEqual(request.status, 200)
+        let requestID = try XCTUnwrap((request.json as? [String: Any])?["id"] as? String)
+        XCTAssertEqual(api.request("POST", "/api/v1/connection-requests/\(requestID)/accept", token: recipient.token).status, 204)
+    }
+
+    private func replaceConnection(subject: DisposableSession, viewer: DisposableSession, newShare: String) throws -> String {
+        let oldConnectionID = try XCTUnwrap(activeConnectionID(personID: viewer.personID, token: subject.token))
+        _ = try setResting("off", personID: viewer.personID, owner: subject)
+        let removed = api.request(
+            "POST",
+            "/api/v1/people/\(viewer.personID)/revoke",
+            token: subject.token,
+            body: ["connectionId": oldConnectionID]
+        )
+        XCTAssertEqual(removed.status, 204, "The peer should remove the old relationship through the real API.")
+        try connect(viewer, to: subject)
+        let newConnectionID = try XCTUnwrap(activeConnectionID(personID: viewer.personID, token: subject.token))
+        XCTAssertNotEqual(newConnectionID, oldConnectionID)
+        _ = try setResting(newShare, personID: viewer.personID, owner: subject)
+        return newConnectionID
+    }
+
+    private func makeLocationPoints(count: Int) -> [[String: Any]] {
+        let now = Date()
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return (0..<count).map { index in
+            [
+                "timestamp": formatter.string(from: now.addingTimeInterval(TimeInterval(-120 * index))),
+                "latitude": 47.60 + Double(index) * 0.001,
+                "longitude": -122.33 - Double(index) * 0.001
+            ]
+        }
+    }
+
+    private func uploadTestLocation(points: [[String: Any]], token: String) -> Int {
+        guard let current = points.first,
+              let timestamp = current["timestamp"],
+              let latitude = current["latitude"],
+              let longitude = current["longitude"] else { return 0 }
+        return api.request(
+            "POST",
+            "/api/v1/location",
+            token: token,
+            body: [
+                "timestamp": timestamp,
+                "latitude": latitude,
+                "longitude": longitude,
+                "batteryPercent": 75,
+                "isCharging": false,
+                "points": points
+            ]
+        ).status
+    }
+
+    @discardableResult
+    private func setResting(_ resting: String, personID: String, owner: DisposableSession) throws -> String {
+        let connectionID = try XCTUnwrap(activeConnectionID(personID: personID, token: owner.token))
+        let revision = try XCTUnwrap(activeShareRevision(personID: personID, token: owner.token))
+        XCTAssertEqual(api.request(
+            "PATCH",
+            "/api/v1/people/\(personID)/share",
+            token: owner.token,
+            body: ["connectionId": connectionID, "revision": revision, "resting": resting]
+        ).status, 204)
+        return connectionID
+    }
+
+    private func launchDevelopmentApp(deviceID: String, displayName: String) -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchEnvironment["TRUST_BASE_URL"] = LocalTrustAPI.baseURL
+        app.launchEnvironment["TRUST_STRICT_API"] = "1"
+        app.launchEnvironment["TRUST_UI_TEST"] = "1"
+        app.launchEnvironment["TRUST_UI_TEST_DEVICE_ID"] = deviceID
+        app.launchEnvironment["TRUST_UI_TEST_DISPLAY_NAME"] = displayName
+        app.launchEnvironment["TRUST_DEV_SESSION"] = "1"
+        app.launch()
+        return app
+    }
+
+    private func waitForProxyState(timeout: TimeInterval, condition: ([String: Any]) -> Bool) -> Bool {
+        waitUntil(timeout: timeout) {
+            guard let state = self.api.raceProxyState() else { return false }
+            return condition(state)
+        }
     }
 
     private func inboundPresentation(personID: String, token: String) -> String? {
@@ -1213,9 +1569,22 @@ private struct DisposableSession {
     let personID: String
 }
 
+private struct ConnectedTestFixture {
+    let main: DisposableSession
+    let peer: DisposableSession
+    let mainName: String
+    let peerName: String
+    let mainDeviceID: String
+    let mainHandle: String
+}
+
 /// XCTest runner helper that has no configurable host: every operation stays on loopback.
 private final class LocalTrustAPI {
-    static var baseURL: String { ProcessInfo.processInfo.environment["TRUST_UI_TEST_BASE_URL"] ?? "" }
+    static var baseURL: String {
+        ProcessInfo.processInfo.environment["TRUST_UI_TEST_BASE_URL"]
+            ?? UserDefaults.standard.string(forKey: "TRUST_UI_TEST_BASE_URL")
+            ?? ""
+    }
     private var base: URL? { URL(string: Self.baseURL) }
     var hasSafeConfiguration: Bool {
         guard let base,
@@ -1232,6 +1601,38 @@ private final class LocalTrustAPI {
     func healthIsAvailable() -> Bool {
         let result = request("GET", "/health/live")
         return (200..<300).contains(result.status)
+    }
+
+    func raceProxyState() -> [String: Any]? {
+        request("GET", "/__test/state").json as? [String: Any]
+    }
+
+    func armCircleRace() -> Bool {
+        (200..<300).contains(request("POST", "/__test/arm", body: [:]).status)
+    }
+
+    func armHistoryRace() -> Bool {
+        (200..<300).contains(request("POST", "/__test/arm-history", body: [:]).status)
+    }
+
+    func armLookRace() -> Bool {
+        (200..<300).contains(request("POST", "/__test/arm-look", body: [:]).status)
+    }
+
+    func armStopAllFailure() -> Bool {
+        (200..<300).contains(request("POST", "/__test/arm-stop-all", body: [:]).status)
+    }
+
+    func releaseHeldCircle() -> Bool {
+        (200..<300).contains(request("POST", "/__test/release", body: [:]).status)
+    }
+
+    func releaseHeldResponse() -> Bool {
+        (200..<300).contains(request("POST", "/__test/release", body: [:]).status)
+    }
+
+    func resetRaceProxy() {
+        _ = request("POST", "/__test/reset", body: [:])
     }
 
     func developmentOTPWithoutSMSIsEnabled() -> Bool {

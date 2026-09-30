@@ -1,9 +1,16 @@
+using System.Net;
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.Json;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using TrustApi.Configuration;
+using TrustApi.Infrastructure.AgeAssurance;
 using TrustApi.Infrastructure.StoreKit;
 
 namespace TrustApi.Tests;
@@ -89,6 +96,183 @@ public sealed class StoreKitTransactionVerifierTests
         Assert.Equal("The signed StoreKit payload has an invalid JWS header.", result.Error);
     }
 
+    [Theory]
+    [InlineData("Sandbox")]
+    [InlineData("Production")]
+    public void VerifyAppTransactionAcceptsOfficialReceiptClaims(string receiptType)
+    {
+        using var certificates = TestCertificates.Create();
+        var verifier = CreateVerifier(certificates, ["Sandbox", "Production"]);
+        const string appTransactionId = "apple-app-transaction-123";
+        var receiptCreationDate = DateTimeOffset.UtcNow.AddMinutes(-1);
+        var appTransaction = CreateSignedPayload(certificates, new
+        {
+            appTransactionId,
+            bundleId = BundleId,
+            receiptType,
+            receiptCreationDate = receiptCreationDate.ToUnixTimeMilliseconds()
+        });
+
+        var result = verifier.VerifyAppTransaction(appTransaction);
+
+        Assert.True(result.IsValid, result.Error);
+        Assert.Equal(appTransactionId, result.AppTransaction?.AppTransactionId);
+        Assert.Equal(receiptType, result.AppTransaction?.Environment);
+    }
+
+    [Fact]
+    public void VerifyAppTransactionRejectsEnvironmentAliasWithoutReceiptType()
+    {
+        using var certificates = TestCertificates.Create();
+        var verifier = CreateVerifier(certificates, ["Sandbox", "Production"]);
+        var appTransaction = CreateSignedPayload(certificates, new
+        {
+            appTransactionId = "apple-app-transaction-123",
+            bundleId = BundleId,
+            environment = "Sandbox",
+            signedDate = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+        });
+
+        var result = verifier.VerifyAppTransaction(appTransaction);
+
+        Assert.False(result.IsValid);
+        Assert.Null(result.AppTransaction);
+    }
+
+    [Fact]
+    public void VerifyAppTransactionRejectsInvalidOfficialClaimsAndSignature()
+    {
+        using var certificates = TestCertificates.Create();
+        var verifier = CreateVerifier(certificates, ["Sandbox", "Production"]);
+        var validCreationDate = DateTimeOffset.UtcNow.AddMinutes(-1).ToUnixTimeMilliseconds();
+        var invalidPayloads = new object[]
+        {
+            new Dictionary<string, object?>
+            {
+                ["appTransactionId"] = "apple-app-transaction-123",
+                ["bundleId"] = BundleId,
+                ["receiptCreationDate"] = validCreationDate
+            },
+            new Dictionary<string, object?>
+            {
+                ["appTransactionId"] = "apple-app-transaction-123",
+                ["bundleId"] = BundleId,
+                ["receiptType"] = 7,
+                ["receiptCreationDate"] = validCreationDate
+            },
+            new Dictionary<string, object?>
+            {
+                ["appTransactionId"] = "apple-app-transaction-123",
+                ["bundleId"] = BundleId,
+                ["receiptType"] = "Xcode",
+                ["receiptCreationDate"] = validCreationDate
+            },
+            new Dictionary<string, object?>
+            {
+                ["appTransactionId"] = "apple-app-transaction-123",
+                ["bundleId"] = "com.example.other",
+                ["receiptType"] = "Sandbox",
+                ["receiptCreationDate"] = validCreationDate
+            },
+            new Dictionary<string, object?>
+            {
+                ["appTransactionId"] = "apple-app-transaction-123",
+                ["bundleId"] = BundleId,
+                ["receiptType"] = "Sandbox"
+            },
+            new Dictionary<string, object?>
+            {
+                ["appTransactionId"] = "apple-app-transaction-123",
+                ["bundleId"] = BundleId,
+                ["receiptType"] = "Sandbox",
+                ["receiptCreationDate"] = "not-a-timestamp"
+            },
+            new Dictionary<string, object?>
+            {
+                ["appTransactionId"] = "apple-app-transaction-123",
+                ["bundleId"] = BundleId,
+                ["receiptType"] = "Sandbox",
+                ["receiptCreationDate"] = long.MaxValue
+            },
+            new Dictionary<string, object?>
+            {
+                ["appTransactionId"] = "apple-app-transaction-123",
+                ["bundleId"] = BundleId,
+                ["receiptType"] = "Sandbox",
+                ["receiptCreationDate"] = DateTimeOffset.UtcNow.AddMinutes(6).ToUnixTimeMilliseconds()
+            }
+        };
+
+        foreach (var payload in invalidPayloads)
+        {
+            var result = verifier.VerifyAppTransaction(CreateSignedPayload(certificates, payload));
+            Assert.False(result.IsValid);
+            Assert.Null(result.AppTransaction);
+        }
+
+        var signedAppTransaction = CreateSignedPayload(certificates, new
+        {
+            appTransactionId = "apple-app-transaction-123",
+            bundleId = BundleId,
+            receiptType = "Sandbox",
+            receiptCreationDate = validCreationDate
+        });
+        var segments = signedAppTransaction.Split('.');
+        segments[2] = (segments[2][0] == 'A' ? 'B' : 'A') + segments[2][1..];
+
+        var badSignatureResult = verifier.VerifyAppTransaction(string.Join('.', segments));
+
+        Assert.False(badSignatureResult.IsValid);
+        Assert.Null(badSignatureResult.AppTransaction);
+    }
+
+    [Fact]
+    public async Task AppTransactionEndpointAcceptsOfficialSignedPayload()
+    {
+        using var certificates = TestCertificates.Create();
+        var verifier = CreateVerifier(certificates, ["Sandbox", "Production"]);
+        using var factory = new TrustApiFactory();
+        using var configuredFactory = factory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureTestServices(services =>
+            {
+                services.RemoveAll<IStoreKitTransactionVerifier>();
+                services.AddSingleton<IStoreKitTransactionVerifier>(verifier);
+            });
+        });
+        using var client = configuredFactory.CreateClient();
+
+        using var sessionResponse = await client.PostAsJsonAsync("/api/v1/session/development", new
+        {
+            displayName = "Migration Fixture",
+            deviceId = Guid.NewGuid().ToString("N")
+        });
+        sessionResponse.EnsureSuccessStatusCode();
+        using var session = JsonDocument.Parse(await sessionResponse.Content.ReadAsStringAsync());
+        var token = session.RootElement.GetProperty("token").GetString();
+        var accountId = session.RootElement.GetProperty("you").GetProperty("id").GetGuid();
+        Assert.False(string.IsNullOrWhiteSpace(token));
+
+        using var request = new HttpRequestMessage(HttpMethod.Put, "/api/v1/age-assurance/app-transaction");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        request.Content = JsonContent.Create(new
+        {
+            signedAppTransactionInfo = CreateSignedPayload(certificates, new
+            {
+                appTransactionId = "synthetic-app-transaction-registration",
+                bundleId = BundleId,
+                receiptType = "Sandbox",
+                receiptCreationDate = DateTimeOffset.UtcNow.AddMinutes(-1).ToUnixTimeMilliseconds()
+            })
+        });
+
+        using var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Assert.True(await configuredFactory.Services.GetRequiredService<IAgeAssuranceAccountStore>()
+            .HasAppTransactionLinkAsync(accountId, CancellationToken.None));
+    }
+
     [Fact]
     public void VerifyNotificationAcceptsSignedNestedTransaction()
     {
@@ -154,8 +338,8 @@ public sealed class StoreKitTransactionVerifierTests
         {
             appTransactionId,
             bundleId = BundleId,
-            environment = "Sandbox",
-            signedDate = DateTimeOffset.UtcNow.AddMinutes(-1).ToUnixTimeMilliseconds()
+            receiptType = "Sandbox",
+            receiptCreationDate = DateTimeOffset.UtcNow.AddMinutes(-1).ToUnixTimeMilliseconds()
         });
         var notificationId = Guid.NewGuid();
         var signedAt = DateTimeOffset.UtcNow.AddSeconds(-10);
@@ -193,7 +377,8 @@ public sealed class StoreKitTransactionVerifierTests
         {
             appTransactionId = "apple-app-transaction-123",
             bundleId = "com.example.other",
-            environment = "Sandbox"
+            receiptType = "Sandbox",
+            receiptCreationDate = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
         });
         var notification = CreateSignedPayload(certificates, new
         {
@@ -215,7 +400,41 @@ public sealed class StoreKitTransactionVerifierTests
         Assert.Null(result.RevokedAppTransaction);
     }
 
-    private static StoreKitTransactionVerifier CreateVerifier(TestCertificates certificates) =>
+    [Fact]
+    public void VerifyNotificationRejectsConsentRevocationWithMismatchedReceiptType()
+    {
+        using var certificates = TestCertificates.Create();
+        var verifier = CreateVerifier(certificates, ["Sandbox", "Production"]);
+        var appTransaction = CreateSignedPayload(certificates, new
+        {
+            appTransactionId = "apple-app-transaction-123",
+            bundleId = BundleId,
+            receiptType = "Production",
+            receiptCreationDate = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+        });
+        var notification = CreateSignedPayload(certificates, new
+        {
+            version = "2.0",
+            signedDate = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+            notificationType = "RESCIND_CONSENT",
+            notificationUUID = Guid.NewGuid(),
+            appData = new
+            {
+                bundleId = BundleId,
+                environment = "Sandbox",
+                signedAppTransactionInfo = appTransaction
+            }
+        });
+
+        var result = verifier.VerifyNotification(notification);
+
+        Assert.False(result.IsValid);
+        Assert.Null(result.RevokedAppTransaction);
+    }
+
+    private static StoreKitTransactionVerifier CreateVerifier(
+        TestCertificates certificates,
+        string[]? allowedEnvironments = null) =>
         new(
             Options.Create(new StoreKitOptions
             {
@@ -227,7 +446,7 @@ public sealed class StoreKitTransactionVerifierTests
                 [
                     Convert.ToBase64String(certificates.Root.Export(X509ContentType.Cert))
                 ],
-                AllowedEnvironments = ["Sandbox"]
+                AllowedEnvironments = allowedEnvironments ?? ["Sandbox"]
             }),
             TimeProvider.System);
 
