@@ -11,7 +11,9 @@ enum ProfileAvatarArtwork {
 
     static var pickerPresetIDs: [String] { pickerGroups.flatMap(\.ids) }
 
-    static let paper = Color(red: 0.99, green: 0.98, blue: 0.95)
+    static func backingColor(for colorScheme: ColorScheme) -> Color {
+        Color(hex: AvatarArtworkPalette.backingHex(isDarkAppearance: colorScheme == .dark))
+    }
 
     static func isSleepyPreset(_ id: String) -> Bool {
         pickerPresetIDs.contains(id)
@@ -71,6 +73,27 @@ enum ProfileAvatarArtwork {
     }
 }
 
+/// Shared circular background and crop for every preset avatar placement.
+struct ProfileAvatarPresetIcon: View {
+    let preset: String
+    let size: CGFloat
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        ZStack {
+            Circle().fill(ProfileAvatarArtwork.backingColor(for: colorScheme))
+            Image(ProfileAvatarArtwork.assetName(for: preset))
+                .resizable()
+                .scaledToFill()
+                .frame(width: size, height: size)
+                .scaleEffect(ProfileAvatarArtwork.displayScale(for: preset))
+                .frame(width: size, height: size)
+        }
+        .frame(width: size, height: size)
+        .clipShape(Circle())
+    }
+}
+
 /// Profile picture disc with initials fallback (`.avatar`). Fill is stable per person.
 struct TrustAvatar: View {
     let name: String
@@ -84,17 +107,19 @@ struct TrustAvatar: View {
 
     var body: some View {
         ZStack {
-            Circle().fill(avatarFill)
             if let preset = avatar?.knownPresetID {
-                presetGlyph(preset)
-            } else if let photo {
-                Image(uiImage: photo)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: size, height: size)
-                    .clipped()
+                ProfileAvatarPresetIcon(preset: preset, size: size)
             } else {
-                initials
+                Circle().fill(avatarFill)
+                if let photo {
+                    Image(uiImage: photo)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: size, height: size)
+                        .clipped()
+                } else {
+                    initials
+                }
             }
         }
             .frame(width: size, height: size)
@@ -126,18 +151,7 @@ struct TrustAvatar: View {
         "\(resolvedPersonID.uuidString)-\(avatar?.version ?? "")"
     }
 
-    private func presetGlyph(_ preset: String) -> some View {
-        return Image(ProfileAvatarArtwork.assetName(for: preset))
-            .resizable()
-            .scaledToFill()
-            .frame(width: size, height: size)
-            .scaleEffect(ProfileAvatarArtwork.displayScale(for: preset))
-    }
-
     private var avatarFill: Color {
-        if let preset = avatar?.knownPresetID, ProfileAvatarArtwork.isSleepyPreset(preset) {
-            return ProfileAvatarArtwork.paper
-        }
         switch abs(seed) % 4 {
         case 0: return palette.accentSoft
         case 1: return palette.sage

@@ -259,14 +259,7 @@ struct ProfileAvatarPicker: View {
     }
 
     private func presetIcon(_ id: String, size: CGFloat) -> some View {
-        return Image(ProfileAvatarArtwork.assetName(for: id))
-            .resizable()
-            .scaledToFill()
-            .frame(width: size, height: size)
-            .scaleEffect(ProfileAvatarArtwork.displayScale(for: id))
-            .frame(width: size, height: size)
-            .background(Circle().fill(ProfileAvatarArtwork.paper))
-            .clipShape(Circle())
+        ProfileAvatarPresetIcon(preset: id, size: size)
     }
 
     private func selectPreset(_ id: String) {
