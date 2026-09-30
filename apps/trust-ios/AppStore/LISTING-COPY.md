@@ -1,6 +1,6 @@
 # App Store listing copy
 
-**App Store Connect draft last verified 2026-09-30; not submitted for review.** The English (U.S.) draft description was saved with qualified notification language, and version 1.0 now selects build 40 and the current icon. Recheck the full listing before submission. Public release gates remain open.
+**App Store Connect listing last directly observed 2026-09-30; not submitted for review.** The English (U.S.) draft description was saved with qualified notification language, and version 1.0 selected build 40 and the current icon at the last listing check. The listing page was not re-opened during the latest session; recheck all saved fields and availability before submission. Public release gates remain open.
 
 ## Current English (U.S.) draft metadata
 
@@ -59,9 +59,10 @@ Reconfirm the primary and secondary categories, supported platforms, territory a
 ## Remaining release checks
 
 - **Build:** Build 40 is uploaded and appears as `Testing` in `Trust Family Auto`, which has three testers and automatic Xcode-build distribution enabled. The last known physical iPhone 16 Pro feedback on build 35 says “We can't complete the required check”; retry it on build 40.
-- **Screenshots:** App Store Connect currently shows six ordered screenshots in each iPhone 6.9-inch, iPhone 6.5-inch, and iPad 13-inch group. The live 6.5-inch map image matches the local source. Recheck the full set against the final release candidate.
-- **Privacy:** the published App Privacy label still reflects its previous data types. Contacts and Photos or Videos have been selected in the edit flow; Contacts is configured as app functionality, linked to identity, and not used for tracking. Finish Photos or Videos, verify all answers against source and the privacy policy, then publish the label.
-- **Review and distribution:** the draft is US-only with pre-order and automatic new territories disabled; release stays manual. Usable reviewer access remains unresolved. Verify paid agreements and physical purchase/restore before submission. No App Review submission has been made.
+- **Screenshots:** the last App Store Connect observation showed six ordered screenshots in each iPhone 6.9-inch, iPhone 6.5-inch, and iPad 13-inch group. The live 6.5-inch map image matched the local source. Recheck the full set against the final release candidate.
+- **Privacy:** the last draft inspection at 3:43 PM PDT showed the published App Privacy label unchanged; Photos or Videos was configured for App Functionality, linked to identity, and not tracked, with its wizard at Publish. Contacts setup was incomplete. The browser URL guard stopped a later attempt to reopen the privacy tab, so the exact preview is not rechecked. Finish Contacts, verify every data type against source and the privacy policy, and get owner approval before publishing.
+- **Subscriptions:** at 3:53 PM, Trust Plus and both products were `Ready for Review` and already added for review. U.S. prices were $7.99/month and $69.99/year with a seven-day trial shown across 175 selected subscription storefronts. Customer-facing localization was English (U.S.) only. The current product description says “Trust Plus: 20 seats, Always, map, year of log.” Revisit clarity and localization before broad international availability; app territory availability has not been rechecked.
+- **Review and distribution:** the last listing observation recorded US-only availability, pre-order and automatic new territories disabled, and manual release. Recheck live before submission. Usable reviewer access remains unresolved. Verify paid agreements and physical purchase/restore before submission. No App Review submission has been made.
 - **Age assurance and legal:** the app uses Apple-signaled age and significant-update flows on supported OS versions. The App Store questionnaire now declares age-assurance use. Audience classification and launch-market obligations still need legal review; see [AGE-ASSURANCE.md](../../../docs/AGE-ASSURANCE.md). Confirm SMS consent and subscription terms against the shipped behavior.
 - **Beta website:** the current beta link opens an email draft. It is not a waitlist or public App Store download link.
 
