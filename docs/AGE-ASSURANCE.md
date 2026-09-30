@@ -20,7 +20,7 @@ For the planned U.S.-only launch, FTC guidance says COPPA applies to child-direc
 ## Launch gaps
 
 - The current age flow does not provide a parent-managed child account or first-use parental-consent path. Do not market Trust as supporting child accounts until the audience classification and legal obligations are reviewed and any required flow is implemented.
-- Apple Sandbox age-range and parental-approval scenarios have not been proven on a signed physical device. The latest known feedback remains the build-35 report from iPhone 16 Pro/iOS 27.0: “We can't complete the required check.” The last live App Store Connect observation showed builds 32 and 36 in `Trust Family Auto`; build 40 is in `main` and locally archived/exported but not uploaded because the prior Xcode attempt lacked App Store Connect access for team `3S529795M9`. Test build 40 on the same iPhone 16 Pro after upload. The new avatar UI test uses simulator fixtures and does not exercise Apple's live age service.
+- Apple age-range and parental-approval scenarios have not been proven on a signed physical device. The latest known feedback remains the build-35 report from iPhone 16 Pro/iOS 27.0: “We can't complete the required check.” Build 40 was uploaded on 2026-09-30 and appears as `Testing` in the `Trust Family Auto` internal group. Retry the required-check flow on that same iPhone using build 40. The avatar and age-gate UI tests use simulator fixtures and do not exercise Apple's live age service.
 - The local six-test age-gate suite uses fixtures; it does not call Apple's live age service. See [release status](STATUS.md) and [App Store review readiness](../apps/trust-ios/AppStore/REVIEW-READINESS.md) for current build and CI evidence.
 
 ## References

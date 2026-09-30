@@ -1,6 +1,6 @@
 # App Store listing copy
 
-**App Store Connect draft last verified 2026-09-29; not submitted for review.** The English (U.S.) name, subtitle, promotional text, keywords, and URLs were applied and re-read through Apple’s API. The description below now includes a more precise notification statement; that revised description still needs to be applied and re-read in App Store Connect. Public release gates remain open.
+**App Store Connect draft last verified 2026-09-30; not submitted for review.** The English (U.S.) draft description was saved with qualified notification language, and version 1.0 now selects build 40 and the current icon. Recheck the full listing before submission. Public release gates remain open.
 
 ## Current English (U.S.) draft metadata
 
@@ -58,9 +58,9 @@ Reconfirm the primary and secondary categories, supported platforms, territory a
 
 ## Remaining release checks
 
-- **Build:** Live App Store Connect lists builds 32 and 36 in `Trust Family Auto`, which has three testers and automatic Xcode-build distribution enabled. Build 40 is archived/exported with production settings and verified locally; it is not uploaded because Xcode lacks account access for team `3S529795M9` while Safari is signed in. See [project status](../../../docs/STATUS.md) for the IPA hash and next step. The last known physical iPhone 16 Pro feedback on build 35 says “We can't complete the required check.”
-- **Screenshots:** the regenerated six-image set for iPhone 6.9, iPhone 6.5, and iPad 13 is in the repository and was visually checked locally. It has not been uploaded. Upload the set and compare its visible content against the final selected candidate.
-- **Privacy:** App Privacy has ten selected data types, but Contacts and Photos or Videos are still flagged as requiring setup in App Store Connect. Keep Contacts selected because Apple includes the social graph in that category and Trust stores connection relationships. Recheck all answers against the final manifest and actual behavior.
+- **Build:** Build 40 is uploaded and appears as `Testing` in `Trust Family Auto`, which has three testers and automatic Xcode-build distribution enabled. The last known physical iPhone 16 Pro feedback on build 35 says “We can't complete the required check”; retry it on build 40.
+- **Screenshots:** App Store Connect currently shows six ordered screenshots in each iPhone 6.9-inch, iPhone 6.5-inch, and iPad 13-inch group. The live 6.5-inch map image matches the local source. Recheck the full set against the final release candidate.
+- **Privacy:** the published App Privacy label still reflects its previous data types. Contacts and Photos or Videos have been selected in the edit flow; Contacts is configured as app functionality, linked to identity, and not used for tracking. Finish Photos or Videos, verify all answers against source and the privacy policy, then publish the label.
 - **Review and distribution:** the draft is US-only with pre-order and automatic new territories disabled; release stays manual. Usable reviewer access remains unresolved. Verify paid agreements and physical purchase/restore before submission. No App Review submission has been made.
 - **Age assurance and legal:** the app uses Apple-signaled age and significant-update flows on supported OS versions. The App Store questionnaire now declares age-assurance use. Audience classification and launch-market obligations still need legal review; see [AGE-ASSURANCE.md](../../../docs/AGE-ASSURANCE.md). Confirm SMS consent and subscription terms against the shipped behavior.
 - **Beta website:** the current beta link opens an email draft. It is not a waitlist or public App Store download link.

@@ -1,6 +1,6 @@
 # Trust App Store screenshot source — September 2026
 
-This repository contains the six annotated panels prepared for the App Store listing. The last saved App Store Connect observation says six ordered assets were complete in each of the iPhone 6.9-inch, iPhone 6.5-inch, and iPad 13-inch groups. The Mac is locked, so the live sets and their correspondence to these files have not been rechecked. Compare them to the selected release build before submission; changing these local files does not update App Store Connect.
+This repository contains the six annotated panels prepared for the App Store listing. On 2026-09-30, App Store Connect showed six ordered screenshots in each of the iPhone 6.9-inch, iPhone 6.5-inch, and iPad 13-inch groups. The live 6.5-inch map image was visually compared with the local asset and matched. Compare all six against the selected release build at storefront scale before submission; changing these local files does not update App Store Connect.
 
 ## Upload assets
 
