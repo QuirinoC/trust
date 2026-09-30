@@ -614,6 +614,7 @@ struct PersonScreen: View {
                 }
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(palette.paper.ignoresSafeArea())
         .toolbar(.visible, for: .navigationBar)
         .toolbarBackground(palette.paper, for: .navigationBar)

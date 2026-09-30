@@ -1082,7 +1082,7 @@ final class AppModel: ObservableObject {
         case "empty":
             guard auth.isAuthenticated else { return }
             selectedTab = .circle
-            if let member = circle.first(where: { $0.person.displayName == "Maya Chen" }) ?? circle.first {
+            if let member = circle.first(where: \.isAvailable) ?? circle.first {
                 openPerson(member)
             }
         case "pause":
