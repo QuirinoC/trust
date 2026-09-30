@@ -17,6 +17,10 @@ For the planned U.S.-only launch, FTC guidance says COPPA applies to child-direc
 - Trust does not store a date of birth, age range, or derived age band on the server. The range is used transiently on-device; it is not included in ordinary account or location requests.
 - Before loading an authenticated account, the app links its signed StoreKit App Transaction to that Trust account. This lets the server enforce Apple's later consent-revocation notification. The transaction is not proof of age or initial parental consent. On revocation, the API blocks access while account deletion is retried durably; self-service deletion remains available.
 
+## App Store age rating
+
+On 30 September 2026, App Store Connect showed a calculated 4+ rating but had a manual 18+ override. The 18+ override was removed and the saved rating was verified after navigating away and returning: 4+ in 172 countries or regions, with Apple's regional equivalents, and a 4+ legacy rating for operating systems earlier than iOS 26. This follows the product direction against blanket age exclusion; it does not decide whether Trust is general-audience, mixed-audience, or child-directed, or settle COPPA duties. Counsel must still classify the audience and validate the intended territories. Apple's runtime age checks remain conditional on Apple's regional eligibility and regulatory signals.
+
 ## Launch gaps
 
 - The current age flow does not provide a parent-managed child account or first-use parental-consent path. Do not market Trust as supporting child accounts until the audience classification and legal obligations are reviewed and any required flow is implemented.
