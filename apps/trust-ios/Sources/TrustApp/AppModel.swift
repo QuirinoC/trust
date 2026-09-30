@@ -1161,6 +1161,11 @@ final class AppModel: ObservableObject {
         #if DEBUG
         let service = DemoTrustService()
         service.startLeanDemo()
+        // The App Store View panel demonstrates a Plus viewer opening Leo's live
+        // Always location. Keep every other screenshot on the Free fixture.
+        if ProcessInfo.processInfo.environment["TRUST_SCREENSHOT"] == "view" {
+            service.setPro(enabled: true)
+        }
         demo = service
         isDemoMode = true
         beginAccountSessionTransition(to: "demo")

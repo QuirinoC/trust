@@ -2,7 +2,7 @@
 
 This is a submission checklist, not a record of current App Store Connect state. Build assignment, metadata, agreements, and review status change outside the repository; verify them directly in App Store Connect before release actions. The last dated external observations are recorded in [project status](../../../docs/STATUS.md) and should be treated as unverified until checked again.
 
-## Current evidence — 2026-09-30 3:15 AM PDT
+## Current evidence — 2026-09-30 3:55 AM PDT
 
 The last saved App Store Connect observation records build 36 as `VALID` in `Trust Family Auto` and build 35 selected in the 1.0 draft. The latest saved feedback is build 35 on iPhone 16 Pro/iOS 27.0: “We can’t complete the required check.” No newer report proves resolution. App Store Connect could not be refreshed while macOS was locked; the previous API read returned `NOT_AUTHORIZED`.
 
@@ -10,7 +10,7 @@ The app source is merged to `main` at `f579005fb73fbc45b6d3551b5ab63fac7da240c6`
 
 Render `trust-api` is live on commit `de977df9879429582b73776a66dd88e4d952dc52`; `/health/live` and `/health/ready` returned 200. The merged app change has no API or database change and needs no redeploy/migration. Cloudflare Worker `jointrust-web` version `f8382a78-2b17-45ba-8cad-1ec4d46dd800` serves the current Privacy, Terms, and Support pages, all returning 200.
 
-The English (U.S.) listing and screenshot sets were applied in an earlier saved App Store Connect observation. Refresh and compare every field live; categories, reviewer access, App Privacy, age rating, agreements, subscription products and review resources, screenshots, and territories are not confirmed current. No public App Review submission has been made.
+The English (U.S.) listing and an earlier screenshot set were applied in the last saved App Store Connect observation. The local annotated screenshot set has since been regenerated and reviewed; it has not been uploaded. Refresh and compare every field live; categories, reviewer access, App Privacy, age rating, agreements, subscription products and review resources, screenshots, and territories are not confirmed current. No public App Review submission has been made.
 
 The age-gate simulator suite uses fixtures and does not call Apple's live service. Retest the required-check flow on the same iPhone 16 Pro using normal Apple sign-in, age assurance, and App Transaction registration. Twilio campaign alignment, physical notification/background-location behavior, purchase/restore, and the full reviewer journey still need evidence. See [project status](../../../docs/STATUS.md) and [two-account E2E evidence](../../../docs/LOCAL-TWO-ACCOUNT-E2E.md).
 
@@ -20,7 +20,7 @@ The age-gate simulator suite uses fixtures and does not call Apple's live servic
 - [x] Increment to build 39 and archive/export the current `main` app source with `ExportOptions-AppStore.plist`; verify Apple Distribution signing, production APNs, Declared Age Range entitlement, `get-task-allow=false`, production API URL, and `TRUST_SKIP_PHONE_VERIFICATION=false`. The project change still needs CI/merge, and App Store Connect must confirm 39 is unused.
 - [x] Merge the current source and deploy the backend. The active API is on `de977df`; `/health/ready` and current legal/SMS routes returned 200. The latest app-only change needs no API redeploy or migration.
 - [ ] Complete listing name, subtitle, description, keywords, categories, support/marketing/privacy URLs, reviewer contact, release timing, territory availability, and platform compatibility.
-- [x] Upload current English (U.S.) screenshots to the iPhone 6.9, iPhone 6.5, and iPad 13 sets; verify six ordered `COMPLETE` assets at each target size. Recheck visible content against the exact selected release candidate before submission.
+- [ ] Upload the regenerated English (U.S.) screenshots to the iPhone 6.9, iPhone 6.5, and iPad 13 sets; verify six ordered `COMPLETE` assets at each target size. Recheck visible content against the exact selected release candidate before submission.
 - [ ] Reconcile App Privacy answers and the privacy manifest against release code and server behavior, including location, phone, identity, connection social graph, installation/device identifiers, and profile photos. Build 36 retains the Contacts and Device ID manifest additions; finish Contacts and Photos setup in App Store Connect.
 - [ ] Choose and align the age policy across the app, Terms, Privacy, listing, and age rating.
 - [ ] Verify the Paid Apps agreement, subscription group/products, price, trial, localizations, review screenshots, purchase, and restore.

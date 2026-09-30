@@ -1,6 +1,6 @@
 # Trust production readiness plan
 
-Updated 2026-09-30 3:15 AM PDT. This is the active launch and scale plan, not a claim that every large-scale control is deployed. `STATUS.md` records the latest checked evidence; `DESIGN.md` remains the source for current UX. Trust's core promise is consensual, revocable location sharing. A feature that obscures consent, loses a paid entitlement, or presents stale location or a requested notification as guaranteed is a product and operations failure.
+Updated 2026-09-30 3:55 AM PDT. This is the active launch and scale plan, not a claim that every large-scale control is deployed. `STATUS.md` records the latest checked evidence; `DESIGN.md` remains the source for current UX. Trust's core promise is consensual, revocable location sharing. A feature that obscures consent, loses a paid entitlement, or presents stale location or a requested notification as guaranteed is a product and operations failure.
 
 ## Current release decision — 2026-09-30
 
@@ -10,6 +10,8 @@ The last saved App Store Connect observation records build 36 as `VALID` in `Tru
 
 The current production database is Render Postgres `basic_256mb`, 15 GB disk, without high availability, disk autoscaling, or a connection pool. Production health is good for the current beta, but this is not measured million-user capacity. The live API source includes migrations 001–021; Render health readiness is 200, while direct ledger inspection remains blocked by the database IP allowlist. PR #14 changes only iOS UI/tests, so no additional database migration is required for this release candidate.
 
+The API exposes liveness/readiness checks, but a code/dependency scan found no application-level metrics/tracing or mobile crash-reporting integration. Current provider alert destinations and delivery were not verified. Before broad public acquisition, choose a privacy-safe minimum cockpit (API/database latency, iOS crashes, APNs/SMS/StoreKit errors, spend thresholds), name a primary and backup responder, and run an alert drill. Do not log raw coordinates, phone numbers, handles, invite tokens, or device tokens.
+
 App Review still needs live App Store Connect checks (privacy categories, audience/age rating, subscriptions and review resources, metadata, reviewer access, territory, and manual-release setting), the same-device Apple age-assurance retry, physical purchase/restore and notification/location verification, and Twilio campaign/HELP/STOP reconciliation. Keep the release manual until these gates pass. A paid History race and same-account physical second-device reconnect remain unverified; the paired simulator evidence is not physical-device evidence. Do not enable production bypasses or imply guaranteed location freshness or notification delivery.
 
 The current website homepage opens an email draft for beta requests; it is not a waitlist or public install route. Confirm the inbox is monitored before using it in a post. A truthful adult-focused prelaunch post can say public downloads are not open. Do not buy install traffic until the app is public, attribution works, and the owner sets a spend cap. `STATUS.md` contains the timestamped verification snapshot and exact open gates.
@@ -18,7 +20,7 @@ Render auto-deploys `main`. Migration behavior has been tested against a populat
 
 ## Same-day launch path
 
-The API deployment and revised legal pages are live. PR #14 is merged and its PR CI is green; the post-merge iOS job was still running during the last check. The Mac must be unlocked for a live App Store Connect refresh, physical iPhone test, and account-authenticated upload. The current build-38 archive is stale relative to `main`; prepare the next build number and archive after CI is green. Then proceed in this order:
+The API deployment and revised legal pages are live. PR #14 and post-merge CI `36699341073` passed all jobs. Build 39 is archived/exported and its production signature and entitlements are verified; PR #15 run `36701410936` passed API and web but failed iOS UI tests. The affected UI tests and Plus-only screenshot fixture were fixed and verified locally, but the branch still needs push and a fresh CI run. The regenerated screenshot assets are local and unuploaded. The Mac must be unlocked for a live App Store Connect refresh, physical iPhone test, and account-authenticated upload. Then proceed in this order:
 
 1. Unlock the Mac and refresh the current App Store Connect version, latest build number, internal group, feedback, agreements, subscription status, privacy categories, and listing state. Do not infer them from Markdown snapshots.
 2. The current-source build-39 IPA is already exported and validated. Confirm build 39 is unused; if it is taken, increment and rebuild. Merge the release branch after its CI passes, then upload the regular Trust target only after confirming the API is ready. Wait for processing and verify it appears in `Trust Family Auto`.
