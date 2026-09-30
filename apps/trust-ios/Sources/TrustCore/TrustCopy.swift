@@ -618,6 +618,8 @@ public enum TrustCopy {
     public static var phoneConsentDetails: String {
         value("phone_consent_details", defaultValue: "By tapping Send code, you agree to receive Trust verification texts at this number. Standard message and data rates may apply. Up to 8/day. Reply STOP to opt out, HELP for help.")
     }
+    /// Increment when `phoneConsentDetails` changes meaning or the allowed send terms change.
+    public static let phoneConsentDetailsVersion = 1
     public static var verifyPhoneTitle: String { value("verify_phone_title", defaultValue: "Verify your number") }
     public static var phoneCodeIntro: String { value("phone_code_intro", defaultValue: "Enter the code we sent to:") }
     public static var editPhone: String { value("edit_phone", defaultValue: "Edit") }
@@ -1016,6 +1018,11 @@ public enum TrustCopy {
             return trimmed.isEmpty ? requestFailed : trimmed
         }
     }
+}
+
+public enum PhoneConsentAction: String, Sendable {
+    case sendCode = "send_code"
+    case resendCode = "resend_code"
 }
 
 /// A user can follow iOS's preferred app language or choose any shipped localization.

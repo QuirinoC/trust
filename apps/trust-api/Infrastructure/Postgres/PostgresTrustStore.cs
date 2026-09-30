@@ -1238,6 +1238,65 @@ public sealed class PostgresTrustStore(string connectionString) : ITrustStore
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
+    public async Task RecordPhoneSmsConsentAsync(
+        PhoneSmsConsentEvent consentEvent,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(
+            """
+            INSERT INTO trust.phone_sms_consent_events (
+                account_id, phone_e164, disclosure_key, disclosure_version, consented_at, source, action)
+            VALUES ($1, $2, $3, $4, $5, $6, $7);
+            """,
+            connection);
+        command.Parameters.AddWithValue(consentEvent.AccountId);
+        command.Parameters.AddWithValue(consentEvent.PhoneE164);
+        command.Parameters.AddWithValue(
+            NpgsqlTypes.NpgsqlDbType.Text,
+            (object?)consentEvent.DisclosureKey ?? DBNull.Value);
+        command.Parameters.AddWithValue(
+            NpgsqlTypes.NpgsqlDbType.Integer,
+            (object?)consentEvent.DisclosureVersion ?? DBNull.Value);
+        command.Parameters.AddWithValue(consentEvent.ConsentedAt);
+        command.Parameters.AddWithValue(consentEvent.Source);
+        command.Parameters.AddWithValue(
+            NpgsqlTypes.NpgsqlDbType.Text,
+            (object?)consentEvent.Action ?? DBNull.Value);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<PhoneSmsConsentEvent>> ListPhoneSmsConsentEventsAsync(
+        Guid accountId,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(
+            """
+            SELECT account_id, phone_e164, disclosure_key, disclosure_version, consented_at, source, action
+            FROM trust.phone_sms_consent_events
+            WHERE account_id = $1
+            ORDER BY consented_at, consent_id;
+            """,
+            connection);
+        command.Parameters.AddWithValue(accountId);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        var events = new List<PhoneSmsConsentEvent>();
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            events.Add(new PhoneSmsConsentEvent(
+                reader.GetGuid(0),
+                reader.GetString(1),
+                reader.IsDBNull(2) ? null : reader.GetString(2),
+                reader.IsDBNull(3) ? null : reader.GetInt32(3),
+                reader.GetFieldValue<DateTimeOffset>(4),
+                reader.GetString(5),
+                reader.IsDBNull(6) ? null : reader.GetString(6)));
+        }
+
+        return events;
+    }
+
     public async Task<bool> TryReserveSmsAsync(IReadOnlyList<SmsSendBudget> budgets, DateTimeOffset now, CancellationToken cancellationToken)
     {
         await using var connection = await OpenAsync(cancellationToken);

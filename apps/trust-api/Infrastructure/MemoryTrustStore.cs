@@ -16,6 +16,7 @@ public sealed class MemoryTrustStore : ITrustStore
     private readonly ConcurrentDictionary<string, Invite> _invites = new();
     private readonly Dictionary<Guid, ConnectionRequest> _connectionRequests = new();
     private readonly ConcurrentDictionary<Guid, PhoneChallenge> _phoneChallenges = new();
+    private readonly ConcurrentDictionary<Guid, PhoneSmsConsentEvent> _phoneSmsConsentEvents = new();
     private readonly ConcurrentDictionary<string, SmsSendBudget> _smsBudgets = new();
     private readonly SemaphoreSlim _smsGate = new(1, 1);
     private readonly ConcurrentDictionary<(Guid Subject, Guid Trustee), PresenceGrant> _presenceGrants = new();
@@ -481,6 +482,13 @@ public sealed class MemoryTrustStore : ITrustStore
             }
 
             _phoneChallenges.TryRemove(accountId, out _);
+            foreach (var key in _phoneSmsConsentEvents
+                .Where(pair => pair.Value.AccountId == accountId)
+                .Select(pair => pair.Key)
+                .ToList())
+            {
+                _phoneSmsConsentEvents.TryRemove(key, out _);
+            }
             _smsBudgets.TryRemove(SmsSendBudget.AccountKey(accountId), out _);
             foreach (var key in _presenceGrants.Keys
                 .Where(key => key.Subject == accountId || key.Trustee == accountId).ToList())
@@ -980,6 +988,25 @@ public sealed class MemoryTrustStore : ITrustStore
     {
         _phoneChallenges.TryRemove(accountId, out _);
         return Task.CompletedTask;
+    }
+
+    public Task RecordPhoneSmsConsentAsync(
+        PhoneSmsConsentEvent consentEvent,
+        CancellationToken cancellationToken)
+    {
+        _phoneSmsConsentEvents[Guid.NewGuid()] = consentEvent;
+        return Task.CompletedTask;
+    }
+
+    public Task<IReadOnlyList<PhoneSmsConsentEvent>> ListPhoneSmsConsentEventsAsync(
+        Guid accountId,
+        CancellationToken cancellationToken)
+    {
+        IReadOnlyList<PhoneSmsConsentEvent> events = _phoneSmsConsentEvents.Values
+            .Where(item => item.AccountId == accountId)
+            .OrderBy(item => item.ConsentedAt)
+            .ToList();
+        return Task.FromResult(events);
     }
 
     public async Task<bool> TryReserveSmsAsync(IReadOnlyList<SmsSendBudget> budgets, DateTimeOffset now, CancellationToken cancellationToken)

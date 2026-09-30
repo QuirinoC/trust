@@ -25,6 +25,10 @@ public sealed class PhoneVerificationService(
     IHostEnvironment environment,
     ILogger<PhoneVerificationService> logger)
 {
+    public const int PhoneConsentDisclosureVersion = 1;
+    public const string PhoneConsentDisclosureKey = "phone_consent_details";
+    public const string PhoneConsentSource = "ios_phone_verification";
+    public const string LegacyPhoneConsentSource = "phone_verification_endpoint_legacy";
     public const int CodeTtlSeconds = 10 * 60;
     public const int ResendCooldownSeconds = 45;
     public const int MaxBackoffSeconds = 3 * 60;
@@ -36,9 +40,26 @@ public sealed class PhoneVerificationService(
     public async Task<PhoneCodeSendResult> SendAsync(
         Guid accountId,
         string? rawPhone,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? consentAction = null,
+        int? consentVersion = null)
     {
         _ = await RequireAccount(accountId, cancellationToken);
+        if (consentVersion is not null and not PhoneConsentDisclosureVersion)
+        {
+            throw TrustException.InvalidPhoneConsentVersion();
+        }
+
+        if (consentAction is not null and not ("send_code" or "resend_code"))
+        {
+            throw TrustException.InvalidPhoneConsentAction();
+        }
+
+        if ((consentVersion is null) != (consentAction is null))
+        {
+            throw TrustException.InvalidPhoneConsentMetadata();
+        }
+
         if (!PhoneE164.TryNormalize(rawPhone, out var e164))
         {
             throw TrustException.InvalidPhone();
@@ -87,6 +108,16 @@ public sealed class PhoneVerificationService(
             sendCount + 1,
             windowStarted);
         await CommitSmsAsync(gate, cancellationToken);
+        await store.RecordPhoneSmsConsentAsync(
+            new PhoneSmsConsentEvent(
+                accountId,
+                e164,
+                consentVersion is null ? null : PhoneConsentDisclosureKey,
+                consentVersion,
+                now,
+                consentVersion is null ? LegacyPhoneConsentSource : PhoneConsentSource,
+                consentAction),
+            cancellationToken);
         await store.UpsertPhoneChallengeAsync(challenge, cancellationToken);
 
         if (!gate.Bypass)

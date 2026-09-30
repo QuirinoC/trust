@@ -174,6 +174,54 @@ public sealed class PhoneVerificationTests
     }
 
     [Fact]
+    public async Task SmsConsentIsRecordedBeforeDeliveryAndFailedSendRetryKeepsItsAction()
+    {
+        var clock = new MutableTimeProvider { UtcNow = new DateTimeOffset(2026, 9, 29, 12, 0, 0, TimeSpan.Zero) };
+        var store = new MemoryTrustStore();
+        var engine = new TrustEngine(store, clock);
+        var account = await engine.SignInAsync("development", "otp-consent-order", "Sam", CancellationToken.None);
+        var sender = new ConsentObservingSms(store, account.Id) { FailNext = true };
+        var phones = NewPhones(store, sender, NullLogger<PhoneVerificationService>.Instance, Environments.Production, clock);
+
+        await Assert.ThrowsAsync<TrustException>(() => phones.SendAsync(
+            account.Id, "+1 (555) 555-0144", CancellationToken.None, "send_code", 1));
+        clock.UtcNow = clock.UtcNow.AddSeconds(PhoneVerificationService.ResendCooldownSeconds + 1);
+        await phones.SendAsync(account.Id, "+15555550144", CancellationToken.None, "send_code", 1);
+        clock.UtcNow = clock.UtcNow.AddSeconds((2 * PhoneVerificationService.ResendCooldownSeconds) + 1);
+        await phones.SendAsync(account.Id, "+15555550144", CancellationToken.None, "resend_code", 1);
+
+        var events = await store.ListPhoneSmsConsentEventsAsync(account.Id, CancellationToken.None);
+        Assert.Equal(3, events.Count);
+        Assert.Equal(new[] { "send_code", "send_code", "resend_code" }, events.Select(item => item.Action));
+        Assert.All(events, item =>
+        {
+            Assert.Equal(account.Id, item.AccountId);
+            Assert.Equal("+15555550144", item.PhoneE164);
+            Assert.Equal(PhoneVerificationService.PhoneConsentDisclosureKey, item.DisclosureKey);
+            Assert.Equal(PhoneVerificationService.PhoneConsentDisclosureVersion, item.DisclosureVersion);
+            Assert.Equal(PhoneVerificationService.PhoneConsentSource, item.Source);
+        });
+        Assert.Equal(3, sender.ObservedEvents);
+    }
+
+    [Fact]
+    public async Task LegacySmsRequestDoesNotClaimAnUnsentVersionedDisclosure()
+    {
+        var store = new MemoryTrustStore();
+        var engine = new TrustEngine(store, TimeProvider.System);
+        var account = await engine.SignInAsync("development", "otp-consent-legacy", "Sam", CancellationToken.None);
+        var phones = NewPhones(store, new RecordingSms(), NullLogger<PhoneVerificationService>.Instance, Environments.Production);
+
+        await phones.SendAsync(account.Id, "+15555550145", CancellationToken.None);
+
+        var consentEvent = Assert.Single(await store.ListPhoneSmsConsentEventsAsync(account.Id, CancellationToken.None));
+        Assert.Null(consentEvent.DisclosureKey);
+        Assert.Null(consentEvent.DisclosureVersion);
+        Assert.Equal(PhoneVerificationService.LegacyPhoneConsentSource, consentEvent.Source);
+        Assert.Null(consentEvent.Action);
+    }
+
+    [Fact]
     public async Task VerifiedPhoneOnAnotherAccountIsRejectedBeforeSms()
     {
         var store = new MemoryTrustStore();
@@ -527,6 +575,29 @@ public sealed class PhoneVerificationTests
         }
     }
 
+    private sealed class ConsentObservingSms(ITrustStore store, Guid accountId) : ISmsOtpSender
+    {
+        public bool IsConfigured => true;
+        public bool FailNext { get; set; }
+        public int ObservedEvents { get; private set; }
+
+        public async Task SendAsync(string e164, string code, CancellationToken cancellationToken)
+        {
+            var events = await store.ListPhoneSmsConsentEventsAsync(accountId, cancellationToken);
+            Assert.NotEmpty(events);
+            Assert.Equal(e164, events[^1].PhoneE164);
+            ObservedEvents++;
+            if (FailNext)
+            {
+                FailNext = false;
+                throw new InvalidOperationException("Synthetic delivery failure.");
+            }
+        }
+
+        public Task SendTextAsync(string e164, string body, CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("Unexpected SMS method.");
+    }
+
     private sealed class TestHostEnvironment : IHostEnvironment
     {
         public string EnvironmentName { get; set; } = Environments.Development;
@@ -571,9 +642,11 @@ public sealed class PhoneVerificationApiTests : IClassFixture<TrustApiFactory>
     };
 
     private readonly HttpClient _client;
+    private readonly TrustApiFactory _factory;
 
     public PhoneVerificationApiTests(TrustApiFactory factory)
     {
+        _factory = factory;
         _client = factory.CreateClient();
     }
 
@@ -593,11 +666,18 @@ public sealed class PhoneVerificationApiTests : IClassFixture<TrustApiFactory>
         using var send = new HttpRequestMessage(HttpMethod.Post, "/api/v1/me/phone/send");
         send.Headers.Authorization =
             new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", payload.Token);
-        send.Content = JsonContent.Create(new { phone });
+        send.Content = JsonContent.Create(new { phone, consentVersion = 1, consentAction = "send_code" });
         var sendResponse = await _client.SendAsync(send);
         sendResponse.EnsureSuccessStatusCode();
         var otp = await sendResponse.Content.ReadFromJsonAsync<SendWire>(Json);
         Assert.False(string.IsNullOrWhiteSpace(otp!.DevelopmentCode));
+        var consentEvents = await _factory.Services.GetRequiredService<ITrustStore>()
+            .ListPhoneSmsConsentEventsAsync(payload.You.Id, CancellationToken.None);
+        var consentEvent = Assert.Single(consentEvents);
+        Assert.Equal(PhoneVerificationService.PhoneConsentDisclosureKey, consentEvent.DisclosureKey);
+        Assert.Equal(1, consentEvent.DisclosureVersion);
+        Assert.Equal("send_code", consentEvent.Action);
+        Assert.Equal("ios_phone_verification", consentEvent.Source);
 
         using var verify = new HttpRequestMessage(HttpMethod.Post, "/api/v1/me/phone/verify");
         verify.Headers.Authorization =

@@ -563,7 +563,12 @@ public static class TrustEndpoints
 
         try
         {
-            var result = await phones.SendAsync(accountId.Value, request.Phone, cancellationToken);
+            var result = await phones.SendAsync(
+                accountId.Value,
+                request.Phone,
+                cancellationToken,
+                request.ConsentAction,
+                request.ConsentVersion);
             return Results.Ok(new SendPhoneCodeResponse(
                 result.ExpiresAt,
                 result.ResendAfterSeconds,

@@ -13,7 +13,7 @@ public sealed class PostgresMigrationUpgradeTests
         ?? "Host=127.0.0.1;Port=5433;Database=trust;Username=trust;Password=trust";
 
     [Fact]
-    public async Task PopulatedSchemaAt013UpgradesTo020AndRemainsRepeatable()
+    public async Task PopulatedSchemaAt013UpgradesTo021AndRemainsRepeatable()
     {
         var source = new NpgsqlConnectionStringBuilder(SourceConnection);
         if (!IPAddress.TryParse(source.Host, out var address) || !IPAddress.IsLoopback(address) || source.Port is not (5433 or 5434 or 5435))
@@ -73,7 +73,7 @@ public sealed class PostgresMigrationUpgradeTests
             await PostgresMigrator.ApplyAsync(target);
 
             await AssertUpgradedDataAsync(target, ids, membershipAB, membershipAC, requestBC, placeId, originalTransaction, transactionId, pauseUntil);
-            await AssertMigrationLedger020Async(target);
+            await AssertMigrationLedger021Async(target);
             Assert.Equal(transitionAfterFirstApply, await ReadTransitionIdAsync(target, ids[0]));
 
             var store = new PostgresTrustStore(target);
@@ -427,7 +427,7 @@ public sealed class PostgresMigrationUpgradeTests
         return (Guid)(await command.ExecuteScalarAsync())!;
     }
 
-    private static async Task AssertMigrationLedger020Async(string connectionString)
+    private static async Task AssertMigrationLedger021Async(string connectionString)
     {
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
@@ -435,8 +435,8 @@ public sealed class PostgresMigrationUpgradeTests
         await using var reader = await command.ExecuteReaderAsync();
         var names = new List<string>();
         while (await reader.ReadAsync()) names.Add(reader.GetString(0));
-        Assert.Equal(20, names.Count);
+        Assert.Equal(21, names.Count);
         Assert.Equal("001_initial.sql", names[0]);
-        Assert.Equal("020_presence_grant_revisions_and_home_transitions.sql", names[^1]);
+        Assert.Equal("021_phone_sms_consent_events.sql", names[^1]);
     }
 }
