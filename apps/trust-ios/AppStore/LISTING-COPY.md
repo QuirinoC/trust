@@ -1,6 +1,6 @@
 # App Store listing copy
 
-**App Store Connect draft updated 2026-09-29; not submitted for review.** The English (U.S.) name, subtitle, promotional text, description, keywords, and URLs below were applied and re-read through Apple’s API. Beta description was updated to match. Public release gates remain open.
+**App Store Connect draft last verified 2026-09-29; not submitted for review.** The English (U.S.) name, subtitle, promotional text, keywords, and URLs were applied and re-read through Apple’s API. The description below now includes a more precise notification statement; that revised description still needs to be applied and re-read in App Store Connect. Public release gates remain open.
 
 ## Current English (U.S.) draft metadata
 
@@ -29,7 +29,7 @@ Trust is a location-sharing app for friends and partners. Choose what each perso
 
 Adding someone does not start sharing. After you connect, each person chooses whether to share. You can choose different settings.
 
-With Sealed sharing, you can confirm a Look to request the other person's latest available location snapshot. Trust records the check in Activity and requests a notification to the person sharing. Notification delivery is not guaranteed. Sealed does not provide location history.
+With Sealed sharing, you can confirm a Look to request the other person's latest available location snapshot. Trust records the check in Activity and attempts to notify the person sharing. Notification delivery is not guaranteed. Always views do not generate a push notification. Sealed does not provide location history.
 
 Always is separate. While someone has chosen Always, selected connected people can view their location and eligible history. Pause or stop sharing at any time.
 
@@ -58,9 +58,9 @@ Reconfirm the primary and secondary categories, supported platforms, territory a
 
 ## Remaining release checks
 
-- **Build:** the last saved App Store Connect observation records build 36 as `VALID` in the automatic internal group; build 35 remained selected in the draft and produced feedback reading “We can't complete the required check.” Refresh these records before release actions. A fresh build-39 IPA has been exported from current app source with production signing and the verification bypass disabled (SHA-256 in [project status](../../../docs/STATUS.md)); its project-number change needs CI/merge, and App Store Connect must confirm that 39 is unused. Then upload and retry the required-check flow on the same physical device. The live API includes migration 021 and `/health/ready` returns 200. The latest main-only History fix requires no database migration or API redeploy.
-- **Screenshots:** six current English (U.S.) images are uploaded and complete in each iPhone 6.9, iPhone 6.5, and iPad 13 set. Confirm their visible content against the final selected candidate.
-- **Privacy:** Coarse Location setup has been published. Contacts and Photos or Videos still need per-category setup and publication in App Store Connect. Email was removed because the app does not collect it. Recheck all answers against the final manifest and actual behavior.
+- **Build:** Live App Store Connect lists builds 32 and 36 in `Trust Family Auto`, which has three testers and automatic Xcode-build distribution enabled. Build 40 is archived/exported with production settings and verified locally; it is not uploaded because Xcode lacks account access for team `3S529795M9` while Safari is signed in. See [project status](../../../docs/STATUS.md) for the IPA hash and next step. The last known physical iPhone 16 Pro feedback on build 35 says “We can't complete the required check.”
+- **Screenshots:** the regenerated six-image set for iPhone 6.9, iPhone 6.5, and iPad 13 is in the repository and was visually checked locally. It has not been uploaded. Upload the set and compare its visible content against the final selected candidate.
+- **Privacy:** App Privacy has ten selected data types, but Contacts and Photos or Videos are still flagged as requiring setup in App Store Connect. Keep Contacts selected because Apple includes the social graph in that category and Trust stores connection relationships. Recheck all answers against the final manifest and actual behavior.
 - **Review and distribution:** the draft is US-only with pre-order and automatic new territories disabled; release stays manual. Usable reviewer access remains unresolved. Verify paid agreements and physical purchase/restore before submission. No App Review submission has been made.
 - **Age assurance and legal:** the app uses Apple-signaled age and significant-update flows on supported OS versions. The App Store questionnaire now declares age-assurance use. Audience classification and launch-market obligations still need legal review; see [AGE-ASSURANCE.md](../../../docs/AGE-ASSURANCE.md). Confirm SMS consent and subscription terms against the shipped behavior.
 - **Beta website:** the current beta link opens an email draft. It is not a waitlist or public App Store download link.

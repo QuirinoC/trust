@@ -2,6 +2,13 @@ import Foundation
 import TrustCore
 import XCTest
 
+final class AvatarArtworkPaletteTests: XCTestCase {
+    func testPresetBackingUsesWarmLightAndMutedBlueGrayDarkColors() {
+        XCTAssertEqual(AvatarArtworkPalette.backingHex(isDarkAppearance: false), 0xFCFAF2)
+        XCTAssertEqual(AvatarArtworkPalette.backingHex(isDarkAppearance: true), 0x334055)
+    }
+}
+
 final class TrustCircleRefreshBarrierTests: XCTestCase {
     func testReadStartedBeforeConfirmedMutationCannotCommitButLaterReadCan() {
         var barrier = TrustCircleRefreshBarrier()
