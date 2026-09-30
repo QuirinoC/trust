@@ -46,7 +46,7 @@ services:
           name: trust-postgres
           property: connectionString
       - key: Apns__Enabled
-        value: "false"
+        value: "true"
       - key: Apns__TeamId
         value: "3S529795M9"
       - key: Apns__BundleId
