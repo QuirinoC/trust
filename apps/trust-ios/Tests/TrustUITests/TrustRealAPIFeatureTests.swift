@@ -1356,13 +1356,21 @@ final class TrustRealAPIFeatureTests: XCTestCase {
         let now = Date()
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return (0..<count).map { index in
-            [
-                "timestamp": formatter.string(from: now.addingTimeInterval(TimeInterval(-120 * index))),
-                "latitude": 47.60 + Double(index) * 0.001,
-                "longitude": -122.33 - Double(index) * 0.001
+        var points: [[String: Any]] = []
+        points.reserveCapacity(count)
+        for index in 0..<count {
+            let secondsAgo = -120.0 * Double(index)
+            let timestamp = formatter.string(from: now.addingTimeInterval(secondsAgo))
+            let latitude = 47.60 + Double(index) * 0.001
+            let longitude = -122.33 - Double(index) * 0.001
+            let point: [String: Any] = [
+                "timestamp": timestamp,
+                "latitude": latitude,
+                "longitude": longitude
             ]
+            points.append(point)
         }
+        return points
     }
 
     private func uploadTestLocation(points: [[String: Any]], token: String) -> Int {
