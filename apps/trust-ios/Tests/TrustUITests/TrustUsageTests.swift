@@ -233,17 +233,16 @@ final class TrustUsageTests: XCTestCase {
     }
 
     func testLanguagePreferenceChangesCopyAndPersists() {
-        let app = launchDemo()
+        let app = launchDemo(forceEnglish: false)
         var changedLanguage = false
         defer {
             // Keep a failed assertion from leaking French into the rest of the suite.
-            if changedLanguage, app.state == .runningForeground {
-                let systemOption = app.buttons["Suivre la langue de l’iPhone"]
-                if !systemOption.exists {
-                    let languagePicker = app.descendants(matching: .any)["language-preference"]
-                    if languagePicker.exists { languagePicker.tap() }
+            if changedLanguage {
+                if app.state != .runningForeground { app.launch() }
+                if app.buttons["tab-you"].waitForExistence(timeout: 10) {
+                    app.buttons["tab-you"].tap()
+                    selectSystemLanguage(in: app)
                 }
-                if systemOption.waitForExistence(timeout: 2) { systemOption.tap() }
                 app.terminate()
             }
         }
@@ -277,6 +276,10 @@ final class TrustUsageTests: XCTestCase {
         let restoredPicker = app.descendants(matching: .any)["language-preference"]
         XCTAssertTrue(restoredPicker.waitForExistence(timeout: 5))
         XCTAssertEqual(restoredPicker.value as? String, "Français")
+
+        selectSystemLanguage(in: app)
+        changedLanguage = false
+        app.terminate()
 
     }
 
@@ -312,14 +315,33 @@ final class TrustUsageTests: XCTestCase {
         add(screenshot)
     }
 
-    private func launchDemo(dark: Bool = false, route: String? = nil) -> XCUIApplication {
+    private func launchDemo(dark: Bool = false, route: String? = nil, forceEnglish: Bool = true) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchEnvironment["TRUST_DEMO"] = "1"
         app.launchEnvironment["TRUST_UI_TEST"] = "1"
         if let route { app.launchEnvironment["TRUST_SCREENSHOT"] = route }
         if dark { app.launchArguments += ["-uiUserInterfaceStyle", "Dark"] }
+        // Demo tests assert English copy. The argument-domain override makes each launch
+        // independent of the persistent language preference left by other simulator runs.
+        if forceEnglish { app.launchArguments += ["-trust.appLanguage", "en"] }
         app.launch()
         return app
+    }
+
+    private func selectSystemLanguage(in app: XCUIApplication) {
+        let picker = app.descendants(matching: .any)["language-preference"]
+        XCTAssertTrue(picker.waitForExistence(timeout: 5))
+        picker.tap()
+        let systemOption = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS[c] %@", "iPhone")
+        ).firstMatch
+        XCTAssertTrue(systemOption.waitForExistence(timeout: 5), "The language menu should offer the system-language option.")
+        systemOption.tap()
+        let restored = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "value CONTAINS[c] %@", "iPhone"),
+            object: app.descendants(matching: .any)["language-preference"]
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [restored], timeout: 5), .completed)
     }
 
     private func tapConfirmationAction(_ identifier: String, in app: XCUIApplication) {

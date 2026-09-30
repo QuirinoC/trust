@@ -181,12 +181,34 @@ final class TrustAgeGateTests: XCTestCase {
         let month = app.textFields["age-birth-month"]
         let day = app.textFields["age-birth-day"]
         let birthYear = app.textFields["age-birth-year"]
-        month.tap()
-        month.typeText("01")
-        day.tap()
-        day.typeText("01")
-        birthYear.tap()
-        birthYear.typeText(String(year))
-        XCTAssertTrue(element("age-gate-continue", in: app).isEnabled)
+        enterDigits("01", into: month)
+        enterDigits("01", into: day)
+        enterDigits(String(year), into: birthYear)
+
+        let continueButton = element("age-gate-continue", in: app)
+        let enabled = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "isEnabled == true"),
+            object: continueButton
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [enabled], timeout: 5),
+            .completed,
+            "Continue should enable after the complete birth date reaches the form. Year field value: \(birthYear.value ?? "<empty>")."
+        )
+    }
+
+    private func enterDigits(_ digits: String, into field: XCUIElement) {
+        field.tap()
+        field.typeText(digits)
+
+        let inputApplied = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "value == %@", digits),
+            object: field
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [inputApplied], timeout: 5),
+            .completed,
+            "Expected \(field.identifier) to contain \(digits) after typing; found \(field.value ?? "<empty>")."
+        )
     }
 }
