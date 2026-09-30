@@ -32,7 +32,6 @@ prepare_sim() {
   xcrun simctl bootstatus "$udid" -b
   xcrun simctl ui "$udid" appearance light
   xcrun simctl status_bar "$udid" override \
-    --time "9:41" \
     --dataNetwork wifi \
     --wifiMode active \
     --wifiBars 3 \
@@ -57,14 +56,16 @@ capture_device() {
   xcrun simctl privacy "$udid" grant location-always "$BUNDLE" || true
   # First boot can show an Apple Intelligence banner while Maps downloads its
   # first tiles. Open the map once and let both settle before recording shots.
-  SIMCTL_CHILD_TRUST_DEMO=1 SIMCTL_CHILD_TRUST_SCREENSHOT="circle" \
+  SIMCTL_CHILD_TRUST_DEMO=1 SIMCTL_CHILD_TRUST_UI_TEST=1 SIMCTL_CHILD_TRUST_SCREENSHOT="circle" \
     xcrun simctl launch --terminate-running-process "$udid" "$BUNDLE" >/dev/null
   sleep 45
   for shot in "${SHOTS[@]}"; do
     xcrun simctl terminate "$udid" "$BUNDLE" >/dev/null 2>&1 || true
-    SIMCTL_CHILD_TRUST_DEMO=1 SIMCTL_CHILD_TRUST_SCREENSHOT="$shot" \
+    SIMCTL_CHILD_TRUST_DEMO=1 SIMCTL_CHILD_TRUST_UI_TEST=1 SIMCTL_CHILD_TRUST_SCREENSHOT="$shot" \
       xcrun simctl launch --terminate-running-process "$udid" "$BUNDLE" >/dev/null
     sleep 5
+    # Match the displayed clock to the real local time at capture.
+    xcrun simctl status_bar "$udid" override --time "$(date '+%-I:%M')"
     xcrun simctl io "$udid" screenshot "${outdir}/${shot}.png"
     echo "  wrote ${outdir}/${shot}.png"
   done

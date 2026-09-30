@@ -174,7 +174,13 @@ final class TrustUsageTests: XCTestCase {
         app.buttons["my-location"].tap()
         XCTAssertTrue(app.staticTexts["location-permission-status"].exists)
         app.buttons["Done"].tap()
-        app.buttons["edit-profile-picture"].tap()
+        let locationSheetDismissed = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == false"),
+            object: app.staticTexts["location-permission-status"])
+        XCTAssertEqual(XCTWaiter.wait(for: [locationSheetDismissed], timeout: 5), .completed)
+        let editProfilePicture = app.buttons["edit-profile-picture"]
+        XCTAssertTrue(scrollYouContent(to: editProfilePicture, direction: .up, in: app), "The profile picture control should be hittable after the location sheet closes.")
+        editProfilePicture.tap()
         XCTAssertTrue(app.buttons["avatar-photo-options"].waitForExistence(timeout: 5))
         app.buttons["Fox icon"].tap()
         XCTAssertTrue(app.buttons["avatar-save"].isEnabled)
@@ -191,6 +197,7 @@ final class TrustUsageTests: XCTestCase {
         for option in ["System", "Light", "Dark"] {
             let picker = app.descendants(matching: .any)["appearance-preference"]
             XCTAssertTrue(picker.waitForExistence(timeout: 5), "The appearance picker should be available in You.")
+            XCTAssertTrue(scrollYouContent(to: picker, direction: .down, in: app), "The appearance picker should be hittable after scrolling down in You.")
             picker.tap()
             let choice = app.buttons[option]
             XCTAssertTrue(choice.waitForExistence(timeout: 5), "The picker should offer the \(option) appearance.")
@@ -216,6 +223,7 @@ final class TrustUsageTests: XCTestCase {
             XCTAssertTrue(app.buttons["tab-you"].waitForExistence(timeout: 20))
             let relaunchedPicker = app.descendants(matching: .any)["appearance-preference"]
             XCTAssertTrue(relaunchedPicker.waitForExistence(timeout: 5))
+            XCTAssertTrue(scrollYouContent(to: relaunchedPicker, direction: .down, in: app), "The relaunched appearance picker should be hittable after scrolling down in You.")
             let preferenceRestored = XCTNSPredicateExpectation(
                 predicate: NSPredicate(format: "value == %@", option),
                 object: relaunchedPicker)
@@ -226,6 +234,8 @@ final class TrustUsageTests: XCTestCase {
         }
 
         let picker = app.descendants(matching: .any)["appearance-preference"]
+        XCTAssertTrue(scrollYouContent(to: picker, direction: .down, in: app))
+        XCTAssertTrue(picker.isHittable)
         picker.tap()
         app.buttons["System"].tap()
         let resetPicker = app.descendants(matching: .any)["appearance-preference"]
@@ -239,6 +249,7 @@ final class TrustUsageTests: XCTestCase {
         app.buttons["tab-you"].tap()
         let restoredPicker = app.descendants(matching: .any)["appearance-preference"]
         XCTAssertTrue(restoredPicker.waitForExistence(timeout: 5))
+        XCTAssertTrue(scrollYouContent(to: restoredPicker, direction: .down, in: app), "The restored appearance picker should be hittable after scrolling down in You.")
         let restoredToSystem = XCTNSPredicateExpectation(
             predicate: NSPredicate(format: "value == %@", "System"),
             object: restoredPicker)
@@ -389,6 +400,27 @@ final class TrustUsageTests: XCTestCase {
             XCTWaiter.wait(for: [dismissed], timeout: 5),
             .completed,
             "The confirmation dialog should dismiss before the next sharing action.")
+    }
+
+    /// Scrolls the You tab a few times and confirms the requested control is ready for input.
+    /// Starting at the control's known side of the page also handles XCUI frames that are
+    /// temporarily invalid while the control is outside the ScrollView viewport.
+    private func scrollYouContent(to element: XCUIElement, direction: ScrollDirection, in app: XCUIApplication) -> Bool {
+        let scrollView = app.scrollViews.firstMatch
+        guard scrollView.waitForExistence(timeout: 5) else { return false }
+        for _ in 0..<6 {
+            if element.isHittable { return true }
+            switch direction {
+            case .up: scrollView.swipeDown()
+            case .down: scrollView.swipeUp()
+            }
+        }
+        return element.isHittable
+    }
+
+    private enum ScrollDirection {
+        case up
+        case down
     }
 
     /// Native SwiftUI menu pickers can expose an on-screen option while XCTest reports
