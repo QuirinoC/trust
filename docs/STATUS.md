@@ -1,6 +1,6 @@
 # Trust project status
 
-Updated 2026-09-30 6:39 PM PDT.
+Updated 2026-09-30 6:45 PM PDT.
 
 The release archive and TestFlight build use stable Xcode 27.0. CI run [`36793168979`](https://github.com/QuirinoC/trust/actions/runs/36793168979) passed all iOS, API, and web jobs. The latest run, [`36800761346`](https://github.com/QuirinoC/trust/actions/runs/36800761346) on `a4201cb`, also passed all jobs: API/Postgres 202/202, TrustCore 82/82, and iOS UI 19 passed with 9 real-API UI tests skipped because CI had no isolated API URL; web tests passed. The local full simulator suite passed 101 with 9 real-API UI tests skipped, and the pause-sheet interaction passed three repeated local runs. These simulator checks do not replace physical TestFlight checks.
 
@@ -10,6 +10,7 @@ The release archive and TestFlight build use stable Xcode 27.0. CI run [`3679316
 - App Store Connect still shows version 1.0 as **Prepare for Submission** with build 41 selected, six screenshots in the 6.5-inch iPhone group, and manual release selected. The Sign-in required checkbox is off even though core app use requires an account. App Review has no working demo-account credentials or two-account test setup yet.
 - App Privacy shows Photos or Videos, Other Diagnostic Data, and Other Data Types selected but not set up; Apple warns they will not be added until setup is complete. The account published the previous privacy response, but these three draft data types have not been published. Publishing requires the Account Holder's accuracy and legal-compliance attestation; do not publish on an assumption.
 - Render's `trust-postgres` Recovery page offers point-in-time restore for the past three days and shows one logical export dated 2026-09-29 3:35 PM. No restore drill has been recorded. The database is still Basic-256mb, so live health is not evidence of high availability or million-user capacity.
+- Render's Metrics page shows Basic-256mb limits of 0.25 GB memory, 0.1 CPU, and 100 active connections. Disk usage/activity, network, database connection/transaction/lock metrics, table/index sizes, and top queries report no data in the last 12 hours or no data yet. Current utilization is therefore unverified; do not interpret the empty charts as low use or capacity headroom.
 - At this check, `jointrust.app` (`/`, `/privacy`, `/terms`, `/sms`, `/support`) and API `/health/live` and `/health/ready` each returned HTTP 200. This verifies reachability only, not full user journeys, backup recovery, or notification delivery.
 
 ## Current release decision

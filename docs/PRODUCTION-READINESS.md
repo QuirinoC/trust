@@ -1,6 +1,6 @@
 # Trust production readiness plan
 
-Updated 2026-09-30 6:39 PM PDT.
+Updated 2026-09-30 6:45 PM PDT.
 
 ## Current release decision — 2026-09-30
 
@@ -14,7 +14,7 @@ The Trust Plus group and both subscription products are `Ready for Review` and a
 
 The release archive uses stable Xcode 27.0 while the CI workflow tests with Xcode 26.6. GitHub currently labels its hosted Xcode 27 image as a public preview; keep stable CI pinned until that image is generally available. The local TrustCore package suite and full simulator suite passed; nine real-API UI tests were skipped because no isolated API URL was configured. CI run `36793168979` and the newer `36800761346` are complete and green. The latest run's iOS UI target had 19 tests pass and 9 real-API tests skipped because CI had no isolated API URL.
 
-The current production database is Render Postgres `basic_256mb`, 15 GB disk, without high availability, disk autoscaling, or a connection pool. Production health is good for the current beta, but this is not measured million-user capacity. The live API source includes migrations 001–021; Render health readiness is 200, while direct ledger inspection remains blocked by the database IP allowlist. PR #14 changes only iOS UI/tests, so no additional database migration is required for this release candidate.
+The current production database is Render Postgres `basic_256mb`, 15 GB disk, without high availability, disk autoscaling, or a connection pool. The live Metrics page shows 0.25 GB memory, 0.1 CPU, and 100 active-connection plan limits, but it reports no data for disk usage/activity, network, connections, transactions, lock-delayed queries, table/index sizes, or top queries in the last 12 hours. Actual utilization and saturation headroom are unknown; empty provider charts are not evidence of low use. Recovery offers three-day point-in-time restore and lists one logical export, but no restore drill has been recorded. Production health is good for the current beta, but this is not measured million-user capacity. The live API source includes migrations 001–021; Render health readiness is 200, while direct ledger inspection remains blocked by the database IP allowlist. The current release candidate has no API behavior or schema change, so no API deploy or additional database migration is required.
 
 The API exposes liveness/readiness checks, but a code/dependency scan found no application-level metrics/tracing or mobile crash-reporting integration. Current provider alert destinations and delivery were not verified. Before broad public acquisition, choose a privacy-safe minimum cockpit (API/database latency, iOS crashes, APNs/SMS/StoreKit errors, spend thresholds), name a primary and backup responder, and run an alert drill. Do not log raw coordinates, phone numbers, handles, invite tokens, or device tokens.
 
