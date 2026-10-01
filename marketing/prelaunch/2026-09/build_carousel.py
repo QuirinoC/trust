@@ -101,7 +101,7 @@ def make_final():
     header(d, 4)
     y = draw_lines(d, (72, 130), ['Stay close.', 'Keep the choice.'], font(78, True), NAVY, 2) + 18
     body = font(39)
-    d.text((74, y), 'We’re preparing our iPhone launch.', font=body, fill=MUTED)
+    d.text((74, y), 'Trust is in a small TestFlight beta.', font=body, fill=MUTED)
     cta_y = y + body.size + 8
     prefix = 'Learn about Trust'
     d.text((74, cta_y), prefix, font=body, fill=MUTED)
@@ -112,7 +112,7 @@ def make_final():
     d.line((arrow_x + 15, arrow_y - 8, arrow_x + 23, arrow_y), fill=BLUE, width=3)
     d.line((arrow_x + 15, arrow_y + 8, arrow_x + 23, arrow_y), fill=BLUE, width=3)
     d.text((arrow_x + 34, cta_y), 'jointrust.app', font=body, fill=MUTED)
-    d.text((74, cta_y + body.size + 8), 'Public downloads aren’t open yet.', font=body, fill=MUTED)
+    d.text((74, cta_y + body.size + 8), 'App Store downloads aren’t open yet.', font=body, fill=MUTED)
     # A truthful, unaltered crop of the lower Sharing screen keeps Home status,
     # Stop all sharing, and the app tab bar visible at useful size.
     source = Image.open(SOURCE / '03-share.png').convert('RGB')

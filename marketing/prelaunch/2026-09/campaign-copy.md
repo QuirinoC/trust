@@ -2,13 +2,13 @@
 
 ## Caption
 
-Trust is a location-sharing app built around choice. Every new connection starts with sharing Off. Choose a one-time Look or Always sharing person by person, then pause or stop whenever you choose.
+Location sharing works better when it’s a choice, person by person. In Trust, connecting doesn’t start sharing. Choose a one-time Look or Always sharing, then pause or stop whenever you choose.
 
-We’re preparing for iPhone; public downloads aren’t open yet. Learn about Trust at jointrust.app.
+Trust is in a small TestFlight beta; App Store downloads aren’t open yet. Learn more at jointrust.app.
 
 ## Audience and placement
 
-Use as an organic prelaunch post for adult/general audiences. Do not target children. Do not attach an App Store download link or paid spend. The live website’s beta button opens an email draft, so confirm that the inbox is monitored before promoting beta requests.
+Use as an organic prelaunch post for adult/general audiences. Do not target children. Do not attach an App Store download link or paid spend. The live website’s beta button opens an email draft, so confirm that the inbox is monitored before promoting beta requests. Choose a destination and review the final post before publishing.
 
 ## Slide alt text
 

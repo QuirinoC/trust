@@ -1,10 +1,12 @@
 # Local two-account E2E evidence
 
-This document records completed local interaction evidence and the safe way to rerun the simulator lane. The latest local interaction evidence includes a 30 September current-branch Stop All failure/retry run; paired two-app account lifecycle evidence is from 29 September 2026. Production service evidence is tracked separately in [STATUS.md](STATUS.md). This document does not describe production behavior.
+This document records completed local interaction evidence and the safe way to rerun the simulator lane. The latest evidence includes current-source paired account lifecycle tests on 1 October 2026 and a current-branch Stop All failure/retry run on 30 September. Production service evidence is tracked separately in [STATUS.md](STATUS.md). This document does not describe production behavior.
 
 ## Latest completed simulator evidence
 
 On 30 September 2026, the current branch's atomic Stop All retry flow passed **1/1 with no skips or failures** on iPhone 17 Pro/iOS 26.5: `/tmp/Trust-StopAll-UI-20260930-corrected.xcresult`. The app connected to two API-created fictional peers through the loopback-only fault proxy and isolated Development + Memory API. The proxy returned a 503 for the first atomic Stop All request; the app kept both peers Sealed in the UI and server after relaunch. A retry succeeded, both peers became Off, and the Off state remained after a second relaunch. Reserved fictional 555-01xx values and Development OTP were used; no SMS or StoreKit/review bypass was used. The proxy and API were stopped after the run.
+
+On 1 October 2026, release HEAD `637b809` passed the paired role test **1/1 on each device, with zero skips or failures**: Alice `/tmp/Trust-Pair-Alice-20261001-controlled.xcresult` on iPhone 17 Pro/iOS 26.5 and Bob `/tmp/Trust-Pair-Bob-20261001-controlled.xcresult` on iPhone Duo/iOS 27.1. Both people completed onboarding with fictional Development OTP, enabled phone discovery, and used the UI to request, accept, remove, and re-add a connection. The test verified default-Off after reconnection; Sealed sharing and reciprocal Home/Away grants; a live Sealed Look that rendered a map snapshot and matching Activity receipt; Home set, Away after simulated movement, an in-place Home update, Away again, and Clear; Hidden suppression; and Stop. It used loopback-only Development + Memory on port 5089 with fictional NANP 555-01xx values. No real SMS, physical device, StoreKit purchase, push token, or APNs delivery was involved. Each `.xcresult` summary reports one pass and zero skipped tests.
 
 At the 2026-09-29 source checkpoint, the paired run passed **1/1 with no skips on each device**: Alice `/tmp/trust-pair-alice34-20260929.xcresult` on iPhone 17 Pro/iOS 26.5 and Bob `/tmp/trust-pair-bob34-20260929.xcresult` on Duo/iOS 27.1. Both apps performed the reciprocal Home/Away presence grants through their native UIs, including Bob's grant through Duo. The run also covered Development OTP onboarding, phone discovery/request/acceptance, removal and re-invite, Sealed Look with map and Activity receipt, Home/Away consent and movement, Home update/clear, Hidden suppression and its visible label on Duo, Stop, and fresh default-Off after re-add.
 
@@ -12,7 +14,7 @@ A separate History UI run, `/tmp/trust-history-current-source-20260929.xcresult`
 
 The paired and History lanes used an isolated ASP.NET Development API backed by Memory on `127.0.0.1:5089`, with the review seed disabled. The fixtures use reserved fictional 555-01xx numbers and Development OTP; no SMS was sent. No push devices were registered, so these runs do not establish APNs delivery, OS presentation, or tap behavior. They also do not establish physical-device SMS, background location, or StoreKit behavior.
 
-At that same 2026-09-29 source checkpoint, Swift package tests passed **77/77**, the API suite passed **183/183**, and the paired results above exercised the normal reciprocal-grant and relationship flow. These are checkpoint results, not the current merged-source test count. On current release source `f579005`, the API/Postgres suite passed **202/202**, Swift tests passed **81/81**, and PR CI run 36706143943 passed API, iOS, and web jobs. Post-merge CI run 36710594550 also passed; its nine `TrustRealAPIFeatureTests` skipped because CI lacks an isolated API base URL, so neither run is live two-account/physical-device proof. PR #15 added a DEBUG-only screenshot fixture and test/docs/assets updates. The focused Stop/Remove/partial Stop All/delayed Look evidence below adds deterministic fault coverage; delayed History remains open.
+At that 2026-09-29 source checkpoint, Swift package tests passed **77/77** and the API suite passed **183/183**. On release HEAD `637b809`, TrustCore passed **82/82**, API/Postgres passed **202/202**, and the full local iOS simulator suite passed **101** tests with nine real-API UI tests skipped because no isolated API URL was configured. CI run [`36793168979`](https://github.com/QuirinoC/trust/actions/runs/36793168979) passed all jobs; its UI target ran 28 tests, with 19 passing and the same 9 real-API cases skipped. The current-source paired iPhone 17 Pro + Duo run also passed 1/1 on each device, with no skips, as recorded above. These automated checks do not prove physical-device SMS, APNs, background location, or StoreKit behavior. The focused Stop/Remove/partial Stop All/delayed Look evidence below adds deterministic fault coverage; delayed History remains open.
 
 The unsigned simulator `TrustAgeGateTests` suite passed **6/6** after DEBUG-only `TrustKeychain` test storage was enabled for `TRUST_AGE_TEST_MODE=1`; result: `/tmp/trust-agegate-keychain-fix-20260929.xcresult`. The release keychain path remains unchanged. That grant assertion was synchronized with the enabled UI action. Earlier failed harness attempts and the rate-limited five-case run are not counted as completed evidence.
 
@@ -46,6 +48,23 @@ dotnet run --no-launch-profile --project apps/trust-api/TrustApi.csproj
 ```
 
 Set `TRUST_UI_TEST_BASE_URL=http://127.0.0.1:5089` for the runner and each simulator. For paired runs, also set `TRUST_UI_PAIR_ROLE=alice` or `bob` and the same eight-hex `TRUST_UI_PAIR_ID` on the corresponding simulator. After reboot, reapply and verify simulator launchd variables with `launchctl getenv`. Stop the isolated API and clear every `TRUST_UI_*` simulator variable after the run. Never point these tests at a remote service or the existing local service on port 5088.
+
+The paired scenario needs live Core Simulator location updates for Sealed Look and Home/Away transitions. A continuous built-in route can move a person away before the app has acknowledged the first Home state. Start both simulators at the fixed synthetic location before the test:
+
+```sh
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun simctl location <alice-device-udid> set 47.600000,-122.330000
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun simctl location <bob-device-udid> set 47.600000,-122.330000
+```
+
+Start the route controller in a separate terminal before launching either XCTest process. It reuses Bob's disposable Development identity, watches only `/api/v1/circle`, and starts each movement after the API acknowledges the corresponding Home state:
+
+```sh
+python3 apps/trust-ios/Scripts/trust_pair_location_controller.py \
+  --pair-id <same-eight-hex-pair-id> \
+  --device-udid <bob-device-udid>
+```
+
+After both XCTest processes and the controller finish, clear each location with `xcrun simctl location <device-udid> clear`, clear the `TRUST_UI_*` launchd variables, and stop the Development + Memory API. Do not use a continuous route for this test unless it has an explicit Home-state barrier.
 
 The deterministic stale-read UI regression uses the loopback-only proxy in `apps/trust-api/scripts/trust_ui_race_proxy.py`. From the repository root, start the Development + Memory API in the first process:
 
