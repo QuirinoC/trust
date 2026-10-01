@@ -1,6 +1,6 @@
 # Trust project status
 
-Updated 2026-09-30 6:45 PM PDT.
+Updated 2026-09-30 6:49 PM PDT.
 
 The release archive and TestFlight build use stable Xcode 27.0. CI run [`36793168979`](https://github.com/QuirinoC/trust/actions/runs/36793168979) passed all iOS, API, and web jobs. The latest run, [`36800761346`](https://github.com/QuirinoC/trust/actions/runs/36800761346) on `a4201cb`, also passed all jobs: API/Postgres 202/202, TrustCore 82/82, and iOS UI 19 passed with 9 real-API UI tests skipped because CI had no isolated API URL; web tests passed. The local full simulator suite passed 101 with 9 real-API UI tests skipped, and the pause-sheet interaction passed three repeated local runs. These simulator checks do not replace physical TestFlight checks.
 
@@ -12,6 +12,8 @@ The release archive and TestFlight build use stable Xcode 27.0. CI run [`3679316
 - Render's `trust-postgres` Recovery page offers point-in-time restore for the past three days and shows one logical export dated 2026-09-29 3:35 PM. No restore drill has been recorded. The database is still Basic-256mb, so live health is not evidence of high availability or million-user capacity.
 - Render's Metrics page shows Basic-256mb limits of 0.25 GB memory, 0.1 CPU, and 100 active connections. Disk usage/activity, network, database connection/transaction/lock metrics, table/index sizes, and top queries report no data in the last 12 hours or no data yet. Current utilization is therefore unverified; do not interpret the empty charts as low use or capacity headroom.
 - At this check, `jointrust.app` (`/`, `/privacy`, `/terms`, `/sms`, `/support`) and API `/health/live` and `/health/ready` each returned HTTP 200. This verifies reachability only, not full user journeys, backup recovery, or notification delivery.
+
+At 6:46 PM, launching the installed build 41 in the shared iPhone 17 Pro simulator displayed the age-range-block screen. The simulator preferences contain an old UI-test keychain-storage entry with `localBirthDate`, but no `TRUST_AGE_TEST_*` launch variable was set; the persisted screen's exact provenance is therefore unclear and does not establish Apple's live age answer on a physical device. Do not use this simulator state to infer the TestFlight age-check result; the iPhone 16 Pro build 41 retry remains open.
 
 ## Current release decision
 
