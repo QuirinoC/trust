@@ -5,6 +5,7 @@ using TrustApi.Infrastructure.Postgres;
 
 namespace TrustApi.Tests;
 
+[Collection("Postgres integration")]
 public sealed class PostgresMigrationUpgradeTests
 {
     private const string MigrationMarker = ".Migrations.";

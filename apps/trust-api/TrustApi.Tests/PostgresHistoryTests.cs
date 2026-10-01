@@ -5,6 +5,7 @@ using Npgsql;
 
 namespace TrustApi.Tests;
 
+[Collection("Postgres integration")]
 public sealed class PostgresHistoryTests
 {
     private static readonly string Connection =

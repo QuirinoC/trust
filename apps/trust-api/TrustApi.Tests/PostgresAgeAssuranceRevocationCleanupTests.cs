@@ -5,6 +5,7 @@ using TrustApi.Infrastructure.StoreKit;
 
 namespace TrustApi.Tests;
 
+[Collection("Postgres integration")]
 public sealed class PostgresAgeAssuranceRevocationCleanupTests
 {
     private static readonly string Connection =

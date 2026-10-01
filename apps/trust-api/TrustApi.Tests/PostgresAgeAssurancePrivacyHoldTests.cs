@@ -4,6 +4,7 @@ using TrustApi.Infrastructure.Postgres;
 
 namespace TrustApi.Tests;
 
+[Collection("Postgres integration")]
 public sealed class PostgresAgeAssurancePrivacyHoldTests
 {
     private static readonly string Connection =

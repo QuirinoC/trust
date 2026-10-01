@@ -4,6 +4,7 @@ using TrustApi.Infrastructure.Postgres;
 
 namespace TrustApi.Tests;
 
+[Collection("Postgres integration")]
 public sealed class DiscoveryConsentPostgresTests
 {
     private static readonly string Connection = Environment.GetEnvironmentVariable("ConnectionStrings__Postgres")

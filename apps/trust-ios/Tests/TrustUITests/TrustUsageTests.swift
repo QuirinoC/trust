@@ -423,11 +423,16 @@ final class TrustUsageTests: XCTestCase {
         case down
     }
 
-    /// Native SwiftUI menu pickers can expose an on-screen option while XCTest reports
-    /// its backing collection cell as non-hittable (or gives that cell an invalid frame).
-    /// Tap the visible option itself by its reported center, then let each test verify that
-    /// the selected value actually changed.
+    /// Prefer XCTest's accessibility hit target for native SwiftUI menu options. Some
+    /// picker rows report a visible frame but do not respond to a coordinate tap, so fall
+    /// back to the row center only when XCTest says the option is not hittable. Each test
+    /// still verifies that the selected value actually changed.
     private func tapVisibleMenuOption(_ option: XCUIElement, in app: XCUIApplication) {
+        if option.isHittable {
+            option.tap()
+            return
+        }
+
         let frame = option.frame
         let center = CGPoint(x: frame.midX, y: frame.midY)
         let screen = app.frame

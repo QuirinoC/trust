@@ -5,6 +5,7 @@ using TrustApi.Infrastructure.Postgres;
 namespace TrustApi.Tests;
 
 /// Two real accounts on the local Trust Postgres (port 5433). Not two phones.
+[Collection("Postgres integration")]
 public sealed class TwoAccountPostgresTests
 {
     private static readonly string Connection =

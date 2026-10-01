@@ -6,6 +6,7 @@ using TrustApi.Infrastructure.Postgres;
 namespace TrustApi.Tests;
 
 /// Exercises lock ordering, unique-pair handling, and transactional acceptance against the local integration database.
+[Collection("Postgres integration")]
 public sealed class PostgresConnectionRequestTests
 {
     private static readonly string Connection = Environment.GetEnvironmentVariable("ConnectionStrings__Postgres")
