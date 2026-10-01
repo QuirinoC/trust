@@ -1,11 +1,11 @@
 # Trust project status
 
-Reconciled 2026-10-01 06:06 UTC (2026-09-30 11:06 PM PDT). This is the current evidence snapshot; provider state is last-known and must be refreshed before release actions. The actionable pickup list is [NEXT-AGENT-HANDOFF.md](NEXT-AGENT-HANDOFF.md).
+Reconciled 2026-10-01 06:25 UTC (2026-09-30 11:25 PM PDT). This is the current evidence snapshot; provider state is last-known and must be refreshed before release actions. The actionable pickup list is [NEXT-AGENT-HANDOFF.md](NEXT-AGENT-HANDOFF.md).
 
 ## Source and CI
 
 - Reconciliation began from `main` and `origin/main` at `63476c8`; all PRs #1–#16 are merged and there were no open PRs. Stale `codex/*` refs correspond to merged PRs and are not work to merge.
-- Latest completed CI: [36812181956](https://github.com/QuirinoC/trust/actions/runs/36812181956), on `c39bb81`, passed TrustCore 82/82, API/Postgres 202/202, web, and 20 iOS UI tests. Nine real-API UI tests skipped because CI lacked an isolated API URL. Local `PushDeviceApiTests` passed 14/14 with a mock APNs transport. Documentation-commit run [36820784316](https://github.com/QuirinoC/trust/actions/runs/36820784316) passed API and web but failed one iOS UI test when the system-language menu tap left the picker in French. The focused test passed once and then 3/3 in a local repeated simulator run; rerun the failed CI job to determine whether this is intermittent.
+- Latest completed CI: [36820784316](https://github.com/QuirinoC/trust/actions/runs/36820784316), on docs/test handoff commit `06d7263`, passed API/Postgres 202/202, web, TrustCore 82/82, and 20 iOS UI tests; 9 real-API UI tests skipped because CI lacked an isolated API URL. Its first iOS attempt had one missed system-language Picker selection, but retry attempt 2 completed successfully at 06:22 UTC. The focused test passed once and then 3/3 in a local repeated simulator run. Local `PushDeviceApiTests` passed 14/14 with a mock APNs transport.
 - App behavior remains at release-source checkpoint `637b809`; later commits are tests and documentation. The build 41 archive was created at 2026-09-30 16:35 PDT, before `637b809` was committed at 16:50 PDT, so the exact Git revision is not embedded. Its archived app is 1.0 (41), its `PrivacyInfo.xcprivacy` exactly matches the current source (SHA-256 `37cc1fbe82aff221017968f95a47bc07cda5aaaf3d80e7d85e3e97c80b103d70`), and `637b809` changed no Swift source. Do not claim an exact source mapping; the current Send-code disclosure/version behavior still needs candidate verification. Documentation-only commits require no app upload.
 
 ## Last verified release and service state
