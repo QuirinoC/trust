@@ -1,6 +1,6 @@
 # App Store listing copy
 
-**App Store Connect listing last directly observed 2026-09-30; not submitted for review.** The English (U.S.) draft description was saved with qualified notification language, and version 1.0 selected build 40 and the current icon at the last listing check. Build 41 was uploaded at 4:38 PM PDT and Xcode reported it processing; version selection has not been rechecked. Recheck all saved fields and availability before submission. Public release gates remain open.
+**App Store Connect listing last directly observed 2026-09-30 at 6:30 PM PDT; not submitted for review.** Version 1.0 remains **Prepare for Submission**, build 41 is selected, and manual release is selected. The English (U.S.) listing below matches the live name, subtitle, promotional text, description, keywords, support URL, marketing URL, and privacy URL. The current live page shows six screenshots in the 6.5-inch iPhone group; see [review readiness](REVIEW-READINESS.md) for the other previously checked screenshot groups. Core review and legal gates remain open.
 
 ## Current English (U.S.) draft metadata
 
@@ -29,7 +29,7 @@ Trust is a location-sharing app for friends and partners. Choose what each perso
 
 Adding someone does not start sharing. After you connect, each person chooses whether to share. You can choose different settings.
 
-With Sealed sharing, you can confirm a Look to request the other person's latest available location snapshot. Trust records the check in Activity and attempts to notify the person sharing. Notification delivery is not guaranteed. Always views do not generate a push notification. Sealed does not provide location history.
+With Sealed sharing, you can confirm a Look to request the other person's latest available location snapshot. Trust records the check in Activity and attempts to notify the person sharing. Notification delivery is not guaranteed. Sealed does not provide location history.
 
 Always is separate. While someone has chosen Always, selected connected people can view their location and eligible history. Pause or stop sharing at any time.
 
@@ -58,11 +58,11 @@ Reconfirm the primary and secondary categories, supported platforms, territory a
 
 ## Remaining release checks
 
-- **Build:** Build 40 was last confirmed as `Testing` in `Trust Family Auto`, which had three testers and automatic Xcode-build distribution enabled. Build 41 was uploaded at 4:38 PM PDT and remains unconfirmed in the group while processing. The last known physical iPhone 16 Pro feedback on build 35 says “We can't complete the required check”; retry on build 41 after it becomes available.
-- **Screenshots:** the last App Store Connect observation showed six ordered screenshots in each iPhone 6.9-inch, iPhone 6.5-inch, and iPad 13-inch group. The live 6.5-inch map image matched the local source. Recheck the full set against the final release candidate.
-- **Privacy:** the last draft inspection at 3:43 PM PDT showed the published App Privacy label unchanged; Photos or Videos was configured for App Functionality, linked to identity, and not tracked, with its wizard at Publish. Contacts setup was incomplete. The browser URL guard stopped a later attempt to reopen the privacy tab, so the exact preview is not rechecked. Finish Contacts, verify every data type against source and the privacy policy, and get owner approval before publishing.
+- **Build:** Build 41 is processed, assigned to `Trust Family Auto` (three testers; automatic Xcode-build distribution), and selected on version 1.0. Juan's iPhone 16 Pro was last observed on build 36. Build 35 feedback says “We can't complete the required check”; retry the same flow on build 41 before submission.
+- **Screenshots:** the current App Store Connect version page shows six ordered screenshots in the 6.5-inch iPhone group. A prior check also confirmed six screenshots in each iPhone 6.9-inch and iPad 13-inch group; recheck those groups and compare the complete set against the selected build before submission.
+- **Privacy:** the published App Privacy label includes nine types, including Contacts for Trust's stored account-to-account social graph; the app does not upload the phone address book. App Store Connect currently warns that Photos or Videos, Other Diagnostic Data, and Other Data Types are selected but not set up, so they are not yet included in the product page. Finish and inspect all three declarations against app/server behavior and get the Account Holder's accuracy and legal-compliance attestation before publishing.
 - **Subscriptions:** at 3:53 PM, Trust Plus and both products were `Ready for Review` and already added for review. U.S. prices were $7.99/month and $69.99/year with a seven-day trial shown across 175 selected subscription storefronts. Customer-facing localization was English (U.S.) only. The current product description says “Trust Plus: 20 seats, Always, map, year of log.” Revisit clarity and localization before broad international availability; app territory availability has not been rechecked.
-- **Review and distribution:** the last listing observation recorded US-only availability, pre-order and automatic new territories disabled, and manual release. Recheck live before submission. Usable reviewer access remains unresolved. Verify paid agreements and physical purchase/restore before submission. No App Review submission has been made.
+- **Review and distribution:** the current version page still shows manual release and the `Prepare for Submission` status. The Sign-in required checkbox is off although an account is required; the review notes have no working demo credentials or connected test account. The last availability observation recorded US-only distribution with pre-order and automatic new territories disabled; recheck those settings. Verify paid agreements and physical purchase/restore before submission. No App Review submission has been made.
 - **Age assurance and legal:** the app uses Apple-signaled age and significant-update flows on supported OS versions. The App Store questionnaire now declares age-assurance use. Audience classification and launch-market obligations still need legal review; see [AGE-ASSURANCE.md](../../../docs/AGE-ASSURANCE.md). Confirm SMS consent and subscription terms against the shipped behavior.
 - **Beta website:** the current beta link opens an email draft. It is not a waitlist or public App Store download link.
 
