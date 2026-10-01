@@ -2,11 +2,13 @@
 
 ## Product model
 
-**Find by handle → send a request → accept the connection → choose what to share.** A request is not consent to receive location. Only recipient acceptance creates an active connection, and acceptance initializes both share directions to Off. Each person then chooses whether and how to share.
+**Find by handle or complete phone number → send a request → accept the connection → choose what to share.** A request is not consent to receive location. Only recipient acceptance creates an active connection, and acceptance initializes both share directions to Off. Each person then chooses whether and how to share.
 
 Sharing owns the audience and per-person location modes. Home status is a secondary setting inside Sharing. You → Location settings owns device permission, Home setup, and diagnostics; it does not decide who can see the account.
 
-## Current milestone
+## Implemented experience
+
+The experience below is implemented and is the current product record, not an open redesign task. Cross-account simulator validation passed; remaining real-device and multi-device checks are listed in [FEATURE-E2E-PLAN.md](FEATURE-E2E-PLAN.md) and [NEXT-AGENT-HANDOFF.md](NEXT-AGENT-HANDOFF.md).
 
 - Add someone opens one native sheet with a clear “Find your person” heading, one privacy reassurance (“Connect first. Sharing stays off until you choose.”), and a focused “Handle or phone number” field. A 350 ms debounce runs one exact handle or complete-phone search; national numbers use device region metadata, and international numbers can include `+` and their country code. There is no Search button. Keep the sheet visually light: one compact bordered field, no decorative card shadows, and a simple result row with the opted-in profile picture and `@handle`; Send request is the full-width action below it. Done dismisses the keyboard and gives submit-only feedback for malformed handles or incomplete phone numbers, while the initial screen stays uncluttered.
 - If a complete phone lookup returns no eligible match, show a plain “No match found” state and a “Share invite link” action. Phone discovery is opt-in, so the copy must not claim the searched number is not registered. Only tapping Share invite link creates the legacy invite URL and opens native sharing. Dismissing the share sheet does not mean it was sent. Never send an automatic SMS or include the typed phone number in an invite.
@@ -27,8 +29,8 @@ The API does not send SMS or push notifications for a connection request. The re
 
 Contact-book upload, automatic Trust-sent SMS, QR codes, and deferred-install attribution are out of scope. Phone discovery is an explicit opt-in using one complete verified phone number at a time; Trust does not upload contacts or send invitations by text. Profile photos can appear as small inline previews for opted-in discovery and remain fully available to active connections. No public photo URL is returned.
 
-## Home behavior and remaining device decision
+## Home behavior and open multi-device product decision
 
 Home removal is implemented locally and on the server. Clearing Home removes the server place and derived place association while preserving independent manual presence. Home coordinates remain device-only and account-scoped; they are not uploaded. The API stores only a place ID/label and coarse presence.
 
-Still decide and test what happens when the same account is active on two devices with different local Home regions. Presence is account-wide today, so the most recent device event can change the status seen by every connection. Define whether one device is the location source, whether presence is per device, or whether local Home monitoring is limited to one signed-in device before treating multi-device Home/Away behavior as production-ready. See the open second-device lane in [FEATURE-E2E-PLAN.md](FEATURE-E2E-PLAN.md).
+The remaining multi-device product decision is separate from the completed sharing redesign: when one account has two devices with different local Home regions, presence is account-wide and the most recent device event can change the status seen by every connection. Decide whether one device is the location source, presence is per device, or Home monitoring is limited to one signed-in device before treating multi-device Home/Away behavior as production-ready. See [FEATURE-E2E-PLAN.md](FEATURE-E2E-PLAN.md).

@@ -11,6 +11,7 @@ Trust is a location sharing service for people who choose each other. It has thr
 | `apps/jointrust-web` | Public landing page, privacy, terms, support, and SMS opt-in |
 | `docs/DEPLOYMENT.md` | Safe API, website, and TestFlight release steps |
 | `docs/STATUS.md` | Verified readiness, known gaps, and release blockers |
+| `docs/NEXT-AGENT-HANDOFF.md` | Ordered pickup list and completed-work guardrails for the next agent |
 
 ## Run the API locally
 
@@ -41,4 +42,4 @@ The public pages and canonical legal URLs are served from Cloudflare at `https:/
 
 ## Current release state
 
-The API is deployed and its configured release origin `https://trust-api-u0ft.onrender.com` passed readiness. Production service readiness and the remaining TestFlight checks are tracked in [docs/STATUS.md](docs/STATUS.md). The custom hostname currently has unresolved TLS; use the Render service URL until DNS/TLS is independently verified.
+The API is deployed and its configured release origin `https://trust-api-u0ft.onrender.com` passed readiness. Start with the [next-agent handoff](docs/NEXT-AGENT-HANDOFF.md) for current open work and use [docs/STATUS.md](docs/STATUS.md) for last-verified provider state. The custom hostname currently has unresolved TLS; use the Render service URL until DNS/TLS is independently verified.

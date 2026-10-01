@@ -1,6 +1,6 @@
 # Trust deployment runbook
 
-This file documents deployment procedure only. It does not assert which deployment is live. Check [STATUS.md](STATUS.md), then verify the provider dashboard and live health/routes immediately before and after each release. Keep credentials in the provider's secret store; never add them to this repository.
+This file documents deployment procedure only. It does not assert which deployment is live. Start with [NEXT-AGENT-HANDOFF.md](NEXT-AGENT-HANDOFF.md), check [STATUS.md](STATUS.md), then verify the provider dashboard and live health/routes immediately before and after each release. Dated build and provider examples below are historical snapshots; refresh them before acting. Keep credentials in the provider's secret store; never add them to this repository.
 
 ## API — Render
 
