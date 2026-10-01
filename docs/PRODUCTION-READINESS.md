@@ -1,6 +1,6 @@
 # Trust production readiness plan
 
-Updated 2026-10-01 09:40 UTC. This is the ongoing production and scale plan, not a completed checklist. Use [NEXT-AGENT-HANDOFF.md](NEXT-AGENT-HANDOFF.md) for the ordered current tasks and [STATUS.md](STATUS.md) for the latest verified snapshot; refresh provider state before release actions.
+Updated 2026-10-01 09:42 UTC. This is the ongoing production and scale plan, not a completed checklist. Use [NEXT-AGENT-HANDOFF.md](NEXT-AGENT-HANDOFF.md) for the ordered current tasks and [STATUS.md](STATUS.md) for the latest verified snapshot; refresh provider state before release actions.
 
 ## Current release decision — reconciled 2026-10-01
 
