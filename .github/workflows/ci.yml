@@ -88,12 +88,85 @@ jobs:
           -derivedDataPath "$RUNNER_TEMP/trust-derived-data"
           CODE_SIGNING_ALLOWED=NO
           test
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+      - name: Start isolated Development API for opt-in UI tests
+        working-directory: apps/trust-api
+        env:
+          ASPNETCORE_ENVIRONMENT: Development
+          ASPNETCORE_URLS: http://127.0.0.1:5089
+          Trust__Store: memory
+          Trust__SeedReviewCircle: "false"
+          Auth__AllowDevelopmentSignIn: "true"
+          Auth__SigningKey: development-signing-key-32bytes-min!!
+        run: |
+          dotnet build TrustApi.csproj --configuration Release
+          nohup dotnet bin/Release/net9.0/TrustApi.dll \
+            > "$RUNNER_TEMP/trust-local-e2e-api.log" 2>&1 &
+          echo "$!" > "$RUNNER_TEMP/trust-local-e2e-api.pid"
+
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://127.0.0.1:5089/health/ready >/dev/null; then
+              curl --fail --silent http://127.0.0.1:5089/api/v1/local-test-capabilities | jq -e ".developmentOtpWithoutSms == true"
+              exit 0
+            fi
+            sleep 2
+          done
+
+          echo "The isolated Development API did not become ready."
+          tail -n 200 "$RUNNER_TEMP/trust-local-e2e-api.log"
+          exit 1
+      - name: Run opt-in local API UI tests (non-serial cases)
+        run: >-
+          xcodebuild
+          -project apps/trust-ios/Trust.xcodeproj
+          -scheme Trust.LocalE2E
+          -testPlan Trust.LocalE2E
+          -destination "platform=iOS Simulator,id=$TRUST_SIMULATOR_ID"
+          -derivedDataPath "$RUNNER_TEMP/trust-derived-data"
+          -skip-testing:TrustUITests/TrustRealAPIFeatureTests/testSameAccountHomeHandoffOwnerSetsHome
+          -skip-testing:TrustUITests/TrustRealAPIFeatureTests/testSameAccountHomeHandoffFirstUseDeviceTakesOver
+          -skip-testing:TrustUITests/TrustRealAPIFeatureTests/testSameAccountHomeHandoffPreviousOwnerDetectsTakeoverAndClear
+          -resultBundlePath "$RUNNER_TEMP/trust-local-e2e.xcresult"
+          CODE_SIGNING_ALLOWED=NO
+          test
+      - name: Stop isolated Development API
+        if: always()
+        run: |
+          if [[ -f "$RUNNER_TEMP/trust-local-e2e-api.pid" ]]; then
+            api_pid=$(cat "$RUNNER_TEMP/trust-local-e2e-api.pid")
+            kill "$api_pid" 2>/dev/null || true
+            wait "$api_pid" 2>/dev/null || true
+          fi
+      - name: Verify opt-in UI coverage ran
+        if: always()
+        run: |
+          result_bundle="$RUNNER_TEMP/trust-local-e2e.xcresult"
+          if [[ ! -d "$result_bundle" ]]; then
+            echo "The opt-in UI test result bundle is missing."
+            exit 1
+          fi
+
+          xcrun xcresulttool get test-results summary --path "$result_bundle" --format json \
+            | tee "$RUNNER_TEMP/trust-local-e2e-summary.json" \
+            | jq -e '
+                .result == "Passed" and
+                .totalTestCount == 9 and
+                .passedTests == 4 and
+                .skippedTests == 5 and
+                .failedTests == 0
+              '
       - name: Upload iOS test result bundle
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: trust-ios-xcresult
-          path: ${{ runner.temp }}/trust-derived-data/Logs/Test/*.xcresult
+          path: |
+            ${{ runner.temp }}/trust-derived-data/Logs/Test/*.xcresult
+            ${{ runner.temp }}/trust-local-e2e.xcresult
+            ${{ runner.temp }}/trust-local-e2e-summary.json
+            ${{ runner.temp }}/trust-local-e2e-api.log
           if-no-files-found: warn
           retention-days: 7
 
