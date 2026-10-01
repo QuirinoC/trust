@@ -58,6 +58,42 @@ final class TrustUsageTests: XCTestCase {
         XCTAssertNotEqual(centerColors.first, centerColors.last, "The test should cover both light and dark appearances.")
     }
 
+    func testSleepyPresetAvatarUsesAdaptiveBackingInBothAppearances() {
+        let appearances: [(dark: Bool, rgb: [Int])] = [
+            (false, [0xFC, 0xFA, 0xF2]),
+            (true, [0x33, 0x40, 0x55])
+        ]
+
+        for appearance in appearances {
+            let app = launchDemo(dark: appearance.dark, route: "you")
+            XCTAssertTrue(app.buttons["tab-you"].waitForExistence(timeout: 20))
+            let editPicture = app.buttons["edit-profile-picture"]
+            XCTAssertTrue(scrollYouContent(to: editPicture, direction: .up, in: app))
+            editPicture.tap()
+
+            let preview = app.buttons["avatar-photo-options"]
+            XCTAssertTrue(preview.waitForExistence(timeout: 5))
+            app.buttons["Fox icon"].tap()
+
+            guard let image = app.screenshot().image.cgImage else {
+                XCTFail("Expected a simulator screenshot for the profile-picture preview.")
+                app.terminate()
+                continue
+            }
+            let scale = CGFloat(image.width) / app.windows.firstMatch.frame.width
+            // The transparent sleepy fox leaves a clear part of the adaptive disc at
+            // the left midpoint. Sample inside the circle, away from the camera badge.
+            let x = Int((preview.frame.minX + preview.frame.width * 0.05) * scale)
+            let y = Int(preview.frame.midY * scale)
+            let actual = pixelColor(image, x: x, y: y)
+            XCTAssertTrue(
+                approximatelyMatches(actual, rgb: appearance.rgb),
+                "The avatar backing should adapt with the app appearance. Expected RGB \(appearance.rgb), sampled 0x\(String(actual, radix: 16))."
+            )
+            app.terminate()
+        }
+    }
+
     func testPauseResumeOffAndRemoveAreSeparateActions() {
         let app = launchDemo()
         XCTAssertTrue(app.buttons["tab-sharing"].waitForExistence(timeout: 20))
@@ -368,6 +404,21 @@ final class TrustUsageTests: XCTestCase {
             | UInt32(bytes[offset + 1]) << 16
             | UInt32(bytes[offset + 2]) << 8
             | UInt32(bytes[offset + 3])
+    }
+
+    private func approximatelyMatches(_ packed: UInt32, rgb expected: [Int]) -> Bool {
+        let bytes = [
+            Int((packed >> 24) & 0xFF),
+            Int((packed >> 16) & 0xFF),
+            Int((packed >> 8) & 0xFF),
+            Int(packed & 0xFF)
+        ]
+        let channelOrders = [Array(bytes.prefix(3)), Array(bytes.dropFirst().prefix(3))]
+        return channelOrders.contains { channels in
+            [channels, channels.reversed()].contains { ordered in
+                zip(ordered, expected).allSatisfy { abs($0 - $1) <= 12 }
+            }
+        }
     }
 
     private func selectSystemLanguage(in app: XCUIApplication) {
