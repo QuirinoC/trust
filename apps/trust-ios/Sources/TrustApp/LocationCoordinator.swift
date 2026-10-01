@@ -13,6 +13,7 @@ final class LocationCoordinator: NSObject, ObservableObject, CLLocationManagerDe
     @Published var isSharing = false
     @Published private(set) var sharingTier: LocationSharingTier = .off
     @Published private(set) var homeIsSet = false
+    @Published private(set) var homeIsOwnedByAnotherDevice = false
 
     var onLocations: (([LocationPoint]) -> Void)?
     var onHomePresence: ((HomePresenceKind, Date, UUID) -> Void)?
@@ -27,6 +28,8 @@ final class LocationCoordinator: NSObject, ObservableObject, CLLocationManagerDe
     private var awaitingAlwaysAnswer = false
     private var didRequestPreciseThisSession = false
     private var monitoringHome = false
+    private var hasReconciledServerHome = false
+    private var serverHomePlaceID: UUID?
     private var lastPostedHomeState: HomePresenceKind?
     private var pendingOneShotLocationCompletion: ((LocationPoint?) -> Void)?
     private var pendingOneShotLocationRequestID: UUID?
@@ -53,6 +56,9 @@ final class LocationCoordinator: NSObject, ObservableObject, CLLocationManagerDe
         homeAccountID = TrustHomeScope.normalizedAccountID(accountID)
         homeStore = HomePlaceStore(accountID: homeAccountID)
         homeIsSet = homeStore.isSet
+        homeIsOwnedByAnotherDevice = false
+        hasReconciledServerHome = false
+        serverHomePlaceID = nil
         lastPostedHomeState = nil
     }
 
@@ -133,12 +139,47 @@ final class LocationCoordinator: NSObject, ObservableObject, CLLocationManagerDe
     func clearHome() {
         homeStore.clear()
         homeIsSet = false
+        homeIsOwnedByAnotherDevice = false
+        hasReconciledServerHome = true
+        serverHomePlaceID = nil
+        monitoringHome = false
         lastPostedHomeState = nil
         applyHomeMonitoring()
     }
 
+    /// Reconcile local monitoring with the canonical Home marker from a successful
+    /// authenticated circle response. Coordinates remain in this device's Keychain.
+    func reconcileHomePlace(serverPlaceID: UUID?) {
+        hasReconciledServerHome = true
+        serverHomePlaceID = serverPlaceID
+        switch TrustHomeReconciliation.outcome(
+            localPlaceID: homeStore.placeID,
+            serverPlaceID: serverPlaceID,
+            hasSuccessfulSnapshot: true
+        ) {
+        case .awaitingServer:
+            break
+        case .noLocalHome:
+            homeIsOwnedByAnotherDevice = false
+        case .activeHere:
+            homeIsOwnedByAnotherDevice = false
+        case .activeElsewhere:
+            homeIsOwnedByAnotherDevice = true
+            monitoringHome = false
+        case .serverClearedLocalHome:
+            homeIsOwnedByAnotherDevice = false
+            clearHome()
+        }
+        applyHomeMonitoring()
+    }
+
     func setHomeMonitoring(_ enabled: Bool) {
-        monitoringHome = enabled && homeStore.isSet
+        let reconciliation = TrustHomeReconciliation.outcome(
+            localPlaceID: homeStore.placeID,
+            serverPlaceID: serverHomePlaceID,
+            hasSuccessfulSnapshot: hasReconciledServerHome
+        )
+        monitoringHome = enabled && homeStore.isSet && reconciliation.allowsMonitoring
         applyHomeMonitoring()
     }
 
@@ -201,6 +242,9 @@ final class LocationCoordinator: NSObject, ObservableObject, CLLocationManagerDe
     func commitHome(_ candidate: (placeID: UUID, label: String, coordinate: CLLocationCoordinate2D)) {
         homeStore.save(coordinate: candidate.coordinate, label: candidate.label, placeID: candidate.placeID)
         homeIsSet = true
+        homeIsOwnedByAnotherDevice = false
+        hasReconciledServerHome = true
+        serverHomePlaceID = candidate.placeID
         lastPostedHomeState = nil
         applyHomeMonitoring()
         evaluateHomePresence(at: CLLocation(latitude: candidate.coordinate.latitude, longitude: candidate.coordinate.longitude))

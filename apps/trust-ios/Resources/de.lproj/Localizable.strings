@@ -208,6 +208,8 @@
 "home_needs_always" = "Standort immer zulassen, sodass „Zuhause“ und „Abwesend“ aktualisiert werden, wenn Trust geschlossen wird.";
 "home_needs_location" = "Standort zulassen und dann „Zuhause“ von Ihrem Standort aus festlegen.";
 "home_not_set_label" = "Noch kein Heimatort.";
+"home_owned_elsewhere" = "Tippe auf „Hier als Zuhause festlegen“, um die Überwachung auf dieses Gerät zu übertragen.";
+"home_owned_elsewhere_label" = "Die Zuhause-Überwachung läuft auf einem anderen Gerät.";
 "home_place" = "Heimatort";
 "home_place_note" = "Stellen Sie die Position dort ein, wo Sie sich gerade befinden. Koordinaten bleiben auf diesem Telefon. Mit „Immer Standort“ markiert Trust Ihren Kreis als „Zuhause“ oder „Abwesend“.";
 "home_place_privacy" = "Dein Heimatort bleibt auf diesem Telefon. Wähle unter „Teilen“ für jede Person einen Standortmodus und deinen Status „Zuhause“, „Unterwegs“ oder „Verborgen“.";

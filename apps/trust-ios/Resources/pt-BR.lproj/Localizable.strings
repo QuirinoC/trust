@@ -208,6 +208,8 @@
 "home_needs_always" = "Permita o acesso à localização Sempre para Casa e Fora atualizarem quando o Trust estiver fechado.";
 "home_needs_location" = "Permita o acesso à localização e defina Casa onde você está.";
 "home_not_set_label" = "Ainda não há um lugar definido como Casa.";
+"home_owned_elsewhere" = "Defina a Casa aqui para transferir o monitoramento para este dispositivo.";
+"home_owned_elsewhere_label" = "O monitoramento da Casa está ativo em outro dispositivo.";
 "home_place" = "Lugar Casa";
 "home_place_note" = "Defina usando sua localização atual. As coordenadas ficam neste celular. Com o acesso à localização Sempre, o Trust indica Casa ou Fora para as pessoas do seu grupo.";
 "home_place_privacy" = "O lugar Casa fica neste celular. Em Compartilhamento, escolha o modo de localização de cada pessoa e seu status Em casa, Fora ou Oculto.";

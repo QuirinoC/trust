@@ -208,6 +208,8 @@
 "home_needs_always" = "Autoriser la localisation Toujours afin que les paramètres Chez moi et Absent soient mis à jour lorsque Trust est fermé.";
 "home_needs_location" = "Autorisez la localisation, puis définissez Domicile à partir de l'endroit où vous vous trouvez.";
 "home_not_set_label" = "Pas encore de domicile.";
+"home_owned_elsewhere" = "Définissez le domicile ici pour transférer le suivi vers cet appareil.";
+"home_owned_elsewhere_label" = "Le suivi du domicile est actif sur un autre appareil.";
 "home_place" = "Lieu de résidence";
 "home_place_note" = "Définir d'où vous êtes actuellement. Les coordonnées restent sur ce téléphone. Avec Toujours la localisation, Trust marque Chez moi ou Absent pour votre cercle.";
 "home_place_privacy" = "Votre lieu de domicile reste sur ce téléphone. Dans Partage, choisissez un mode de partage de position pour chaque personne, ainsi que votre statut Domicile, Absent ou Masqué.";

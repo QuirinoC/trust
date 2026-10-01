@@ -102,6 +102,8 @@
   "handle_taken": "Em uso",
   "home_cleared_toast": "Casa removida. A presença continua manual.",
   "home_is_set_label": "Casa está definida neste celular.",
+  "home_owned_elsewhere": "Defina a Casa aqui para transferir o monitoramento para este dispositivo.",
+  "home_owned_elsewhere_label": "O monitoramento da Casa está ativo em outro dispositivo.",
   "home_needs_always": "Permita o acesso à localização Sempre para Casa e Fora atualizarem quando o Trust estiver fechado.",
   "home_needs_location": "Permita o acesso à localização e defina Casa onde você está.",
   "home_not_set_label": "Ainda não há um lugar definido como Casa.",

@@ -157,6 +157,8 @@
   "pin_accessibility": "%@。 %@。",
   "show_on_map": "在地图上显示 %@",
   "home_is_set_label": "此手机已设置主页。",
+  "home_owned_elsewhere": "点按“在此处设置家”以将监测转移到此设备。",
+  "home_owned_elsewhere_label": "家庭状态监测正在另一台设备上运行。",
   "home_needs_always": "允许始终定位，以便在信任关闭时更新家庭和外出地点。",
   "home_not_set_label": "还没有家。",
   "home_place": "家的地方",

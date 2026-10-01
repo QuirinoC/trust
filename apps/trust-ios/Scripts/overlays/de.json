@@ -113,6 +113,8 @@
   "pin_accessibility": "%@. %@.",
   "show_on_map": "Zeigen Sie %@ auf der Karte an",
   "home_is_set_label": "Auf diesem Telefon ist „Zuhause“ eingestellt.",
+  "home_owned_elsewhere": "Tippe auf „Hier als Zuhause festlegen“, um die Überwachung auf dieses Gerät zu übertragen.",
+  "home_owned_elsewhere_label": "Die Zuhause-Überwachung läuft auf einem anderen Gerät.",
   "home_needs_always": "Standort immer zulassen, sodass „Zuhause“ und „Abwesend“ aktualisiert werden, wenn Trust geschlossen wird.",
   "home_not_set_label": "Noch kein Heimatort.",
   "home_place": "Heimatort",

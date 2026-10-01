@@ -36,6 +36,63 @@ final class TrustCircleRefreshBarrierTests: XCTestCase {
     }
 }
 
+final class TrustHomeReconciliationTests: XCTestCase {
+    func testMatchingServerPlaceKeepsMonitoringOnThisDevice() {
+        let placeID = UUID()
+        XCTAssertEqual(
+            TrustHomeReconciliation.outcome(localPlaceID: placeID, serverPlaceID: placeID, hasSuccessfulSnapshot: true),
+            .activeHere
+        )
+        XCTAssertTrue(TrustHomeReconciliation.outcome(
+            localPlaceID: placeID, serverPlaceID: placeID, hasSuccessfulSnapshot: true
+        ).allowsMonitoring)
+    }
+
+    func testDifferentServerPlaceMarksMonitoringActiveElsewhere() {
+        XCTAssertEqual(
+            TrustHomeReconciliation.outcome(localPlaceID: UUID(), serverPlaceID: UUID(), hasSuccessfulSnapshot: true),
+            .activeElsewhere
+        )
+        XCTAssertFalse(TrustHomeReconciliation.outcome(
+            localPlaceID: UUID(), serverPlaceID: UUID(), hasSuccessfulSnapshot: true
+        ).allowsMonitoring)
+    }
+
+    func testFirstUseDeviceSeesMonitoringOwnedElsewhere() {
+        let serverPlaceID = UUID()
+        XCTAssertEqual(
+            TrustHomeReconciliation.outcome(
+                localPlaceID: nil,
+                serverPlaceID: serverPlaceID,
+                hasSuccessfulSnapshot: true
+            ),
+            .activeElsewhere
+        )
+    }
+
+    func testSuccessfulServerClearClearsLocalHomeAndNoLocalHomeIsNoOp() {
+        XCTAssertEqual(
+            TrustHomeReconciliation.outcome(localPlaceID: UUID(), serverPlaceID: nil, hasSuccessfulSnapshot: true),
+            .serverClearedLocalHome
+        )
+        XCTAssertEqual(
+            TrustHomeReconciliation.outcome(localPlaceID: nil, serverPlaceID: nil, hasSuccessfulSnapshot: true),
+            .noLocalHome
+        )
+    }
+
+    func testMissingServerResponseDoesNotInferRemoteClearAndKeepsLocalMonitoring() {
+        let localPlaceID = UUID()
+        let outcome = TrustHomeReconciliation.outcome(
+            localPlaceID: localPlaceID,
+            serverPlaceID: nil,
+            hasSuccessfulSnapshot: false
+        )
+        XCTAssertEqual(outcome, .awaitingServer)
+        XCTAssertTrue(outcome.allowsMonitoring)
+    }
+}
+
 final class TrustShareMutationGateTests: XCTestCase {
     func testOnlyTheActiveConnectionBlocksNewEnableOrPauseIntents() {
         var gate = TrustShareMutationGate()

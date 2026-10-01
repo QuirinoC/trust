@@ -209,6 +209,8 @@
   "home_needs_always": "Allow Always location so Home and Away update when Trust is closed.",
   "home_needs_location": "Allow location, then set Home from where you are.",
   "home_not_set_label": "No Home place yet.",
+  "home_owned_elsewhere": "Set Home Here to move monitoring to this device.",
+  "home_owned_elsewhere_label": "Home monitoring is active on another device.",
   "home_place": "Home place",
   "home_place_note": "Set from where you are now. Coordinates stay on this phone. With Always location, Trust marks Home or Away for your circle.",
   "home_place_privacy": "Your Home place stays on this phone. In Sharing, choose each person's location mode and your Home, Away, or Hidden status.",

@@ -208,6 +208,8 @@
 "home_needs_always" = "允许始终定位，以便在信任关闭时更新家庭和外出地点。";
 "home_needs_location" = "允许位置，然后从您所在的位置设置主页。";
 "home_not_set_label" = "还没有家。";
+"home_owned_elsewhere" = "点按“在此处设置家”以将监测转移到此设备。";
+"home_owned_elsewhere_label" = "家庭状态监测正在另一台设备上运行。";
 "home_place" = "家的地方";
 "home_place_note" = "从你现在所在的位置开始设置。坐标保留在此手机上。通过“始终定位”，Trust 可以为您的圈子标记“在家”或“离开”。";
 "home_place_privacy" = "“家”地点仅保存在此手机上。在“共享”中，为每个人选择位置共享模式，并选择“在家”“外出”或“隐藏”状态。";

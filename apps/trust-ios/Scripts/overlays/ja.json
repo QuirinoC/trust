@@ -157,6 +157,8 @@
   "pin_accessibility": "%@。%@。",
   "show_on_map": "%@さんを地図に表示",
   "home_is_set_label": "自宅はこの端末に設定されています。",
+  "home_owned_elsewhere": "このデバイスに移すには「ここを自宅に設定」をタップしてください。",
+  "home_owned_elsewhere_label": "自宅の監視は別のデバイスで有効です。",
   "home_needs_always": "Trustを閉じていても自宅・外出を更新できるよう、位置情報を「常に許可」にしてください。",
   "home_not_set_label": "自宅の場所は未設定です。",
   "home_place": "自宅の場所",

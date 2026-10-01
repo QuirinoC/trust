@@ -443,6 +443,12 @@ public enum TrustCopy {
     public static var homeNotSetLabel: String {
         value("home_not_set_label", defaultValue: "No Home place yet.")
     }
+    public static var homeOwnedElsewhereLabel: String {
+        value("home_owned_elsewhere_label", defaultValue: "Home monitoring is active on another device.")
+    }
+    public static var homeOwnedElsewhere: String {
+        value("home_owned_elsewhere", defaultValue: "Set Home Here to move monitoring to this device.")
+    }
     public static var homePlace: String { value("home_place", defaultValue: "Home place") }
     public static var homePlaceNote: String {
         value(

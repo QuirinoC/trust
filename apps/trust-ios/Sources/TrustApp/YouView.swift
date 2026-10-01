@@ -307,10 +307,19 @@ struct YouView: View {
                 .trustFont(12)
                 .foregroundStyle(palette.muted)
                 .fixedSize(horizontal: false, vertical: true)
-            Text(model.location.homeIsSet ? TrustCopy.homeIsSetLabel : TrustCopy.homeNotSetLabel)
+            Text(model.location.homeIsOwnedByAnotherDevice
+                ? TrustCopy.homeOwnedElsewhereLabel
+                : (model.location.homeIsSet ? TrustCopy.homeIsSetLabel : TrustCopy.homeNotSetLabel))
                 .trustFont(13, weight: .semibold)
                 .foregroundStyle(palette.ink)
                 .accessibilityIdentifier("home-place-status")
+            if model.location.homeIsOwnedByAnotherDevice {
+                Text(TrustCopy.homeOwnedElsewhere)
+                    .trustFont(12)
+                    .foregroundStyle(palette.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("home-monitoring-elsewhere")
+            }
             if model.location.homeIsSet, !model.location.hasAlways {
                 Text(TrustCopy.homeNeedsAlways)
                     .trustFont(12)

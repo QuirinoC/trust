@@ -1594,6 +1594,7 @@ final class AppModel: ObservableObject {
             let fresh = refreshResult.snapshot
             setAccountDataScope(fresh.you.id.uuidString.lowercased())
             snapshot = fresh
+            location.reconcileHomePlace(serverPlaceID: fresh.yourHomePlaceID)
             lastSuccessfulCircleRefreshSequence = refreshSequence
             for (personID, pending) in pendingPresenceGrants where pending.preserveOptimisticValue &&
                 fresh.members.first(where: { $0.id == personID })?.connectionID == pending.connectionID {

@@ -113,6 +113,8 @@
   "pin_accessibility": "%@. %@.",
   "show_on_map": "Afficher %@ sur la carte",
   "home_is_set_label": "La maison est définie sur ce téléphone.",
+  "home_owned_elsewhere": "Définissez le domicile ici pour transférer le suivi vers cet appareil.",
+  "home_owned_elsewhere_label": "Le suivi du domicile est actif sur un autre appareil.",
   "home_needs_always": "Autoriser la localisation Toujours afin que les paramètres Chez moi et Absent soient mis à jour lorsque Trust est fermé.",
   "home_not_set_label": "Pas encore de domicile.",
   "home_place": "Lieu de résidence",
