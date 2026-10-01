@@ -37,21 +37,20 @@ The delayed-History case was removed from this patch: its available synthetic un
 
 `TrustRealAPIFeatureTests` requires an explicit `TRUST_UI_TEST_BASE_URL` with HTTP loopback port 5089. Before creating an account or requesting a phone code, setup checks `/api/v1/local-test-capabilities` for `developmentOtpWithoutSms: true`, then validates the returned OTP. Single-UI test accounts are deleted in test cleanup; paired accounts are discarded when the isolated Memory API is stopped.
 
-The local API plan is opt-in (`Trust.LocalE2E.xctestplan` is not the scheme default). Run its feature tests explicitly; ordinary `xcodebuild test -scheme Trust` continues to run both `TrustCoreTests` and the normal `TrustUITests` target:
+The local API plan is opt-in through the separate `Trust.LocalE2E` scheme. The standard `Trust` scheme has no test plan and continues to run both `TrustCoreTests` and `TrustUITests`; this separation preserves CI test discovery. Run the feature tests with the dedicated scheme and exclude the three phases that must run serially against a shared Home marker:
 
 ```sh
 cd apps/trust-ios
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
-xcodebuild test -project Trust.xcodeproj -scheme Trust \
+xcodebuild test -project Trust.xcodeproj -scheme Trust.LocalE2E \
   -testPlan Trust.LocalE2E \
   -destination 'platform=iOS Simulator,id=<simulator-udid>' \
-  -only-testing:TrustUITests/TrustRealAPIFeatureTests \
   -skip-testing:TrustUITests/TrustRealAPIFeatureTests/testSameAccountHomeHandoffOwnerSetsHome \
   -skip-testing:TrustUITests/TrustRealAPIFeatureTests/testSameAccountHomeHandoffFirstUseDeviceTakesOver \
   -skip-testing:TrustUITests/TrustRealAPIFeatureTests/testSameAccountHomeHandoffPreviousOwnerDetectsTakeoverAndClear
 ```
 
-The plan injects `TRUST_UI_TEST_BASE_URL=http://127.0.0.1:5089` into the UI-test runner. App launches use `TRUST_BASE_URL` with `TRUST_STRICT_API=1`, so they cannot fall back to port 5088 or a remote API. On 1 October, the initial direct run recorded **1 passed, 5 skipped, 3 failed**: the Always-history case passed; five fault-proxy/pair-role cases skipped because their required proxy/role setup was absent; Privacy Hold, onboarding, and Sharing refresh failed while the app remained on `Before you join / Checking age requirements…` (the Sharing failure was the initial tab assertion). Those three results identify a startup/harness problem and are not passing evidence. After adding an explicit DEBUG-only age fixture and reset-safe relaunch setup, the focused local API suite passed **4, skipped 5, failed 0** in `/tmp/trust-real-api-ui-final.xcresult`. Passed: Always history, Privacy Hold/relaunch, onboarding, and Sharing refresh. Skipped due to missing fault proxy or paired role setup: `testDelayedLookResponseIsDiscardedAfterReplacementRelationship`, `testPairedRequestAcceptAndPresenceGrantRole`, `testRemoveStaysAbsentAfterStaleCircleResponseAndRelaunch`, `testStopAllFailureDoesNotPartiallyStopAndRetryPersistsAfterRelaunch`, and `testStopRemainsOffAcrossStaleCircleResponseAndRelaunch`. Save each run's `.xcresult`; do not describe skipped cases as passed.
+The plan injects `TRUST_UI_TEST_BASE_URL=http://127.0.0.1:5089` into the UI-test runner. App launches use `TRUST_BASE_URL` with `TRUST_STRICT_API=1`, so they cannot fall back to port 5088 or a remote API. On 1 October, the initial direct run recorded **1 passed, 5 skipped, 3 failed**: the Always-history case passed; five fault-proxy/pair-role cases skipped because their required proxy/role setup was absent; Privacy Hold, onboarding, and Sharing refresh failed while the app remained on `Before you join / Checking age requirements…` (the Sharing failure was the initial tab assertion). Those three results identify a startup/harness problem and are not passing evidence. After adding an explicit DEBUG-only age fixture and reset-safe relaunch setup, the focused local API suite passed **4, skipped 5, failed 0** in `/tmp/trust-real-api-ui-final.xcresult`. Passed: Always history, Privacy Hold/relaunch, onboarding, and Sharing refresh. Skipped due to missing fault proxy or paired role setup: `testDelayedLookResponseIsDiscardedAfterReplacementRelationship`, `testPairedRequestAcceptAndPresenceGrantRole`, `testRemoveStaysAbsentAfterStaleCircleResponseAndRelaunch`, `testStopAllFailureDoesNotPartiallyStopAndRetryPersistsAfterRelaunch`, and `testStopRemainsOffAcrossStaleCircleResponseAndRelaunch`. When the plan was first run through the dedicated scheme without `-only-testing`, Xcode reported success but executed 0 tests; the selected-tests value redundantly included the target prefix. After correcting it to the class identifier `TrustRealAPIFeatureTests`, the no-`-only-testing` command shown above discovered and ran the intended suite: **4 passed, 5 setup-dependent skips, 0 failed** in `/tmp/trust-locale2e-plan-correct-selector.xcresult`. Separately, the standard `Trust` scheme with no API URL executed **119 tests: 107 passed, 12 real-API UI tests skipped, 0 failed** in `/tmp/trust-standard-scheme-after-plan-split.xcresult` (87 TrustCore and 20 UI tests passed). Save each run's `.xcresult`; do not describe skipped cases as passed.
 
 ### Same-account Home handoff simulator acceptance
 
@@ -67,15 +66,15 @@ Do not run these phases in parallel: they share one account-wide Home marker. Th
 ```sh
 cd apps/trust-ios
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
-xcodebuild test -project Trust.xcodeproj -scheme Trust -testPlan Trust.LocalE2E \
+xcodebuild test -project Trust.xcodeproj -scheme Trust.LocalE2E -testPlan Trust.LocalE2E \
   -destination 'platform=iOS Simulator,id=61DC2501-3A93-4123-A6D5-D3512AF07464' \
   -only-testing:TrustUITests/TrustRealAPIFeatureTests/testSameAccountHomeHandoffOwnerSetsHome
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
-xcodebuild test -project Trust.xcodeproj -scheme Trust -testPlan Trust.LocalE2E \
+xcodebuild test -project Trust.xcodeproj -scheme Trust.LocalE2E -testPlan Trust.LocalE2E \
   -destination 'platform=iOS Simulator,id=C6495E9A-B165-46E1-97F9-0B92ABBDDC0D' \
   -only-testing:TrustUITests/TrustRealAPIFeatureTests/testSameAccountHomeHandoffFirstUseDeviceTakesOver
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
-xcodebuild test -project Trust.xcodeproj -scheme Trust -testPlan Trust.LocalE2E \
+xcodebuild test -project Trust.xcodeproj -scheme Trust.LocalE2E -testPlan Trust.LocalE2E \
   -destination 'platform=iOS Simulator,id=61DC2501-3A93-4123-A6D5-D3512AF07464' \
   -only-testing:TrustUITests/TrustRealAPIFeatureTests/testSameAccountHomeHandoffPreviousOwnerDetectsTakeoverAndClear
 ```

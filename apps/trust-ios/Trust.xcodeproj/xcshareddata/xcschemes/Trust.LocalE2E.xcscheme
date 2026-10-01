@@ -62,6 +62,12 @@
             </BuildableReference>
          </TestableReference>
       </Testables>
+      <TestPlans>
+         <TestPlanReference
+            reference = "container:Trust.LocalE2E.xctestplan"
+            default = "YES">
+         </TestPlanReference>
+      </TestPlans>
       <CommandLineArguments>
       </CommandLineArguments>
    </TestAction>
