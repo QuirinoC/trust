@@ -1,0 +1,40 @@
+{
+  "configurations" : [
+    {
+      "id" : "47D72A96-7743-46D2-9B83-3CF401E9A5E1",
+      "name" : "Local E2E",
+      "options" : {
+        "targetForVariableExpansion" : {
+          "containerPath" : "container:Trust.xcodeproj",
+          "identifier" : "18755F391E6B12E3A5CFD401",
+          "name" : "Trust"
+        }
+      }
+    }
+  ],
+  "defaultOptions" : {
+    "environmentVariableEntries" : [
+      {
+        "key" : "TRUST_UI_TEST_BASE_URL",
+        "value" : "http://127.0.0.1:5089"
+      },
+      {
+        "key" : "TRUST_UI_HOME_HANDOFF_DEVICE_ID",
+        "value" : "trust-local-home-handoff-e2e"
+      }
+    ]
+  },
+  "testTargets" : [
+    {
+      "target" : {
+        "containerPath" : "container:Trust.xcodeproj",
+        "identifier" : "33753F0B8DE2D72C33BB08C5",
+        "name" : "TrustUITests"
+      },
+      "selectedTests" : [
+        "TrustUITests/TrustRealAPIFeatureTests"
+      ]
+    }
+  ],
+  "version" : 1
+}

@@ -62,7 +62,10 @@ final class TrustRealAPIFeatureTests: XCTestCase {
         app.launchEnvironment["TRUST_UI_TEST_DISPLAY_NAME"] = ownName
         app.launchEnvironment["TRUST_UI_TEST_RESET_AUTH"] = "1"
         app.launchEnvironment["TRUST_DEV_SESSION"] = "1"
+        configureLocalAgeFixture(for: app)
         app.launch()
+        app.launchEnvironment.removeValue(forKey: "TRUST_UI_TEST_RESET_AUTH")
+        completeLocalAgeFixture(in: app)
 
         let handleField = app.textFields.firstMatch
         XCTAssertTrue(handleField.waitForExistence(timeout: 20))
@@ -610,15 +613,20 @@ final class TrustRealAPIFeatureTests: XCTestCase {
         app.launchEnvironment["TRUST_UI_TEST"] = "1"
         app.launchEnvironment["TRUST_UI_TEST_DEVICE_ID"] = deviceID
         app.launchEnvironment["TRUST_UI_TEST_DISPLAY_NAME"] = name
+        app.launchEnvironment["TRUST_UI_TEST_RESET_AUTH"] = "1"
         app.launchEnvironment["TRUST_DEV_SESSION"] = "1"
+        configureLocalAgeFixture(for: app)
         app.launch()
+        app.launchEnvironment.removeValue(forKey: "TRUST_UI_TEST_RESET_AUTH")
+        completeLocalAgeFixture(in: app)
 
         let delete = app.buttons["age-privacy-hold-delete-account"]
         XCTAssertTrue(delete.waitForExistence(timeout: 20), app.debugDescription)
 
         // The authorization needed only for account deletion must survive an app
         // restart while the server continues to deny ordinary account access. The
-        // second launch intentionally has no UI-test or development-session bypass.
+        // second launch has no UI-test or development-session bypass; retain only the
+        // DEBUG age fixture so this simulator keeps using its isolated test keychain.
         app.terminate()
         app.launchEnvironment.removeValue(forKey: "TRUST_DEV_SESSION")
         app.launchEnvironment.removeValue(forKey: "TRUST_UI_TEST")
@@ -641,6 +649,79 @@ final class TrustRealAPIFeatureTests: XCTestCase {
             defer { api.deleteAccount(token: replacementSession.token) }
             XCTAssertNotEqual(replacementSession.personID, session.personID)
         }
+    }
+
+    /// Run these three cases serially, using the same TRUST_UI_HOME_HANDOFF_DEVICE_ID
+    /// on both simulators. The Development API maps that device key to one account;
+    /// each simulator keeps its own Keychain Home coordinates and monitor.
+    func testSameAccountHomeHandoffOwnerSetsHome() throws {
+        let session = try sameAccountHomeHandoffSession()
+        let app = launchDevelopmentApp(deviceID: session.deviceID, displayName: "HomeHandoff")
+        setHomeInUI(app)
+        let saved = api.yourHomePlace(token: session.token)
+        XCTAssertEqual(saved.status, 200)
+        XCTAssertEqual(saved.label, "Home")
+        XCTAssertNotNil(saved.placeID, "The API marker must identify the active Home monitor.")
+        XCTAssertTrue(app.staticTexts["home-place-status"].label.localizedCaseInsensitiveContains("set"))
+    }
+
+    func testSameAccountHomeHandoffFirstUseDeviceTakesOver() throws {
+        let session = try sameAccountHomeHandoffSession()
+        let original = api.yourHomePlace(token: session.token)
+        XCTAssertEqual(original.status, 200)
+        XCTAssertNotNil(original.placeID, "Simulator A must publish its Home marker before simulator B starts.")
+        let app = launchDevelopmentApp(deviceID: session.deviceID, displayName: "HomeHandoff")
+        XCTAssertTrue(app.buttons["tab-you"].waitForExistence(timeout: 15), app.debugDescription)
+        app.buttons["tab-you"].tap()
+        let locationButton = app.buttons["my-location"]
+        XCTAssertTrue(locationButton.waitForExistence(timeout: 10), app.debugDescription)
+        locationButton.tap()
+        let elsewhere = app.staticTexts["home-monitoring-elsewhere"]
+        XCTAssertTrue(elsewhere.waitForExistence(timeout: 15), "A first-use simulator should detect the server marker owned by the other device.\n\(app.debugDescription)")
+        XCTAssertTrue(elsewhere.label.localizedCaseInsensitiveContains("move monitoring to this device"))
+        XCTAssertTrue(app.staticTexts["home-place-status"].label.localizedCaseInsensitiveContains("another device"))
+        setHomeInUI(app)
+        let replacement = api.yourHomePlace(token: session.token)
+        XCTAssertEqual(replacement.status, 200)
+        XCTAssertEqual(replacement.label, "Home")
+        XCTAssertNotEqual(replacement.placeID, original.placeID, "Taking over from a different local Home coordinate must publish a new ownership marker.")
+        assertAlwaysLocationPermission(in: app)
+    }
+
+    func testSameAccountHomeHandoffPreviousOwnerDetectsTakeoverAndClear() throws {
+        let session = try sameAccountHomeHandoffSession()
+        let takeover = api.yourHomePlace(token: session.token)
+        XCTAssertEqual(takeover.status, 200)
+        XCTAssertNotNil(takeover.placeID, "Simulator B must publish its replacement server marker before simulator A resumes.")
+        let app = launchDevelopmentApp(deviceID: session.deviceID, displayName: "HomeHandoff")
+        app.buttons["tab-you"].tap()
+        let myLocation = app.buttons["my-location"]
+        XCTAssertTrue(myLocation.waitForExistence(timeout: 10), app.debugDescription)
+        myLocation.tap()
+        let elsewhere = app.staticTexts["home-monitoring-elsewhere"]
+        XCTAssertTrue(elsewhere.waitForExistence(timeout: 15), "The former owner must reconcile the new server marker and stop its local monitor.")
+        assertAlwaysLocationPermission(in: app)
+        let cleared = app.buttons["home-clear-button"]
+        XCTAssertTrue(cleared.waitForExistence(timeout: 5))
+        cleared.tap()
+        XCTAssertTrue(waitUntil(timeout: 15) {
+            let current = self.api.yourHomePlace(token: session.token)
+            return current.status == 200 && current.placeID == nil
+        }, "Clear Home must remove the shared server marker.")
+        app.terminate()
+        app.launch()
+        let youTab = app.buttons["tab-you"]
+        XCTAssertTrue(youTab.waitForExistence(timeout: 15), app.debugDescription)
+        youTab.tap()
+        let locationButton = app.buttons["my-location"]
+        XCTAssertTrue(locationButton.waitForExistence(timeout: 10), app.debugDescription)
+        locationButton.tap()
+        XCTAssertTrue(waitUntil(timeout: 15) {
+            let status = app.staticTexts["home-place-status"]
+            return status.exists && status.label.localizedCaseInsensitiveContains("no home")
+        }, "After a confirmed remote clear and reconnect, the former owner's local Home must be cleared.\n\(app.debugDescription)")
+        XCTAssertFalse(app.staticTexts["home-monitoring-elsewhere"].exists, "After the API marker is cleared, the reconnection must not show remote ownership.\n\(app.debugDescription)")
+        assertAlwaysLocationPermission(in: app)
     }
 
     /// The peer accepts through the local API after this UI's initial circle fetch.
@@ -675,8 +756,12 @@ final class TrustRealAPIFeatureTests: XCTestCase {
         app.launchEnvironment["TRUST_UI_TEST"] = "1"
         app.launchEnvironment["TRUST_UI_TEST_DEVICE_ID"] = mainDeviceID
         app.launchEnvironment["TRUST_UI_TEST_DISPLAY_NAME"] = mainName
+        app.launchEnvironment["TRUST_UI_TEST_RESET_AUTH"] = "1"
         app.launchEnvironment["TRUST_DEV_SESSION"] = "1"
+        configureLocalAgeFixture(for: app)
         app.launch()
+        app.launchEnvironment.removeValue(forKey: "TRUST_UI_TEST_RESET_AUTH")
+        completeLocalAgeFixture(in: app)
 
         XCTAssertTrue(app.buttons["tab-sharing"].waitForExistence(timeout: 20))
         app.buttons["tab-you"].tap()
@@ -791,8 +876,12 @@ final class TrustRealAPIFeatureTests: XCTestCase {
         app.launchEnvironment["TRUST_UI_TEST"] = "1"
         app.launchEnvironment["TRUST_UI_TEST_DEVICE_ID"] = viewerDeviceID
         app.launchEnvironment["TRUST_UI_TEST_DISPLAY_NAME"] = viewerName
+        app.launchEnvironment["TRUST_UI_TEST_RESET_AUTH"] = "1"
         app.launchEnvironment["TRUST_DEV_SESSION"] = "1"
+        configureLocalAgeFixture(for: app)
         app.launch()
+        app.launchEnvironment.removeValue(forKey: "TRUST_UI_TEST_RESET_AUTH")
+        completeLocalAgeFixture(in: app)
 
         XCTAssertTrue(app.buttons["tab-circle"].waitForExistence(timeout: 15))
         let peerRow = app.buttons["person-row-\(subjectName.lowercased())"]
@@ -863,8 +952,12 @@ final class TrustRealAPIFeatureTests: XCTestCase {
         app.launchEnvironment["TRUST_STRICT_API"] = "1"
         app.launchEnvironment["TRUST_UI_TEST"] = "1"
         app.launchEnvironment["TRUST_UI_TEST_DEVICE_ID"] = deviceID
+        app.launchEnvironment["TRUST_UI_TEST_RESET_AUTH"] = "1"
         app.launchEnvironment["TRUST_DEV_SESSION"] = "1"
+        configureLocalAgeFixture(for: app)
         app.launch()
+        app.launchEnvironment.removeValue(forKey: "TRUST_UI_TEST_RESET_AUTH")
+        completeLocalAgeFixture(in: app)
 
         let handleField = app.textFields.firstMatch
         XCTAssertTrue(handleField.waitForExistence(timeout: 20), "A fresh development identity should land on real handle onboarding.")
@@ -1423,8 +1516,94 @@ final class TrustRealAPIFeatureTests: XCTestCase {
         app.launchEnvironment["TRUST_UI_TEST_DEVICE_ID"] = deviceID
         app.launchEnvironment["TRUST_UI_TEST_DISPLAY_NAME"] = displayName
         app.launchEnvironment["TRUST_DEV_SESSION"] = "1"
+        app.launchEnvironment["TRUST_UI_TEST_RESET_AUTH"] = "1"
+        configureLocalAgeFixture(for: app)
         app.launch()
+        app.launchEnvironment.removeValue(forKey: "TRUST_UI_TEST_RESET_AUTH")
+        completeLocalAgeFixture(in: app)
         return app
+    }
+
+    private func configureLocalAgeFixture(for app: XCUIApplication) {
+        app.launchEnvironment["TRUST_AGE_TEST_MODE"] = "1"
+        app.launchEnvironment["TRUST_AGE_TEST_RESET_STATE"] = "1"
+    }
+
+    /// Use the app's existing DEBUG-only self-attestation fixture so these API tests
+    /// do not inherit the simulator's Apple age range or change production age checks.
+    private func completeLocalAgeFixture(in app: XCUIApplication) {
+        app.launchEnvironment.removeValue(forKey: "TRUST_AGE_TEST_RESET_STATE")
+        let month = app.textFields["age-birth-month"]
+        XCTAssertTrue(month.waitForExistence(timeout: 15), "The explicit DEBUG age fixture should start at the birth-date gate.\n\(app.debugDescription)")
+        guard month.exists else { return }
+        let day = app.textFields["age-birth-day"]
+        let year = app.textFields["age-birth-year"]
+        for (field, value) in [(month, "01"), (day, "01"), (year, "1990")] {
+            field.tap()
+            field.typeText(value)
+            let inputApplied = XCTNSPredicateExpectation(
+                predicate: NSPredicate(format: "value == %@", value),
+                object: field
+            )
+            XCTAssertEqual(
+                XCTWaiter.wait(for: [inputApplied], timeout: 5),
+                .completed,
+                "The DEBUG age fixture should enter \(field.identifier)=\(value); current value: \(field.value ?? "<empty>")."
+            )
+        }
+        let proceed = app.buttons["age-gate-continue"]
+        XCTAssertTrue(waitUntil(timeout: 5) { proceed.isEnabled }, "The eligible local age fixture should enable Continue.")
+        proceed.tap()
+        XCTAssertTrue(waitUntil(timeout: 30) {
+            app.textFields.firstMatch.exists
+                || app.buttons["tab-circle"].exists
+                || app.buttons["age-privacy-hold-delete-account"].exists
+        }, "The eligible DEBUG age fixture should reach onboarding, the signed-in app, or its server privacy-hold screen.\n\(app.debugDescription)")
+    }
+
+    private func sameAccountHomeHandoffSession() throws -> (deviceID: String, token: String) {
+        guard let deviceID = ProcessInfo.processInfo.environment["TRUST_UI_HOME_HANDOFF_DEVICE_ID"],
+              deviceID.range(of: "^[A-Za-z0-9_-]{8,64}$", options: .regularExpression) != nil else {
+            throw XCTSkip("Set one unique TRUST_UI_HOME_HANDOFF_DEVICE_ID for all serial handoff phases and both simulators.")
+        }
+        let session = try XCTUnwrap(api.developmentSession(name: "HomeHandoff", deviceID: deviceID))
+        let profile = api.circle(token: session.token)?["you"] as? [String: Any]
+        if profile?["onboardingComplete"] as? Bool != true {
+            XCTAssertEqual(api.putHandle("homehandoff", token: session.token), 204)
+            let phone = try XCTUnwrap(LocalTrustAPI.reservedPhonePool().randomElement())
+            XCTAssertTrue(api.verifyPhone(phone: "+1\(phone)", token: session.token), "The disposable same-account fixture must use only the local Development OTP path.")
+        }
+        return (deviceID, session.token)
+    }
+
+    private func setHomeInUI(_ app: XCUIApplication) {
+        XCTAssertTrue(app.buttons["tab-you"].waitForExistence(timeout: 15))
+        app.buttons["tab-you"].tap()
+        let myLocation = app.buttons["my-location"]
+        XCTAssertTrue(myLocation.waitForExistence(timeout: 10), app.debugDescription)
+        myLocation.tap()
+        let setHome = app.buttons["home-set-button"]
+        XCTAssertTrue(setHome.waitForExistence(timeout: 10), app.debugDescription)
+        if !setHome.isHittable { app.swipeUp() }
+        setHome.tap()
+        let permission = app.alerts.firstMatch
+        if permission.waitForExistence(timeout: 2) {
+            let whileUsing = permission.buttons.matching(NSPredicate(format: "label CONTAINS[c] %@", "While Using")).firstMatch
+            let allowOnce = permission.buttons.matching(NSPredicate(format: "label CONTAINS[c] %@", "Allow Once")).firstMatch
+            if whileUsing.exists { whileUsing.tap() }
+            else if allowOnce.exists { allowOnce.tap() }
+        }
+        let status = app.staticTexts["home-place-status"]
+        XCTAssertTrue(waitUntil(timeout: 30) { status.exists && status.label.localizedCaseInsensitiveContains("set") }, app.debugDescription)
+        allowBackgroundLocationIfPrompted(in: app)
+        assertAlwaysLocationPermission(in: app)
+    }
+
+    private func assertAlwaysLocationPermission(in app: XCUIApplication) {
+        let permission = app.staticTexts["location-permission-status"]
+        XCTAssertTrue(waitUntil(timeout: 12) {
+            permission.exists && permission.label.localizedCaseInsensitiveContains("always")
+        }, "Home handoff requires the UI to show Always location permission.\n\(app.debugDescription)")
     }
 
     private func waitForProxyState(timeout: TimeInterval, condition: ([String: Any]) -> Bool) -> Bool {

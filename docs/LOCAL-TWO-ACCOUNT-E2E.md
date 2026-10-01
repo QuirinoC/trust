@@ -37,6 +37,51 @@ The delayed-History case was removed from this patch: its available synthetic un
 
 `TrustRealAPIFeatureTests` requires an explicit `TRUST_UI_TEST_BASE_URL` with HTTP loopback port 5089. Before creating an account or requesting a phone code, setup checks `/api/v1/local-test-capabilities` for `developmentOtpWithoutSms: true`, then validates the returned OTP. Single-UI test accounts are deleted in test cleanup; paired accounts are discarded when the isolated Memory API is stopped.
 
+The local API plan is opt-in (`Trust.LocalE2E.xctestplan` is not the scheme default). Run its feature tests explicitly; ordinary `xcodebuild test -scheme Trust` continues to run both `TrustCoreTests` and the normal `TrustUITests` target:
+
+```sh
+cd apps/trust-ios
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
+xcodebuild test -project Trust.xcodeproj -scheme Trust \
+  -testPlan Trust.LocalE2E \
+  -destination 'platform=iOS Simulator,id=<simulator-udid>' \
+  -only-testing:TrustUITests/TrustRealAPIFeatureTests \
+  -skip-testing:TrustUITests/TrustRealAPIFeatureTests/testSameAccountHomeHandoffOwnerSetsHome \
+  -skip-testing:TrustUITests/TrustRealAPIFeatureTests/testSameAccountHomeHandoffFirstUseDeviceTakesOver \
+  -skip-testing:TrustUITests/TrustRealAPIFeatureTests/testSameAccountHomeHandoffPreviousOwnerDetectsTakeoverAndClear
+```
+
+The plan injects `TRUST_UI_TEST_BASE_URL=http://127.0.0.1:5089` into the UI-test runner. App launches use `TRUST_BASE_URL` with `TRUST_STRICT_API=1`, so they cannot fall back to port 5088 or a remote API. On 1 October, the initial direct run recorded **1 passed, 5 skipped, 3 failed**: the Always-history case passed; five fault-proxy/pair-role cases skipped because their required proxy/role setup was absent; Privacy Hold, onboarding, and Sharing refresh failed while the app remained on `Before you join / Checking age requirements…` (the Sharing failure was the initial tab assertion). Those three results identify a startup/harness problem and are not passing evidence. After adding an explicit DEBUG-only age fixture and reset-safe relaunch setup, the focused local API suite passed **4, skipped 5, failed 0** in `/tmp/trust-real-api-ui-final.xcresult`. Passed: Always history, Privacy Hold/relaunch, onboarding, and Sharing refresh. Skipped due to missing fault proxy or paired role setup: `testDelayedLookResponseIsDiscardedAfterReplacementRelationship`, `testPairedRequestAcceptAndPresenceGrantRole`, `testRemoveStaysAbsentAfterStaleCircleResponseAndRelaunch`, `testStopAllFailureDoesNotPartiallyStopAndRetryPersistsAfterRelaunch`, and `testStopRemainsOffAcrossStaleCircleResponseAndRelaunch`. Save each run's `.xcresult`; do not describe skipped cases as passed.
+
+### Same-account Home handoff simulator acceptance
+
+Run these cases serially against one fresh Development + Memory API. The opt-in test plan injects the local-only `TRUST_UI_HOME_HANDOFF_DEVICE_ID=trust-local-home-handoff-e2e`; the API maps it to one server identity, while the two simulators hold distinct local Home coordinates. Use the existing iPhone 17 Pro (A) and iPhone Duo (B), and give them different synthetic fixes before setting Home:
+
+```sh
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun simctl location 61DC2501-3A93-4123-A6D5-D3512AF07464 set 47.600000,-122.330000
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun simctl location C6495E9A-B165-46E1-97F9-0B92ABBDDC0D set 47.620000,-122.330000
+```
+
+Do not run these phases in parallel: they share one account-wide Home marker. This path uses the real UI and server marker, so a server-side rejection alone cannot count as success.
+
+```sh
+cd apps/trust-ios
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
+xcodebuild test -project Trust.xcodeproj -scheme Trust -testPlan Trust.LocalE2E \
+  -destination 'platform=iOS Simulator,id=61DC2501-3A93-4123-A6D5-D3512AF07464' \
+  -only-testing:TrustUITests/TrustRealAPIFeatureTests/testSameAccountHomeHandoffOwnerSetsHome
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
+xcodebuild test -project Trust.xcodeproj -scheme Trust -testPlan Trust.LocalE2E \
+  -destination 'platform=iOS Simulator,id=C6495E9A-B165-46E1-97F9-0B92ABBDDC0D' \
+  -only-testing:TrustUITests/TrustRealAPIFeatureTests/testSameAccountHomeHandoffFirstUseDeviceTakesOver
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
+xcodebuild test -project Trust.xcodeproj -scheme Trust -testPlan Trust.LocalE2E \
+  -destination 'platform=iOS Simulator,id=61DC2501-3A93-4123-A6D5-D3512AF07464' \
+  -only-testing:TrustUITests/TrustRealAPIFeatureTests/testSameAccountHomeHandoffPreviousOwnerDetectsTakeoverAndClear
+```
+
+The phases assert that A's UI sets Home and shows Always permission, then publishes a marker; B sees the “another device” UI before taking over, also shows Always permission, and publishes a different marker; and A shows both the handoff UI and retained Always permission before clearing the marker. After a successful clear, A relaunches, reopens My Location, and confirms the local no-Home status, absence of remote ownership UI, and retained Always permission. After adding the explicit permission assertions, all three phases passed serially against the same live Development + Memory API on 1 October 2026: A owner (`/tmp/trust-home-handoff-A7.xcresult`), B takeover (`/tmp/trust-home-handoff-B7.xcresult`), and A detects takeover, clears, and reconnects (`/tmp/trust-home-handoff-A8.xcresult`). An earlier final-A run confirmed the server marker was cleared but failed because the test checked status before navigating back to My Location; the test now reopens that screen and asserts the cleared state. A preceding A setup attempt also showed no Home because the simulator synthetic location had not been restored; with the documented coordinates reapplied, all three phases passed. Clear both synthetic locations and stop the isolated API afterward.
+
 Start the isolated API with local-only settings:
 
 ```sh
@@ -102,6 +147,6 @@ At the Render observation recorded during this test run, API commit `f5e235d148f
 
 ## Remaining verification
 
-- Delay History with a legitimate paid entitlement across Stop/remove/re-add; cover offline/reconnect, same-account second devices, and concurrent History screens. The focused Look replacement race is completed above.
-- Verify carrier SMS, background location, APNs permission/token/presentation/tap, StoreKit purchase/restore/expiry/refund, and account deletion on physical TestFlight devices.
+- Delay History with a legitimate paid entitlement across Stop/remove/re-add; cover offline/reconnect and Home-monitoring recovery across interruption; and test concurrent History screens. The focused Look replacement race and same-account Home A→B→A simulator handoff are completed above. Simulator GPS and visible Always permission do not establish physical background execution.
+- On physical TestFlight devices, verify same-account second-device behavior and background location/permission recovery, along with carrier SMS, APNs permission/token/presentation/tap, StoreKit purchase/restore/expiry/refund, and account deletion.
 - Build-32 app-UI compatibility remains unverified because the build has expired. Existing HTTP tests cover its privacy-reducing Off, Remove, and Delete operations; they do not establish old-client UI behavior, and a new expired-build download is not a release gate.
