@@ -169,7 +169,7 @@ struct AgeGateView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .frame(minHeight: 52)
-        case .ageCheckUnavailable, .appTransactionUnavailable:
+        case .ageCheckUnavailable, .appTransactionUnavailable, .ageRangeSharingDeclined:
             VStack(spacing: 10) {
                 Button {
                     if model.phase == .appTransactionUnavailable {
@@ -184,7 +184,9 @@ struct AgeGateView: View {
                 .buttonStyle(TrustFilledButtonStyle())
                 .accessibilityIdentifier(model.phase == .appTransactionUnavailable
                     ? "app-transaction-retry"
-                    : "age-gate-retry")
+                    : model.phase == .ageRangeSharingDeclined
+                        ? "age-range-sharing-retry"
+                        : "age-gate-retry")
                 .disabled(model.ageUnavailableStopAllState == .pending)
 
                 if model.canStopAllFromUnavailableVerification {
@@ -245,15 +247,6 @@ struct AgeGateView: View {
                     }
                 }
             }
-        case .ageRangeSharingDeclined:
-            Button {
-                model.retryAgeCheck()
-            } label: {
-                Text(TrustCopy.ageGateRetry)
-                    .frame(maxWidth: .infinity, minHeight: 52)
-            }
-            .buttonStyle(TrustFilledButtonStyle())
-            .accessibilityIdentifier("age-range-sharing-retry")
         case .ageRangeBlocked:
             VStack(spacing: 12) {
                 if #available(iOS 26, *), model.canTryAppleAgeRangeAfterUnderage {

@@ -990,7 +990,10 @@ final class AppModel: ObservableObject {
     }
 
     private static func isUnavailableVerificationPhase(_ phase: AppPhase) -> Bool {
-        phase == .ageCheckUnavailable || phase == .appTransactionUnavailable
+        // Declining age-range disclosure must not require consent just to revoke
+        // existing sharing. This enables only the confirmed restrictive action;
+        // ageAccessState and account-feature authorization remain unchanged.
+        phase == .ageCheckUnavailable || phase == .appTransactionUnavailable || phase == .ageRangeSharingDeclined
     }
 
     var canStopAllFromUnavailableVerification: Bool {

@@ -46,12 +46,54 @@ final class TrustAgeGateTests: XCTestCase {
         app.launch()
 
         assertDeclinedAgeRange(in: app)
+        XCTAssertFalse(element("age-stop-all-sharing", in: app).exists, "An unauthenticated decline must not offer account mutations.")
         element("age-range-sharing-retry", in: app).tap()
         assertDeclinedAgeRange(in: app)
 
         app.terminate()
         app.launch()
         assertDeclinedAgeRange(in: app)
+    }
+
+    func testAuthenticatedAgeRangeDeclineCanConfirmStopWithoutUnlocking() {
+        let app = launchAuthenticatedAgeRangeDecline(stopOutcome: "SUCCESS")
+        assertDeclinedAgeRange(in: app)
+        let stop = element("age-stop-all-sharing", in: app)
+        XCTAssertTrue(stop.waitForExistence(timeout: 5))
+        stop.tap()
+        let cancel = app.buttons.matching(identifier: "age-stop-all-cancel").firstMatch
+        XCTAssertTrue(cancel.waitForExistence(timeout: 5))
+        cancel.tap()
+        XCTAssertFalse(element("age-stop-all-status", in: app).exists)
+
+        stop.tap()
+        let confirm = app.buttons.matching(identifier: "age-stop-all-confirm").firstMatch
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        confirm.tap()
+        let status = element("age-stop-all-status", in: app)
+        XCTAssertTrue(status.waitForExistence(timeout: 5))
+        XCTAssertTrue(status.label.localizedCaseInsensitiveContains("sharing is off"))
+        XCTAssertFalse(stop.isEnabled)
+        assertDeclinedAgeRange(in: app)
+        XCTAssertFalse(element("tab-circle", in: app).exists, "Revoking sharing must not authorize account access.")
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Declined age sharing - confirmed Stop keeps gate closed"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
+    func testPendingStopAfterAgeRangeDeclineDisablesRetryAndKeepsGateClosed() {
+        let app = launchAuthenticatedAgeRangeDecline(stopOutcome: "HOLD")
+        assertDeclinedAgeRange(in: app)
+        element("age-stop-all-sharing", in: app).tap()
+        let confirm = app.buttons.matching(identifier: "age-stop-all-confirm").firstMatch
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        confirm.tap()
+        XCTAssertTrue(element("age-stop-all-status", in: app).waitForExistence(timeout: 5))
+        XCTAssertFalse(element("age-range-sharing-retry", in: app).isEnabled)
+        XCTAssertFalse(element("age-stop-all-sharing", in: app).isEnabled)
+        XCTAssertFalse(element("tab-circle", in: app).exists)
+        XCTAssertFalse(element("local-api-sign-in", in: app).exists)
     }
 
     func testAppTransactionFailureAfterSignInUsesItsOwnRetryAndKeepsAccountSafetyControls() {
@@ -355,6 +397,16 @@ final class TrustAgeGateTests: XCTestCase {
         XCTAssertTrue(element("age-gate-body", in: app).label.localizedCaseInsensitiveContains("required age check"), file: file, line: line)
         XCTAssertFalse(element("local-api-sign-in", in: app).exists, file: file, line: line)
         XCTAssertFalse(element("app-transaction-title", in: app).exists, file: file, line: line)
+    }
+
+    private func launchAuthenticatedAgeRangeDecline(stopOutcome: String) -> XCUIApplication {
+        let app = XCUIApplication()
+        for key in ["MODE", "RESET_AUTH", "AUTHENTICATED", "RESET_STATE", "AGE_RANGE_REQUIRED", "AGE_RANGE_DECLINED", "STOP_ALL_\(stopOutcome)"] {
+            app.launchEnvironment["TRUST_AGE_TEST_\(key)"] = "1"
+        }
+        app.launchEnvironment["TRUST_BASE_URL"] = "http://127.0.0.1:59999"
+        app.launch()
+        return app
     }
 
     private func assertDeclinedAgeRange(in app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) {
