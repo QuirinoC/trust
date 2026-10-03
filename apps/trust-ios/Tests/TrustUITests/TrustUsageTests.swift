@@ -522,34 +522,64 @@ final class TrustUsageTests: XCTestCase {
         case down
     }
 
-    /// CI recordings showed element.tap() leaving both Picker and Menu rows open.
-    /// Wait for a stable visible row, then send one tap at its observed center;
-    /// this does not assume a cause for the earlier undelivered selections.
-    /// Never retry the action: callers must still prove the value or sheet changed.
+    /// Sample readiness without the predicate waiter's per-failure hierarchy dumps.
+    /// CI timed out there before a tap, after costly remote AX reads.
+    /// Keep exact frame stability and one contact; result assertions belong to callers.
     private func tapVisibleMenuOption(_ option: XCUIElement, in app: XCUIApplication) {
+        let started = ProcessInfo.processInfo.systemUptime
+        let deadline = started + 10
         var previousFrame: CGRect?
-        var stableSince: Date?
-        let ready = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-            guard option.exists, option.isEnabled, option.isHittable else {
+        var stableSince: TimeInterval?
+        var settledFrame: CGRect?
+        var samples: [String] = []
+        while ProcessInfo.processInfo.systemUptime < deadline {
+            var hasSnapshot = false
+            var enabled = false
+            var hittable = false
+            var validGeometry = false
+            var frame = CGRect.null
+            if let snapshot = try? option.snapshot() {
+                hasSnapshot = true
+                enabled = snapshot.isEnabled
+                frame = snapshot.frame
+                if enabled { hittable = option.isHittable }
+                if hittable {
+                    let center = CGPoint(x: frame.midX, y: frame.midY)
+                    validGeometry = frame.width.isFinite && frame.height.isFinite
+                        && frame.width > 0 && frame.height > 0
+                        && center.x.isFinite && center.y.isFinite
+                        && app.frame.contains(center)
+                }
+            }
+            let now = ProcessInfo.processInfo.systemUptime
+            if hasSnapshot && enabled && hittable && validGeometry {
+                if previousFrame != frame {
+                    previousFrame = frame
+                    stableSince = now
+                }
+                if let stableSince, now - stableSince >= 0.35, now < deadline {
+                    settledFrame = frame
+                }
+            } else {
+                // No ineligible interval may count toward frame stability.
                 previousFrame = nil
                 stableSince = nil
-                return false
             }
-            let frame = option.frame
-            let center = CGPoint(x: frame.midX, y: frame.midY)
-            guard frame.width.isFinite, frame.height.isFinite,
-                  frame.width > 0, frame.height > 0,
-                  center.x.isFinite, center.y.isFinite,
-                  app.frame.contains(center) else { return false }
-            if previousFrame != frame {
-                previousFrame = frame
-                stableSince = Date()
-                return false
+            samples.append(String(format: "t=%.3f snapshot=%@ enabled=%@ hittable=%@ geometry=%@ frame=%@ stable=%.3f",
+                                  now - started, String(hasSnapshot), String(enabled), String(hittable),
+                                  String(validGeometry), NSCoder.string(for: frame),
+                                  stableSince.map { now - $0 } ?? 0))
+            if settledFrame != nil { break }
+            let remaining = deadline - ProcessInfo.processInfo.systemUptime
+            if remaining > 0 {
+                RunLoop.current.run(until: Date().addingTimeInterval(min(0.1, remaining)))
             }
-            return stableSince.map { Date().timeIntervalSince($0) >= 0.35 } ?? false
-        }, object: option)
-        guard XCTWaiter.wait(for: [ready], timeout: 5) == .completed,
-              let frame = previousFrame else {
+        }
+        let readiness = XCTAttachment(string: samples.joined(separator: "\n"))
+        readiness.name = "Menu readiness samples (no action retries)"
+        readiness.lifetime = .keepAlways
+        add(readiness)
+        guard let frame = settledFrame else {
             add(XCTAttachment(screenshot: app.screenshot()))
             XCTFail("The menu option did not settle into an enabled, hittable row. \(option.debugDescription)")
             return
