@@ -19,6 +19,8 @@ STATE = {
     "hold_next_circle": False,
     "hold_next_history": False,
     "hold_next_look": False,
+    "hold_next_home_presence": False,
+    "home_presence_responses": {},
     "fail_circle_after_release": False,
     "fail_next_circle": False,
     "fail_next_stop_all": False,
@@ -168,6 +170,12 @@ class Handler(BaseHTTPRequestHandler):
                 })
             self.respond_json(200, {"armed": True})
             return
+        if self.path == "/__test/arm-home-presence":
+            with LOCK:
+                STATE["hold_next_home_presence"] = True
+                RELEASE_HELD.clear()
+            self.respond_json(200, {"armed": True})
+            return
         if self.path == "/__test/release":
             with LOCK:
                 if not STATE["holding"]:
@@ -205,6 +213,7 @@ class Handler(BaseHTTPRequestHandler):
         body = self.rfile.read(length) if length else None
         path = self.path
         is_circle = self.command == "GET" and path.split("?", 1)[0] == "/api/v1/circle"
+        is_home_presence = self.command == "POST" and path.split("?", 1)[0] == "/api/v1/me/home/presence"
         is_history = self.command == "GET" and path.split("?", 1)[0].startswith("/api/v1/people/") and path.endswith("/history")
         is_look = self.command == "POST" and path.split("?", 1)[0] == "/api/v1/looks"
         is_share = self.command == "PATCH" and path.split("?", 1)[0].startswith("/api/v1/people/") and path.endswith("/share")
@@ -256,6 +265,9 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         with LOCK:
+            hold_this_home_presence = is_home_presence and STATE["hold_next_home_presence"]
+            if hold_this_home_presence:
+                STATE["hold_next_home_presence"] = False
             fail_this_circle = is_circle and STATE["fail_next_circle"]
             if fail_this_circle:
                 STATE["fail_next_circle"] = False
@@ -301,7 +313,11 @@ class Handler(BaseHTTPRequestHandler):
             self.respond_json(502, {"error": "local-test-upstream-unavailable"})
             return
 
-        held_resource = "circle" if hold_this_circle else "history" if hold_this_history else "look" if hold_this_look else None
+        if is_home_presence:
+            with LOCK:
+                key = str(status)
+                STATE["home_presence_responses"][key] = STATE["home_presence_responses"].get(key, 0) + 1
+        held_resource = "circle" if hold_this_circle else "history" if hold_this_history else "look" if hold_this_look else "home_presence" if hold_this_home_presence else None
         if held_resource:
             with LOCK:
                 STATE["holding"] = True

@@ -28,6 +28,57 @@ final class TrustRealAPIFeatureTests: XCTestCase {
         super.tearDown()
     }
 
+    func testManualHomeChoicesReachServerAndRetirePreviousNotice() throws {
+        guard api.raceProxyState() != nil else { throw XCTSkip("Requires the isolated loopback fault proxy.") }
+        let fixture = try makeConnectedFixture(prefix: "home-notice")
+        defer {
+            api.deleteAccount(token: fixture.peer.token)
+            api.deleteAccount(token: fixture.main.token)
+        }
+        let app = launchDevelopmentApp(deviceID: fixture.mainDeviceID, displayName: fixture.mainName)
+        defer { app.terminate() }
+        XCTAssertTrue(app.buttons["tab-sharing"].waitForExistence(timeout: 15))
+        app.buttons["tab-sharing"].tap()
+        let control = app.buttons["home-status-control"]
+        XCTAssertTrue(control.waitForExistence(timeout: 10))
+        api.resetRaceProxy()
+        var previousNotice: String?
+        for (index, state) in ["home", "away", "hidden", "home", "away", "hidden"].enumerated() {
+            XCTAssertTrue(scrollUpUntilHittable(control, in: app))
+            XCTAssertEqual(api.request("POST", "/__test/arm-home-presence").status, 200)
+            control.tap()
+            let choice = app.buttons.matching(identifier: "set-home-status-\(state)").firstMatch
+            XCTAssertTrue(choice.waitForExistence(timeout: 5))
+            XCTAssertTrue(choice.isEnabled && choice.isHittable)
+            // One native-element tap, deliberately matching the original Home attempt.
+            choice.tap()
+            XCTAssertTrue(waitForProxyState(timeout: 8) { $0["held_resource"] as? String == "home_presence" }, "Attempt \(index + 1) \(state): \(api.raceProxyState() ?? [:]); \(app.debugDescription)")
+            if let previousNotice {
+                attachScreenshot(of: app, named: "Home notice - pending \(state) attempt \(index + 1)")
+                XCTAssertFalse(app.staticTexts[previousNotice].exists, "A previous status acknowledgement must retire when another choice is pending.")
+            }
+            XCTAssertFalse(choice.exists, "The native menu must dismiss after its single tap.")
+            XCTAssertEqual(yourHomeState(token: fixture.main.token), state)
+            let proxy = try XCTUnwrap(api.raceProxyState())
+            XCTAssertEqual((proxy["request_counts"] as? [String: Int])?["POST /api/v1/me/home/presence"], index + 1)
+            XCTAssertEqual((proxy["home_presence_responses"] as? [String: Int])?["204"], index + 1)
+            let evidence = XCTAttachment(string: "Attempt \(index + 1): \(state), one tap, server state \(state), requests/responses \(proxy)")
+            evidence.lifetime = .keepAlways
+            add(evidence)
+            XCTAssertTrue(api.releaseHeldResponse())
+            let notice = state == "hidden" ? "Status hidden." : "Status set to \(state.capitalized)."
+            XCTAssertTrue(app.staticTexts[notice].waitForExistence(timeout: 5), app.debugDescription)
+            previousNotice = notice
+        }
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(app.buttons["tab-sharing"].waitForExistence(timeout: 15))
+        app.buttons["tab-sharing"].tap()
+        XCTAssertTrue(control.waitForExistence(timeout: 10))
+        XCTAssertTrue(control.label.contains("Hidden"))
+        XCTAssertEqual(yourHomeState(token: fixture.main.token), "hidden")
+    }
+
     func testAdultAgeGateAppleExchangeFailureCanRetryThroughTransactionLinkIntoOnboarding() throws {
         try requireAgeAssuranceFaultProxy()
         let suffix = UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()

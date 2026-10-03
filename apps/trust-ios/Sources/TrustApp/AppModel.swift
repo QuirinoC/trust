@@ -80,6 +80,7 @@ enum CircleRoute: Hashable {
 struct TrustToast: Equatable, Identifiable {
     let id = UUID()
     let message: String
+    var isHomePresence = false
     let at = Date()
 }
 
@@ -229,6 +230,7 @@ final class AppModel: ObservableObject {
     private var connectionLookupTask: Task<Void, Never>?
     private let homePresenceMutationQueue = TrustAsyncSerialExecutor()
     private var pendingHomePresenceMutationID: UUID?
+    private var latestHomePresenceMutationID: UUID?
     private let homeMutationQueue = TrustAsyncSerialExecutor()
     private let shareMutationQueue = TrustAsyncSerialExecutor()
     private var shareMutationGate = TrustShareMutationGate()
@@ -1855,10 +1857,10 @@ final class AppModel: ObservableObject {
 
     // MARK: Toast
 
-    func showToast(_ message: String) {
+    func showToast(_ message: String, isHomePresence: Bool = false) {
         if isScreenshotLaunch { return }
         toastTask?.cancel()
-        toast = TrustToast(message: message)
+        toast = TrustToast(message: message, isHomePresence: isHomePresence)
         toastTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(4.2))
             guard !Task.isCancelled else { return }
@@ -2599,7 +2601,7 @@ final class AppModel: ObservableObject {
         if let demo {
             demo.setMyPresence(kind)
             publishDemoSnapshot()
-            showToast(kind == .hidden ? TrustCopy.presenceHiddenToast : TrustCopy.presenceSetToast(label: kind.label))
+            showToast(kind == .hidden ? TrustCopy.presenceHiddenToast : TrustCopy.presenceSetToast(label: kind.label), isHomePresence: true)
             return
         }
         guard requireOnline() else { return }
@@ -3553,6 +3555,13 @@ final class AppModel: ObservableObject {
         guard let operation = currentAccountOperation() else { return }
         let mutationID = UUID()
         pendingHomePresenceMutationID = mutationID
+        latestHomePresenceMutationID = mutationID
+        // The new optimistic state supersedes only feedback owned by an older
+        // presence choice. Other warnings remain visible; success still needs an ack.
+        if self.toast?.isHomePresence == true {
+            toastTask?.cancel()
+            self.toast = nil
+        }
         presenceOverride = kind
         homePresenceMutationQueue.enqueue { [weak self] in
             guard let self else { return }
@@ -3569,7 +3578,7 @@ final class AppModel: ObservableObject {
                 recordConfirmedCircleMutation()
                 pendingHomePresenceMutationID = nil
                 if toast {
-                    showToast(kind == .hidden ? TrustCopy.presenceHiddenToast : TrustCopy.presenceSetToast(label: kind.label))
+                    showToast(kind == .hidden ? TrustCopy.presenceHiddenToast : TrustCopy.presenceSetToast(label: kind.label), isHomePresence: true)
                 }
                 await refresh()
             } catch {
@@ -3579,7 +3588,8 @@ final class AppModel: ObservableObject {
                 presenceOverride = nil
                 await refresh()
                 guard isCurrentAccount(operation: operation) else { return }
-                if toast { showToast(plainMessage(for: error)) }
+                guard latestHomePresenceMutationID == mutationID else { return }
+                if toast { showToast(plainMessage(for: error), isHomePresence: true) }
             }
         }
     }
