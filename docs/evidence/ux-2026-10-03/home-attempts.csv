@@ -1,0 +1,13 @@
+simulator,attempt,selected_state,cumulative_requests,cumulative_http_204,server_state
+iPhone 17 Pro,1,home,1,1,home
+iPhone 17 Pro,2,away,2,2,away
+iPhone 17 Pro,3,hidden,3,3,hidden
+iPhone 17 Pro,4,home,4,4,home
+iPhone 17 Pro,5,away,5,5,away
+iPhone 17 Pro,6,hidden,6,6,hidden
+iPhone Duo,1,home,1,1,home
+iPhone Duo,2,away,2,2,away
+iPhone Duo,3,hidden,3,3,hidden
+iPhone Duo,4,home,4,4,home
+iPhone Duo,5,away,5,5,away
+iPhone Duo,6,hidden,6,6,hidden

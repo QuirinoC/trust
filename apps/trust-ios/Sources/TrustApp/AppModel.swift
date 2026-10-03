@@ -144,7 +144,17 @@ final class AppModel: ObservableObject {
     @Published var showingPaywall = false
     @Published var showingAlwaysExplainer = false
     /// Pause sheet. Set from Sharing, or from a screenshot launch.
-    @Published var pauseSheetPersonID: UUID?
+    @Published var pauseSheetPersonID: UUID? {
+        didSet { tracePausePresentation(pauseSheetPersonID == nil ? "selection cleared" : "selection assigned") }
+    }
+
+    func tracePausePresentation(_ event: String) {
+        #if DEBUG
+        guard isUITestLaunch else { return }
+        Logger(subsystem: "com.collapsetechnologies.trust", category: "SharingFlow")
+            .notice("Pause presentation: \(event, privacy: .public)")
+        #endif
+    }
     @Published var stopAllRequested = false
 
     @Published var inviteCodeDraft = ""

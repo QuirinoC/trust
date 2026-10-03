@@ -69,7 +69,10 @@ struct SharingView: View {
                                 seed: seed(member),
                                 compact: geometry.size.width < 430,
                                 stackModes: geometry.size.width < 380,
-                                onPause: { model.pauseSheetPersonID = member.id },
+                                onPause: {
+                                    model.tracePausePresentation("menu callback")
+                                    model.pauseSheetPersonID = member.id
+                                },
                                 onStopSharing: { activeConfirmation = .stopSharing(personID: member.id, name: member.firstName) },
                                 onRemove: { activeConfirmation = .removePerson(personID: member.id, name: member.firstName) }
                             )
@@ -105,7 +108,12 @@ struct SharingView: View {
             }
             .sheet(isPresented: Binding(
                 get: { model.pauseSheetPersonID != nil },
-                set: { if !$0 { model.pauseSheetPersonID = nil } }
+                set: {
+                    if !$0 {
+                        model.tracePausePresentation("sheet binding dismissed")
+                        model.pauseSheetPersonID = nil
+                    }
+                }
             )) {
                 if let personID = model.pauseSheetPersonID {
                     PauseSharingSheet(personID: personID) {
@@ -116,6 +124,7 @@ struct SharingView: View {
                     .presentationDetents([.height(420)])
                     .presentationDragIndicator(.visible)
                     .presentationBackground(palette.paper)
+                    .onAppear { model.tracePausePresentation("sheet appeared") }
                 }
             }
         .alert(

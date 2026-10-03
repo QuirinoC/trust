@@ -157,6 +157,13 @@ jobs:
                 .skippedTests == 9 and
                 .failedTests == 0
               '
+      - name: Collect DEBUG sharing presentation trace
+        if: always() && env.TRUST_SIMULATOR_ID != ''
+        continue-on-error: true
+        run: |
+          xcrun simctl spawn "$TRUST_SIMULATOR_ID" log show --style compact --last 30m \
+            --predicate 'subsystem == "com.collapsetechnologies.trust" AND category == "SharingFlow"' \
+            | tee "$RUNNER_TEMP/trust-sharing-flow.log"
       - name: Upload iOS test result bundle
         if: failure()
         uses: actions/upload-artifact@v4
@@ -167,6 +174,7 @@ jobs:
             ${{ runner.temp }}/trust-local-e2e.xcresult
             ${{ runner.temp }}/trust-local-e2e-summary.json
             ${{ runner.temp }}/trust-local-e2e-api.log
+            ${{ runner.temp }}/trust-sharing-flow.log
           if-no-files-found: warn
           retention-days: 7
 
