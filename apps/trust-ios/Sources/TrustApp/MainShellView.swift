@@ -6,6 +6,7 @@ struct MainShellView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.trustPalette) private var palette
     @Environment(\.scenePhase) private var scenePhase
+    @AppStorage(TrustAppLanguage.storageKey) private var appLanguage = TrustAppLanguage.system.rawValue
 
     var body: some View {
         VStack(spacing: 0) {
@@ -32,6 +33,9 @@ struct MainShellView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             tabBar
+                // TrustCopy resolves these titles to Strings outside SwiftUI's
+                // locale lookup. Refresh only the bar when the preference changes.
+                .id(appLanguage)
         }
         .background(palette.canvas.ignoresSafeArea(edges: .bottom))
         .overlay(alignment: .bottom) {

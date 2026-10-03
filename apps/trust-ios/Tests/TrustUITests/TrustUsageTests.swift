@@ -303,7 +303,7 @@ final class TrustUsageTests: XCTestCase {
         let app = launchDemo(forceEnglish: false)
         var changedLanguage = false
         defer {
-            // Keep a failed assertion from leaking French into the rest of the suite.
+            // Restore the system preference even if an assertion fails.
             if changedLanguage {
                 if app.state != .runningForeground { app.launch() }
                 if app.buttons["tab-you"].waitForExistence(timeout: 10) {
@@ -313,28 +313,38 @@ final class TrustUsageTests: XCTestCase {
                 app.terminate()
             }
         }
+        func selectLanguage(_ title: String) {
+            let picker = app.descendants(matching: .any)["language-preference"]
+            XCTAssertTrue(picker.waitForExistence(timeout: 5))
+            picker.tap()
+            let option = app.buttons[title]
+            XCTAssertTrue(option.waitForExistence(timeout: 5))
+            tapVisibleMenuOption(option, in: app)
+            let selected = XCTNSPredicateExpectation(
+                predicate: NSPredicate(format: "value == %@", title), object: picker)
+            XCTAssertEqual(XCTWaiter.wait(for: [selected], timeout: 5), .completed)
+        }
+        func assertTabLabels(_ labels: [String]) {
+            let identifiers = ["tab-circle", "tab-sharing", "tab-log", "tab-you"]
+            let expectations = zip(identifiers, labels).map { identifier, label in
+                XCTNSPredicateExpectation(
+                    predicate: NSPredicate(format: "label == %@", label),
+                    object: app.buttons[identifier])
+            }
+            XCTAssertEqual(XCTWaiter.wait(for: expectations, timeout: 5), .completed,
+                           "Changing language should update every tab immediately.")
+        }
         XCTAssertTrue(app.buttons["tab-you"].waitForExistence(timeout: 20))
         app.buttons["tab-you"].tap()
-
-        let picker = app.descendants(matching: .any)["language-preference"]
-        XCTAssertTrue(picker.waitForExistence(timeout: 5))
-        picker.tap()
-        let french = app.buttons["Français"]
-        XCTAssertTrue(french.waitForExistence(timeout: 5))
-        tapVisibleMenuOption(french, in: app)
         changedLanguage = true
-
-        let selected = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "value == %@", "Français"),
-            object: picker)
-        XCTAssertEqual(XCTWaiter.wait(for: [selected], timeout: 5), .completed)
-        let localizedTab = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "label == %@", "Toi"),
-            object: app.buttons["tab-you"])
-        XCTAssertEqual(
-            XCTWaiter.wait(for: [localizedTab], timeout: 5),
-            .completed,
-            "Changing language should update visible copy immediately.")
+        selectLanguage("English")
+        assertTabLabels(["People", "Sharing", "Activity", "You"])
+        selectLanguage("Français")
+        assertTabLabels(["Personnes", "Partage", "Activité", "Toi"])
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "French settings and all four tabs"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
 
         app.terminate()
         app.launch()
@@ -343,11 +353,12 @@ final class TrustUsageTests: XCTestCase {
         let restoredPicker = app.descendants(matching: .any)["language-preference"]
         XCTAssertTrue(restoredPicker.waitForExistence(timeout: 5))
         XCTAssertEqual(restoredPicker.value as? String, "Français")
-
+        assertTabLabels(["Personnes", "Partage", "Activité", "Toi"])
+        selectLanguage("English")
+        assertTabLabels(["People", "Sharing", "Activity", "You"])
         selectSystemLanguage(in: app)
         changedLanguage = false
         app.terminate()
-
     }
 
     func testPaywallScreenshotRouteIsReachable() {
