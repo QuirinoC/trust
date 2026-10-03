@@ -18,6 +18,67 @@ final class TrustAgeGateTests: XCTestCase {
         XCTAssertFalse(app.textFields["age-birth-month"].exists)
     }
 
+    func testUnavailableAgeCheckExplainsFailureAndStaysClosedAcrossRetryAndRelaunch() {
+        let app = XCUIApplication()
+        app.launchEnvironment["TRUST_AGE_TEST_MODE"] = "1"
+        app.launchEnvironment["TRUST_AGE_TEST_RESET_AUTH"] = "1"
+        app.launchEnvironment["TRUST_AGE_TEST_UNAVAILABLE"] = "1"
+        app.launchEnvironment["TRUST_AGE_TEST_RECHECK_UNAVAILABLE"] = "1"
+        app.launch()
+
+        assertUnavailableAgeCheck(in: app)
+        element("age-gate-retry", in: app).tap()
+        assertUnavailableAgeCheck(in: app)
+
+        app.terminate()
+        app.launch()
+        assertUnavailableAgeCheck(in: app)
+    }
+
+    func testDeclinedAppleAgeRangeExplainsRequiredSharingAndStaysClosedAcrossRetryAndRelaunch() {
+        let app = XCUIApplication()
+        app.launchEnvironment["TRUST_AGE_TEST_MODE"] = "1"
+        app.launchEnvironment["TRUST_AGE_TEST_RESET_AUTH"] = "1"
+        app.launchEnvironment["TRUST_AGE_TEST_RESET_STATE"] = "1"
+        app.launchEnvironment["TRUST_AGE_TEST_AGE_RANGE_REQUIRED"] = "1"
+        app.launchEnvironment["TRUST_AGE_TEST_AGE_RANGE_DECLINED"] = "1"
+        app.launchEnvironment["TRUST_AGE_TEST_RECHECK_DECLINED"] = "1"
+        app.launch()
+
+        assertDeclinedAgeRange(in: app)
+        element("age-range-sharing-retry", in: app).tap()
+        assertDeclinedAgeRange(in: app)
+
+        app.terminate()
+        app.launch()
+        assertDeclinedAgeRange(in: app)
+    }
+
+    func testAppTransactionFailureAfterSignInUsesItsOwnRetryAndKeepsAccountSafetyControls() {
+        let app = XCUIApplication()
+        app.launchEnvironment["TRUST_AGE_TEST_MODE"] = "1"
+        app.launchEnvironment["TRUST_AGE_TEST_RESET_AUTH"] = "1"
+        app.launchEnvironment["TRUST_AGE_TEST_AUTHENTICATED"] = "1"
+        app.launchEnvironment["TRUST_AGE_TEST_APP_TRANSACTION_UNAVAILABLE"] = "1"
+        app.launchEnvironment["TRUST_AGE_TEST_STOP_ALL_SUCCESS"] = "1"
+        app.launchEnvironment["TRUST_BASE_URL"] = "http://127.0.0.1:59999"
+        app.launch()
+
+        assertAppTransactionUnavailable(in: app)
+        XCTAssertTrue(element("age-stop-all-sharing", in: app).exists)
+        XCTAssertFalse(element("tab-circle", in: app).exists)
+        element("app-transaction-retry", in: app).tap()
+        assertAppTransactionUnavailable(in: app)
+        element("age-stop-all-sharing", in: app).tap()
+        app.buttons.matching(identifier: "age-stop-all-confirm").firstMatch.tap()
+        XCTAssertTrue(element("age-stop-all-status", in: app).waitForExistence(timeout: 5))
+        XCTAssertTrue(element("age-stop-all-status", in: app).label.localizedCaseInsensitiveContains("sharing is off"))
+
+        app.terminate()
+        app.launch()
+        assertAppTransactionUnavailable(in: app)
+    }
+
     func testUnavailableAgeCheckStopAllRequiresConfirmationAndReportsUnconfirmedFailure()
     {
         let app = XCUIApplication()
@@ -285,6 +346,35 @@ final class TrustAgeGateTests: XCTestCase {
 
     private func element(_ identifier: String, in app: XCUIApplication) -> XCUIElement {
         app.descendants(matching: .any)[identifier]
+    }
+
+    private func assertUnavailableAgeCheck(in app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) {
+        let title = element("age-gate-title", in: app)
+        XCTAssertTrue(title.waitForExistence(timeout: 15), file: file, line: line)
+        XCTAssertTrue(title.label.localizedCaseInsensitiveContains("age"), file: file, line: line)
+        XCTAssertTrue(element("age-gate-body", in: app).label.localizedCaseInsensitiveContains("confirm whether"), file: file, line: line)
+        XCTAssertFalse(element("local-api-sign-in", in: app).exists, file: file, line: line)
+        XCTAssertFalse(element("app-transaction-title", in: app).exists, file: file, line: line)
+    }
+
+    private func assertDeclinedAgeRange(in app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) {
+        let title = element("age-gate-title", in: app)
+        XCTAssertTrue(title.waitForExistence(timeout: 15), file: file, line: line)
+        XCTAssertTrue(title.label.localizedCaseInsensitiveContains("share"), file: file, line: line)
+        XCTAssertTrue(element("age-gate-body", in: app).label.localizedCaseInsensitiveContains("birth date"), file: file, line: line)
+        XCTAssertTrue(element("age-range-sharing-retry", in: app).exists, file: file, line: line)
+        XCTAssertFalse(element("local-api-sign-in", in: app).exists, file: file, line: line)
+    }
+
+    private func assertAppTransactionUnavailable(in app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) {
+        let title = element("app-transaction-title", in: app)
+        XCTAssertTrue(title.waitForExistence(timeout: 15), file: file, line: line)
+        XCTAssertTrue(title.label.localizedCaseInsensitiveContains("verify"), file: file, line: line)
+        XCTAssertTrue(element("app-transaction-body", in: app).label.localizedCaseInsensitiveContains("App Store transaction"), file: file, line: line)
+        XCTAssertTrue(element("app-transaction-retry", in: app).exists, file: file, line: line)
+        XCTAssertFalse(element("local-api-sign-in", in: app).exists, file: file, line: line)
+        XCTAssertFalse(element("age-gate-retry", in: app).exists, file: file, line: line)
+        XCTAssertFalse(element("tab-circle", in: app).exists, file: file, line: line)
     }
 
     private func enterBirthDate(year: Int, in app: XCUIApplication) {

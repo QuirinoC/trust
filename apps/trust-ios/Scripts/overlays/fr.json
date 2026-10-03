@@ -480,8 +480,8 @@
   "age_gate_blocked_title": "Trust n’est pas encore disponible",
   "age_gate_blocked_body": "Apple ne peut pas autoriser l’accès selon les exigences d’âge actuellement applicables.",
   "age_gate_checking": "Vérification des exigences d’âge…",
-  "age_gate_unavailable_title": "Impossible de terminer la vérification requise",
-  "age_gate_unavailable_body": "Vérifiez votre connexion ou les réglages Apple, puis réessayez.",
+  "age_gate_unavailable_title": "Vérification d’âge Apple indisponible",
+  "age_gate_unavailable_body": "Trust n’a pas pu déterminer si une vérification d’âge Apple s’applique ici. Vérifiez votre connexion et les réglages de votre compte Apple, puis réessayez.",
   "age_gate_retry": "Réessayer",
   "age_gate_try_apple_range": "Essayer la tranche d’âge Apple",
   "age_range_blocked_title": "Trust n’est pas disponible pour cette tranche d’âge",
@@ -518,5 +518,10 @@
   "age_gate_stop_all_success": "Le partage est désactivé pour tout le monde. Votre compte reste verrouillé jusqu’à la fin de la vérification requise.",
   "age_gate_stop_all_error": "Nous n’avons pas pu confirmer l’arrêt du partage. Il est peut-être toujours actif. Réessayez.",
   "location_unavailable": "Emplacement indisponible",
-  "location_may_be_stale": "Peut ne plus être à jour · %@"
+  "location_may_be_stale": "Peut ne plus être à jour · %@",
+  "age_range_sharing_declined_body": "Apple indique qu’une vérification d’âge s’applique ici. Si vous avez refusé le partage, réessayez et acceptez. Trust reçoit une tranche d’âge, pas votre date de naissance.",
+  "age_range_sharing_declined_title": "Partagez votre tranche d’âge pour continuer",
+  "app_transaction_checking": "Vérification de l’App Store…",
+  "app_transaction_unavailable_body": "Trust n’a pas pu confirmer la transaction App Store de l’app. Vérifiez votre connexion, puis réessayez.",
+  "app_transaction_unavailable_title": "Impossible de vérifier cette app"
 }

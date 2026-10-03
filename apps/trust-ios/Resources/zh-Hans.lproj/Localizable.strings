@@ -32,8 +32,8 @@
 "age_gate_stop_all_success" = "已停止与所有人共享。完成所需检查前，你的账户仍会保持锁定。";
 "age_gate_title" = "加入前请先确认";
 "age_gate_try_apple_range" = "尝试使用 Apple 年龄范围";
-"age_gate_unavailable_body" = "请检查网络连接或 Apple 设置，然后重试。";
-"age_gate_unavailable_title" = "无法完成所需的检查";
+"age_gate_unavailable_body" = "Trust 无法确认此处是否需要 Apple 年龄验证。请检查网络连接和 Apple 账户设置，然后重试。";
+"age_gate_unavailable_title" = "Apple 年龄验证暂不可用";
 "age_parent_action" = "请求家长或监护人批准";
 "age_parent_body" = "请让家长或监护人批准继续使用 Trust。";
 "age_parent_declined" = "家长或监护人未批准此更新。";
@@ -46,6 +46,8 @@
 "age_privacy_hold_retry" = "重试";
 "age_range_blocked_body" = "根据 Apple 分享的年龄范围，无法创建 Trust 账户。如果信息有误，请让家长或监护人检查 Apple 账户中的“App 年龄范围”设置，或联系支持团队。";
 "age_range_blocked_title" = "此年龄范围无法使用 Trust";
+"age_range_sharing_declined_body" = "Apple 表示此处需要进行年龄验证。如果你选择了不分享，请重试并允许分享。Trust 接收的是年龄范围，不是你的出生日期。";
+"age_range_sharing_declined_title" = "分享年龄范围后即可继续";
 "age_rating_and_update_description" = "Trust 的年龄保障要求和 App Store 年龄分级均已更改。请确认这两项更改后继续使用 Trust。";
 "age_rating_change_description" = "Trust 的 App Store 年龄分级已更改。请确认此项更改后继续使用 Trust。";
 "age_update_description" = "Trust 现在会在适用时遵循 Apple 的年龄验证和批准要求。";
@@ -104,6 +106,9 @@
 "api_unauthorized" = "需要登录。";
 "api_verification_required" = "连接前请先验证手机号。";
 "api_view_requires_available" = "密封。相反，您可以记录一个快照并请求通知。";
+"app_transaction_checking" = "正在验证 App Store 信息…";
+"app_transaction_unavailable_body" = "Trust 无法确认此 App 的 App Store 交易。请检查网络连接，然后重试。";
+"app_transaction_unavailable_title" = "无法验证此 App";
 "appearance" = "外观";
 "apple_sign_in_failed" = "Apple 无法完成登录。";
 "apple_sign_in_timed_out" = "Apple 登录未完成。再试一次。";

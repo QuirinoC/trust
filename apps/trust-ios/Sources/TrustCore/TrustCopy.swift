@@ -175,9 +175,24 @@ public enum TrustCopy {
         value("age_gate_blocked_body", defaultValue: "Apple’s required age check could not approve access under the current requirements.")
     }
     public static var ageGateChecking: String { value("age_gate_checking", defaultValue: "Checking age requirements…") }
-    public static var ageGateUnavailableTitle: String { value("age_gate_unavailable_title", defaultValue: "We can’t complete the required check") }
+    public static var ageGateUnavailableTitle: String { value("age_gate_unavailable_title", defaultValue: "Apple age check unavailable") }
     public static var ageGateUnavailableBody: String {
-        value("age_gate_unavailable_body", defaultValue: "Check your connection or Apple settings, then try again.")
+        value("age_gate_unavailable_body", defaultValue: "Trust couldn’t confirm whether an Apple age check applies here. Check your connection and Apple Account settings, then try again.")
+    }
+    public static var ageRangeSharingDeclinedTitle: String {
+        value("age_range_sharing_declined_title", defaultValue: "Share your age range to continue")
+    }
+    public static var ageRangeSharingDeclinedBody: String {
+        value("age_range_sharing_declined_body", defaultValue: "Apple says an age check applies here. If you chose not to share, try again and allow it. Trust receives an age range, not your birth date.")
+    }
+    public static var appTransactionChecking: String {
+        value("app_transaction_checking", defaultValue: "Checking your App Store verification…")
+    }
+    public static var appTransactionUnavailableTitle: String {
+        value("app_transaction_unavailable_title", defaultValue: "Couldn’t verify this app")
+    }
+    public static var appTransactionUnavailableBody: String {
+        value("app_transaction_unavailable_body", defaultValue: "Trust couldn’t confirm its App Store transaction. Check your connection and try again.")
     }
     public static var ageGateRetry: String { value("age_gate_retry", defaultValue: "Try again") }
     public static var ageGateStopAll: String { value("age_gate_stop_all", defaultValue: "Stop sharing with everyone") }

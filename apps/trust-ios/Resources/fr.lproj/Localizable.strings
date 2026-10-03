@@ -32,8 +32,8 @@
 "age_gate_stop_all_success" = "Le partage est désactivé pour tout le monde. Votre compte reste verrouillé jusqu’à la fin de la vérification requise.";
 "age_gate_title" = "Avant de rejoindre Trust";
 "age_gate_try_apple_range" = "Essayer la tranche d’âge Apple";
-"age_gate_unavailable_body" = "Vérifiez votre connexion ou les réglages Apple, puis réessayez.";
-"age_gate_unavailable_title" = "Impossible de terminer la vérification requise";
+"age_gate_unavailable_body" = "Trust n’a pas pu déterminer si une vérification d’âge Apple s’applique ici. Vérifiez votre connexion et les réglages de votre compte Apple, puis réessayez.";
+"age_gate_unavailable_title" = "Vérification d’âge Apple indisponible";
 "age_parent_action" = "Demander l’accord d’un parent";
 "age_parent_body" = "Demandez à un parent ou tuteur d’autoriser la poursuite de l’utilisation de Trust.";
 "age_parent_declined" = "Un parent ou tuteur n’a pas approuvé cette mise à jour.";
@@ -46,6 +46,8 @@
 "age_privacy_hold_retry" = "Réessayer";
 "age_range_blocked_body" = "Vous ne pouvez pas créer de compte Trust avec la tranche d’âge partagée par Apple. Si elle est incorrecte, demandez à un parent ou tuteur de vérifier l’âge partagé avec les apps dans les réglages du compte Apple, ou contactez l’assistance.";
 "age_range_blocked_title" = "Trust n’est pas disponible pour cette tranche d’âge";
+"age_range_sharing_declined_body" = "Apple indique qu’une vérification d’âge s’applique ici. Si vous avez refusé le partage, réessayez et acceptez. Trust reçoit une tranche d’âge, pas votre date de naissance.";
+"age_range_sharing_declined_title" = "Partagez votre tranche d’âge pour continuer";
 "age_rating_and_update_description" = "Les exigences de vérification de l’âge de Trust et sa classification d’âge sur l’App Store ont changé. Veuillez confirmer ces deux changements pour continuer à utiliser Trust.";
 "age_rating_change_description" = "La classification d’âge de Trust sur l’App Store a changé. Veuillez confirmer ce changement pour continuer à utiliser Trust.";
 "age_update_description" = "Trust suit désormais les exigences d’âge et d’approbation d’Apple lorsqu’elles s’appliquent.";
@@ -104,6 +106,9 @@
 "api_unauthorized" = "La connexion est requise.";
 "api_verification_required" = "Vérifiez votre numéro de téléphone avant de vous connecter.";
 "api_view_requires_available" = "Scellé. Cherchez plutôt à enregistrer un instantané et à demander une notification.";
+"app_transaction_checking" = "Vérification de l’App Store…";
+"app_transaction_unavailable_body" = "Trust n’a pas pu confirmer la transaction App Store de l’app. Vérifiez votre connexion, puis réessayez.";
+"app_transaction_unavailable_title" = "Impossible de vérifier cette app";
 "appearance" = "Apparence";
 "apple_sign_in_failed" = "Apple n'a pas pu finaliser la connexion.";
 "apple_sign_in_timed_out" = "La connexion Apple n’a pas abouti. Essayer à nouveau.";

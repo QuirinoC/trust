@@ -12,7 +12,7 @@ struct RootView: View {
         ZStack {
             palette.canvas.ignoresSafeArea()
             switch model.phase {
-            case .ageChecking, .ageGate, .ageCheckUnavailable, .ageRangeBlocked, .ageWaitingForParent, .ageBlocked, .ageConsentRevoked, .agePrivacyHoldPending, .agePrivacyHeld:
+            case .ageChecking, .ageGate, .ageCheckUnavailable, .ageRangeSharingDeclined, .ageRangeBlocked, .ageWaitingForParent, .ageBlocked, .ageConsentRevoked, .agePrivacyHoldPending, .agePrivacyHeld, .appTransactionChecking, .appTransactionUnavailable:
                 AgeGateView()
             case .login:
                 LoginView()

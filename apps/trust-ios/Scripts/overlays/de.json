@@ -480,8 +480,8 @@
   "age_gate_blocked_title": "Trust ist noch nicht verfügbar",
   "age_gate_blocked_body": "Apple kann den Zugriff nach den aktuell geltenden Altersanforderungen nicht freigeben.",
   "age_gate_checking": "Altersanforderungen werden geprüft …",
-  "age_gate_unavailable_title": "Die erforderliche Prüfung kann nicht abgeschlossen werden",
-  "age_gate_unavailable_body": "Prüfe deine Verbindung oder die Apple-Einstellungen zur Altersfreigabe und versuche es erneut.",
+  "age_gate_unavailable_title": "Apple-Altersprüfung nicht verfügbar",
+  "age_gate_unavailable_body": "Trust konnte nicht feststellen, ob hier eine Apple-Altersprüfung gilt. Prüfe deine Verbindung und deine Apple-Account-Einstellungen und versuche es erneut.",
   "age_gate_retry": "Erneut versuchen",
   "age_gate_try_apple_range": "Apple-Altersbereich prüfen",
   "age_range_blocked_title": "Trust ist für diese Altersgruppe nicht verfügbar",
@@ -518,5 +518,10 @@
   "age_gate_stop_all_success": "Die Standortfreigabe ist für alle ausgeschaltet. Dein Konto bleibt gesperrt, bis die erforderliche Prüfung abgeschlossen ist.",
   "age_gate_stop_all_error": "Wir konnten nicht bestätigen, dass die Standortfreigabe beendet wurde. Sie ist möglicherweise noch aktiv. Versuche es erneut.",
   "location_unavailable": "Standort nicht verfügbar",
-  "location_may_be_stale": "Möglicherweise nicht aktuell · %@"
+  "location_may_be_stale": "Möglicherweise nicht aktuell · %@",
+  "age_range_sharing_declined_body": "Apple verlangt hier eine Altersprüfung. Wenn du das Teilen abgelehnt hast, versuche es erneut und stimme zu. Trust erhält eine Altersspanne, nicht dein Geburtsdatum.",
+  "age_range_sharing_declined_title": "Teile deine Altersspanne, um fortzufahren",
+  "app_transaction_checking": "App-Store-Verifizierung wird geprüft …",
+  "app_transaction_unavailable_body": "Trust konnte die App-Store-Transaktion nicht bestätigen. Prüfe deine Verbindung und versuche es erneut.",
+  "app_transaction_unavailable_title": "Diese App konnte nicht verifiziert werden"
 }

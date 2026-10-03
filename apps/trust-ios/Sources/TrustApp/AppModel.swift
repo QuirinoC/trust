@@ -24,12 +24,15 @@ enum AppPhase: Equatable {
     case ageChecking
     case ageGate
     case ageCheckUnavailable
+    case ageRangeSharingDeclined
     case ageRangeBlocked
     case ageWaitingForParent
     case ageBlocked
     case ageConsentRevoked
     case agePrivacyHoldPending
     case agePrivacyHeld
+    case appTransactionChecking
+    case appTransactionUnavailable
     case login
     /// A2 — pick `@handle` once after the first Sign in with Apple.
     case handle
@@ -103,7 +106,7 @@ final class AppModel: ObservableObject {
 
     @Published var phase: AppPhase {
         didSet {
-            if oldValue == .ageCheckUnavailable && phase != .ageCheckUnavailable {
+            if Self.isUnavailableVerificationPhase(oldValue), !Self.isUnavailableVerificationPhase(phase) {
                 ageUnavailableStopAllState = .idle
             }
         }
@@ -151,11 +154,28 @@ final class AppModel: ObservableObject {
 
     @Published var isSigningIn = false
     @Published var isDemoMode = false
+    /// This server-side link is required before exposing an authenticated account. It is
+    /// separate from `ageAccessState`: Apple's age decision may succeed while StoreKit
+    /// cannot yet prove the signed app transaction needed for consent-revocation handling.
+    private var isAppTransactionLinked = false
     @Published private(set) var isAgeAccessAllowed = false {
         didSet {
             location.setAgeAccessAllowed(isAgeAccessAllowed)
             location.setAppActive(isSceneActive && isAgeAccessAllowed)
         }
+    }
+    private var canAccessAccountData: Bool {
+        var localFixture = isDemoMode
+#if DEBUG
+        localFixture = localFixture
+            || ProcessInfo.processInfo.environment["TRUST_DEV_SESSION"] == "1"
+#endif
+        return TrustAccountAccessPolicy.canAccessAccountData(
+            ageAssurancePassed: isAgeAccessAllowed && ageAccessState.isAllowed,
+            accountAuthenticated: auth.isAuthenticated,
+            appTransactionLinked: isAppTransactionLinked,
+            localFixture: localFixture
+        )
     }
     @Published private(set) var ageGateBlockedByParent = false
     // PermissionQuestion is iOS 26+, while Trust still supports older deployment targets.
@@ -228,7 +248,7 @@ final class AppModel: ObservableObject {
     }
 
     private func currentAccountOperation() -> TrustAccountOperation? {
-        guard isAgeAccessAllowed, auth.isAuthenticated, let token = auth.sessionToken else { return nil }
+        guard canAccessAccountData, auth.isAuthenticated, let token = auth.sessionToken else { return nil }
         return TrustAccountOperation(token: token, generation: accountGeneration)
     }
 
@@ -238,6 +258,7 @@ final class AppModel: ObservableObject {
 
     private func beginAccountSessionTransition(to token: String) {
         guard auth.sessionToken != token else { return }
+        isAppTransactionLinked = false
         let previousAccountID = TrustSessionIdentity.accountID(from: auth.sessionToken)
         let nextAccountID = TrustSessionIdentity.accountID(from: token)
         let accountChanged = previousAccountID == nil || nextAccountID == nil || previousAccountID != nextAccountID
@@ -519,7 +540,7 @@ final class AppModel: ObservableObject {
             client.token = nil
         }
         if env["TRUST_AGE_TEST_MODE"] == "1", env["TRUST_AGE_TEST_AUTHENTICATED"] == "1" {
-            auth.prepareAgeGateUITestSession()
+            auth.prepareAgeGateUITestSession(token: env["TRUST_AGE_TEST_SESSION_TOKEN"])
         }
 #endif
         if auth.isCurrentSessionPrivacyHeld {
@@ -529,6 +550,15 @@ final class AppModel: ObservableObject {
             return
         }
 #if DEBUG
+        if env["TRUST_AGE_TEST_MODE"] == "1",
+           env["TRUST_AGE_TEST_APP_TRANSACTION_UNAVAILABLE"] == "1",
+           auth.isAuthenticated {
+            ageAccessState.setAllowedOutsideEvaluation(true)
+            isAgeAccessAllowed = true
+            client.token = auth.sessionToken
+            _ = await registerCurrentAppTransactionForConsentRevocation()
+            return
+        }
         if env["TRUST_AGE_TEST_MODE"] == "1" {
             if env["TRUST_AGE_TEST_UNAVAILABLE"] == "1" {
                 ageAccessState.setAllowedOutsideEvaluation(false)
@@ -569,6 +599,8 @@ final class AppModel: ObservableObject {
                 phase = .ageBlocked
             case .ageRangeBelowMinimum:
                 handleAppleAgeRangeRestriction()
+            case .ageRangeSharingDeclined:
+                phase = .ageRangeSharingDeclined
             case .parentApprovalRequired, .parentApprovalDenied, .unavailable:
                 isAgeAccessAllowed = false
                 phase = .ageCheckUnavailable
@@ -586,36 +618,41 @@ final class AppModel: ObservableObject {
         await checkAgeAndContinue()
     }
 
-    private func continueAfterAgeGate() async {
+    private func continueAfterAgeGate(retryAppTransaction: Bool = false) async {
         let authorizationGeneration = ageAccessState.generation
-        guard canContinueAgeAuthorizedFlow(generation: authorizationGeneration) else { return }
+        guard hasCurrentAgeAuthorization(generation: authorizationGeneration) else { return }
         await client.prepare()
-        guard canContinueAgeAuthorizedFlow(generation: authorizationGeneration) else { return }
+        guard hasCurrentAgeAuthorization(generation: authorizationGeneration) else { return }
         #if DEBUG
         if ProcessInfo.processInfo.environment["TRUST_DEV_SESSION"] == "1" {
             await signInWithLocalAPI()
-            guard canContinueAgeAuthorizedFlow(generation: authorizationGeneration) else { return }
+            guard hasCurrentAgeAuthorization(generation: authorizationGeneration) else { return }
             await store.loadProducts()
-            guard canContinueAgeAuthorizedFlow(generation: authorizationGeneration) else { return }
+            guard hasCurrentAgeAuthorization(generation: authorizationGeneration) else { return }
             applyScreenshotLaunch()
             return
         }
         if Self.debugDemoRequested(sessionToken: auth.sessionToken) {
             enterDemo()
             await store.loadProducts()
-            guard canContinueAgeAuthorizedFlow(generation: authorizationGeneration) else { return }
+            guard hasCurrentAgeAuthorization(generation: authorizationGeneration) else { return }
             applyScreenshotLaunch()
             return
         }
         #endif
+        if auth.isAuthenticated {
+            isAppTransactionLinked = false
+            isAgeAccessAllowed = false
+            phase = .appTransactionChecking
+        }
         let restoredCredentialInvalidated = await auth.validateRestoredAppleCredential()
-        guard canContinueAgeAuthorizedFlow(generation: authorizationGeneration) else { return }
+        guard hasCurrentAgeAuthorization(generation: authorizationGeneration) else { return }
         if restoredCredentialInvalidated {
             clearAccountSession()
         }
         client.token = auth.sessionToken
         if auth.isAuthenticated {
-            guard await registerCurrentAppTransactionForConsentRevocation() else { return }
+            guard await registerCurrentAppTransactionForConsentRevocation(retryRequested: retryAppTransaction) else { return }
             guard canContinueAgeAuthorizedFlow(generation: authorizationGeneration) else { return }
             if !isDemoMode,
                let accountID = TrustSessionIdentity.accountID(from: auth.sessionToken),
@@ -627,6 +664,7 @@ final class AppModel: ObservableObject {
             await refresh(enterHome: true)
             guard canContinueAgeAuthorizedFlow(generation: authorizationGeneration) else { return }
         } else {
+            isAgeAccessAllowed = true
             phase = .login
             if let warning = client.reachabilityNotice {
                 auth.notice = warning
@@ -678,6 +716,8 @@ final class AppModel: ObservableObject {
             phase = .ageBlocked
         case .ageRangeBelowMinimum:
             handleAppleAgeRangeRestriction()
+        case .ageRangeSharingDeclined:
+            phase = .ageRangeSharingDeclined
         case .parentApprovalRequired:
             if #available(iOS 26.2, *) {
                 ageUpdateQuestion = ageAssurance.updateQuestion()
@@ -694,27 +734,45 @@ final class AppModel: ObservableObject {
 
     /// Links the authenticated Trust account to Apple's app transaction before loading
     /// account data. The server needs this link to apply a later RESCIND_CONSENT event.
-    private func registerCurrentAppTransactionForConsentRevocation() async -> Bool {
+    private func registerCurrentAppTransactionForConsentRevocation(retryRequested: Bool = false) async -> Bool {
         guard auth.isAuthenticated, !isDemoMode else { return true }
-        guard isAgeAccessAllowed, ageAccessState.isAllowed,
+        guard ageAccessState.isAllowed,
               let token = auth.sessionToken else { return false }
         let ageAuthorizationGeneration = ageAccessState.generation
         let operation = TrustAccountOperation(token: token, generation: accountGeneration)
+        let transactionAuthorization = TrustAppTransactionAuthorization(
+            accountOperation: operation,
+            ageAuthorizationGeneration: ageAuthorizationGeneration
+        )
+        isAppTransactionLinked = false
+        isAgeAccessAllowed = false
+        phase = .appTransactionChecking
         do {
-            try await client.registerCurrentAppTransaction(authorizedToken: operation.token) { [weak self] in
+            try await client.registerCurrentAppTransaction(
+                authorizedToken: operation.token,
+                retryRequested: retryRequested
+            ) { [weak self] in
                 guard let self else { return false }
-                return operation.authorizationToken(currentToken: self.auth.sessionToken, generation: self.accountGeneration) != nil
+                return transactionAuthorization.permitsRegistration(
+                    currentAccountToken: self.auth.sessionToken,
+                    currentAccountGeneration: self.accountGeneration,
+                    ageIsAuthorized: self.ageAccessState.isAllowed,
+                    currentAgeAuthorizationGeneration: self.ageAccessState.generation
+                )
             }
-            return operation.matches(token: auth.sessionToken, generation: accountGeneration)
-                && canContinueAgeAuthorizedFlow(generation: ageAuthorizationGeneration)
+            guard operation.matches(token: auth.sessionToken, generation: accountGeneration),
+                  hasCurrentAgeAuthorization(generation: ageAuthorizationGeneration) else { return false }
+            isAppTransactionLinked = true
+            isAgeAccessAllowed = true
+            return true
         } catch let error as TrustClientError where TrustAgePolicy.isConsentRevocationResponse(apiCode: error.apiCode) {
             guard operation.matches(token: auth.sessionToken, generation: accountGeneration),
-                  canContinueAgeAuthorizedFlow(generation: ageAuthorizationGeneration) else { return false }
+                  hasCurrentAgeAuthorization(generation: ageAuthorizationGeneration) else { return false }
             handleConsentRevocation()
             return false
         } catch let error as TrustClientError where error.apiCode == "account_privacy_hold" {
             guard operation.matches(token: auth.sessionToken, generation: accountGeneration),
-                  canContinueAgeAuthorizedFlow(generation: ageAuthorizationGeneration) else { return false }
+                  hasCurrentAgeAuthorization(generation: ageAuthorizationGeneration) else { return false }
             privacyHoldSubmission.beginSubmission(for: operation)
             _ = privacyHoldSubmission.acknowledge(
                 operation: operation,
@@ -722,24 +780,39 @@ final class AppModel: ObservableObject {
                 generation: accountGeneration)
             handleAcknowledgedPrivacyHold()
             return false
+        } catch TrustClientError.appTransactionVerificationUnavailable {
+            ageAssuranceLogger.error("Apple app transaction verification was unavailable.")
+            guard operation.matches(token: auth.sessionToken, generation: accountGeneration),
+                  hasCurrentAgeAuthorization(generation: ageAuthorizationGeneration) else { return false }
+            phase = .appTransactionUnavailable
+            return false
+        } catch TrustClientError.appTransactionUnverified {
+            ageAssuranceLogger.error("Apple returned an unverified app transaction.")
+            guard operation.matches(token: auth.sessionToken, generation: accountGeneration),
+                  hasCurrentAgeAuthorization(generation: ageAuthorizationGeneration) else { return false }
+            phase = .appTransactionUnavailable
+            return false
         } catch is CancellationError {
+            guard operation.matches(token: auth.sessionToken, generation: accountGeneration),
+                  hasCurrentAgeAuthorization(generation: ageAuthorizationGeneration) else { return false }
+            phase = .appTransactionUnavailable
             return false
         } catch {
-            ageAssuranceLogger.error("Could not register the app transaction for consent revocation: \(error.localizedDescription, privacy: .public)")
+            ageAssuranceLogger.error("App transaction server registration failed.")
             guard operation.matches(token: auth.sessionToken, generation: accountGeneration),
-                  canContinueAgeAuthorizedFlow(generation: ageAuthorizationGeneration) else { return false }
-            _ = ageAccessState.beginEvaluation()
-            isAgeAccessAllowed = false
-            ageGateBlockedByParent = false
-            phase = .ageCheckUnavailable
+                  hasCurrentAgeAuthorization(generation: ageAuthorizationGeneration) else { return false }
+            phase = .appTransactionUnavailable
             return false
         }
     }
 
+    private func hasCurrentAgeAuthorization(generation: UInt64) -> Bool {
+        ageAccessState.isAllowed && ageAccessState.isCurrentEvaluation(generation)
+    }
+
     private func canContinueAgeAuthorizedFlow(generation: UInt64) -> Bool {
         isAgeAccessAllowed
-            && ageAccessState.isAllowed
-            && ageAccessState.isCurrentEvaluation(generation)
+            && hasCurrentAgeAuthorization(generation: generation)
     }
 
     private func handleConsentRevocation() {
@@ -888,16 +961,44 @@ final class AppModel: ObservableObject {
             phase = .ageCheckUnavailable
             return
         }
+        if env["TRUST_AGE_TEST_MODE"] == "1", env["TRUST_AGE_TEST_RECHECK_DECLINED"] == "1" {
+            phase = .ageChecking
+            phase = .ageRangeSharingDeclined
+            return
+        }
 #endif
         Task { await checkAgeAndContinue(forceAppleAgeRange: canTryAppleAgeRangeAfterUnderage) }
     }
 
-    var canStopAllFromUnavailableAgeCheck: Bool {
-        phase == .ageCheckUnavailable && auth.isAuthenticated && auth.sessionToken != nil
+    func retryAppTransactionRegistration() {
+        guard phase == .appTransactionUnavailable,
+              auth.isAuthenticated,
+              ageAccessState.isAllowed else { return }
+        phase = .appTransactionChecking
+        Task { [weak self] in
+            guard let self else { return }
+#if DEBUG
+            if ProcessInfo.processInfo.environment["TRUST_AGE_TEST_MODE"] == "1",
+               ProcessInfo.processInfo.environment["TRUST_AGE_TEST_APP_TRANSACTION_UNAVAILABLE"] == "1" {
+                self.client.token = self.auth.sessionToken
+                _ = await self.registerCurrentAppTransactionForConsentRevocation()
+                return
+            }
+#endif
+            await self.continueAfterAgeGate(retryAppTransaction: true)
+        }
+    }
+
+    private static func isUnavailableVerificationPhase(_ phase: AppPhase) -> Bool {
+        phase == .ageCheckUnavailable || phase == .appTransactionUnavailable
+    }
+
+    var canStopAllFromUnavailableVerification: Bool {
+        Self.isUnavailableVerificationPhase(phase) && auth.isAuthenticated && auth.sessionToken != nil
     }
 
     func requestAgeUnavailableStopAll() {
-        guard canStopAllFromUnavailableAgeCheck,
+        guard canStopAllFromUnavailableVerification,
               ageUnavailableStopAllState == .idle || ageUnavailableStopAllState.isError else { return }
         ageUnavailableStopAllState = .confirming
     }
@@ -909,13 +1010,15 @@ final class AppModel: ObservableObject {
 
     func confirmAgeUnavailableStopAll() {
         guard ageUnavailableStopAllState == .confirming,
-              phase == .ageCheckUnavailable,
+              Self.isUnavailableVerificationPhase(phase),
               let token = auth.sessionToken else { return }
         let operation = TrustAccountOperation(token: token, generation: accountGeneration)
         client.token = operation.token
         ageUnavailableStopAllState = .pending
         Task { [weak self] in
-            guard let self, self.isCurrentAccount(operation: operation), self.phase == .ageCheckUnavailable else { return }
+            guard let self,
+                  operation.matches(token: self.auth.sessionToken, generation: self.accountGeneration),
+                  Self.isUnavailableVerificationPhase(self.phase) else { return }
 #if DEBUG
             if ProcessInfo.processInfo.environment["TRUST_AGE_TEST_STOP_ALL_HOLD"] == "1" {
                 try? await Task.sleep(nanoseconds: 60_000_000_000)
@@ -935,12 +1038,14 @@ final class AppModel: ObservableObject {
                     guard let self else { return false }
                     return operation.matches(token: self.auth.sessionToken, generation: self.accountGeneration)
                 }
-                guard self.isCurrentAccount(operation: operation), self.phase == .ageCheckUnavailable else { return }
+                guard operation.matches(token: self.auth.sessionToken, generation: self.accountGeneration),
+                      Self.isUnavailableVerificationPhase(self.phase) else { return }
                 self.ageUnavailableStopAllState = .success
             } catch is CancellationError {
                 return
             } catch {
-                guard self.isCurrentAccount(operation: operation), self.phase == .ageCheckUnavailable else { return }
+                guard operation.matches(token: self.auth.sessionToken, generation: self.accountGeneration),
+                      Self.isUnavailableVerificationPhase(self.phase) else { return }
                 self.ageUnavailableStopAllState = .error(self.plainMessage(for: error))
             }
         }
@@ -1029,7 +1134,14 @@ final class AppModel: ObservableObject {
         let ageTestAccountChange = ProcessInfo.processInfo.environment["TRUST_AGE_TEST_ACCOUNT_CHANGE_ON_STOP"] == "1"
         if isUITestLaunch || (ProcessInfo.processInfo.environment["TRUST_AGE_TEST_MODE"] == "1" && !ageTestAccountChange) { return }
 #endif
-        guard isAgeAccessAllowed || phase == .ageChecking || phase == .ageWaitingForParent || phase == .ageCheckUnavailable || phase == .ageRangeBlocked else { return }
+        guard isAgeAccessAllowed
+            || phase == .ageChecking
+            || phase == .ageWaitingForParent
+            || phase == .ageCheckUnavailable
+            || phase == .ageRangeSharingDeclined
+            || phase == .ageRangeBlocked
+            || phase == .appTransactionChecking
+            || phase == .appTransactionUnavailable else { return }
         let isForeground = foregroundHint ?? (UIApplication.shared.applicationState == .active)
         _ = ageAccessState.suspendForAppleAccountChange(isForeground: isForeground)
         isAgeAccessAllowed = false
@@ -1377,6 +1489,7 @@ final class AppModel: ObservableObject {
     private func clearAccountSession(preservingPrivacyHoldDeletionSession: Bool = false) {
         let pushRemovalToken = client.token ?? auth.sessionToken
         accountGeneration &+= 1
+        isAppTransactionLinked = false
         ageUnavailableStopAllState = .idle
         ageAssurance.resetAccountAttestations()
         Task { await receipts.unregister(authorizedToken: pushRemovalToken) }
@@ -1517,7 +1630,7 @@ final class AppModel: ObservableObject {
     }
 
     func refresh(enterHome: Bool = false, fallbackOnboardingComplete: Bool? = nil) async {
-        guard isAgeAccessAllowed else { return }
+        guard canAccessAccountData else { return }
         if isDemoMode {
             publishDemoSnapshot()
             if enterHome { phase = .home }
@@ -1567,7 +1680,7 @@ final class AppModel: ObservableObject {
     }
 
     private func performRefresh(enterHome: Bool, fallbackOnboardingComplete: Bool?) async {
-        guard isAgeAccessAllowed else { return }
+        guard canAccessAccountData else { return }
         guard let refreshToken = auth.sessionToken else { return }
         circleRefreshSequence &+= 1
         let refreshSequence = circleRefreshSequence
@@ -3258,7 +3371,7 @@ final class AppModel: ObservableObject {
     // MARK: Plus (StoreKit 2 — SubscriptionStoreView submits JWS here)
 
     func syncCircleEntitlement(signedTransactionInfo: String? = nil) async {
-        guard isAgeAccessAllowed else { return }
+        guard canAccessAccountData else { return }
         do {
             if let signed = signedTransactionInfo, !signed.isEmpty {
                 try await client.verifyStoreKitTransaction(signed)
@@ -3278,7 +3391,7 @@ final class AppModel: ObservableObject {
     }
 
     func refreshStoreKitToken() async {
-        guard isAgeAccessAllowed, auth.isAuthenticated else { return }
+        guard canAccessAccountData, auth.isAuthenticated else { return }
         do {
             let token = try await client.storeKitAccountToken()
             store.setAppAccountToken(token)
@@ -3329,6 +3442,7 @@ final class AppModel: ObservableObject {
     }
 
     func requestNotifications() async {
+        guard canAccessAccountData else { return }
         await receipts.requestPermission()
     }
 
@@ -3417,11 +3531,11 @@ final class AppModel: ObservableObject {
     /// Desire monitoring whenever Home is set — region monitoring starts when Always arrives.
     /// Manual triad remains an override. Hidden is never posted from the geofence.
     func syncHomeMonitoring() {
-        location.setHomeMonitoring(isAgeAccessAllowed && auth.isAuthenticated && location.homeIsSet)
+        location.setHomeMonitoring(canAccessAccountData && auth.isAuthenticated && location.homeIsSet)
     }
 
     private func postGeofencePresence(_ kind: HomePresenceKind, signaledAt: Date, placeID: UUID) {
-        guard isAgeAccessAllowed, auth.isAuthenticated, kind == .home || kind == .away else { return }
+        guard canAccessAccountData, auth.isAuthenticated, kind == .home || kind == .away else { return }
         if myPresence == .hidden { return }
         if isDemoMode {
             demo?.setMyPresence(kind)
@@ -3546,7 +3660,7 @@ final class AppModel: ObservableObject {
     }
 
     private func syncLocationSharing() {
-        guard isAgeAccessAllowed, auth.isAuthenticated || isDemoMode else {
+        guard canAccessAccountData, auth.isAuthenticated || isDemoMode else {
             location.setSharingTier(.off)
             return
         }
@@ -3560,7 +3674,7 @@ final class AppModel: ObservableObject {
     }
 
     private func enqueueLocations(_ points: [LocationPoint]) {
-        guard isAgeAccessAllowed, isSharingLocation, location.hasAccess, !points.isEmpty else { return }
+        guard canAccessAccountData, isSharingLocation, location.hasAccess, !points.isEmpty else { return }
         ingestStore.append(points)
         ingestFlushTask?.cancel()
         ingestFlushTask = Task { [weak self] in
@@ -3571,7 +3685,7 @@ final class AppModel: ObservableObject {
     }
 
     private func flushIngestQueue() async {
-        guard isAgeAccessAllowed, isSharingLocation, location.hasAccess, !isDemoMode, !isFlushingIngest,
+        guard canAccessAccountData, isSharingLocation, location.hasAccess, !isDemoMode, !isFlushingIngest,
               let token = auth.sessionToken else { return }
         let operation = TrustAccountOperation(token: token, generation: accountGeneration)
         let queue = ingestStore
@@ -3581,7 +3695,7 @@ final class AppModel: ObservableObject {
         defer {
             isFlushingIngest = false
             if ingestStore.queueIdentity != queueIdentity,
-               isAgeAccessAllowed, isSharingLocation, location.hasAccess,
+               canAccessAccountData, isSharingLocation, location.hasAccess,
                auth.isAuthenticated, !isDemoMode, !ingestStore.points.isEmpty {
                 Task { await flushIngestQueue() }
             }
@@ -3590,7 +3704,7 @@ final class AppModel: ObservableObject {
         do {
             try await LocationIngestBatchDrain.run(
                 canContinue: {
-                    self.isAgeAccessAllowed && self.isSharingLocation && self.location.hasAccess
+                    self.canAccessAccountData && self.isSharingLocation && self.location.hasAccess
                         && operation.matches(token: self.auth.sessionToken, generation: self.accountGeneration)
                         && queue.queueIdentity == queueIdentity
                         && self.ingestStore.queueIdentity == queueIdentity

@@ -235,6 +235,8 @@ enum TrustClientError: LocalizedError {
     case api(code: String, message: String)
     /// Unknown server message — passed through.
     case server(String)
+    case appTransactionUnverified
+    case appTransactionVerificationUnavailable
     case decoding
 
     /// Connectivity, not a decision the server made. These are the cases the offline
@@ -277,6 +279,10 @@ enum TrustClientError: LocalizedError {
             return message
         case .server(let message):
             return message
+        case .appTransactionUnverified:
+            return TrustCopy.appTransactionUnavailableBody
+        case .appTransactionVerificationUnavailable:
+            return TrustCopy.appTransactionUnavailableBody
         case .decoding:
             return TrustCopy.decodingError
         }
@@ -350,6 +356,7 @@ final class TrustClient {
     var onPrivacyHoldDetected: (() -> Void)?
     private(set) var resolvedBaseURL: URL = AppConfiguration.apiBaseURL
     private(set) var reachabilityNotice: String?
+    private var didFailAppleExchangeForLocalUITest = false
 
     private let session: URLSession = {
         let config = URLSessionConfiguration.default
@@ -384,6 +391,34 @@ final class TrustClient {
     /// `nonce` is the exact value set on `ASAuthorizationAppleIDRequest.nonce`; the server
     /// compares it with the ID token's `nonce` claim (replay hygiene). Optional for back-compat.
     func appleSession(identityToken: String, displayName: String?, nonce: String? = nil) async throws -> SessionPayload {
+#if DEBUG
+        if ProcessInfo.processInfo.environment["TRUST_UI_TEST_FAKE_APPLE_AUTH"] == "1",
+           isLocalAgeAssuranceUITestAPI {
+            if ProcessInfo.processInfo.environment["TRUST_UI_TEST_APPLE_EXCHANGE_FAILURE_ONCE"] == "1",
+               !didFailAppleExchangeForLocalUITest {
+                didFailAppleExchangeForLocalUITest = true
+                struct InvalidBody: Encodable {
+                    var identityToken: String
+                    var displayName: String
+                    var nonce: String?
+                }
+                return try await post(
+                    path: "/api/v1/session/apple",
+                    body: InvalidBody(
+                        identityToken: "not-a-valid-apple-jwt",
+                        displayName: displayName ?? "Trust UI Test",
+                        nonce: nonce
+                    ),
+                    authorized: false
+                )
+            }
+            return try await developmentSession(
+                displayName: displayName ?? "Trust UI Test",
+                deviceId: ProcessInfo.processInfo.environment["TRUST_UI_TEST_DEVICE_ID"] ?? "trust-local-apple-test",
+                provider: "apple"
+            )
+        }
+#endif
         struct Body: Encodable {
             var identityToken: String
             var displayName: String
@@ -421,7 +456,7 @@ final class TrustClient {
     #if DEBUG
     /// Local API only. Release builds do not include this call. The server returns 404 unless
     /// `Auth:AllowDevelopmentSignIn` is on, which production leaves off.
-    func developmentSession(displayName: String, deviceId: String) async throws -> SessionPayload {
+    func developmentSession(displayName: String, deviceId: String, provider: String = "development") async throws -> SessionPayload {
         struct Body: Encodable {
             var displayName: String
             var provider: String
@@ -429,7 +464,7 @@ final class TrustClient {
         }
         let payload: SessionPayload = try await post(
             path: "/api/v1/session/development",
-            body: Body(displayName: displayName, provider: "development", deviceId: deviceId),
+            body: Body(displayName: displayName, provider: provider, deviceId: deviceId),
             authorized: false
         )
         token = payload.token
@@ -919,14 +954,54 @@ final class TrustClient {
 
     func registerCurrentAppTransaction(
         authorizedToken: String,
+        retryRequested: Bool = false,
         operationIsCurrent: @MainActor () -> Bool
     ) async throws {
-        let result = try await AppTransaction.shared
+#if DEBUG
+        if ProcessInfo.processInfo.environment["TRUST_AGE_TEST_MODE"] == "1",
+           ProcessInfo.processInfo.environment["TRUST_AGE_TEST_APP_TRANSACTION_UNAVAILABLE"] == "1" {
+            throw TrustClientError.appTransactionUnverified
+        }
+        if ProcessInfo.processInfo.environment["TRUST_AGE_TEST_APP_TRANSACTION_PROXY"] == "1" {
+            guard isLocalAgeAssuranceUITestAPI else { throw TrustClientError.appTransactionUnverified }
+            guard operationIsCurrent(), token == authorizedToken else { throw CancellationError() }
+            struct LocalTestBody: Encodable {
+                var signedAppTransactionInfo: String
+            }
+            var request = try makeRequest(
+                path: "/api/v1/age-assurance/app-transaction",
+                method: "PUT",
+                authorized: true,
+                tokenOverride: authorizedToken
+            )
+            request.httpBody = try encoder.encode(
+                LocalTestBody(signedAppTransactionInfo: "local-simulator-test-only")
+            )
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue("1", forHTTPHeaderField: "X-Trust-Local-Test-App-Transaction")
+            try await sendEmptyResponse(request)
+            guard operationIsCurrent(), token == authorizedToken else { throw CancellationError() }
+            return
+        }
+#endif
+        let result: VerificationResult<AppTransaction>
+        do {
+            result = try await TrustAppTransactionResolution.resolve(
+                retryRequested: retryRequested,
+                isVerified: { if case .verified = $0 { return true }; return false },
+                shared: { try await AppTransaction.shared },
+                refresh: { try await AppTransaction.refresh() }
+            )
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            throw TrustClientError.appTransactionVerificationUnavailable
+        }
         // StoreKit can suspend while another account signs in. Recheck before dispatch
         // and always use the token captured by the caller, never the mutable token field.
         guard operationIsCurrent(), token == authorizedToken else { throw CancellationError() }
         guard case .verified = result else {
-            throw TrustClientError.server(TrustCopy.ageGateUnavailableBody)
+            throw TrustClientError.appTransactionUnverified
         }
 
         struct Body: Encodable {
@@ -973,6 +1048,16 @@ final class TrustClient {
             request.setValue("Bearer \(requestToken)", forHTTPHeaderField: "Authorization")
         }
         return request
+    }
+
+    private var isLocalAgeAssuranceUITestAPI: Bool {
+        ProcessInfo.processInfo.environment["TRUST_UI_TEST"] == "1"
+            && AppConfiguration.isLoopback(resolvedBaseURL)
+            && resolvedBaseURL.port == 5089
+    }
+
+    private func sendEmptyResponse(_ request: URLRequest) async throws {
+        let _: EmptyPayload = try await send(request, allowEmpty: true)
     }
 
     private func send<T: Decodable>(_ request: URLRequest, allowEmpty: Bool = false) async throws -> T {

@@ -2,6 +2,113 @@ import Foundation
 import TrustCore
 import XCTest
 
+@MainActor
+private final class RetryAuthorizationSnapshot {
+    var token: String? = "alice-token"
+    var accountGeneration: UInt64 = 18
+    var currentAgeAuthorizationGeneration: UInt64 = 7
+    var didDispatchRegistration = false
+}
+
+final class TrustAppTransactionResolutionTests: XCTestCase {
+    fileprivate enum FakeAppTransactionResult: Equatable {
+        case verified
+        case unverified
+    }
+
+    func testInitialRegistrationUsesSharedWithoutRefresh() async throws {
+        var sharedCalls = 0
+        var refreshCalls = 0
+        let result = try await TrustAppTransactionResolution.resolve(
+            retryRequested: false,
+            isVerified: { (value: FakeAppTransactionResult) in value == .verified },
+            shared: { sharedCalls += 1; return FakeAppTransactionResult.verified },
+            refresh: { refreshCalls += 1; return FakeAppTransactionResult.verified }
+        )
+
+        XCTAssertEqual(result, FakeAppTransactionResult.verified)
+        XCTAssertEqual(sharedCalls, 1)
+        XCTAssertEqual(refreshCalls, 0)
+    }
+
+    func testExplicitRetryRefreshesAfterUnverifiedSharedResult() async throws {
+        var refreshCalls = 0
+        let result = try await TrustAppTransactionResolution.resolve(
+            retryRequested: true,
+            isVerified: { (value: FakeAppTransactionResult) in value == .verified },
+            shared: { FakeAppTransactionResult.unverified },
+            refresh: { refreshCalls += 1; return FakeAppTransactionResult.verified }
+        )
+
+        XCTAssertEqual(result, FakeAppTransactionResult.verified)
+        XCTAssertEqual(refreshCalls, 1)
+    }
+
+    func testExplicitRetryRefreshesWhenSharedThrows() async throws {
+        struct SharedFailure: Error {}
+        var refreshCalls = 0
+        let result = try await TrustAppTransactionResolution.resolve(
+            retryRequested: true,
+            isVerified: { (value: FakeAppTransactionResult) in value == .verified },
+            shared: { () async throws -> FakeAppTransactionResult in throw SharedFailure() },
+            refresh: { refreshCalls += 1; return FakeAppTransactionResult.verified }
+        )
+
+        XCTAssertEqual(result, FakeAppTransactionResult.verified)
+        XCTAssertEqual(refreshCalls, 1)
+    }
+
+    func testRetryRefreshThatRemainsUnverifiedIsReturnedForClosedHandling() async throws {
+        let result = try await TrustAppTransactionResolution.resolve(
+            retryRequested: true,
+            isVerified: { (value: FakeAppTransactionResult) in value == .verified },
+            shared: { FakeAppTransactionResult.unverified },
+            refresh: { FakeAppTransactionResult.unverified }
+        )
+
+        XCTAssertEqual(result, FakeAppTransactionResult.unverified)
+        XCTAssertFalse(result == FakeAppTransactionResult.verified)
+    }
+
+    func testRetryRefreshErrorPropagatesWithoutAnotherRefreshAttempt() async {
+        struct RefreshFailure: Error {}
+        var refreshCalls = 0
+        do {
+            _ = try await TrustAppTransactionResolution.resolve(
+                retryRequested: true,
+                isVerified: { (value: FakeAppTransactionResult) in value == .verified },
+                shared: { () async throws -> FakeAppTransactionResult in throw RefreshFailure() },
+                refresh: { () async throws -> FakeAppTransactionResult in
+                    refreshCalls += 1
+                    throw RefreshFailure()
+                }
+            )
+            XCTFail("A rejected refresh must remain a failure.")
+        } catch is RefreshFailure {
+            XCTAssertEqual(refreshCalls, 1)
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
+    func testRetryDoesNotRefreshAfterSharedCancellation() async {
+        var refreshCalls = 0
+        do {
+            _ = try await TrustAppTransactionResolution.resolve(
+                retryRequested: true,
+                isVerified: { (value: FakeAppTransactionResult) in value == .verified },
+                shared: { () async throws -> FakeAppTransactionResult in throw CancellationError() },
+                refresh: { refreshCalls += 1; return FakeAppTransactionResult.verified }
+            )
+            XCTFail("A cancelled StoreKit request must not start a refresh.")
+        } catch is CancellationError {
+            XCTAssertEqual(refreshCalls, 0)
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+}
+
 final class AvatarArtworkPaletteTests: XCTestCase {
     func testPresetBackingUsesWarmLightAndMutedBlueGrayDarkColors() {
         XCTAssertEqual(AvatarArtworkPalette.backingHex(isDarkAppearance: false), 0xFCFAF2)
@@ -425,6 +532,14 @@ final class TrustPushDestinationTests: XCTestCase {
 }
 
 final class TrustAgePolicyTests: XCTestCase {
+    func testAppleSignInTokenErrorIsDistinctFromAgeAndAppTransactionFailures() {
+        let signInError = TrustCopy.apiError(code: "invalid_apple_token", fallback: nil)
+
+        XCTAssertNotEqual(signInError, TrustCopy.ageGateUnavailableBody)
+        XCTAssertNotEqual(signInError, TrustCopy.appTransactionUnavailableBody)
+        XCTAssertTrue(signInError.localizedCaseInsensitiveContains("Apple"))
+    }
+
     func testAgeBandsMatchTexasCategoriesWithoutKeepingExactAge() {
         let thresholds = TrustAgePolicy.ageBandThresholds
         XCTAssertEqual(thresholds.minimum, 13)
@@ -636,6 +751,41 @@ final class TrustAgePolicyTests: XCTestCase {
 
         XCTAssertNil(dispatchedToken, "The stale A operation must stop before network dispatch, never substitute B's mutable token.")
         XCTAssertNotEqual(dispatchedToken, currentToken)
+    }
+
+    @MainActor
+    func testDelayedRetryCannotDispatchAfterAgeAuthorizationChanges() async throws {
+        let operation = TrustAccountOperation(token: "alice-token", generation: 18)
+        let authorization = RetryAuthorizationSnapshot()
+        let registrationAuthorization = TrustAppTransactionAuthorization(
+            accountOperation: operation,
+            ageAuthorizationGeneration: authorization.currentAgeAuthorizationGeneration
+        )
+
+        let retry = Task { @MainActor in
+            let result = try await TrustAppTransactionResolution.resolve(
+                retryRequested: true,
+                isVerified: { (value: TrustAppTransactionResolutionTests.FakeAppTransactionResult) in value == .verified },
+                shared: { TrustAppTransactionResolutionTests.FakeAppTransactionResult.unverified },
+                refresh: {
+                    await Task.yield()
+                    return TrustAppTransactionResolutionTests.FakeAppTransactionResult.verified
+                }
+            )
+            guard result == .verified,
+                  registrationAuthorization.permitsRegistration(
+                    currentAccountToken: authorization.token,
+                    currentAccountGeneration: authorization.accountGeneration,
+                    ageIsAuthorized: true,
+                    currentAgeAuthorizationGeneration: authorization.currentAgeAuthorizationGeneration
+                  ) else { return }
+            authorization.didDispatchRegistration = true
+        }
+
+        authorization.currentAgeAuthorizationGeneration = 8
+        try await retry.value
+
+        XCTAssertFalse(authorization.didDispatchRegistration, "A retry must not register after age authorization changes, even when the account is unchanged.")
     }
 
     func testHistoryAndSharingResultsAreDiscardedAfterAccountSwitch() {
@@ -1119,6 +1269,46 @@ final class TrustAgePolicyTests: XCTestCase {
             ),
             .none
         )
+    }
+}
+
+final class TrustAccountAccessPolicyTests: XCTestCase {
+    func testAgeApprovalAllowsSignInButAuthenticatedFeaturesWaitForAppTransactionLink() {
+        XCTAssertTrue(TrustAccountAccessPolicy.canAccessAccountData(
+            ageAssurancePassed: true,
+            accountAuthenticated: false,
+            appTransactionLinked: false
+        ), "An age-approved person must still be able to reach sign-in.")
+        XCTAssertFalse(TrustAccountAccessPolicy.canAccessAccountData(
+            ageAssurancePassed: true,
+            accountAuthenticated: true,
+            appTransactionLinked: false
+        ), "A failed or pending AppTransaction link must keep account data closed.")
+        XCTAssertTrue(TrustAccountAccessPolicy.canAccessAccountData(
+            ageAssurancePassed: true,
+            accountAuthenticated: true,
+            appTransactionLinked: true
+        ))
+        XCTAssertFalse(TrustAccountAccessPolicy.canAccessAccountData(
+            ageAssurancePassed: false,
+            accountAuthenticated: true,
+            appTransactionLinked: true
+        ), "An AppTransaction link can never override an unresolved age decision.")
+    }
+
+    func testExplicitLocalFixtureCanAccessOnlyAfterAgeFixturePermits() {
+        XCTAssertTrue(TrustAccountAccessPolicy.canAccessAccountData(
+            ageAssurancePassed: true,
+            accountAuthenticated: true,
+            appTransactionLinked: false,
+            localFixture: true
+        ))
+        XCTAssertFalse(TrustAccountAccessPolicy.canAccessAccountData(
+            ageAssurancePassed: false,
+            accountAuthenticated: true,
+            appTransactionLinked: false,
+            localFixture: true
+        ))
     }
 }
 

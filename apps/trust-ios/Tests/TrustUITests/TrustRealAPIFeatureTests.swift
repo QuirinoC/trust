@@ -28,6 +28,171 @@ final class TrustRealAPIFeatureTests: XCTestCase {
         super.tearDown()
     }
 
+    func testAdultAgeGateAppleExchangeFailureCanRetryThroughTransactionLinkIntoOnboarding() throws {
+        try requireAgeAssuranceFaultProxy()
+        let suffix = UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
+        let deviceID = "trust-age-signin-\(suffix.prefix(12))"
+        let displayName = "AgeSignIn\(suffix.prefix(6))"
+        api.resetRaceProxy()
+        XCTAssertTrue(api.armAppTransactionFixture(retry: false))
+
+        let app = XCUIApplication()
+        app.launchEnvironment["TRUST_BASE_URL"] = LocalTrustAPI.baseURL
+        app.launchEnvironment["TRUST_STRICT_API"] = "1"
+        app.launchEnvironment["TRUST_UI_TEST"] = "1"
+        app.launchEnvironment["TRUST_UI_TEST_DEVICE_ID"] = deviceID
+        app.launchEnvironment["TRUST_UI_TEST_DISPLAY_NAME"] = displayName
+        app.launchEnvironment["TRUST_UI_TEST_RESET_AUTH"] = "1"
+        app.launchEnvironment["TRUST_UI_TEST_FAKE_APPLE_AUTH"] = "1"
+        app.launchEnvironment["TRUST_UI_TEST_APPLE_EXCHANGE_FAILURE_ONCE"] = "1"
+        app.launchEnvironment["TRUST_AGE_TEST_MODE"] = "1"
+        app.launchEnvironment["TRUST_AGE_TEST_RESET_AUTH"] = "1"
+        app.launchEnvironment["TRUST_AGE_TEST_RESET_STATE"] = "1"
+        app.launchEnvironment["TRUST_AGE_TEST_APP_TRANSACTION_PROXY"] = "1"
+        app.launch()
+        app.launchEnvironment.removeValue(forKey: "TRUST_UI_TEST_RESET_AUTH")
+        app.launchEnvironment.removeValue(forKey: "TRUST_AGE_TEST_RESET_AUTH")
+
+        let month = app.textFields["age-birth-month"]
+        XCTAssertTrue(month.waitForExistence(timeout: 15), app.debugDescription)
+        for (field, value) in [
+            (month, "01"),
+            (app.textFields["age-birth-day"], "01"),
+            (app.textFields["age-birth-year"], "1990")
+        ] {
+            XCTAssertTrue(field.waitForExistence(timeout: 5), app.debugDescription)
+            field.tap()
+            field.typeText(value)
+        }
+        let continueAge = app.buttons["age-gate-continue"]
+        XCTAssertTrue(waitUntil(timeout: 5) { continueAge.isEnabled })
+        continueAge.tap()
+
+        let appleSignIn = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] %@", "Apple")).firstMatch
+        XCTAssertTrue(appleSignIn.waitForExistence(timeout: 15), app.debugDescription)
+        appleSignIn.tap()
+        let loginNotice = app.staticTexts["login-notice"]
+        XCTAssertTrue(loginNotice.waitForExistence(timeout: 15), app.debugDescription)
+        XCTAssertTrue(loginNotice.label.localizedCaseInsensitiveContains("could not verify this sign-in"), loginNotice.label)
+        XCTAssertTrue(appleSignIn.exists, "An Apple token exchange failure must keep the person on Login so they can retry.")
+        XCTAssertFalse(app.switches["onboarding-discovery-toggle"].exists)
+
+        appleSignIn.tap()
+        XCTAssertTrue(
+            app.switches["onboarding-discovery-toggle"].waitForExistence(timeout: 20),
+            "After retry, the test identity must complete Apple sign-in, transaction registration, and reach real handle onboarding.\n\(app.debugDescription)"
+        )
+        XCTAssertFalse(loginNotice.exists)
+        let state = try XCTUnwrap(api.raceProxyState())
+        let counts = state["request_counts"] as? [String: Int] ?? [:]
+        XCTAssertEqual(counts["POST /api/v1/session/apple"], 1, "The first Apple exchange must reach the local API and fail.")
+        XCTAssertEqual(counts["POST /api/v1/session/development"], 1, "Only the explicit retry fixture may create its local Apple-provider account.")
+        XCTAssertEqual(counts["PUT /api/v1/age-assurance/app-transaction"], 1)
+        XCTAssertGreaterThan(counts["GET /api/v1/circle"] ?? 0, 0, "The account read must happen only after successful transaction registration.")
+        XCTAssertEqual(state["app_transaction_success_count"] as? Int, 1)
+
+        let session = try XCTUnwrap(api.developmentSession(name: displayName, deviceID: deviceID, provider: "apple"))
+        defer {
+            app.terminate()
+            api.deleteAccount(token: session.token)
+        }
+        let profile = api.circle(token: session.token)?["you"] as? [String: Any]
+        XCTAssertEqual(profile?["onboardingComplete"] as? Bool, false)
+    }
+
+    func testAppTransactionRetryKeepsRequestsClosedThenRecoversAcrossRelaunch() throws {
+        try requireAgeAssuranceFaultProxy()
+        let suffix = UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
+        let deviceID = "trust-age-retry-\(suffix.prefix(12))"
+        let displayName = "AgeRetry\(suffix.prefix(6))"
+        let session = try XCTUnwrap(api.developmentSession(name: displayName, deviceID: deviceID, provider: "apple"))
+        defer { api.deleteAccount(token: session.token) }
+        let handle = "age\(suffix.prefix(12))"
+        XCTAssertEqual(api.putHandle(handle, token: session.token), 204)
+        let phone = try XCTUnwrap(LocalTrustAPI.reservedPhonePool().randomElement())
+        XCTAssertTrue(api.verifyPhone(phone: "+1\(phone)", token: session.token))
+
+        api.resetRaceProxy()
+        XCTAssertTrue(api.armAppTransactionFixture(retry: true))
+        let app = XCUIApplication()
+        app.launchEnvironment["TRUST_BASE_URL"] = LocalTrustAPI.baseURL
+        app.launchEnvironment["TRUST_STRICT_API"] = "1"
+        app.launchEnvironment["TRUST_UI_TEST"] = "1"
+        app.launchEnvironment["TRUST_UI_TEST_DEVICE_ID"] = deviceID
+        app.launchEnvironment["TRUST_UI_TEST_DISPLAY_NAME"] = displayName
+        app.launchEnvironment["TRUST_AGE_TEST_MODE"] = "1"
+        app.launchEnvironment["TRUST_AGE_TEST_RESET_AUTH"] = "1"
+        app.launchEnvironment["TRUST_AGE_TEST_RESET_STATE"] = "1"
+        app.launchEnvironment["TRUST_AGE_TEST_ADULT"] = "1"
+        app.launchEnvironment["TRUST_AGE_TEST_AUTHENTICATED"] = "1"
+        app.launchEnvironment["TRUST_AGE_TEST_SESSION_TOKEN"] = session.token
+        app.launchEnvironment["TRUST_AGE_TEST_APP_TRANSACTION_PROXY"] = "1"
+        app.launch()
+        app.launchEnvironment.removeValue(forKey: "TRUST_AGE_TEST_RESET_AUTH")
+
+        assertAppTransactionUnavailable(in: app)
+        assertNoAccountWork(api.raceProxyState(), file: #filePath, line: #line)
+        element("app-transaction-retry", in: app).tap()
+        XCTAssertTrue(app.buttons["tab-circle"].waitForExistence(timeout: 20), app.debugDescription)
+
+        var state = try XCTUnwrap(api.raceProxyState())
+        XCTAssertEqual(state["app_transaction_request_count"] as? Int, 2)
+        XCTAssertEqual(state["app_transaction_failure_count"] as? Int, 1)
+        XCTAssertEqual(state["app_transaction_success_count"] as? Int, 1)
+        var counts = state["request_counts"] as? [String: Int] ?? [:]
+        XCTAssertGreaterThan(counts["GET /api/v1/circle"] ?? 0, 0, "The first account read should occur after transaction registration recovers.")
+        XCTAssertEqual(counts["POST /api/v1/location"], nil)
+        XCTAssertEqual(counts["POST /api/v1/push/devices"], nil)
+
+        app.terminate()
+        api.resetRaceProxy()
+        XCTAssertTrue(api.armAppTransactionFixture(retry: false))
+        app.launch()
+        XCTAssertTrue(app.buttons["tab-circle"].waitForExistence(timeout: 20), app.debugDescription)
+        state = try XCTUnwrap(api.raceProxyState())
+        counts = state["request_counts"] as? [String: Int] ?? [:]
+        XCTAssertEqual(state["app_transaction_request_count"] as? Int, 1)
+        XCTAssertEqual(state["app_transaction_success_count"] as? Int, 1)
+        XCTAssertGreaterThan(counts["GET /api/v1/circle"] ?? 0, 0, "A relaunch must re-establish transaction linkage before restoring account data.")
+        XCTAssertEqual(counts["POST /api/v1/location"], nil)
+        XCTAssertEqual(counts["POST /api/v1/push/devices"], nil)
+        app.terminate()
+    }
+
+    func testAgeAndPrivacyBlocksSuppressAccountLocationAndPushRequests() throws {
+        try requireAgeAssuranceFaultProxy()
+        let suffix = UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
+        let session = try XCTUnwrap(api.developmentSession(name: "Blocked\(suffix.prefix(6))", deviceID: "trust-age-block-\(suffix.prefix(12))"))
+        defer { api.deleteAccount(token: session.token) }
+
+        let app = XCUIApplication()
+        app.launchEnvironment["TRUST_BASE_URL"] = LocalTrustAPI.baseURL
+        app.launchEnvironment["TRUST_STRICT_API"] = "1"
+        app.launchEnvironment["TRUST_UI_TEST"] = "1"
+        app.launchEnvironment["TRUST_AGE_TEST_MODE"] = "1"
+        app.launchEnvironment["TRUST_AGE_TEST_RESET_AUTH"] = "1"
+        app.launchEnvironment["TRUST_AGE_TEST_AUTHENTICATED"] = "1"
+        app.launchEnvironment["TRUST_AGE_TEST_SESSION_TOKEN"] = session.token
+        app.launchEnvironment["TRUST_AGE_TEST_UNAVAILABLE"] = "1"
+
+        for fixture in ["TRUST_AGE_TEST_UNAVAILABLE", "TRUST_AGE_TEST_PRIVACY_HELD"] {
+            app.launchEnvironment.removeValue(forKey: "TRUST_AGE_TEST_UNAVAILABLE")
+            app.launchEnvironment.removeValue(forKey: "TRUST_AGE_TEST_PRIVACY_HELD")
+            app.launchEnvironment[fixture] = "1"
+            api.resetRaceProxy()
+            app.launch()
+            if fixture == "TRUST_AGE_TEST_UNAVAILABLE" {
+                assertUnavailableAgeCheck(in: app)
+            } else {
+                XCTAssertTrue(element("age-privacy-hold-delete-account", in: app).waitForExistence(timeout: 15))
+            }
+            XCTAssertFalse(element("tab-circle", in: app).exists)
+            assertNoAccountWork(api.raceProxyState(), file: #filePath, line: #line)
+            app.terminate()
+            app.launchEnvironment.removeValue(forKey: fixture)
+        }
+    }
+
     /// Paired acceptance prototype. Run this case simultaneously in two independent
     /// XCTest processes with the same pair ID and roles alice/bob. The accounts are
     /// created from their own app UI; the local API resolves the peer's public handle.
@@ -1613,6 +1778,52 @@ final class TrustRealAPIFeatureTests: XCTestCase {
         }
     }
 
+    private func element(_ identifier: String, in app: XCUIApplication) -> XCUIElement {
+        app.descendants(matching: .any)[identifier]
+    }
+
+    private func requireAgeAssuranceFaultProxy() throws {
+        guard api.raceProxyState()?["request_counts"] is [String: Int] else {
+            throw XCTSkip("This age-assurance request-count scenario requires the loopback fault proxy on port 5089; the direct-API CI lane does not provide proxy controls.")
+        }
+    }
+
+    private func assertAppTransactionUnavailable(in app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) {
+        XCTAssertTrue(app.staticTexts["app-transaction-title"].waitForExistence(timeout: 15), app.debugDescription, file: file, line: line)
+        XCTAssertTrue(app.staticTexts["app-transaction-body"].exists, file: file, line: line)
+        XCTAssertTrue(app.buttons["app-transaction-retry"].exists, file: file, line: line)
+        XCTAssertFalse(app.buttons["tab-circle"].exists, "Account data must stay closed until AppTransaction registration succeeds.", file: file, line: line)
+    }
+
+    private func assertUnavailableAgeCheck(in app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) {
+        XCTAssertTrue(app.staticTexts["age-gate-title"].waitForExistence(timeout: 15), app.debugDescription, file: file, line: line)
+        XCTAssertTrue(app.staticTexts["age-gate-body"].exists, file: file, line: line)
+        XCTAssertTrue(app.buttons["age-gate-retry"].exists, file: file, line: line)
+        XCTAssertFalse(app.buttons["tab-circle"].exists, "Account data must stay closed when age assurance is unavailable.", file: file, line: line)
+    }
+
+    private func assertNoAccountWork(_ state: [String: Any]?, file: StaticString = #filePath, line: UInt = #line) {
+        guard let state else {
+            XCTFail("The loopback proxy must provide request counters for this assertion.", file: file, line: line)
+            return
+        }
+        guard let counts = state["request_counts"] as? [String: Int] else {
+            XCTFail("The loopback proxy response is missing request counters.", file: file, line: line)
+            return
+        }
+        for request in [
+            "GET /api/v1/circle",
+            "POST /api/v1/location",
+            "POST /api/v1/push/devices",
+            "PUT /api/v1/me/home",
+            "POST /api/v1/me/home/presence",
+            "GET /api/v1/storekit/account-token",
+            "POST /api/v1/circle/entitlement"
+        ] {
+            XCTAssertEqual(counts[request] ?? 0, 0, "\(request) must remain suppressed while account access is blocked.", file: file, line: line)
+        }
+    }
+
     private func inboundPresentation(personID: String, token: String) -> String? {
         guard let inboundShare = api.member(personID: personID, token: token)?["inboundShare"] as? [String: Any] else {
             return nil
@@ -1819,6 +2030,11 @@ private final class LocalTrustAPI {
         (200..<300).contains(request("POST", "/__test/arm-stop-all", body: [:]).status)
     }
 
+    func armAppTransactionFixture(retry: Bool) -> Bool {
+        let path = retry ? "/__test/arm-app-transaction-retry" : "/__test/arm-app-transaction"
+        return (200..<300).contains(request("POST", path, body: [:]).status)
+    }
+
     func releaseHeldCircle() -> Bool {
         (200..<300).contains(request("POST", "/__test/release", body: [:]).status)
     }
@@ -1847,8 +2063,12 @@ private final class LocalTrustAPI {
         }
     }
 
-    func developmentSession(name: String, deviceID: String) -> DisposableSession? {
-        let result = request("POST", "/api/v1/session/development", body: ["displayName": name, "deviceId": deviceID])
+    func developmentSession(name: String, deviceID: String, provider: String = "development") -> DisposableSession? {
+        let result = request(
+            "POST",
+            "/api/v1/session/development",
+            body: ["displayName": name, "deviceId": deviceID, "provider": provider]
+        )
         guard result.status == 200,
               let json = result.json as? [String: Any],
               let token = json["token"] as? String,

@@ -32,8 +32,8 @@
 "age_gate_stop_all_success" = "Die Standortfreigabe ist für alle ausgeschaltet. Dein Konto bleibt gesperrt, bis die erforderliche Prüfung abgeschlossen ist.";
 "age_gate_title" = "Bevor du Trust nutzt";
 "age_gate_try_apple_range" = "Apple-Altersbereich prüfen";
-"age_gate_unavailable_body" = "Prüfe deine Verbindung oder die Apple-Einstellungen zur Altersfreigabe und versuche es erneut.";
-"age_gate_unavailable_title" = "Die erforderliche Prüfung kann nicht abgeschlossen werden";
+"age_gate_unavailable_body" = "Trust konnte nicht feststellen, ob hier eine Apple-Altersprüfung gilt. Prüfe deine Verbindung und deine Apple-Account-Einstellungen und versuche es erneut.";
+"age_gate_unavailable_title" = "Apple-Altersprüfung nicht verfügbar";
 "age_parent_action" = "Elternteil um Zustimmung bitten";
 "age_parent_body" = "Bitte einen Elternteil oder Vormund um Zustimmung, Trust weiter zu nutzen.";
 "age_parent_declined" = "Ein Elternteil oder Vormund hat diesem Update nicht zugestimmt.";
@@ -46,6 +46,8 @@
 "age_privacy_hold_retry" = "Erneut versuchen";
 "age_range_blocked_body" = "Mit der von Apple geteilten Altersgruppe kannst du kein Trust-Konto erstellen. Wenn sie falsch ist, bitte einen Elternteil oder Erziehungsberechtigten, die Altersfreigabe für Apps in den Apple-Account-Einstellungen zu prüfen, oder wende dich an den Support.";
 "age_range_blocked_title" = "Trust ist für diese Altersgruppe nicht verfügbar";
+"age_range_sharing_declined_body" = "Apple verlangt hier eine Altersprüfung. Wenn du das Teilen abgelehnt hast, versuche es erneut und stimme zu. Trust erhält eine Altersspanne, nicht dein Geburtsdatum.";
+"age_range_sharing_declined_title" = "Teile deine Altersspanne, um fortzufahren";
 "age_rating_and_update_description" = "Die Altersicherungsanforderungen von Trust und die Altersfreigabe im App Store haben sich geändert. Bitte bestätigen Sie beide Änderungen, um Trust weiter zu nutzen.";
 "age_rating_change_description" = "Die Altersfreigabe von Trust im App Store hat sich geändert. Bitte bestätigen Sie diese Änderung, um Trust weiter zu nutzen.";
 "age_update_description" = "Trust folgt jetzt den Alters- und Genehmigungsanforderungen von Apple, sofern sie gelten.";
@@ -104,6 +106,9 @@
 "api_unauthorized" = "Eine Anmeldung ist erforderlich.";
 "api_verification_required" = "Bestätige deine Telefonnummer, bevor du dich verbindest.";
 "api_view_requires_available" = "Versiegelt. Versuchen Sie stattdessen, einen Schnappschuss aufzuzeichnen und eine Benachrichtigung anzufordern.";
+"app_transaction_checking" = "App-Store-Verifizierung wird geprüft …";
+"app_transaction_unavailable_body" = "Trust konnte die App-Store-Transaktion nicht bestätigen. Prüfe deine Verbindung und versuche es erneut.";
+"app_transaction_unavailable_title" = "Diese App konnte nicht verifiziert werden";
 "appearance" = "Erscheinungsbild";
 "apple_sign_in_failed" = "Apple konnte die Anmeldung nicht abschließen.";
 "apple_sign_in_timed_out" = "Die Apple-Anmeldung wurde nicht abgeschlossen. Versuchen Sie es erneut.";

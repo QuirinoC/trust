@@ -32,8 +32,8 @@
 "age_gate_stop_all_success" = "全員との共有をオフにしました。必要な確認が完了するまでアカウントはロックされたままです。";
 "age_gate_title" = "利用を始める前に";
 "age_gate_try_apple_range" = "Appleの年齢範囲を試す";
-"age_gate_unavailable_body" = "インターネット接続またはAppleの設定を確認して、もう一度お試しください。";
-"age_gate_unavailable_title" = "必要な確認を完了できません";
+"age_gate_unavailable_body" = "この地域でAppleの年齢確認が必要かどうかをTrustで確認できませんでした。接続とApple Accountの設定を確認して、もう一度お試しください。";
+"age_gate_unavailable_title" = "Appleの年齢確認を利用できません";
 "age_parent_action" = "保護者に承認を求める";
 "age_parent_body" = "Trustを引き続き利用するには、保護者または後見人の承認を求めてください。";
 "age_parent_declined" = "保護者または後見人がこのアップデートを承認しませんでした。";
@@ -46,6 +46,8 @@
 "age_privacy_hold_retry" = "再試行";
 "age_range_blocked_body" = "Appleが共有した年齢範囲では、Trustアカウントを作成できません。誤りと思われる場合は、保護者にApple Accountの「アプリ用年齢範囲」を確認してもらうか、サポートにお問い合わせください。";
 "age_range_blocked_title" = "この年齢範囲ではTrustを利用できません";
+"age_range_sharing_declined_body" = "この地域ではAppleの年齢確認が必要です。共有しないを選んだ場合は、もう一度お試しのうえ共有を許可してください。Trustが受け取るのは年齢範囲で、生年月日ではありません。";
+"age_range_sharing_declined_title" = "続けるには年齢範囲の共有が必要です";
 "age_rating_and_update_description" = "Trustの年齢確認要件とApp Storeの年齢レーティングが変更されました。Trustを引き続き利用するには、両方の変更を確認してください。";
 "age_rating_change_description" = "TrustのApp Store年齢レーティングが変更されました。Trustを引き続き利用するには、この変更を確認してください。";
 "age_update_description" = "Trustは、該当する場合にAppleの年齢確認と承認の要件に従うようになりました。";
@@ -104,6 +106,9 @@
 "api_unauthorized" = "サインインが必要です。";
 "api_verification_required" = "接続する前に電話番号を確認してください。";
 "api_view_requires_available" = "Sealedです。スナップショットを1回記録し通知をリクエストするにはLookを使ってください。";
+"app_transaction_checking" = "App Storeの確認中…";
+"app_transaction_unavailable_body" = "TrustはApp Storeの取引を確認できませんでした。接続を確認して、もう一度お試しください。";
+"app_transaction_unavailable_title" = "このアプリを確認できませんでした";
 "appearance" = "外観";
 "apple_sign_in_failed" = "Appleでサインインを完了できませんでした。";
 "apple_sign_in_timed_out" = "Appleでのサインインが終わりませんでした。もう一度お試しください。";

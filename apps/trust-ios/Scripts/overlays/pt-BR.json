@@ -480,8 +480,8 @@
   "age_gate_blocked_title": "O Trust ainda não está disponível",
   "age_gate_blocked_body": "A Apple não pode aprovar o acesso segundo os requisitos de idade atuais.",
   "age_gate_checking": "Verificando os requisitos de idade…",
-  "age_gate_unavailable_title": "Não foi possível concluir a verificação necessária",
-  "age_gate_unavailable_body": "Confira sua conexão ou os ajustes da Apple e tente novamente.",
+  "age_gate_unavailable_title": "Verificação de idade da Apple indisponível",
+  "age_gate_unavailable_body": "O Trust não conseguiu confirmar se uma verificação de idade da Apple se aplica aqui. Confira sua conexão e os ajustes da sua Conta Apple e tente novamente.",
   "age_gate_retry": "Tentar novamente",
   "age_gate_try_apple_range": "Tentar usar a faixa etária da Apple",
   "age_range_blocked_title": "O Trust não está disponível para esta faixa etária",
@@ -518,5 +518,10 @@
   "age_gate_stop_all_success": "O compartilhamento foi desativado para todos. Sua conta continuará bloqueada até que a verificação necessária seja concluída.",
   "age_gate_stop_all_error": "Não foi possível confirmar que o compartilhamento foi interrompido. Ele ainda pode estar ativo. Tente novamente.",
   "location_unavailable": "Localização indisponível",
-  "location_may_be_stale": "Pode estar desatualizada · %@"
+  "location_may_be_stale": "Pode estar desatualizada · %@",
+  "age_range_sharing_declined_body": "A Apple informa que uma verificação de idade se aplica aqui. Se você recusou o compartilhamento, tente novamente e permita. O Trust recebe uma faixa etária, não sua data de nascimento.",
+  "age_range_sharing_declined_title": "Compartilhe sua faixa etária para continuar",
+  "app_transaction_checking": "Verificando a validação da App Store…",
+  "app_transaction_unavailable_body": "O Trust não conseguiu confirmar a transação do app na App Store. Confira sua conexão e tente novamente.",
+  "app_transaction_unavailable_title": "Não foi possível verificar este app"
 }

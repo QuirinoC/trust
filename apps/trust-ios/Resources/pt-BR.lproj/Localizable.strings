@@ -32,8 +32,8 @@
 "age_gate_stop_all_success" = "O compartilhamento foi desativado para todos. Sua conta continuará bloqueada até que a verificação necessária seja concluída.";
 "age_gate_title" = "Antes de entrar";
 "age_gate_try_apple_range" = "Tentar usar a faixa etária da Apple";
-"age_gate_unavailable_body" = "Confira sua conexão ou os ajustes da Apple e tente novamente.";
-"age_gate_unavailable_title" = "Não foi possível concluir a verificação necessária";
+"age_gate_unavailable_body" = "O Trust não conseguiu confirmar se uma verificação de idade da Apple se aplica aqui. Confira sua conexão e os ajustes da sua Conta Apple e tente novamente.";
+"age_gate_unavailable_title" = "Verificação de idade da Apple indisponível";
 "age_parent_action" = "Pedir aprovação a um responsável";
 "age_parent_body" = "Peça a um dos pais ou responsável que aprove o acesso contínuo ao Trust.";
 "age_parent_declined" = "Um dos pais ou responsável não aprovou esta atualização.";
@@ -46,6 +46,8 @@
 "age_privacy_hold_retry" = "Tentar novamente";
 "age_range_blocked_body" = "Não é possível criar uma conta Trust com a faixa etária compartilhada pela Apple. Se ela parecer incorreta, peça a um responsável para verificar o compartilhamento de faixa etária nos ajustes da Conta Apple ou fale com o suporte.";
 "age_range_blocked_title" = "O Trust não está disponível para esta faixa etária";
+"age_range_sharing_declined_body" = "A Apple informa que uma verificação de idade se aplica aqui. Se você recusou o compartilhamento, tente novamente e permita. O Trust recebe uma faixa etária, não sua data de nascimento.";
+"age_range_sharing_declined_title" = "Compartilhe sua faixa etária para continuar";
 "age_rating_and_update_description" = "Os requisitos de garantia de idade do Trust e sua classificação etária na App Store mudaram. Confirme ambas as mudanças para continuar usando o Trust.";
 "age_rating_change_description" = "A classificação etária do Trust na App Store mudou. Confirme essa mudança para continuar usando o Trust.";
 "age_update_description" = "Agora o Trust segue os requisitos de verificação de idade e aprovação da Apple quando aplicáveis.";
@@ -104,6 +106,9 @@
 "api_unauthorized" = "É preciso entrar.";
 "api_verification_required" = "Verifique seu telefone antes de se conectar.";
 "api_view_requires_available" = "Lacrado. Faça um Olhar para registrar um instantâneo e solicitar uma notificação.";
+"app_transaction_checking" = "Verificando a validação da App Store…";
+"app_transaction_unavailable_body" = "O Trust não conseguiu confirmar a transação do app na App Store. Confira sua conexão e tente novamente.";
+"app_transaction_unavailable_title" = "Não foi possível verificar este app";
 "appearance" = "Aparência";
 "apple_sign_in_failed" = "A Apple não conseguiu concluir o início de sessão.";
 "apple_sign_in_timed_out" = "O início de sessão com a Apple não foi concluído. Tente novamente.";

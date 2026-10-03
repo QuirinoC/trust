@@ -152,9 +152,9 @@ jobs:
             | tee "$RUNNER_TEMP/trust-local-e2e-summary.json" \
             | jq -e '
                 .result == "Passed" and
-                .totalTestCount == 9 and
+                .totalTestCount == 12 and
                 .passedTests == 4 and
-                .skippedTests == 5 and
+                .skippedTests == 8 and
                 .failedTests == 0
               '
       - name: Upload iOS test result bundle

@@ -480,8 +480,8 @@
   "age_gate_blocked_title": "目前无法使用 Trust",
   "age_gate_blocked_body": "根据当前适用的年龄要求，Apple 无法批准访问。",
   "age_gate_checking": "正在检查年龄要求…",
-  "age_gate_unavailable_title": "无法完成所需的检查",
-  "age_gate_unavailable_body": "请检查网络连接或 Apple 设置，然后重试。",
+  "age_gate_unavailable_title": "Apple 年龄验证暂不可用",
+  "age_gate_unavailable_body": "Trust 无法确认此处是否需要 Apple 年龄验证。请检查网络连接和 Apple 账户设置，然后重试。",
   "age_gate_retry": "重试",
   "age_gate_try_apple_range": "尝试使用 Apple 年龄范围",
   "age_range_blocked_title": "此年龄范围无法使用 Trust",
@@ -518,5 +518,10 @@
   "age_gate_stop_all_success": "已停止与所有人共享。完成所需检查前，你的账户仍会保持锁定。",
   "age_gate_stop_all_error": "无法确认共享已停止。共享可能仍处于开启状态，请重试。",
   "location_unavailable": "位置不可用",
-  "location_may_be_stale": "可能已过期 · %@"
+  "location_may_be_stale": "可能已过期 · %@",
+  "age_range_sharing_declined_body": "Apple 表示此处需要进行年龄验证。如果你选择了不分享，请重试并允许分享。Trust 接收的是年龄范围，不是你的出生日期。",
+  "age_range_sharing_declined_title": "分享年龄范围后即可继续",
+  "app_transaction_checking": "正在验证 App Store 信息…",
+  "app_transaction_unavailable_body": "Trust 无法确认此 App 的 App Store 交易。请检查网络连接，然后重试。",
+  "app_transaction_unavailable_title": "无法验证此 App"
 }

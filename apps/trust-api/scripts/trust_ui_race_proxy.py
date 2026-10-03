@@ -35,6 +35,12 @@ STATE = {
     "history_release_count": 0,
     "look_hold_count": 0,
     "look_release_count": 0,
+    "request_counts": {},
+    "app_transaction_test_enabled": False,
+    "fail_next_app_transaction": False,
+    "app_transaction_request_count": 0,
+    "app_transaction_failure_count": 0,
+    "app_transaction_success_count": 0,
 }
 RELEASE_HELD = threading.Event()
 
@@ -62,11 +68,29 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/__test/reset":
             with LOCK:
                 for key in list(STATE):
-                    STATE[key] = [] if key.endswith("_person_ids") else 0 if key.endswith("_count") else False
+                    if key.endswith("_person_ids"):
+                        STATE[key] = []
+                    elif key.endswith("_count"):
+                        STATE[key] = 0
+                    elif isinstance(STATE[key], dict):
+                        STATE[key] = {}
+                    else:
+                        STATE[key] = False
                 STATE["holding"] = False
                 STATE["held_resource"] = None
                 RELEASE_HELD.set()
             self.respond_json(200, {"reset": True})
+            return
+        if self.path in ("/__test/arm-app-transaction", "/__test/arm-app-transaction-retry"):
+            with LOCK:
+                STATE.update({
+                    "app_transaction_test_enabled": True,
+                    "fail_next_app_transaction": self.path.endswith("-retry"),
+                    "app_transaction_request_count": 0,
+                    "app_transaction_failure_count": 0,
+                    "app_transaction_success_count": 0,
+                })
+            self.respond_json(200, {"armed": True})
             return
         if self.path == "/__test/arm":
             with LOCK:
@@ -185,7 +209,51 @@ class Handler(BaseHTTPRequestHandler):
         is_look = self.command == "POST" and path.split("?", 1)[0] == "/api/v1/looks"
         is_share = self.command == "PATCH" and path.split("?", 1)[0].startswith("/api/v1/people/") and path.endswith("/share")
         is_stop_all = self.command == "POST" and path.split("?", 1)[0] == "/api/v1/me/sharing/stop-all"
+        is_app_transaction = self.command == "PUT" and path.split("?", 1)[0] == "/api/v1/age-assurance/app-transaction"
         person_id = path.split("/api/v1/people/", 1)[1].split("/", 1)[0] if "/api/v1/people/" in path else None
+        normalized_path = path.split("?", 1)[0]
+        observed_paths = {
+            "/api/v1/circle",
+            "/api/v1/location",
+            "/api/v1/push/devices",
+            "/api/v1/me/home",
+            "/api/v1/me/home/presence",
+            "/api/v1/storekit/account-token",
+            "/api/v1/circle/entitlement",
+            "/api/v1/age-assurance/privacy-hold",
+            "/api/v1/session/apple",
+            "/api/v1/session/development",
+            "/api/v1/age-assurance/app-transaction",
+        }
+        local_transaction_fixture = (
+            is_app_transaction
+            and self.headers.get("X-Trust-Local-Test-App-Transaction") == "1"
+        )
+        if normalized_path in observed_paths and not local_transaction_fixture:
+            key = f"{self.command} {normalized_path}"
+            with LOCK:
+                STATE["request_counts"][key] = STATE["request_counts"].get(key, 0) + 1
+
+        if local_transaction_fixture:
+            with LOCK:
+                STATE["app_transaction_request_count"] += 1
+                key = f"{self.command} {normalized_path}"
+                STATE["request_counts"][key] = STATE["request_counts"].get(key, 0) + 1
+                fixture_enabled = STATE["app_transaction_test_enabled"]
+                fail_this_app_transaction = fixture_enabled and STATE["fail_next_app_transaction"]
+                if fail_this_app_transaction:
+                    STATE["fail_next_app_transaction"] = False
+                    STATE["app_transaction_failure_count"] += 1
+                elif fixture_enabled:
+                    STATE["app_transaction_success_count"] += 1
+            if not fixture_enabled:
+                self.respond_json(409, {"error": "local-app-transaction-test-not-armed"})
+            elif fail_this_app_transaction:
+                self.respond_json(503, {"error": "deterministic-local-app-transaction-failure"})
+            else:
+                self.send_response(204)
+                self.end_headers()
+            return
 
         with LOCK:
             fail_this_circle = is_circle and STATE["fail_next_circle"]

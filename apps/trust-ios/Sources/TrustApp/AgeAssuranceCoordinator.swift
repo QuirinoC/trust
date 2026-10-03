@@ -1,5 +1,6 @@
 @preconcurrency import DeclaredAgeRange
 import Foundation
+import OSLog
 import PermissionKit
 import StoreKit
 import TrustCore
@@ -7,6 +8,15 @@ import UIKit
 
 @MainActor
 final class AgeAssuranceCoordinator {
+    private let logger = Logger(subsystem: "com.collapsetechnologies.trust", category: "AgeAssurance")
+
+    private enum EvaluationStage: String {
+        case regionalEligibility = "regional eligibility"
+        case regulatoryFeatures = "regulatory feature lookup"
+        case ageRangeRequest = "age range request"
+        case significantUpdateAcknowledgement = "significant update acknowledgement"
+    }
+
     enum UnderMinimumAgeSource: String {
         case localBirthDate
         case appleAgeRange
@@ -17,6 +27,7 @@ final class AgeAssuranceCoordinator {
         case selfAttestationRequired
         case underMinimumAge
         case ageRangeBelowMinimum
+        case ageRangeSharingDeclined
         case parentApprovalRequired
         case parentApprovalDenied
         case unavailable
@@ -160,6 +171,7 @@ final class AgeAssuranceCoordinator {
 
         if #available(iOS 26, *) {
             let service = AgeRangeService.shared
+            var evaluationStage = EvaluationStage.regionalEligibility
             do {
                 var regulatorySignalsAvailable = false
                 var requiresAdultAcknowledgement = false
@@ -172,10 +184,12 @@ final class AgeAssuranceCoordinator {
                 var upperBound: Int?
                 if #available(iOS 26.4, *) {
                     regulatorySignalsAvailable = true
+                    evaluationStage = .regionalEligibility
                     let eligible = try await service.isEligibleForAgeFeatures
                     guard evaluationIsCurrent() else { return .unavailable }
                     let regulatoryFeatures: Set<AgeRangeService.RegulatoryFeature>
                     if eligible {
+                        evaluationStage = .regulatoryFeatures
                         regulatoryFeatures = try await service.requiredRegulatoryFeatures
                         guard evaluationIsCurrent() else { return .unavailable }
                     } else {
@@ -186,6 +200,7 @@ final class AgeAssuranceCoordinator {
                     requiresAdultAcknowledgement = regulatoryFeatures.contains(.significantAppChangeRequiresAdultNotification)
                     requiresParentApproval = regulatoryFeatures.contains(.significantAppChangeRequiresParentalConsent)
                 } else if #available(iOS 26.2, *) {
+                    evaluationStage = .regionalEligibility
                     ageRangeRequired = try await service.isEligibleForAgeFeatures
                     guard evaluationIsCurrent() else { return .unavailable }
                     ageRangeRequiredForCurrentPerson = ageRangeRequired
@@ -208,6 +223,7 @@ final class AgeAssuranceCoordinator {
                 if shouldRequestAgeRange {
                     guard let viewController = foregroundViewController() else { return .unavailable }
                     let thresholds = TrustAgePolicy.ageBandThresholds
+                    evaluationStage = .ageRangeRequest
                     let response = try await service.requestAgeRange(
                         ageGates: thresholds.minimum,
                         thresholds.olderTeen,
@@ -219,7 +235,7 @@ final class AgeAssuranceCoordinator {
                     switch response {
                     case .declinedSharing:
                         if hasAppleUnderMinimumAgeBlock { return .ageRangeBelowMinimum }
-                        return hasUnderMinimumAgeBlock ? .underMinimumAge : .unavailable
+                        return hasUnderMinimumAgeBlock ? .underMinimumAge : .ageRangeSharingDeclined
                     case .sharing(let sharedRange):
                         range = sharedRange
                     @unknown default:
@@ -379,6 +395,7 @@ final class AgeAssuranceCoordinator {
                     }
                     if #available(iOS 26.4, *) {
                         guard let scene = foregroundWindowScene() else { return .unavailable }
+                        evaluationStage = .significantUpdateAcknowledgement
                         try await service.showSignificantUpdateAcknowledgment(
                             in: scene,
                             updateDescription: !ratingNeedsAcknowledgement
@@ -439,6 +456,10 @@ final class AgeAssuranceCoordinator {
             guard evaluationIsCurrent() else { return .unavailable }
             // In a region requiring age assurance, failure to obtain Apple's result
             // must not silently fall back to a weaker self-attestation.
+            let appleError = error as NSError
+            logger.error(
+                "Apple age assurance failed during \(evaluationStage.rawValue, privacy: .public) (\(appleError.domain, privacy: .public), code \(appleError.code, privacy: .public))."
+            )
             return .unavailable
             }
         }
@@ -516,6 +537,9 @@ final class AgeAssuranceCoordinator {
     /// Retained only for explicit local UI-test fixture launches. Normal app startup
     /// never invokes this DOB/self-attestation flow.
     func evaluateLocalAttestationForDebugTest() -> Decision {
+        if ProcessInfo.processInfo.environment["TRUST_AGE_TEST_ADULT"] == "1" {
+            return .permitted
+        }
         if ProcessInfo.processInfo.environment["TRUST_AGE_TEST_APPLE_ACCOUNT_CHANGED"] == "1" {
             resetPersonScopedStateForAppleAccountChange()
         }
@@ -523,6 +547,9 @@ final class AgeAssuranceCoordinator {
         if ProcessInfo.processInfo.environment["TRUST_AGE_TEST_AGE_RANGE_BLOCKED"] == "1" {
             recordUnderMinimumAge(source: .appleAgeRange)
             return .ageRangeBelowMinimum
+        }
+        if ProcessInfo.processInfo.environment["TRUST_AGE_TEST_AGE_RANGE_DECLINED"] == "1" {
+            return ageRangeRequiredForCurrentPerson ? .ageRangeSharingDeclined : .unavailable
         }
         if hasAppleUnderMinimumAgeBlock { return .ageRangeBelowMinimum }
         if hasUnderMinimumAgeBlock { return .underMinimumAge }

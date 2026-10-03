@@ -79,6 +79,21 @@ final class AuthSession: ObservableObject {
         guard !isAuthorizing else { throw TrustAuthenticationError.signInInProgress }
         isAuthorizing = true
         defer { isAuthorizing = false }
+#if DEBUG
+        let testEnvironment = ProcessInfo.processInfo.environment
+        let testAPI = AppConfiguration.apiBaseURL
+        if testEnvironment["TRUST_UI_TEST_FAKE_APPLE_AUTH"] == "1",
+           testEnvironment["TRUST_UI_TEST"] == "1",
+           AppConfiguration.isLoopback(testAPI),
+           testAPI.port == 5089 {
+            return AppleIdentity(
+                identityToken: "local-ui-test-apple-identity",
+                userID: testEnvironment["TRUST_UI_TEST_DEVICE_ID"] ?? "trust-local-apple-test",
+                displayName: testEnvironment["TRUST_UI_TEST_DISPLAY_NAME"] ?? "Trust UI Test",
+                nonce: "local-ui-test-nonce"
+            )
+        }
+#endif
         let coordinator = AppleAuthorizationCoordinator(anchor: try presentationAnchor())
         appleCoordinator = coordinator
         defer {
@@ -119,9 +134,13 @@ final class AuthSession: ObservableObject {
     }
 
 #if DEBUG
-    func prepareAgeGateUITestSession() {
-        account = AuthAccount(provider: .apple, displayName: "Age Gate Test", appleUserID: "age-gate-ui-test")
-        sessionToken = "age-gate-ui-test-token"
+    func prepareAgeGateUITestSession(token: String? = nil) {
+        account = AuthAccount(
+            provider: .apple,
+            displayName: "Age Gate Test",
+            appleUserID: token == nil ? "age-gate-ui-test" : nil
+        )
+        sessionToken = token ?? "age-gate-ui-test-token"
     }
 #endif
 

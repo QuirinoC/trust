@@ -55,7 +55,9 @@ struct AgeGateView: View {
                         .foregroundStyle(palette.ink)
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityAddTraits(.isHeader)
-                        .accessibilityIdentifier("age-gate-title")
+                        .accessibilityIdentifier(model.phase == .appTransactionChecking || model.phase == .appTransactionUnavailable
+                            ? "app-transaction-title"
+                            : "age-gate-title")
 
                     Text(bodyText)
                         .trustFont(16)
@@ -63,7 +65,9 @@ struct AgeGateView: View {
                         .foregroundStyle(palette.muted)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.top, 12)
-                        .accessibilityIdentifier("age-gate-body")
+                        .accessibilityIdentifier(model.phase == .appTransactionChecking || model.phase == .appTransactionUnavailable
+                            ? "app-transaction-body"
+                            : "age-gate-body")
 
                     Spacer(minLength: 28)
 
@@ -74,7 +78,7 @@ struct AgeGateView: View {
                     HStack(spacing: 18) {
                         Link(TrustCopy.termsOfService, destination: AppConfiguration.termsURL)
                         Link(TrustCopy.privacy, destination: AppConfiguration.privacyURL)
-                        if model.phase == .ageBlocked || model.phase == .ageCheckUnavailable || model.phase == .ageRangeBlocked || model.phase == .ageConsentRevoked || model.phase == .agePrivacyHoldPending || model.phase == .agePrivacyHeld {
+                        if model.phase == .ageBlocked || model.phase == .ageCheckUnavailable || model.phase == .ageRangeSharingDeclined || model.phase == .ageRangeBlocked || model.phase == .ageConsentRevoked || model.phase == .agePrivacyHoldPending || model.phase == .agePrivacyHeld || model.phase == .appTransactionUnavailable {
                             Link(TrustCopy.support, destination: AppConfiguration.supportURL)
                                 .accessibilityIdentifier("age-gate-support")
                         }
@@ -151,29 +155,37 @@ struct AgeGateView: View {
                 .disabled(birthDateEligibility == .incomplete)
                 .accessibilityIdentifier("age-gate-continue")
             }
-        case .ageChecking:
+        case .ageChecking, .appTransactionChecking:
             HStack(spacing: 12) {
                 ProgressView()
                     .tint(palette.accent)
-                Text(TrustCopy.ageGateChecking)
+                Text(model.phase == .appTransactionChecking
+                    ? TrustCopy.appTransactionChecking
+                    : TrustCopy.ageGateChecking)
                     .trustFont(14, weight: .medium)
                     .foregroundStyle(palette.muted)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .frame(minHeight: 52)
-        case .ageCheckUnavailable:
+        case .ageCheckUnavailable, .appTransactionUnavailable:
             VStack(spacing: 10) {
                 Button {
-                    model.retryAgeCheck()
+                    if model.phase == .appTransactionUnavailable {
+                        model.retryAppTransactionRegistration()
+                    } else {
+                        model.retryAgeCheck()
+                    }
                 } label: {
                     Text(TrustCopy.ageGateRetry)
                         .frame(maxWidth: .infinity, minHeight: 52)
                 }
                 .buttonStyle(TrustFilledButtonStyle())
-                .accessibilityIdentifier("age-gate-retry")
+                .accessibilityIdentifier(model.phase == .appTransactionUnavailable
+                    ? "app-transaction-retry"
+                    : "age-gate-retry")
                 .disabled(model.ageUnavailableStopAllState == .pending)
 
-                if model.canStopAllFromUnavailableAgeCheck {
+                if model.canStopAllFromUnavailableVerification {
                     Button {
                         model.requestAgeUnavailableStopAll()
                     } label: {
@@ -231,6 +243,15 @@ struct AgeGateView: View {
                     }
                 }
             }
+        case .ageRangeSharingDeclined:
+            Button {
+                model.retryAgeCheck()
+            } label: {
+                Text(TrustCopy.ageGateRetry)
+                    .frame(maxWidth: .infinity, minHeight: 52)
+            }
+            .buttonStyle(TrustFilledButtonStyle())
+            .accessibilityIdentifier("age-range-sharing-retry")
         case .ageRangeBlocked:
             VStack(spacing: 12) {
                 if #available(iOS 26, *), model.canTryAppleAgeRangeAfterUnderage {
@@ -379,12 +400,15 @@ struct AgeGateView: View {
         case .ageGate: TrustCopy.ageGateTitle
         case .ageChecking: TrustCopy.ageGateTitle
         case .ageCheckUnavailable: TrustCopy.ageGateUnavailableTitle
+        case .ageRangeSharingDeclined: TrustCopy.ageRangeSharingDeclinedTitle
         case .ageRangeBlocked: TrustCopy.ageRangeBlockedTitle
         case .agePrivacyHoldPending: TrustCopy.agePrivacyHoldPendingTitle
         case .agePrivacyHeld: TrustCopy.agePrivacyHeldTitle
         case .ageWaitingForParent: TrustCopy.ageParentTitle
         case .ageBlocked: TrustCopy.ageGateBlockedTitle
         case .ageConsentRevoked: TrustCopy.ageConsentRevokedTitle
+        case .appTransactionChecking: TrustCopy.appTransactionChecking
+        case .appTransactionUnavailable: TrustCopy.appTransactionUnavailableTitle
         case .login, .handle, .phone, .home: TrustCopy.ageGateTitle
         }
     }
@@ -394,19 +418,22 @@ struct AgeGateView: View {
         case .ageGate: TrustCopy.ageGateBody
         case .ageChecking: TrustCopy.ageGateChecking
         case .ageCheckUnavailable: TrustCopy.ageGateUnavailableBody
+        case .ageRangeSharingDeclined: TrustCopy.ageRangeSharingDeclinedBody
         case .ageRangeBlocked: TrustCopy.ageRangeBlockedBody
         case .agePrivacyHoldPending: TrustCopy.agePrivacyHoldPendingBody
         case .agePrivacyHeld: TrustCopy.agePrivacyHeldBody
         case .ageWaitingForParent: TrustCopy.ageParentBody
         case .ageBlocked: model.ageGateBlockedByParent ? TrustCopy.ageParentDeclined : TrustCopy.ageGateBlockedBody
         case .ageConsentRevoked: TrustCopy.ageConsentRevokedBody
+        case .appTransactionChecking: TrustCopy.appTransactionChecking
+        case .appTransactionUnavailable: TrustCopy.appTransactionUnavailableBody
         case .login, .handle, .phone, .home: TrustCopy.ageGateBody
         }
     }
 
     private var icon: String {
         switch model.phase {
-        case .ageGate, .ageChecking, .ageCheckUnavailable: "person.crop.circle.badge.checkmark"
+        case .ageGate, .ageChecking, .ageCheckUnavailable, .ageRangeSharingDeclined, .appTransactionChecking, .appTransactionUnavailable: "person.crop.circle.badge.checkmark"
         case .ageRangeBlocked: "hand.raised.fill"
         case .agePrivacyHoldPending, .agePrivacyHeld: "hand.raised.fill"
         case .ageWaitingForParent: "person.badge.shield.checkmark"
