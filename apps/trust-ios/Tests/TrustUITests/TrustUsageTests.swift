@@ -102,7 +102,11 @@ final class TrustUsageTests: XCTestCase {
         app.buttons["sharing-actions-maya"].tap()
         let pause = app.buttons["pause-sharing-maya"]
         XCTAssertTrue(pause.waitForExistence(timeout: 5))
-        pause.tap()
+        tapVisibleMenuOption(pause, in: app)
+        let pauseMenuDismissed = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == false"),
+            object: pause)
+        XCTAssertEqual(XCTWaiter.wait(for: [pauseMenuDismissed], timeout: 5), .completed)
         let oneHour = app.buttons["pause-duration-3600"]
         XCTAssertTrue(oneHour.waitForExistence(timeout: 5))
         oneHour.tap()
@@ -273,7 +277,7 @@ final class TrustUsageTests: XCTestCase {
         XCTAssertTrue(scrollYouContent(to: picker, direction: .down, in: app))
         XCTAssertTrue(picker.isHittable)
         picker.tap()
-        app.buttons["System"].tap()
+        tapVisibleMenuOption(app.buttons["System"], in: app)
         let resetPicker = app.descendants(matching: .any)["appearance-preference"]
         let systemSelected = XCTNSPredicateExpectation(
             predicate: NSPredicate(format: "value == %@", "System"),
@@ -513,29 +517,41 @@ final class TrustUsageTests: XCTestCase {
         case down
     }
 
-    /// Prefer XCTest's accessibility hit target for native SwiftUI menu options. Some
-    /// picker rows report a visible frame but do not respond to a coordinate tap, so fall
-    /// back to the row center only when XCTest says the option is not hittable. Each test
-    /// still verifies that the selected value actually changed.
+    /// CI recordings showed element.tap() leaving both Picker and Menu rows open.
+    /// Wait for a stable visible row, then send one tap at its observed center;
+    /// this does not assume a cause for the earlier undelivered selections.
+    /// Never retry the action: callers must still prove the value or sheet changed.
     private func tapVisibleMenuOption(_ option: XCUIElement, in app: XCUIApplication) {
-        if option.isHittable {
-            option.tap()
+        var previousFrame: CGRect?
+        var stableSince: Date?
+        let ready = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            guard option.exists, option.isEnabled, option.isHittable else {
+                previousFrame = nil
+                stableSince = nil
+                return false
+            }
+            let frame = option.frame
+            let center = CGPoint(x: frame.midX, y: frame.midY)
+            guard frame.width.isFinite, frame.height.isFinite,
+                  frame.width > 0, frame.height > 0,
+                  center.x.isFinite, center.y.isFinite,
+                  app.frame.contains(center) else { return false }
+            if previousFrame != frame {
+                previousFrame = frame
+                stableSince = Date()
+                return false
+            }
+            return stableSince.map { Date().timeIntervalSince($0) >= 0.35 } ?? false
+        }, object: option)
+        guard XCTWaiter.wait(for: [ready], timeout: 5) == .completed,
+              let frame = previousFrame else {
+            add(XCTAttachment(screenshot: app.screenshot()))
+            XCTFail("The menu option did not settle into an enabled, hittable row. \(option.debugDescription)")
             return
         }
-
-        let frame = option.frame
-        let center = CGPoint(x: frame.midX, y: frame.midY)
         let screen = app.frame
-        guard frame.width.isFinite,
-              frame.height.isFinite,
-              frame.width > 0,
-              frame.height > 0,
-              center.x.isFinite,
-              center.y.isFinite,
-              screen.contains(center) else {
-            XCTFail("The menu option has no visible screen frame. \(option.debugDescription)")
-            return
-        }
-        option.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        app.coordinate(withNormalizedOffset: .zero)
+            .withOffset(CGVector(dx: frame.midX - screen.minX, dy: frame.midY - screen.minY))
+            .tap()
     }
 }
