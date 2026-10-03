@@ -521,7 +521,17 @@ final class TrustRealAPIFeatureTests: XCTestCase {
             XCTAssertTrue(mapCanvas.waitForExistence(timeout: 20), "A confirmed Look should add its snapshot pin to the map.")
             XCTAssertTrue(app.descendants(matching: .any)["map-screen-person-panel"].waitForExistence(timeout: 10))
             XCTAssertTrue(app.staticTexts["PairAlice"].exists, "The selected map pin should identify Alice.")
+            let snapshotTime = app.descendants(matching: .any)["map-selected-location-time"]
+            XCTAssertTrue(snapshotTime.waitForExistence(timeout: 5))
+            XCTAssertTrue(snapshotTime.label.localizedCaseInsensitiveContains("snapshot"))
+            let viewSelected = app.buttons["map-view-selected-person"]
+            if !viewSelected.isHittable { app.swipeUp() }
+            XCTAssertTrue(viewSelected.isHittable, "Map details must scroll so the selected-person action remains reachable.")
             attachScreenshot(of: app, named: "Paired Sealed Look - snapshot map pin")
+            viewSelected.tap()
+            XCTAssertTrue(app.buttons["view-open-map"].waitForExistence(timeout: 10), "The map action must open the selected person's location.")
+            app.buttons["view-open-map"].tap()
+            XCTAssertTrue(app.buttons["map-back-to-people"].waitForExistence(timeout: 10))
             app.buttons["map-back-to-people"].tap()
             app.buttons["tab-log"].tap()
             let lookEventID = try XCTUnwrap(lookEvent["id"] as? String).uppercased()
@@ -1287,6 +1297,7 @@ final class TrustRealAPIFeatureTests: XCTestCase {
         XCTAssertTrue(waitUntil(timeout: 8) {
             self.api.member(personID: peerSession.personID, token: mainSession.token)?["outboundPresenceGranted"] as? Bool == true
         }, "The per-person control should persist the explicit presence/arrival grant.")
+        XCTAssertTrue(app.staticTexts["Home/Away sharing preference updated."].waitForExistence(timeout: 15), "Wait for the acknowledged write and UI refresh before opening the menu again.")
         app.buttons["sharing-actions-\(peerName.lowercased())"].tap()
         XCTAssertTrue(presenceGrant.waitForExistence(timeout: 5))
         presenceGrant.tap()

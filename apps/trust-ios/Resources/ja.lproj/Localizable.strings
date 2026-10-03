@@ -346,6 +346,7 @@
 "phone_lookup_country_code_hint" = "国番号を含む完全な電話番号を入力してください。";
 "phone_number" = "電話番号";
 "phone_placeholder" = "(415) 555-0100";
+"phone_request_pending" = "しばらくお待ちください…";
 "photo_options" = "写真のオプション";
 "pin_accessibility" = "%@。%@。";
 "plus" = "Plus";
@@ -431,6 +432,7 @@
 "send_an_invite" = "招待を送信";
 "send_code" = "コードを送信";
 "send_request" = "リクエストを送信";
+"sending_code" = "コードを送信中…";
 "sent_requests" = "送信済み";
 "server_unavailable" = "Trustのサーバーは一時的に利用できません。しばらくしてからお試しください。";
 "server_unavailable_host" = "Trustのサーバーは%@で一時的に利用できません（%d）。";

@@ -528,5 +528,7 @@
   "stop_sharing_confirm": "Parar de compartilhar com %@?",
   "stop_sharing_confirm_body": "Essa pessoa não verá sua localização nem seu status Em casa/Fora até você escolher um modo de compartilhamento novamente.",
   "remove_person_confirm_body": "Essa pessoa sai da sua lista de Pessoas e o compartilhamento é interrompido nas duas direções.",
-  "stop_all_confirm_body": "Ninguém verá sua localização nem seu status Em casa/Fora até você escolher os modos de compartilhamento novamente."
+  "stop_all_confirm_body": "Ninguém verá sua localização nem seu status Em casa/Fora até você escolher os modos de compartilhamento novamente.",
+  "sending_code": "Enviando código…",
+  "phone_request_pending": "Aguarde…"
 }

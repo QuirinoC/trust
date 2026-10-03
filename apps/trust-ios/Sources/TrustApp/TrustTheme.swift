@@ -251,6 +251,7 @@ struct TrustWordmark: View {
 
 struct TrustFilledButtonStyle: ButtonStyle {
     var expand = true
+    var isBusy = false
     @Environment(\.trustPalette) private var palette
     @Environment(\.isEnabled) private var isEnabled
 
@@ -262,7 +263,7 @@ struct TrustFilledButtonStyle: ButtonStyle {
             .frame(maxWidth: expand ? .infinity : nil, minHeight: 52)
             .background(palette.accent.opacity(configuration.isPressed ? 0.86 : 1))
             .clipShape(RoundedRectangle(cornerRadius: TrustTheme.controlRadius, style: .continuous))
-            .opacity(isEnabled ? 1 : 0.45)
+            .opacity(isEnabled || isBusy ? 1 : 0.45)
     }
 }
 

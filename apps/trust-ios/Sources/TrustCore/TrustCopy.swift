@@ -185,6 +185,8 @@ public enum TrustCopy {
     public static var ageRangeSharingDeclinedBody: String {
         value("age_range_sharing_declined_body", defaultValue: "Apple says an age check applies here. If you chose not to share, try again and allow it. Trust receives an age range, not your birth date.")
     }
+    public static var sendingCode: String { value("sending_code", defaultValue: "Sending code…") }
+    public static var phoneRequestPending: String { value("phone_request_pending", defaultValue: "Please wait…") }
     public static var appVerificationTitle: String { value("app_verification_title", defaultValue: "App verification") }
     public static func stopSharingConfirm(name: String) -> String { format("stop_sharing_confirm", defaultValue: "Stop sharing with %@?", name) }
     public static var stopSharingConfirmBody: String { value("stop_sharing_confirm_body", defaultValue: "They will not see your location or Home/Away status until you choose a sharing mode again.") }

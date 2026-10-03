@@ -528,5 +528,7 @@
   "stop_sharing_confirm": "Arrêter le partage avec %@ ?",
   "stop_sharing_confirm_body": "Cette personne ne verra plus votre position ni votre statut À la maison/Absent tant que vous n’aurez pas choisi à nouveau un mode de partage.",
   "remove_person_confirm_body": "Cette personne quitte votre liste Personnes et le partage s’arrête dans les deux sens.",
-  "stop_all_confirm_body": "Personne ne verra votre position ni votre statut À la maison/Absent tant que vous n’aurez pas choisi à nouveau des modes de partage."
+  "stop_all_confirm_body": "Personne ne verra votre position ni votre statut À la maison/Absent tant que vous n’aurez pas choisi à nouveau des modes de partage.",
+  "sending_code": "Envoi du code…",
+  "phone_request_pending": "Veuillez patienter…"
 }

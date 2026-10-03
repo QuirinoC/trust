@@ -528,5 +528,7 @@
   "stop_sharing_confirm": "%@との共有を停止しますか？",
   "stop_sharing_confirm_body": "共有モードを再び選ぶまで、この人にはあなたの位置情報や在宅／外出ステータスが表示されません。",
   "remove_person_confirm_body": "この人は「つながり」リストから削除され、双方向の共有が停止します。",
-  "stop_all_confirm_body": "共有モードを再び選ぶまで、誰にもあなたの位置情報や在宅／外出ステータスは表示されません。"
+  "stop_all_confirm_body": "共有モードを再び選ぶまで、誰にもあなたの位置情報や在宅／外出ステータスは表示されません。",
+  "sending_code": "コードを送信中…",
+  "phone_request_pending": "しばらくお待ちください…"
 }

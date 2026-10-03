@@ -346,6 +346,7 @@
 "phone_lookup_country_code_hint" = "Saisissez un numéro de téléphone complet avec l’indicatif du pays.";
 "phone_number" = "Numéro de téléphone";
 "phone_placeholder" = "(415) 555-0100";
+"phone_request_pending" = "Veuillez patienter…";
 "photo_options" = "Options de photo";
 "pin_accessibility" = "%@. %@.";
 "plus" = "Plus";
@@ -431,6 +432,7 @@
 "send_an_invite" = "Envoyer une invitation";
 "send_code" = "Envoyer le code";
 "send_request" = "Envoyer une demande";
+"sending_code" = "Envoi du code…";
 "sent_requests" = "Envoyées";
 "server_unavailable" = "Le serveur de Trust est temporairement indisponible. Réessayez sous peu.";
 "server_unavailable_host" = "Le serveur de Trust n'est pas disponible (%d) sur %@.";

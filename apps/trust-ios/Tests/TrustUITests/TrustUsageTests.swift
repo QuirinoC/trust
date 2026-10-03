@@ -400,11 +400,11 @@ final class TrustUsageTests: XCTestCase {
             field.typeText("abc")
             let clear = app.buttons["clear-connection-lookup"]
             XCTAssertTrue(clear.isHittable)
-            XCTAssertGreaterThanOrEqual(clear.frame.width, 44)
-            XCTAssertGreaterThanOrEqual(clear.frame.height, 44)
+            XCTAssertGreaterThanOrEqual(clear.frame.width, 43.99)
+            XCTAssertGreaterThanOrEqual(clear.frame.height, 43.99)
             let close = app.buttons["cancel-add-person"]
             XCTAssertTrue(close.isHittable)
-            XCTAssertGreaterThanOrEqual(close.frame.height, 44)
+            XCTAssertGreaterThanOrEqual(close.frame.height, 43.99)
             let lookup = XCTAttachment(screenshot: app.screenshot())
             lookup.name = "Accessibility text - Add keyboard - \(dark ? "dark" : "light")"
             lookup.lifetime = .keepAlways

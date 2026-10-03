@@ -32,7 +32,7 @@ struct MapScreen: View {
                 } else if isWide {
                     regularContent
                 } else {
-                    compactContent
+                    compactContent(availableHeight: geometry.size.height)
                 }
             }
         }
@@ -70,23 +70,25 @@ struct MapScreen: View {
             mapCanvas
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             palette.line.frame(width: 1)
-            personPanel(isWide: true)
+            ScrollView { personPanel(isWide: true) }
                 .frame(width: 360)
                 .background(palette.paper)
         }
     }
 
-    private var compactContent: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            mapHeader
-                .padding(.horizontal, TrustTheme.gutter)
-                .padding(.top, 4)
-                .padding(.bottom, 12)
-            mapCanvas
-                .frame(minHeight: 260, maxHeight: .infinity)
-            personPanel(isWide: false)
+    private func compactContent(availableHeight: CGFloat) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                mapHeader
+                    .padding(.horizontal, TrustTheme.gutter)
+                    .padding(.top, 4)
+                    .padding(.bottom, 12)
+                mapCanvas
+                    .frame(height: min(320, max(200, availableHeight * 0.42)))
+                personPanel(isWide: false)
+            }
+            .padding(.bottom, 16)
         }
-        .padding(.bottom, 16)
     }
 
     private var mapHeader: some View {
@@ -173,6 +175,7 @@ struct MapScreen: View {
                     }
                 }
                 .buttonStyle(TrustOutlineButtonStyle(compact: true))
+                .accessibilityIdentifier("map-view-selected-person")
                 .padding(.horizontal, TrustTheme.gutter)
             }
 
@@ -181,7 +184,6 @@ struct MapScreen: View {
                     .padding(.horizontal, TrustTheme.gutter)
                     .padding(.top, 10)
             }
-            Spacer(minLength: 0)
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("map-screen-person-panel")
@@ -191,20 +193,21 @@ struct MapScreen: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 12) {
                 TrustAvatar(name: member.person.displayName, seed: model.circle.firstIndex { $0.id == member.id } ?? 0, size: 40, avatar: member.person.avatar, personID: member.id)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(member.person.displayName)
-                        .trustFont(15, weight: .semibold)
-                        .foregroundStyle(palette.ink)
-                    TimelineView(.periodic(from: .now, by: 60)) { context in
-                        Text(subtitle(pin, member, now: context.date))
-                            .trustFont(12)
-                            .foregroundStyle(palette.muted)
-                            .accessibilityIdentifier("map-selected-location-time")
-                    }
-                }
+                Text(member.person.displayName)
+                    .trustFont(15, weight: .semibold)
+                    .foregroundStyle(palette.ink)
+                    .fixedSize(horizontal: false, vertical: true)
                 Spacer()
                 TrustBadge(glyph: pin.live ? "eye" : "lock", text: pin.live ? TrustCopy.always : TrustCopy.oneLook)
             }
+            TimelineView(.periodic(from: .now, by: 60)) { context in
+                Text(subtitle(pin, member, now: context.date))
+                    .trustFont(12)
+                    .foregroundStyle(palette.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("map-selected-location-time")
+            }
+
         }
         .padding(.horizontal, TrustTheme.gutter)
         .padding(.bottom, 12)
@@ -225,7 +228,7 @@ struct MapScreen: View {
         let locationStatus = pin.live
             ? TrustCopy.locationFreshness(timestamp: pin.point.timestamp, now: now)
             : TrustCopy.snapshotAt(time)
-        return "\(presence) · \(locationStatus)"
+        return "\(locationStatus) · \(presence)"
     }
 
     private func fitAll() {

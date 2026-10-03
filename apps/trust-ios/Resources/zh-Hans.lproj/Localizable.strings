@@ -346,6 +346,7 @@
 "phone_lookup_country_code_hint" = "请输入包含国家/地区代码的完整电话号码。";
 "phone_number" = "电话号码";
 "phone_placeholder" = "(415) 555-0100";
+"phone_request_pending" = "请稍候…";
 "photo_options" = "照片选项";
 "pin_accessibility" = "%@。 %@。";
 "plus" = "加";
@@ -431,6 +432,7 @@
 "send_an_invite" = "发送邀请";
 "send_code" = "发送代码";
 "send_request" = "发送请求";
+"sending_code" = "正在发送验证码…";
 "sent_requests" = "已发送";
 "server_unavailable" = "Trust 的服务器暂时不可用。稍后再试。";
 "server_unavailable_host" = "Trust 的服务器在 %@ 不可用 (%d)。";

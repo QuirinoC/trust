@@ -528,5 +528,7 @@
   "stop_sharing_confirm": "停止与%@共享？",
   "stop_sharing_confirm_body": "在你重新选择共享模式之前，对方将无法看到你的位置或在家／外出状态。",
   "remove_person_confirm_body": "对方将从你的列表中移除，双方的共享都会停止。",
-  "stop_all_confirm_body": "在你重新选择共享模式之前，任何人都无法看到你的位置或在家／外出状态。"
+  "stop_all_confirm_body": "在你重新选择共享模式之前，任何人都无法看到你的位置或在家／外出状态。",
+  "sending_code": "正在发送验证码…",
+  "phone_request_pending": "请稍候…"
 }

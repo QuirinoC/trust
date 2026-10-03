@@ -528,5 +528,7 @@
   "stop_sharing_confirm": "Teilen mit %@ beenden?",
   "stop_sharing_confirm_body": "Diese Person sieht deinen Standort und deinen Zuhause/Unterwegs-Status erst wieder, wenn du erneut einen Freigabemodus auswählst.",
   "remove_person_confirm_body": "Diese Person wird aus deiner Personenliste entfernt und beide Freigaberichtungen werden beendet.",
-  "stop_all_confirm_body": "Niemand sieht deinen Standort und deinen Zuhause/Unterwegs-Status, bis du erneut Freigabemodi auswählst."
+  "stop_all_confirm_body": "Niemand sieht deinen Standort und deinen Zuhause/Unterwegs-Status, bis du erneut Freigabemodi auswählst.",
+  "sending_code": "Code wird gesendet…",
+  "phone_request_pending": "Bitte warten…"
 }

@@ -72,11 +72,16 @@ struct PhoneView: View {
                         Task { await model.sendPhoneCode(action: .sendCode) }
                     } label: {
                         HStack(spacing: 8) {
-                            if model.isSendingPhone { ProgressView().tint(palette.accentOn) }
-                            Text(TrustCopy.sendCode)
+                            if model.isSendingPhone {
+                                ProgressView()
+                                    .tint(palette.accentOn)
+                                    .frame(width: 24, height: 24)
+                                    .accessibilityHidden(true)
+                            }
+                            Text(model.isSendingPhone ? TrustCopy.sendingCode : TrustCopy.sendCode)
                         }
                     }
-                    .buttonStyle(TrustFilledButtonStyle())
+                    .buttonStyle(TrustFilledButtonStyle(isBusy: model.isSendingPhone))
                     .disabled(model.isSendingPhone || model.phoneDraft.trimmingCharacters(in: .whitespaces).isEmpty)
                     .accessibilityIdentifier("send-phone-code")
 
@@ -146,11 +151,16 @@ struct PhoneView: View {
                         Task { await model.verifyPhoneCode() }
                     } label: {
                         HStack(spacing: 8) {
-                            if model.isSendingPhone { ProgressView().tint(palette.accentOn) }
-                            Text(TrustCopy.verify)
+                            if model.isSendingPhone {
+                                ProgressView()
+                                    .tint(palette.accentOn)
+                                    .frame(width: 24, height: 24)
+                                    .accessibilityHidden(true)
+                            }
+                            Text(model.isSendingPhone ? TrustCopy.phoneRequestPending : TrustCopy.verify)
                         }
                     }
-                    .buttonStyle(TrustFilledButtonStyle())
+                    .buttonStyle(TrustFilledButtonStyle(isBusy: model.isSendingPhone))
                     .disabled(model.isSendingPhone || model.phoneCodeDraft.trimmingCharacters(in: .whitespaces).isEmpty)
                     .accessibilityIdentifier("verify-phone-code")
 
