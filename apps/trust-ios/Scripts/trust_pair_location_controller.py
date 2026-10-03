@@ -83,6 +83,7 @@ def main() -> int:
     print("Waiting for Bob's first Home state.", flush=True)
     phase = 0
     place_id: str | None = None
+    home_observed_at: float | None = None
     deadline = time.monotonic() + args.timeout
     while time.monotonic() < deadline:
         circle = request_json("GET", "/api/v1/circle", token=token)
@@ -92,20 +93,35 @@ def main() -> int:
         current_place_id = place.get("placeId")
 
         if phase == 0 and state == "home" and current_place_id:
-            place_id = current_place_id
+            if home_observed_at is None or current_place_id != place_id:
+                place_id = current_place_id
+                home_observed_at = time.monotonic()
+                print("First Home observed; holding for permission UI and both-account assertions.", flush=True)
+            if time.monotonic() - home_observed_at < 12:
+                time.sleep(2)
+                continue
             start_route(args.device_udid, INITIAL, FIRST_AWAY)
             print("First Home acknowledged; simulating departure.", flush=True)
             phase = 1
         elif phase == 1 and state == "away" and current_place_id == place_id:
             print("First Away acknowledged; waiting for Home update.", flush=True)
             phase = 2
+            home_observed_at = None
         elif phase == 2 and state == "home" and current_place_id == place_id:
+            if home_observed_at is None:
+                home_observed_at = time.monotonic()
+                print("Updated Home observed; holding for both-account assertions.", flush=True)
+            if time.monotonic() - home_observed_at < 12:
+                time.sleep(2)
+                continue
             start_route(args.device_udid, FIRST_AWAY, SECOND_AWAY)
             print("Updated Home acknowledged; simulating second departure.", flush=True)
             phase = 3
         elif phase == 3 and state == "away" and current_place_id == place_id:
             print("Second Away acknowledged; route controller complete.", flush=True)
             return 0
+        elif phase in (0, 2):
+            home_observed_at = None
 
         time.sleep(2)
 

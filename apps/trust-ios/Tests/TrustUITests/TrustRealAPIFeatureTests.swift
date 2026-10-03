@@ -346,10 +346,14 @@ final class TrustRealAPIFeatureTests: XCTestCase {
             }, "Bob must finish Look and Home set/clear and publish the Hidden readiness barrier before Alice starts her Home/Away/Hidden sequence.")
 
             for state in ["home", "away", "hidden"] {
+                XCTAssertTrue(scrollUpUntilHittable(homeStatus, in: app), app.debugDescription)
                 homeStatus.tap()
                 let choice = app.buttons.matching(identifier: "set-home-status-\(state)").firstMatch
                 XCTAssertTrue(choice.waitForExistence(timeout: 5), "The Sharing status menu should offer \(state).")
+                XCTAssertTrue(choice.isEnabled && choice.isHittable, app.debugDescription)
                 choice.tap()
+                XCTAssertTrue(waitUntil(timeout: 5) { !choice.exists }, "The selected status menu should dismiss.")
+                attachScreenshot(of: app, named: "Alice - Selected \(state)")
                 XCTAssertTrue(waitUntil(timeout: 15) { self.yourHomeState(token: session.token) == state }, "Alice's selected status should persist as \(state).")
                 if state == "hidden" {
                     XCTAssertTrue(waitUntil(timeout: 30) {
@@ -521,7 +525,7 @@ final class TrustRealAPIFeatureTests: XCTestCase {
             XCTAssertTrue(mapCanvas.waitForExistence(timeout: 20), "A confirmed Look should add its snapshot pin to the map.")
             XCTAssertTrue(app.descendants(matching: .any)["map-screen-person-panel"].waitForExistence(timeout: 10))
             XCTAssertTrue(app.staticTexts["PairAlice"].exists, "The selected map pin should identify Alice.")
-            let snapshotTime = app.descendants(matching: .any)["map-selected-location-time"]
+            let snapshotTime = app.descendants(matching: .any).matching(identifier: "map-selected-location-time").firstMatch
             XCTAssertTrue(snapshotTime.waitForExistence(timeout: 5))
             XCTAssertTrue(snapshotTime.label.localizedCaseInsensitiveContains("snapshot"))
             let viewSelected = app.buttons["map-view-selected-person"]
@@ -1104,7 +1108,7 @@ final class TrustRealAPIFeatureTests: XCTestCase {
         // Use only fictional 555-0100..0199 values across established area codes.
         // The fixed 202-555-0199 no-match fixture is excluded. A wide randomized pool
         // avoids reusing persistent local SMS budget keys across sequential simulator runs.
-        let reservedPhones = LocalTrustAPI.reservedPhonePool().shuffled().prefix(2)
+        let reservedPhones = LocalTrustAPI.reservedPhonePool().shuffled().prefix(3)
         let phoneDigits = try XCTUnwrap(reservedPhones.first)
         let peerPhoneDigits = try XCTUnwrap(reservedPhones.dropFirst().first)
 
@@ -1336,6 +1340,32 @@ final class TrustRealAPIFeatureTests: XCTestCase {
         let peerAfterStop = api.member(personID: mainSession.personID, token: peerSession.token)
         XCTAssertEqual(peerAfterStop?["inboundLive"] as? Bool, false)
         XCTAssertTrue(peerAfterStop?["live"] == nil || peerAfterStop?["live"] is NSNull)
+
+        let declinedSession = try XCTUnwrap(api.developmentSession(name: "DeclinedPeer", deviceID: "trust-decline-\(suffix)"))
+        disposableTokens.append(declinedSession.token)
+        let declinedHandle = "decline\(suffix.prefix(8))"
+        XCTAssertEqual(api.putHandle(declinedHandle, token: declinedSession.token), 204)
+        let declinedPhone = try XCTUnwrap(reservedPhones.dropFirst(2).first)
+        XCTAssertTrue(api.verifyPhone(phone: "+1\(declinedPhone)", token: declinedSession.token))
+        XCTAssertTrue((200..<300).contains(api.createConnectionRequest(recipientID: mainSession.personID, token: declinedSession.token)))
+        app.buttons["tab-you"].tap()
+        app.buttons["tab-sharing"].tap()
+        let decline = app.buttons["decline-connection-request-\(declinedHandle)"]
+        XCTAssertTrue(decline.waitForExistence(timeout: 12))
+        decline.tap()
+        XCTAssertTrue(waitUntil(timeout: 10) {
+            let incoming = self.api.connectionRequests(token: mainSession.token)?["incoming"] as? [[String: Any]] ?? []
+            return incoming.isEmpty
+        })
+        XCTAssertNil(api.member(personID: declinedSession.personID, token: mainSession.token))
+        XCTAssertEqual(api.createConnectionRequest(recipientID: mainSession.personID, token: declinedSession.token), 409, "Decline must enforce the server's directional cooldown.")
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(app.buttons["tab-sharing"].waitForExistence(timeout: 15))
+        app.buttons["tab-sharing"].tap()
+        XCTAssertFalse(app.buttons["accept-connection-request-\(declinedHandle)"].exists)
+        XCTAssertTrue(waitUntil(timeout: 10) { self.inboundPresentation(personID: mainSession.personID, token: peerSession.token) == "off" })
+        attachScreenshot(of: app, named: "Requests - Declined and Stop persists after relaunch")
 
     }
 
