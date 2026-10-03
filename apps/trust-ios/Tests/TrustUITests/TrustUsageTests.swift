@@ -301,17 +301,15 @@ final class TrustUsageTests: XCTestCase {
 
     func testLanguagePreferenceChangesCopyAndPersists() {
         let app = launchDemo(forceEnglish: false)
-        var changedLanguage = false
-        defer {
-            // Restore the system preference even if an assertion fails.
-            if changedLanguage {
-                if app.state != .runningForeground { app.launch() }
-                if app.buttons["tab-you"].waitForExistence(timeout: 10) {
-                    app.buttons["tab-you"].tap()
-                    selectSystemLanguage(in: app)
-                }
-                app.terminate()
-            }
+        // XCTest can end a failing test before Swift defer executes. Register
+        // cleanup with XCTest; separate termination still runs if restoration fails.
+        addTeardownBlock { app.terminate() }
+        addTeardownBlock { [self] in
+            app.terminate()
+            app.launch()
+            XCTAssertTrue(app.buttons["tab-you"].waitForExistence(timeout: 20))
+            app.buttons["tab-you"].tap()
+            selectSystemLanguage(in: app)
         }
         func selectLanguage(_ title: String) {
             let picker = app.descendants(matching: .any)["language-preference"]
@@ -336,7 +334,6 @@ final class TrustUsageTests: XCTestCase {
         }
         XCTAssertTrue(app.buttons["tab-you"].waitForExistence(timeout: 20))
         app.buttons["tab-you"].tap()
-        changedLanguage = true
         selectLanguage("English")
         assertTabLabels(["People", "Sharing", "Activity", "You"])
         selectLanguage("Français")
@@ -356,9 +353,6 @@ final class TrustUsageTests: XCTestCase {
         assertTabLabels(["Personnes", "Partage", "Activité", "Toi"])
         selectLanguage("English")
         assertTabLabels(["People", "Sharing", "Activity", "You"])
-        selectSystemLanguage(in: app)
-        changedLanguage = false
-        app.terminate()
     }
 
     func testPaywallScreenshotRouteIsReachable() {
