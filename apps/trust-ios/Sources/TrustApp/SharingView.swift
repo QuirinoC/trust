@@ -16,7 +16,7 @@ struct SharingView: View {
 
     private var confirmationTitle: String {
         switch activeConfirmation {
-        case .some(.stopSharing(_, let name)): return "Stop sharing with \(name)?"
+        case .some(.stopSharing(_, let name)): return TrustCopy.stopSharingConfirm(name: name)
         case .some(.removePerson(_, let name)): return TrustCopy.removePersonConfirm(name: name)
         case .some(.stopAll): return TrustCopy.stopAllConfirm
         case .none: return ""
@@ -25,9 +25,9 @@ struct SharingView: View {
 
     private var confirmationMessage: String {
         switch activeConfirmation {
-        case .some(.stopSharing(_, _)): return "They will not see your location or Home/Away status until you choose a sharing mode again."
-        case .some(.removePerson(_, _)): return "They leave your People list and both sharing directions stop."
-        case .some(.stopAll): return "No one will see your location or Home/Away status until you choose sharing modes again."
+        case .some(.stopSharing(_, _)): return TrustCopy.stopSharingConfirmBody
+        case .some(.removePerson(_, _)): return TrustCopy.removePersonConfirmBody
+        case .some(.stopAll): return TrustCopy.stopAllConfirmBody
         case .none: return ""
         }
     }

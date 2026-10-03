@@ -352,7 +352,7 @@ final class TrustAgeGateTests: XCTestCase {
         let title = element("age-gate-title", in: app)
         XCTAssertTrue(title.waitForExistence(timeout: 15), file: file, line: line)
         XCTAssertTrue(title.label.localizedCaseInsensitiveContains("age"), file: file, line: line)
-        XCTAssertTrue(element("age-gate-body", in: app).label.localizedCaseInsensitiveContains("confirm whether"), file: file, line: line)
+        XCTAssertTrue(element("age-gate-body", in: app).label.localizedCaseInsensitiveContains("required age check"), file: file, line: line)
         XCTAssertFalse(element("local-api-sign-in", in: app).exists, file: file, line: line)
         XCTAssertFalse(element("app-transaction-title", in: app).exists, file: file, line: line)
     }

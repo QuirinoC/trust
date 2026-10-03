@@ -59,15 +59,17 @@ struct AgeGateView: View {
                             ? "app-transaction-title"
                             : "age-gate-title")
 
-                    Text(bodyText)
-                        .trustFont(16)
-                        .lineSpacing(4)
-                        .foregroundStyle(palette.muted)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(.top, 12)
-                        .accessibilityIdentifier(model.phase == .appTransactionChecking || model.phase == .appTransactionUnavailable
-                            ? "app-transaction-body"
-                            : "age-gate-body")
+                    if model.phase != .ageChecking && model.phase != .appTransactionChecking {
+                        Text(bodyText)
+                            .trustFont(16)
+                            .lineSpacing(4)
+                            .foregroundStyle(palette.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.top, 12)
+                            .accessibilityIdentifier(model.phase == .appTransactionChecking || model.phase == .appTransactionUnavailable
+                                ? "app-transaction-body"
+                                : "age-gate-body")
+                    }
 
                     Spacer(minLength: 28)
 
@@ -407,7 +409,7 @@ struct AgeGateView: View {
         case .ageWaitingForParent: TrustCopy.ageParentTitle
         case .ageBlocked: TrustCopy.ageGateBlockedTitle
         case .ageConsentRevoked: TrustCopy.ageConsentRevokedTitle
-        case .appTransactionChecking: TrustCopy.appTransactionChecking
+        case .appTransactionChecking: TrustCopy.appVerificationTitle
         case .appTransactionUnavailable: TrustCopy.appTransactionUnavailableTitle
         case .login, .handle, .phone, .home: TrustCopy.ageGateTitle
         }

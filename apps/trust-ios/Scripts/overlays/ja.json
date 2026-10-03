@@ -481,7 +481,7 @@
   "age_gate_blocked_body": "現在適用される年齢要件では、Appleがアクセスを承認できませんでした。",
   "age_gate_checking": "年齢要件を確認しています…",
   "age_gate_unavailable_title": "Appleの年齢確認を利用できません",
-  "age_gate_unavailable_body": "この地域でAppleの年齢確認が必要かどうかをTrustで確認できませんでした。接続とApple Accountの設定を確認して、もう一度お試しください。",
+  "age_gate_unavailable_body": "TrustはAppleが求める年齢確認を完了できませんでした。接続とApple Accountの設定を確認して、もう一度お試しください。",
   "age_gate_retry": "再試行",
   "age_gate_try_apple_range": "Appleの年齢範囲を試す",
   "age_range_blocked_title": "この年齢範囲ではTrustを利用できません",
@@ -523,5 +523,10 @@
   "age_range_sharing_declined_title": "続けるには年齢範囲の共有が必要です",
   "app_transaction_checking": "App Storeの確認中…",
   "app_transaction_unavailable_body": "TrustはApp Storeの取引を確認できませんでした。接続を確認して、もう一度お試しください。",
-  "app_transaction_unavailable_title": "このアプリを確認できませんでした"
+  "app_transaction_unavailable_title": "このアプリを確認できませんでした",
+  "app_verification_title": "アプリの確認",
+  "stop_sharing_confirm": "%@との共有を停止しますか？",
+  "stop_sharing_confirm_body": "共有モードを再び選ぶまで、この人にはあなたの位置情報や在宅／外出ステータスが表示されません。",
+  "remove_person_confirm_body": "この人は「つながり」リストから削除され、双方向の共有が停止します。",
+  "stop_all_confirm_body": "共有モードを再び選ぶまで、誰にもあなたの位置情報や在宅／外出ステータスは表示されません。"
 }

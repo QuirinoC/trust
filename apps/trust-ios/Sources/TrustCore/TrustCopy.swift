@@ -177,7 +177,7 @@ public enum TrustCopy {
     public static var ageGateChecking: String { value("age_gate_checking", defaultValue: "Checking age requirements…") }
     public static var ageGateUnavailableTitle: String { value("age_gate_unavailable_title", defaultValue: "Apple age check unavailable") }
     public static var ageGateUnavailableBody: String {
-        value("age_gate_unavailable_body", defaultValue: "Trust couldn’t confirm whether an Apple age check applies here. Check your connection and Apple Account settings, then try again.")
+        value("age_gate_unavailable_body", defaultValue: "Trust couldn’t complete Apple’s required age check. Check your connection and Apple Account settings, then try again.")
     }
     public static var ageRangeSharingDeclinedTitle: String {
         value("age_range_sharing_declined_title", defaultValue: "Share your age range to continue")
@@ -185,6 +185,11 @@ public enum TrustCopy {
     public static var ageRangeSharingDeclinedBody: String {
         value("age_range_sharing_declined_body", defaultValue: "Apple says an age check applies here. If you chose not to share, try again and allow it. Trust receives an age range, not your birth date.")
     }
+    public static var appVerificationTitle: String { value("app_verification_title", defaultValue: "App verification") }
+    public static func stopSharingConfirm(name: String) -> String { format("stop_sharing_confirm", defaultValue: "Stop sharing with %@?", name) }
+    public static var stopSharingConfirmBody: String { value("stop_sharing_confirm_body", defaultValue: "They will not see your location or Home/Away status until you choose a sharing mode again.") }
+    public static var removePersonConfirmBody: String { value("remove_person_confirm_body", defaultValue: "They leave your People list and both sharing directions stop.") }
+    public static var stopAllConfirmBody: String { value("stop_all_confirm_body", defaultValue: "No one will see your location or Home/Away status until you choose sharing modes again.") }
     public static var appTransactionChecking: String {
         value("app_transaction_checking", defaultValue: "Checking your App Store verification…")
     }

@@ -32,7 +32,7 @@
 "age_gate_stop_all_success" = "Le partage est désactivé pour tout le monde. Votre compte reste verrouillé jusqu’à la fin de la vérification requise.";
 "age_gate_title" = "Avant de rejoindre Trust";
 "age_gate_try_apple_range" = "Essayer la tranche d’âge Apple";
-"age_gate_unavailable_body" = "Trust n’a pas pu déterminer si une vérification d’âge Apple s’applique ici. Vérifiez votre connexion et les réglages de votre compte Apple, puis réessayez.";
+"age_gate_unavailable_body" = "Trust n’a pas pu terminer la vérification d’âge requise par Apple. Vérifiez votre connexion et les réglages de votre compte Apple, puis réessayez.";
 "age_gate_unavailable_title" = "Vérification d’âge Apple indisponible";
 "age_parent_action" = "Demander l’accord d’un parent";
 "age_parent_body" = "Demandez à un parent ou tuteur d’autoriser la poursuite de l’utilisation de Trust.";
@@ -109,6 +109,7 @@
 "app_transaction_checking" = "Vérification de l’App Store…";
 "app_transaction_unavailable_body" = "Trust n’a pas pu confirmer la transaction App Store de l’app. Vérifiez votre connexion, puis réessayez.";
 "app_transaction_unavailable_title" = "Impossible de vérifier cette app";
+"app_verification_title" = "Vérification de l’app";
 "appearance" = "Apparence";
 "apple_sign_in_failed" = "Apple n'a pas pu finaliser la connexion.";
 "apple_sign_in_timed_out" = "La connexion Apple n’a pas abouti. Essayer à nouveau.";
@@ -397,6 +398,7 @@
 "recenter_map" = "Carte recentrer";
 "remove_person" = "Retirer";
 "remove_person_confirm" = "Supprimer %@ ? Ils quittent la liste. Arrêtez de les conserver comme ne les partageant pas.";
+"remove_person_confirm_body" = "Cette personne quitte votre liste Personnes et le partage s’arrête dans les deux sens.";
 "remove_picture" = "Supprimer la photo";
 "request_failed" = "La demande a échoué.";
 "request_failed_status" = "La demande a échoué (%d).";
@@ -468,9 +470,12 @@
 "stop" = "Arrêt";
 "stop_all" = "Arrêtez tout partage de position";
 "stop_all_confirm" = "Arrêter de partager avec tout le monde ? Ils ne peuvent pas voir votre position jusqu'à ce que vous choisissiez à nouveau un mode.";
+"stop_all_confirm_body" = "Personne ne verra votre position ni votre statut À la maison/Absent tant que vous n’aurez pas choisi à nouveau des modes de partage.";
 "stop_all_toast" = "Tout partage de position sortant s'est arrêté.";
 "stop_confirm" = "Arrêter de partager avec %@ ? Ils ne peuvent pas voir votre position jusqu'à ce que vous choisissiez à nouveau un mode.";
 "stop_sharing" = "Arrêter de partager";
+"stop_sharing_confirm" = "Arrêter le partage avec %@ ?";
+"stop_sharing_confirm_body" = "Cette personne ne verra plus votre position ni votre statut À la maison/Absent tant que vous n’aurez pas choisi à nouveau un mode de partage.";
 "stop_sharing_warning" = "Ils ne peuvent pas voir votre position.";
 "storekit_verification_failed" = "La vérification StoreKit a échoué.";
 "strip_live" = "Mises à jour pendant qu'ils partagent toujours.";

@@ -32,7 +32,7 @@
 "age_gate_stop_all_success" = "O compartilhamento foi desativado para todos. Sua conta continuará bloqueada até que a verificação necessária seja concluída.";
 "age_gate_title" = "Antes de entrar";
 "age_gate_try_apple_range" = "Tentar usar a faixa etária da Apple";
-"age_gate_unavailable_body" = "O Trust não conseguiu confirmar se uma verificação de idade da Apple se aplica aqui. Confira sua conexão e os ajustes da sua Conta Apple e tente novamente.";
+"age_gate_unavailable_body" = "O Trust não conseguiu concluir a verificação de idade exigida pela Apple. Confira sua conexão e os ajustes da sua Conta Apple e tente novamente.";
 "age_gate_unavailable_title" = "Verificação de idade da Apple indisponível";
 "age_parent_action" = "Pedir aprovação a um responsável";
 "age_parent_body" = "Peça a um dos pais ou responsável que aprove o acesso contínuo ao Trust.";
@@ -109,6 +109,7 @@
 "app_transaction_checking" = "Verificando a validação da App Store…";
 "app_transaction_unavailable_body" = "O Trust não conseguiu confirmar a transação do app na App Store. Confira sua conexão e tente novamente.";
 "app_transaction_unavailable_title" = "Não foi possível verificar este app";
+"app_verification_title" = "Verificação do app";
 "appearance" = "Aparência";
 "apple_sign_in_failed" = "A Apple não conseguiu concluir o início de sessão.";
 "apple_sign_in_timed_out" = "O início de sessão com a Apple não foi concluído. Tente novamente.";
@@ -397,6 +398,7 @@
 "recenter_map" = "Centralizar mapa";
 "remove_person" = "Remover";
 "remove_person_confirm" = "Remover %@? Essa pessoa sai da lista. Ao parar, ela continua na lista sem acesso.";
+"remove_person_confirm_body" = "Essa pessoa sai da sua lista de Pessoas e o compartilhamento é interrompido nas duas direções.";
 "remove_picture" = "Remover foto";
 "request_failed" = "Falha na solicitação.";
 "request_failed_status" = "Falha na solicitação (%d).";
@@ -468,9 +470,12 @@
 "stop" = "Parar";
 "stop_all" = "Parar todo compartilhamento de localização";
 "stop_all_confirm" = "Parar de compartilhar com todos? Ninguém poderá ver sua localização até você escolher um modo novamente.";
+"stop_all_confirm_body" = "Ninguém verá sua localização nem seu status Em casa/Fora até você escolher os modos de compartilhamento novamente.";
 "stop_all_toast" = "Todo o compartilhamento de localização enviado por você foi interrompido.";
 "stop_confirm" = "Parar de compartilhar com %@? Essa pessoa não poderá ver sua localização até você escolher um modo novamente.";
 "stop_sharing" = "Parar de compartilhar";
+"stop_sharing_confirm" = "Parar de compartilhar com %@?";
+"stop_sharing_confirm_body" = "Essa pessoa não verá sua localização nem seu status Em casa/Fora até você escolher um modo de compartilhamento novamente.";
 "stop_sharing_warning" = "Essa pessoa não pode ver sua localização.";
 "storekit_verification_failed" = "Falha na verificação do StoreKit.";
 "strip_live" = "Atualiza enquanto a pessoa compartilha no modo Sempre.";

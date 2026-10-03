@@ -481,7 +481,7 @@
   "age_gate_blocked_body": "A Apple não pode aprovar o acesso segundo os requisitos de idade atuais.",
   "age_gate_checking": "Verificando os requisitos de idade…",
   "age_gate_unavailable_title": "Verificação de idade da Apple indisponível",
-  "age_gate_unavailable_body": "O Trust não conseguiu confirmar se uma verificação de idade da Apple se aplica aqui. Confira sua conexão e os ajustes da sua Conta Apple e tente novamente.",
+  "age_gate_unavailable_body": "O Trust não conseguiu concluir a verificação de idade exigida pela Apple. Confira sua conexão e os ajustes da sua Conta Apple e tente novamente.",
   "age_gate_retry": "Tentar novamente",
   "age_gate_try_apple_range": "Tentar usar a faixa etária da Apple",
   "age_range_blocked_title": "O Trust não está disponível para esta faixa etária",
@@ -523,5 +523,10 @@
   "age_range_sharing_declined_title": "Compartilhe sua faixa etária para continuar",
   "app_transaction_checking": "Verificando a validação da App Store…",
   "app_transaction_unavailable_body": "O Trust não conseguiu confirmar a transação do app na App Store. Confira sua conexão e tente novamente.",
-  "app_transaction_unavailable_title": "Não foi possível verificar este app"
+  "app_transaction_unavailable_title": "Não foi possível verificar este app",
+  "app_verification_title": "Verificação do app",
+  "stop_sharing_confirm": "Parar de compartilhar com %@?",
+  "stop_sharing_confirm_body": "Essa pessoa não verá sua localização nem seu status Em casa/Fora até você escolher um modo de compartilhamento novamente.",
+  "remove_person_confirm_body": "Essa pessoa sai da sua lista de Pessoas e o compartilhamento é interrompido nas duas direções.",
+  "stop_all_confirm_body": "Ninguém verá sua localização nem seu status Em casa/Fora até você escolher os modos de compartilhamento novamente."
 }

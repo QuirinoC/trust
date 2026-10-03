@@ -112,6 +112,8 @@ struct AddPersonSheet: View {
                                 } label: {
                                     Image(systemName: "xmark.circle.fill")
                                         .foregroundStyle(palette.muted)
+                                        .frame(width: 44, height: 44)
+                                        .contentShape(Rectangle())
                                 }
                                 .buttonStyle(.plain)
                                 .accessibilityLabel(TrustCopy.clearField)
@@ -197,6 +199,8 @@ struct AddPersonSheet: View {
                             .foregroundStyle(palette.ink)
                             .frame(width: 36, height: 36)
                             .background(palette.surface, in: Circle())
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
                     }
                         .buttonStyle(.plain)
                         .accessibilityLabel(TrustCopy.cancel)

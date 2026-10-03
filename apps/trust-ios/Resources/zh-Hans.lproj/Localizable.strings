@@ -32,7 +32,7 @@
 "age_gate_stop_all_success" = "已停止与所有人共享。完成所需检查前，你的账户仍会保持锁定。";
 "age_gate_title" = "加入前请先确认";
 "age_gate_try_apple_range" = "尝试使用 Apple 年龄范围";
-"age_gate_unavailable_body" = "Trust 无法确认此处是否需要 Apple 年龄验证。请检查网络连接和 Apple 账户设置，然后重试。";
+"age_gate_unavailable_body" = "Trust 无法完成 Apple 要求的年龄检查。请检查网络连接和 Apple 账户设置，然后重试。";
 "age_gate_unavailable_title" = "Apple 年龄验证暂不可用";
 "age_parent_action" = "请求家长或监护人批准";
 "age_parent_body" = "请让家长或监护人批准继续使用 Trust。";
@@ -109,6 +109,7 @@
 "app_transaction_checking" = "正在验证 App Store 信息…";
 "app_transaction_unavailable_body" = "Trust 无法确认此 App 的 App Store 交易。请检查网络连接，然后重试。";
 "app_transaction_unavailable_title" = "无法验证此 App";
+"app_verification_title" = "App 验证";
 "appearance" = "外观";
 "apple_sign_in_failed" = "Apple 无法完成登录。";
 "apple_sign_in_timed_out" = "Apple 登录未完成。再试一次。";
@@ -397,6 +398,7 @@
 "recenter_map" = "最近的地图";
 "remove_person" = "消除";
 "remove_person_confirm" = "删除%@？他们离开了名单。停止让他们不共享。";
+"remove_person_confirm_body" = "对方将从你的列表中移除，双方的共享都会停止。";
 "remove_picture" = "移除照片";
 "request_failed" = "请求失败。";
 "request_failed_status" = "请求失败（%d）。";
@@ -468,9 +470,12 @@
 "stop" = "停止";
 "stop_all" = "停止所有位置共享";
 "stop_all_confirm" = "停止与大家分享？在您再次选择模式之前，他们无法看到您的位置。";
+"stop_all_confirm_body" = "在你重新选择共享模式之前，任何人都无法看到你的位置或在家／外出状态。";
 "stop_all_toast" = "所有出站位置共享均已停止。";
 "stop_confirm" = "停止与 %@ 共享？在您再次选择模式之前，他们无法看到您的位置。";
 "stop_sharing" = "停止分享";
+"stop_sharing_confirm" = "停止与%@共享？";
+"stop_sharing_confirm_body" = "在你重新选择共享模式之前，对方将无法看到你的位置或在家／外出状态。";
 "stop_sharing_warning" = "他们看不到您的位置。";
 "storekit_verification_failed" = "StoreKit 验证失败。";
 "strip_live" = "在他们共享的同时进行更新。";

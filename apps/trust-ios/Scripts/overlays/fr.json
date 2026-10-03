@@ -481,7 +481,7 @@
   "age_gate_blocked_body": "Apple ne peut pas autoriser l’accès selon les exigences d’âge actuellement applicables.",
   "age_gate_checking": "Vérification des exigences d’âge…",
   "age_gate_unavailable_title": "Vérification d’âge Apple indisponible",
-  "age_gate_unavailable_body": "Trust n’a pas pu déterminer si une vérification d’âge Apple s’applique ici. Vérifiez votre connexion et les réglages de votre compte Apple, puis réessayez.",
+  "age_gate_unavailable_body": "Trust n’a pas pu terminer la vérification d’âge requise par Apple. Vérifiez votre connexion et les réglages de votre compte Apple, puis réessayez.",
   "age_gate_retry": "Réessayer",
   "age_gate_try_apple_range": "Essayer la tranche d’âge Apple",
   "age_range_blocked_title": "Trust n’est pas disponible pour cette tranche d’âge",
@@ -523,5 +523,10 @@
   "age_range_sharing_declined_title": "Partagez votre tranche d’âge pour continuer",
   "app_transaction_checking": "Vérification de l’App Store…",
   "app_transaction_unavailable_body": "Trust n’a pas pu confirmer la transaction App Store de l’app. Vérifiez votre connexion, puis réessayez.",
-  "app_transaction_unavailable_title": "Impossible de vérifier cette app"
+  "app_transaction_unavailable_title": "Impossible de vérifier cette app",
+  "app_verification_title": "Vérification de l’app",
+  "stop_sharing_confirm": "Arrêter le partage avec %@ ?",
+  "stop_sharing_confirm_body": "Cette personne ne verra plus votre position ni votre statut À la maison/Absent tant que vous n’aurez pas choisi à nouveau un mode de partage.",
+  "remove_person_confirm_body": "Cette personne quitte votre liste Personnes et le partage s’arrête dans les deux sens.",
+  "stop_all_confirm_body": "Personne ne verra votre position ni votre statut À la maison/Absent tant que vous n’aurez pas choisi à nouveau des modes de partage."
 }

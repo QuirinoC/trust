@@ -378,6 +378,45 @@ final class TrustUsageTests: XCTestCase {
         add(screenshot)
     }
 
+    func testAddPersonControlsRemainReachableWithAccessibilityText() {
+        for dark in [false, true] {
+            let app = XCUIApplication()
+            app.launchEnvironment["TRUST_DEMO"] = "1"
+            app.launchEnvironment["TRUST_UI_TEST"] = "1"
+            app.launchArguments += ["-appearancePreference", dark ? "dark" : "light",
+                                    "-trust.appLanguage", "en",
+                                    "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+            app.launch()
+            XCTAssertTrue(app.buttons["tab-sharing"].waitForExistence(timeout: 20))
+            app.buttons["tab-sharing"].tap()
+            let sharing = XCTAttachment(screenshot: app.screenshot())
+            sharing.name = "Accessibility text - Sharing - \(dark ? "dark" : "light")"
+            sharing.lifetime = .keepAlways
+            add(sharing)
+            app.buttons["add-someone-button"].tap()
+            let field = app.textFields["connection-handle"]
+            XCTAssertTrue(field.waitForExistence(timeout: 5))
+            field.tap()
+            field.typeText("abc")
+            let clear = app.buttons["clear-connection-lookup"]
+            XCTAssertTrue(clear.isHittable)
+            XCTAssertGreaterThanOrEqual(clear.frame.width, 44)
+            XCTAssertGreaterThanOrEqual(clear.frame.height, 44)
+            let close = app.buttons["cancel-add-person"]
+            XCTAssertTrue(close.isHittable)
+            XCTAssertGreaterThanOrEqual(close.frame.height, 44)
+            let lookup = XCTAttachment(screenshot: app.screenshot())
+            lookup.name = "Accessibility text - Add keyboard - \(dark ? "dark" : "light")"
+            lookup.lifetime = .keepAlways
+            add(lookup)
+            clear.tap()
+            XCTAssertEqual(field.value as? String, "Handle or phone number")
+            close.tap()
+            XCTAssertTrue(app.buttons["add-someone-button"].waitForExistence(timeout: 5))
+            app.terminate()
+        }
+    }
+
     private func launchDemo(dark: Bool? = nil, route: String? = nil, forceEnglish: Bool = true) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchEnvironment["TRUST_DEMO"] = "1"

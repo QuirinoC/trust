@@ -481,7 +481,7 @@
   "age_gate_blocked_body": "Apple kann den Zugriff nach den aktuell geltenden Altersanforderungen nicht freigeben.",
   "age_gate_checking": "Altersanforderungen werden geprüft …",
   "age_gate_unavailable_title": "Apple-Altersprüfung nicht verfügbar",
-  "age_gate_unavailable_body": "Trust konnte nicht feststellen, ob hier eine Apple-Altersprüfung gilt. Prüfe deine Verbindung und deine Apple-Account-Einstellungen und versuche es erneut.",
+  "age_gate_unavailable_body": "Trust konnte die von Apple erforderliche Altersprüfung nicht abschließen. Prüfe deine Verbindung und die Einstellungen deines Apple Accounts und versuche es erneut.",
   "age_gate_retry": "Erneut versuchen",
   "age_gate_try_apple_range": "Apple-Altersbereich prüfen",
   "age_range_blocked_title": "Trust ist für diese Altersgruppe nicht verfügbar",
@@ -523,5 +523,10 @@
   "age_range_sharing_declined_title": "Teile deine Altersspanne, um fortzufahren",
   "app_transaction_checking": "App-Store-Verifizierung wird geprüft …",
   "app_transaction_unavailable_body": "Trust konnte die App-Store-Transaktion nicht bestätigen. Prüfe deine Verbindung und versuche es erneut.",
-  "app_transaction_unavailable_title": "Diese App konnte nicht verifiziert werden"
+  "app_transaction_unavailable_title": "Diese App konnte nicht verifiziert werden",
+  "app_verification_title": "App-Verifizierung",
+  "stop_sharing_confirm": "Teilen mit %@ beenden?",
+  "stop_sharing_confirm_body": "Diese Person sieht deinen Standort und deinen Zuhause/Unterwegs-Status erst wieder, wenn du erneut einen Freigabemodus auswählst.",
+  "remove_person_confirm_body": "Diese Person wird aus deiner Personenliste entfernt und beide Freigaberichtungen werden beendet.",
+  "stop_all_confirm_body": "Niemand sieht deinen Standort und deinen Zuhause/Unterwegs-Status, bis du erneut Freigabemodi auswählst."
 }

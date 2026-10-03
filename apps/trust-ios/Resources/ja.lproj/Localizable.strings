@@ -32,7 +32,7 @@
 "age_gate_stop_all_success" = "全員との共有をオフにしました。必要な確認が完了するまでアカウントはロックされたままです。";
 "age_gate_title" = "利用を始める前に";
 "age_gate_try_apple_range" = "Appleの年齢範囲を試す";
-"age_gate_unavailable_body" = "この地域でAppleの年齢確認が必要かどうかをTrustで確認できませんでした。接続とApple Accountの設定を確認して、もう一度お試しください。";
+"age_gate_unavailable_body" = "TrustはAppleが求める年齢確認を完了できませんでした。接続とApple Accountの設定を確認して、もう一度お試しください。";
 "age_gate_unavailable_title" = "Appleの年齢確認を利用できません";
 "age_parent_action" = "保護者に承認を求める";
 "age_parent_body" = "Trustを引き続き利用するには、保護者または後見人の承認を求めてください。";
@@ -109,6 +109,7 @@
 "app_transaction_checking" = "App Storeの確認中…";
 "app_transaction_unavailable_body" = "TrustはApp Storeの取引を確認できませんでした。接続を確認して、もう一度お試しください。";
 "app_transaction_unavailable_title" = "このアプリを確認できませんでした";
+"app_verification_title" = "アプリの確認";
 "appearance" = "外観";
 "apple_sign_in_failed" = "Appleでサインインを完了できませんでした。";
 "apple_sign_in_timed_out" = "Appleでのサインインが終わりませんでした。もう一度お試しください。";
@@ -397,6 +398,7 @@
 "recenter_map" = "地図を現在地に戻す";
 "remove_person" = "削除";
 "remove_person_confirm" = "%@さんを削除しますか？一覧から外れます。「停止」なら、共有していない状態で一覧に残ります。";
+"remove_person_confirm_body" = "この人は「つながり」リストから削除され、双方向の共有が停止します。";
 "remove_picture" = "写真を削除";
 "request_failed" = "リクエストに失敗しました。";
 "request_failed_status" = "リクエストに失敗しました（%d）。";
@@ -468,9 +470,12 @@
 "stop" = "停止";
 "stop_all" = "すべての位置情報共有を停止";
 "stop_all_confirm" = "全員との共有を停止しますか？再びモードを選ぶまで、誰もあなたの位置情報を見られません。";
+"stop_all_confirm_body" = "共有モードを再び選ぶまで、誰にもあなたの位置情報や在宅／外出ステータスは表示されません。";
 "stop_all_toast" = "すべての位置情報共有を停止しました。";
 "stop_confirm" = "%@さんとの共有を停止しますか？再びモードを選ぶまで、相手はあなたの位置情報を見られません。";
 "stop_sharing" = "共有を停止";
+"stop_sharing_confirm" = "%@との共有を停止しますか？";
+"stop_sharing_confirm_body" = "共有モードを再び選ぶまで、この人にはあなたの位置情報や在宅／外出ステータスが表示されません。";
 "stop_sharing_warning" = "相手はあなたの位置情報を見られません。";
 "storekit_verification_failed" = "StoreKitの確認に失敗しました。";
 "strip_live" = "相手がAlwaysで共有している間、更新されます。";

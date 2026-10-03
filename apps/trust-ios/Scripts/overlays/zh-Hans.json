@@ -481,7 +481,7 @@
   "age_gate_blocked_body": "根据当前适用的年龄要求，Apple 无法批准访问。",
   "age_gate_checking": "正在检查年龄要求…",
   "age_gate_unavailable_title": "Apple 年龄验证暂不可用",
-  "age_gate_unavailable_body": "Trust 无法确认此处是否需要 Apple 年龄验证。请检查网络连接和 Apple 账户设置，然后重试。",
+  "age_gate_unavailable_body": "Trust 无法完成 Apple 要求的年龄检查。请检查网络连接和 Apple 账户设置，然后重试。",
   "age_gate_retry": "重试",
   "age_gate_try_apple_range": "尝试使用 Apple 年龄范围",
   "age_range_blocked_title": "此年龄范围无法使用 Trust",
@@ -523,5 +523,10 @@
   "age_range_sharing_declined_title": "分享年龄范围后即可继续",
   "app_transaction_checking": "正在验证 App Store 信息…",
   "app_transaction_unavailable_body": "Trust 无法确认此 App 的 App Store 交易。请检查网络连接，然后重试。",
-  "app_transaction_unavailable_title": "无法验证此 App"
+  "app_transaction_unavailable_title": "无法验证此 App",
+  "app_verification_title": "App 验证",
+  "stop_sharing_confirm": "停止与%@共享？",
+  "stop_sharing_confirm_body": "在你重新选择共享模式之前，对方将无法看到你的位置或在家／外出状态。",
+  "remove_person_confirm_body": "对方将从你的列表中移除，双方的共享都会停止。",
+  "stop_all_confirm_body": "在你重新选择共享模式之前，任何人都无法看到你的位置或在家／外出状态。"
 }
