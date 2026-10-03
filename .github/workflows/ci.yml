@@ -157,12 +157,12 @@ jobs:
                 .skippedTests == 9 and
                 .failedTests == 0
               '
-      - name: Collect DEBUG sharing presentation trace
+      - name: Collect DEBUG UI interaction traces
         if: always() && env.TRUST_SIMULATOR_ID != ''
         continue-on-error: true
         run: |
           xcrun simctl spawn "$TRUST_SIMULATOR_ID" log show --style compact --last 30m \
-            --predicate 'subsystem == "com.collapsetechnologies.trust" AND category == "SharingFlow"' \
+            --predicate 'subsystem == "com.collapsetechnologies.trust" AND (category == "SharingFlow" OR category == "InteractionFlow")' \
             | tee "$RUNNER_TEMP/trust-sharing-flow.log"
       - name: Upload iOS test result bundle
         if: failure()

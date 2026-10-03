@@ -144,7 +144,14 @@ struct YouView: View {
                 .trustFont(15, weight: .medium)
                 .foregroundStyle(palette.ink)
             Spacer(minLength: 8)
-            Picker(TrustCopy.language, selection: $appLanguage) {
+            Picker(TrustCopy.language, selection: Binding(
+                get: { appLanguage },
+                set: { language in
+                    let value = TrustAppLanguage(rawValue: language) ?? .system
+                    model.traceUIInteraction("language callback: \(value.rawValue)")
+                    appLanguage = language
+                }
+            )) {
                 ForEach(TrustAppLanguage.allCases) { option in
                     Text(option.title).tag(option.rawValue)
                 }
@@ -154,6 +161,10 @@ struct YouView: View {
             .accessibilityLabel(TrustCopy.language)
             .accessibilityValue((TrustAppLanguage(rawValue: appLanguage) ?? .system).title)
             .accessibilityIdentifier("language-preference")
+            .onChange(of: appLanguage) { _, language in
+                let value = TrustAppLanguage(rawValue: language) ?? .system
+                model.traceUIInteraction("picker language observed: \(value.rawValue)")
+            }
         }
         .padding(.horizontal, 14)
         .frame(minHeight: 52)

@@ -112,7 +112,9 @@ final class AppModel: ObservableObject {
             }
         }
     }
-    @Published var selectedTab: MainTab = .circle
+    @Published var selectedTab: MainTab = .circle {
+        didSet { traceUIInteraction("tab assigned: \(selectedTab.rawValue)") }
+    }
     @Published var pendingPushDestination: TrustPushDestination?
     @Published var circlePath: [CircleRoute] = []
     @Published var snapshot: CircleSnapshot?
@@ -146,6 +148,15 @@ final class AppModel: ObservableObject {
     /// Pause sheet. Set from Sharing, or from a screenshot launch.
     @Published var pauseSheetPersonID: UUID? {
         didSet { tracePausePresentation(pauseSheetPersonID == nil ? "selection cleared" : "selection assigned") }
+    }
+
+    /// Fixed control/state labels only; active solely in DEBUG UI-test launches.
+    func traceUIInteraction(_ event: String) {
+        #if DEBUG
+        guard isUITestLaunch else { return }
+        Logger(subsystem: "com.collapsetechnologies.trust", category: "InteractionFlow")
+            .notice("UI interaction: \(event, privacy: .public)")
+        #endif
     }
 
     func tracePausePresentation(_ event: String) {

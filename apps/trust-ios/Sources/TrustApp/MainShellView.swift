@@ -62,7 +62,12 @@ struct MainShellView: View {
             guard destination != nil else { return }
             routePendingPushDestination()
         }
+        .onChange(of: appLanguage) { _, language in
+            let value = TrustAppLanguage(rawValue: language) ?? .system
+            model.traceUIInteraction("shell language observed: \(value.rawValue)")
+        }
         .onChange(of: model.selectedTab) { _, tab in
+            model.traceUIInteraction("shell tab observed: \(tab.rawValue)")
             Task {
                 // Sharing is where a newly accepted relationship must become visible.
                 // The ordinary freshness throttle can skip this read when acceptance
@@ -150,6 +155,7 @@ struct MainShellView: View {
             ForEach(MainTab.allCases) { tab in
                 let selected = model.selectedTab == tab
                 Button {
+                    model.traceUIInteraction("tab callback: \(tab.rawValue)")
                     model.selectedTab = tab
                 } label: {
                     VStack(spacing: 5) {
