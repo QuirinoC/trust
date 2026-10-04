@@ -371,6 +371,108 @@ final class TrustUsageTests: XCTestCase {
         add(screenshot)
     }
 
+    func testWideWindowKeepsPeopleToTheRightOfTheMap() throws {
+        let app = XCUIApplication()
+        app.launchEnvironment["TRUST_DEMO"] = "1"
+        app.launchEnvironment["TRUST_UI_TEST"] = "1"
+        app.launchArguments = ["-trust.appLanguage", "en", "-appearancePreference", "light"]
+        app.launch()
+        defer { app.terminate() }
+        XCTAssertTrue(app.buttons["tab-circle"].waitForExistence(timeout: 20))
+        let window = app.windows.firstMatch
+        XCTAssertTrue(window.waitForExistence(timeout: 5))
+        // CI runs this exact test separately on a wide iPad window and requires a
+        // passing result there. Compact windows exercise the phone layout instead.
+        guard window.frame.width >= 760 else {
+            throw XCTSkip("The wide People layout requires a window at least 760 points wide; CI covers it in the dedicated iPad lane.")
+        }
+        let list = app.descendants(matching: .any)["people-list"]
+        XCTAssertTrue(list.waitForExistence(timeout: 8), app.debugDescription)
+        let note = XCTAttachment(string: "window \(window.frame) people-list \(list.frame)")
+        note.lifetime = .keepAlways
+        add(note)
+        let shot = XCTAttachment(screenshot: app.screenshot())
+        shot.name = "Duo People layout"
+        shot.lifetime = .keepAlways
+        add(shot)
+        XCTAssertGreaterThanOrEqual(window.frame.width, 760, "A window at least 760 points wide should use the side-by-side layout. Window \(window.frame).")
+        XCTAssertGreaterThan(list.frame.minX, window.frame.width * 0.45, "People should stay to the right of the map. List \(list.frame), window \(window.frame).")
+        XCTAssertLessThan(list.frame.width, window.frame.width * 0.55, "The people panel should not cover the map. List \(list.frame), window \(window.frame).")
+    }
+
+    func testMaximumTextSizeKeepsConnectedSharingControlsReachable() {
+        let app = XCUIApplication()
+        app.launchEnvironment["TRUST_DEMO"] = "1"
+        app.launchEnvironment["TRUST_UI_TEST"] = "1"
+        app.launchArguments = ["-appearancePreference", "light", "-trust.appLanguage", "en",
+                               "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        app.launch()
+        XCTAssertTrue(app.buttons["tab-sharing"].waitForExistence(timeout: 20))
+        app.buttons["tab-sharing"].tap()
+        let window = app.windows.firstMatch
+        let tabBarTop = app.buttons["tab-circle"].frame.minY
+        let sharingScroll = app.scrollViews.firstMatch
+        XCTAssertTrue(sharingScroll.waitForExistence(timeout: 8))
+        func isFullyReachable(_ control: XCUIElement) -> Bool {
+            control.isHittable
+                && control.frame.minY >= sharingScroll.frame.minY
+                && control.frame.maxY <= min(sharingScroll.frame.maxY, tabBarTop) + 0.5
+        }
+        func nudge(_ control: XCUIElement) {
+            let above = control.frame.midY < 180
+            let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: above ? 0.42 : 0.62))
+            let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: above ? 0.62 : 0.46))
+            start.press(forDuration: 0.05, thenDragTo: end)
+        }
+        for identifier in ["sharing-mode-off-maya", "sharing-mode-sealed-maya", "sharing-mode-always-maya", "sharing-actions-maya"] {
+            let control = app.buttons[identifier]
+            XCTAssertTrue(control.waitForExistence(timeout: 5), identifier)
+            var reachable = isFullyReachable(control)
+            for _ in 0..<8 where !reachable {
+                nudge(control)
+                reachable = isFullyReachable(control)
+            }
+            XCTAssertTrue(reachable, "\(identifier) should stay reachable at the largest text size. Frame \(control.frame).\n\(app.debugDescription)")
+            XCTAssertGreaterThanOrEqual(control.frame.height, 44, identifier)
+            XCTAssertGreaterThanOrEqual(control.frame.minY, sharingScroll.frame.minY, identifier)
+            XCTAssertLessThanOrEqual(control.frame.maxY, sharingScroll.frame.maxY + 0.5, identifier)
+            XCTAssertGreaterThanOrEqual(control.frame.minX, 0, identifier)
+            XCTAssertLessThanOrEqual(control.frame.maxX, window.frame.maxX + 1, identifier)
+            XCTAssertLessThanOrEqual(control.frame.maxY, tabBarTop + 1, "\(identifier) overlaps the tab bar. Control \(control.frame), tabs start at \(tabBarTop).")
+        }
+
+        let off = app.buttons["sharing-mode-off-maya"]
+        let sealed = app.buttons["sharing-mode-sealed-maya"]
+        let always = app.buttons["sharing-mode-always-maya"]
+        XCTAssertLessThan(off.frame.midY, sealed.frame.midY, "Accessibility-size sharing modes should stack vertically.")
+        XCTAssertLessThan(sealed.frame.midY, always.frame.midY, "Accessibility-size sharing modes should stack vertically.")
+        for mode in [off, sealed, always] {
+            XCTAssertGreaterThanOrEqual(mode.frame.width, window.frame.width * 0.7, "Mode labels need enough width to remain readable at the largest text size. Frame \(mode.frame).")
+        }
+
+        let tabNames = [
+            ("tab-circle", "People"),
+            ("tab-sharing", "Sharing"),
+            ("tab-log", "Activity"),
+            ("tab-you", "You")
+        ]
+        let tabs = tabNames.map { (app.buttons[$0.0], $0.1) }
+        for (tab, name) in tabs {
+            XCTAssertTrue(tab.isHittable, "\(name) navigation should remain reachable at the largest text size.")
+            XCTAssertTrue(tab.label.contains(name), "Navigation should retain the complete tab name. Found \(tab.label).")
+            XCTAssertGreaterThanOrEqual(tab.frame.width, window.frame.width * 0.4, "Each accessibility navigation cell should have room for its label.")
+            XCTAssertGreaterThanOrEqual(tab.frame.height, 44, "Each navigation cell should retain a 44pt tap target.")
+        }
+        XCTAssertLessThan(tabs[0].0.frame.midY, tabs[2].0.frame.midY, "Accessibility navigation should use two rows.")
+        XCTAssertLessThan(tabs[1].0.frame.midY, tabs[3].0.frame.midY, "Accessibility navigation should use two rows.")
+        XCTAssertLessThan(tabs[0].0.frame.midX, tabs[1].0.frame.midX, "The first navigation row should use two columns.")
+        XCTAssertLessThan(tabs[2].0.frame.midX, tabs[3].0.frame.midX, "The second navigation row should use two columns.")
+        let shot = XCTAttachment(screenshot: app.screenshot())
+        shot.name = "Maximum text - connected Sharing"
+        shot.lifetime = .keepAlways
+        add(shot)
+    }
+
     func testPhoneCodeRequiresTheDisclosedButtonAction() {
         let app = launchDemo(route: "phone")
         XCTAssertTrue(app.textFields["phone-number"].waitForExistence(timeout: 10))
@@ -398,11 +500,51 @@ final class TrustUsageTests: XCTestCase {
             app.launch()
             XCTAssertTrue(app.buttons["tab-sharing"].waitForExistence(timeout: 20))
             app.buttons["tab-sharing"].tap()
+            XCTAssertTrue(app.staticTexts["sharing-intro"].waitForExistence(timeout: 8), "Sharing content should load after the tab tap.")
+            let demoBanner = app.staticTexts["Nine fictional people. Offline — no Sign in with Apple, nothing is sent."]
+            let demoBannerDisappeared = XCTNSPredicateExpectation(
+                predicate: NSPredicate(format: "exists == false"),
+                object: demoBanner
+            )
+            XCTAssertEqual(
+                XCTWaiter.wait(for: [demoBannerDisappeared], timeout: 10),
+                .completed,
+                "Wait for the demo toast to disappear naturally before tapping Add someone."
+            )
+
+            let addButton = app.buttons["add-someone-button"]
+            XCTAssertTrue(addButton.waitForExistence(timeout: 8), "The Add someone action should exist before measuring reachability.")
+            let sharingScroll = app.scrollViews.firstMatch
+            XCTAssertTrue(sharingScroll.waitForExistence(timeout: 5), "Sharing content should remain inside its scroll view.")
+            let sharingTab = app.buttons["tab-sharing"]
+
+            func addButtonIsFullyReachable() -> Bool {
+                let buttonFrame = addButton.frame
+                let scrollFrame = sharingScroll.frame
+                let visibleBottom = min(scrollFrame.maxY, sharingTab.frame.minY)
+                return addButton.exists
+                    && addButton.isHittable
+                    && buttonFrame.width > 0
+                    && buttonFrame.minY >= scrollFrame.minY
+                    && buttonFrame.maxY <= visibleBottom
+            }
+
+            for _ in 0..<4 where !addButtonIsFullyReachable() {
+                let start = sharingScroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.8))
+                let end = sharingScroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.73))
+                start.press(forDuration: 0.05, thenDragTo: end)
+            }
+            XCTAssertTrue(addButton.isHittable, "Add someone should be hittable after bounded scroll nudges.")
+            XCTAssertGreaterThan(addButton.frame.width, 0)
+            XCTAssertGreaterThanOrEqual(addButton.frame.height, 44, "Add someone should retain a 44-point hit target.")
+            XCTAssertGreaterThanOrEqual(addButton.frame.minY, sharingScroll.frame.minY, "Add someone should be fully inside the Sharing scroll view.")
+            XCTAssertLessThanOrEqual(addButton.frame.maxY, min(sharingScroll.frame.maxY, sharingTab.frame.minY), "Add someone should be fully above the tab bar.")
+
             let sharing = XCTAttachment(screenshot: app.screenshot())
             sharing.name = "Accessibility text - Sharing - \(dark ? "dark" : "light")"
             sharing.lifetime = .keepAlways
             add(sharing)
-            app.buttons["add-someone-button"].tap()
+            addButton.tap()
             let field = app.textFields["connection-handle"]
             XCTAssertTrue(field.waitForExistence(timeout: 5))
             field.tap()
@@ -425,6 +567,390 @@ final class TrustUsageTests: XCTestCase {
             app.terminate()
         }
     }
+
+    func testPeopleSheetDetentSurvivesTabChanges() {
+        let app = launchDemo()
+        XCTAssertTrue(app.buttons["tab-circle"].waitForExistence(timeout: 20))
+        dismissDemoBanner(app)
+
+        let detent = app.buttons["people-sheet-detent"]
+        XCTAssertTrue(detent.waitForExistence(timeout: 8))
+        XCTAssertEqual(detent.value as? String, "Half height")
+        detent.tap()
+        XCTAssertTrue(waitForValue("Expanded", on: detent), "The People sheet should expand before changing tabs.")
+
+        app.buttons["tab-sharing"].tap()
+        XCTAssertTrue(app.staticTexts["sharing-intro"].waitForExistence(timeout: 8))
+        app.buttons["tab-you"].tap()
+        XCTAssertTrue(app.staticTexts["You"].waitForExistence(timeout: 8))
+        app.buttons["tab-circle"].tap()
+
+        XCTAssertTrue(detent.waitForExistence(timeout: 8))
+        XCTAssertTrue(waitForValue("Expanded", on: detent), "The People sheet should keep its expanded detent after visiting other tabs.")
+    }
+
+    func testMainTabsPassAccessibilityAudit() throws {
+        var failures: [String] = []
+        var ignoredIssues: [String] = []
+        let previousContinueAfterFailure = continueAfterFailure
+        continueAfterFailure = true
+        defer { continueAfterFailure = previousContinueAfterFailure }
+        for dark in [false, true] {
+            let appearance = dark ? "dark" : "light"
+            let app = launchDemo(dark: dark)
+            defer { app.terminate() }
+            XCTAssertTrue(app.buttons["tab-circle"].waitForExistence(timeout: 20))
+            dismissDemoBanner(app)
+            let window = app.windows.firstMatch
+            XCTAssertTrue(window.waitForExistence(timeout: 5))
+            let windowFrame = window.frame
+            for tab in ["tab-circle", "tab-sharing", "tab-log", "tab-you"] {
+                app.buttons[tab].tap()
+                let contentReady: XCUIElement
+                switch tab {
+                case "tab-circle": contentReady = app.buttons["people-sheet-detent"]
+                case "tab-sharing": contentReady = app.staticTexts["sharing-intro"]
+                case "tab-log": contentReady = app.staticTexts["Activity"].firstMatch
+                default: contentReady = app.buttons["edit-profile-picture"]
+                }
+                XCTAssertTrue(contentReady.waitForExistence(timeout: 8), "Selected content should load before auditing \(tab).")
+                if tab == "tab-you" {
+                    // The profile and personal-location card should both be fully
+                    // visible. A partially scrolled label at the pinned legal footer
+                    // is not a useful contrast sample of the label's actual colors.
+                    let scroll = app.scrollViews["you-content"]
+                    let location = app.buttons["my-location"]
+                    XCTAssertTrue(scroll.waitForExistence(timeout: 8))
+                    XCTAssertTrue(location.waitForExistence(timeout: 8))
+                    for _ in 0..<4 {
+                        if location.frame.minY >= scroll.frame.minY,
+                           location.frame.maxY <= scroll.frame.maxY { break }
+                        let distance = max(20, location.frame.maxY - scroll.frame.maxY + 12)
+                        let start = scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.8))
+                        let end = start.withOffset(CGVector(dx: 0, dy: -min(distance, scroll.frame.height * 0.3)))
+                        start.press(forDuration: 0.1, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.25)
+                    }
+                    XCTAssertTrue(location.isHittable)
+                    XCTAssertGreaterThanOrEqual(location.frame.minY, scroll.frame.minY)
+                    XCTAssertLessThanOrEqual(location.frame.maxY, scroll.frame.maxY)
+                    XCTAssertGreaterThanOrEqual(contentReady.frame.minY, scroll.frame.minY, "The profile remains visible in this audit state.")
+                    XCTAssertLessThanOrEqual(contentReady.frame.maxY, scroll.frame.maxY)
+                }
+                let shot = XCTAttachment(screenshot: app.screenshot())
+                shot.name = "Accessibility audit - \(tab) - \(appearance)"
+                shot.lifetime = .keepAlways
+                add(shot)
+                let audit = recordAccessibilityAudit(
+                    app: app,
+                    context: "\(tab) - \(appearance)",
+                    windowFrame: windowFrame
+                )
+                failures.append(contentsOf: audit.failures)
+                ignoredIssues.append(contentsOf: audit.ignoredIssues)
+            }
+
+            // Score the final People row while it is visible inside the expanded list.
+            app.buttons["tab-circle"].tap()
+            let detent = app.buttons["people-sheet-detent"]
+            XCTAssertTrue(detent.waitForExistence(timeout: 8))
+            if (detent.value as? String) != "Expanded" { detent.tap() }
+            XCTAssertTrue(waitForValue("Expanded", on: detent))
+            let peopleList = app.scrollViews["people-list"]
+            let noah = app.buttons["person-row-noah"]
+            XCTAssertTrue(peopleList.waitForExistence(timeout: 8))
+            XCTAssertTrue(noah.waitForExistence(timeout: 8))
+            for _ in 0..<8 {
+                if noah.isHittable,
+                   noah.frame.minY >= peopleList.frame.minY,
+                   noah.frame.maxY <= peopleList.frame.maxY {
+                    break
+                }
+                peopleList.swipeUp()
+            }
+            XCTAssertTrue(noah.isHittable, "The final People row should be visible before auditing the expanded list.")
+            XCTAssertGreaterThanOrEqual(noah.frame.minY, peopleList.frame.minY)
+            XCTAssertLessThanOrEqual(noah.frame.maxY, peopleList.frame.maxY)
+            let peopleAudit = recordAccessibilityAudit(
+                app: app,
+                context: "People expanded - last row - \(appearance)",
+                windowFrame: windowFrame
+            )
+            failures.append(contentsOf: peopleAudit.failures)
+            ignoredIssues.append(contentsOf: peopleAudit.ignoredIssues)
+
+            // Score the bottom of You as well, where account controls enter the viewport.
+            app.buttons["tab-you"].tap()
+            XCTAssertTrue(app.buttons["edit-profile-picture"].waitForExistence(timeout: 8))
+            let youScrollView = app.scrollViews["you-content"]
+            XCTAssertTrue(youScrollView.waitForExistence(timeout: 8))
+            let deleteAccount = app.buttons["delete-account"]
+            for _ in 0..<8 {
+                if deleteAccount.isHittable,
+                   deleteAccount.frame.minY >= youScrollView.frame.minY,
+                   deleteAccount.frame.maxY <= youScrollView.frame.maxY { break }
+                youScrollView.swipeUp()
+            }
+            XCTAssertTrue(deleteAccount.isHittable, "The bottom account action should be visible before auditing You.")
+            XCTAssertGreaterThanOrEqual(deleteAccount.frame.minY, youScrollView.frame.minY)
+            XCTAssertLessThanOrEqual(deleteAccount.frame.maxY, youScrollView.frame.maxY)
+            let youAudit = recordAccessibilityAudit(
+                app: app,
+                context: "You bottom - \(appearance)",
+                windowFrame: windowFrame
+            )
+            failures.append(contentsOf: youAudit.failures)
+            ignoredIssues.append(contentsOf: youAudit.ignoredIssues)
+        }
+        print("Ignored accessibility audit issues (\(ignoredIssues.count)): \(ignoredIssues.joined(separator: "\n"))")
+        XCTAssertTrue(failures.isEmpty, "Accessibility audit:\n\(failures.joined(separator: "\n"))")
+    }
+
+    private func recordAccessibilityAudit(
+        app: XCUIApplication,
+        context: String,
+        windowFrame: CGRect
+    ) -> (failures: [String], ignoredIssues: [String]) {
+        // The tab bar stays visible and participates in every screen audit. Only the
+        // exact MapKit Legal control, its identified canvas, and proven empty layout
+        // artifacts can be ignored; clipped visible text and controls remain scored.
+        var failures: [String] = []
+        var ignoredIssues: [String] = []
+        // Run every iOS audit type independently so a framework error in one check
+        // does not prevent the remaining checks, screens, or appearance from running.
+        let auditTypes: [(String, XCUIAccessibilityAuditType)] = [
+            ("contrast", .contrast),
+            ("elementDetection", .elementDetection),
+            ("hitRegion", .hitRegion),
+            ("sufficientElementDescription", .sufficientElementDescription),
+            ("dynamicType", .dynamicType),
+            ("textClipped", .textClipped),
+            ("trait", .trait)
+        ]
+        for (auditName, auditType) in auditTypes {
+            print("Accessibility check: \(context) | \(auditName)")
+            let failureCount = failures.count
+            do {
+                try app.performAccessibilityAudit(for: auditType) { issue in
+                    let element = issue.element
+                    let label = element?.label ?? ""
+                    let identifier = element?.identifier ?? ""
+                    let elementType = element?.elementType
+                    let frame = element?.frame
+                    let summary = "\(context) | \(auditName) | \(identifier) | \(label) | \(issue.compactDescription) | \(issue.detailedDescription) | \(String(describing: elementType)) | \(String(describing: frame))"
+                    let mapKitLegalControl = identifier.isEmpty && label == "Legal"
+                    // This exact identifier marks the decorative MapKit canvas, whose rendered
+                    // tiles are not Trust-authored accessibility controls.
+                    let mapCanvas = identifier == "map-screen-canvas"
+                    // Require an empty, unidentified container: zero-frame text is still scored.
+                    let zeroFrameLayoutNode = elementType == .other
+                        && identifier.isEmpty
+                        && label.isEmpty
+                        && frame.map { $0.width <= 0 || $0.height <= 0 } == true
+                    let outsideWindow = frame.map { frame in
+                        let hasFinitePositiveArea = frame.origin.x.isFinite
+                            && frame.origin.y.isFinite
+                            && frame.width.isFinite
+                            && frame.height.isFinite
+                            && frame.maxX.isFinite
+                            && frame.maxY.isFinite
+                            && frame.width > 0
+                            && frame.height > 0
+                        return hasFinitePositiveArea && (
+                            frame.maxX <= windowFrame.minX || frame.minX >= windowFrame.maxX
+                                || frame.maxY <= windowFrame.minY || frame.minY >= windowFrame.maxY
+                        )
+                    } ?? false
+                    // SwiftUI retains offscreen row nodes in the AX tree. Require the
+                    // exact node to belong to an explicitly clipped Trust ScrollView
+                    // and lie wholly outside its viewport. Partly visible text is scored.
+                    let outsideClippedViewport: Bool
+                    var viewportIdentityEvidence: String?
+                    let hasFinitePositiveBounds: (CGRect) -> Bool = { candidateFrame in
+                        candidateFrame.minX.isFinite
+                            && candidateFrame.minY.isFinite
+                            && candidateFrame.width.isFinite
+                            && candidateFrame.height.isFinite
+                            && candidateFrame.maxX.isFinite
+                            && candidateFrame.maxY.isFinite
+                            && candidateFrame.width > 0
+                            && candidateFrame.height > 0
+                    }
+                    let isWhollyOutsideViewport: (CGRect, CGRect) -> Bool = { candidateFrame, viewportFrame in
+                        hasFinitePositiveBounds(candidateFrame)
+                            && hasFinitePositiveBounds(viewportFrame)
+                            && !viewportFrame.intersects(candidateFrame)
+                    }
+                    if let frame, !label.isEmpty,
+                       hasFinitePositiveBounds(frame), let elementType {
+                        outsideClippedViewport = ["people-list", "you-content"].contains { scrollIdentifier in
+                            let scroll = app.scrollViews[scrollIdentifier]
+                            guard scroll.exists else { return false }
+                            let viewportFrame = scroll.frame
+                            guard hasFinitePositiveBounds(viewportFrame),
+                                  isWhollyOutsideViewport(frame, viewportFrame) else { return false }
+                            let matches = scroll.descendants(matching: .any)
+                                .matching(NSPredicate(format: "label == %@", label))
+                                .allElementsBoundByIndex
+                                .filter { candidate in
+                                    candidate.identifier == identifier
+                                        && candidate.label == label
+                                        && candidate.elementType == elementType
+                                }
+                            let sameFrameMatch = matches.contains { candidate in
+                                let candidateFrame = candidate.frame
+                                return isWhollyOutsideViewport(candidateFrame, viewportFrame)
+                                    && abs(candidateFrame.minX - frame.minX) < 0.5
+                                    && abs(candidateFrame.minY - frame.minY) < 0.5
+                                    && abs(candidateFrame.width - frame.width) < 0.5
+                                    && abs(candidateFrame.height - frame.height) < 0.5
+                            }
+                            if sameFrameMatch { return true }
+
+                            guard identifier.hasPrefix("avatar-initials-"),
+                                  identifier.count > "avatar-initials-".count,
+                                  matches.count == 1,
+                                  let candidate = matches.first else { return false }
+                            let candidateFrame = candidate.frame
+                            guard isWhollyOutsideViewport(candidateFrame, viewportFrame) else { return false }
+                            viewportIdentityEvidence = "matched stable clipped avatar identity \(identifier), label \(label), type \(elementType), issue frame \(frame), candidate frame \(candidateFrame), viewport \(scrollIdentifier) \(viewportFrame)"
+                            return true
+                        }
+                    } else {
+                        outsideClippedViewport = false
+                    }
+                    if mapKitLegalControl || mapCanvas || zeroFrameLayoutNode || outsideWindow || outsideClippedViewport {
+                        let recordedIssue = summary + (viewportIdentityEvidence.map { " | \($0)" } ?? "")
+                        ignoredIssues.append(recordedIssue)
+                        print("Ignored audit issue: \(recordedIssue)")
+                        return true
+                    }
+                    failures.append(summary)
+                    print("Audit issue: \(summary)")
+                    return false
+                }
+            } catch {
+                let summary = "\(context) | \(auditName) | Audit could not complete: \(error)"
+                failures.append(summary)
+                print(summary)
+            }
+            if failures.count > failureCount {
+                let tree = XCTAttachment(string: app.debugDescription)
+                tree.name = "Accessibility failure tree - \(context) - \(auditName)"
+                tree.lifetime = .keepAlways
+                add(tree)
+                let shot = XCTAttachment(screenshot: app.screenshot())
+                shot.name = "Accessibility failure - \(context) - \(auditName)"
+                shot.lifetime = .keepAlways
+                add(shot)
+            }
+        }
+        return (failures, ignoredIssues)
+    }
+
+    private func waitForValue(_ value: String, on element: XCUIElement, timeout: TimeInterval = 5) -> Bool {
+        let expectation = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "value == %@", value),
+            object: element
+        )
+        return XCTWaiter.wait(for: [expectation], timeout: timeout) == .completed
+    }
+
+    private func dismissDemoBanner(_ app: XCUIApplication) {
+        let banner = app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "fictional")).firstMatch
+        guard banner.waitForExistence(timeout: 2) else { return }
+        if banner.isHittable {
+            banner.tap()
+        }
+        XCTAssertTrue(banner.waitForNonExistence(timeout: 6))
+    }
+
+    func testLastPersonRowScrollsClearOfTheTabBar() {
+        let app = launchDemo()
+        XCTAssertTrue(app.buttons["tab-circle"].waitForExistence(timeout: 20))
+        dismissDemoBanner(app)
+        let list = app.scrollViews["people-list"]
+        XCTAssertTrue(list.waitForExistence(timeout: 8))
+        let noah = app.buttons["person-row-noah"]
+        let tabTop = { app.buttons["tab-circle"].frame.minY }
+        for _ in 0..<6 {
+            if noah.exists, noah.isHittable, noah.frame.maxY <= tabTop() - 1, noah.frame.height >= 44 {
+                break
+            }
+            let start = list.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.75))
+            let end = list.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.35))
+            start.press(forDuration: 0.05, thenDragTo: end)
+        }
+        XCTAssertTrue(noah.exists, "Noah should be in the People list.")
+        XCTAssertLessThanOrEqual(
+            noah.frame.maxY,
+            tabTop() + 0.5,
+            "The last person must sit fully above the tab bar. row \(noah.frame) tab \(tabTop())"
+        )
+        XCTAssertGreaterThanOrEqual(noah.frame.height, 44)
+        let shot = XCTAttachment(screenshot: app.screenshot())
+        shot.name = "Last person above the tab bar"
+        shot.lifetime = .keepAlways
+        add(shot)
+    }
+
+    /// Spoken VoiceOver on iOS 27. The service reads the focused element; this walks People
+    /// and Sharing and checks the names a person would hear.
+    func testVoiceOverSpeaksPeopleAndSharing() throws {
+#if compiler(>=6.4)
+        guard #available(iOS 27.0, *) else {
+            throw XCTSkip("Spoken VoiceOver control requires iOS 27.")
+        }
+        let app = launchDemo()
+        XCTAssertTrue(app.buttons["tab-circle"].waitForExistence(timeout: 20))
+        let service = XCUIDevice.shared.voiceOverService
+        addTeardownBlock {
+            if #available(iOS 27.0, *), service.isEnabled {
+                try? service.disable()
+            }
+        }
+        try service.enable()
+        XCTAssertTrue(service.isEnabled)
+
+        var spoken = try voiceOverUtterances(service, limit: 24)
+        app.buttons["tab-sharing"].tap()
+        spoken += try voiceOverUtterances(service, limit: 24)
+        let transcript = spoken.joined(separator: "\n")
+        let attachment = XCTAttachment(string: transcript)
+        attachment.name = "VoiceOver transcript"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+
+        let heard = transcript.lowercased()
+        XCTAssertTrue(heard.contains("people"), transcript)
+        XCTAssertTrue(heard.contains("maya"), transcript)
+        XCTAssertTrue(heard.contains("sharing"), transcript)
+        XCTAssertFalse(heard.contains("presence hidden"), transcript)
+        try service.disable()
+#else
+        throw XCTSkip("Spoken VoiceOver requires the Xcode 27 SDK and iOS 27.")
+#endif
+    }
+
+#if compiler(>=6.4)
+    @available(iOS 27.0, *)
+    private func voiceOverUtterances(_ service: XCUIVoiceOverService, limit: Int) throws -> [String] {
+        var lines: [String] = []
+        if let current = try? service.currentSpeech() {
+            lines.append(current.utterance)
+        }
+        for _ in 0..<limit {
+            let next: XCUIVoiceOverService.Output
+            do {
+                next = try service.moveForward()
+            } catch {
+                break
+            }
+            if lines.contains(next.utterance), lines.count > 6 { break }
+            lines.append(next.utterance)
+        }
+        return lines
+    }
+#endif
 
     private func launchDemo(dark: Bool? = nil, route: String? = nil, forceEnglish: Bool = true) -> XCUIApplication {
         let app = XCUIApplication()

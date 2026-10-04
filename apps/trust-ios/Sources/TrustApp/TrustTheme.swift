@@ -117,7 +117,6 @@ enum TrustTheme {
 
     static func textStyle(for size: CGFloat) -> Font.TextStyle {
         switch size {
-        case ..<12: return .caption2
         case ..<13: return .caption
         case ..<15: return .footnote
         case ..<16: return .subheadline
@@ -158,16 +157,20 @@ enum TrustAppearance: String, CaseIterable, Identifiable {
 }
 
 private struct TrustScaledFont: ViewModifier {
-    @ScaledMetric private var size: CGFloat
+    private let size: CGFloat
     private let weight: Font.Weight
 
     init(size: CGFloat, weight: Font.Weight) {
-        _size = ScaledMetric(wrappedValue: size, relativeTo: TrustTheme.textStyle(for: size))
+        self.size = size
         self.weight = weight
     }
 
     func body(content: Content) -> some View {
-        content.font(.system(size: size, weight: weight, design: .default))
+        // A text style is what Dynamic Type scales through the accessibility sizes.
+        // Weight is applied separately so the style itself stays a system text style.
+        content
+            .font(.system(TrustTheme.textStyle(for: size), design: .default))
+            .fontWeight(weight)
     }
 }
 
@@ -186,8 +189,8 @@ struct TrustEyebrow: View {
     var body: some View {
         Text(text.uppercased())
             .trustFont(size, weight: .semibold)
-            .tracking(0.7)
-            .foregroundStyle(color ?? palette.muted)
+            .foregroundStyle(color ?? palette.chromeMuted)
+            .fixedSize(horizontal: false, vertical: true)
             .accessibilityAddTraits(.isHeader)
     }
 }
@@ -233,7 +236,10 @@ struct TrustRule: View {
 
 struct TrustHairline: View {
     @Environment(\.trustPalette) private var palette
-    var body: some View { palette.line.frame(height: 1) }
+    var body: some View {
+        palette.line.frame(height: 1)
+            .accessibilityHidden(true)
+    }
 }
 
 struct TrustWordmark: View {
@@ -256,14 +262,14 @@ struct TrustFilledButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
 
     func makeBody(configuration: Configuration) -> some View {
+        let active = isEnabled || isBusy
         configuration.label
             .trustFont(16, weight: .semibold)
-            .foregroundStyle(palette.accentOn.opacity(configuration.isPressed ? 0.76 : 1))
+            .foregroundStyle(active ? palette.accentOn.opacity(configuration.isPressed ? 0.76 : 1) : palette.ink)
             .padding(.horizontal, 20)
             .frame(maxWidth: expand ? .infinity : nil, minHeight: 52)
-            .background(palette.accent.opacity(configuration.isPressed ? 0.86 : 1))
+            .background(active ? palette.accent.opacity(configuration.isPressed ? 0.86 : 1) : palette.line)
             .clipShape(RoundedRectangle(cornerRadius: TrustTheme.controlRadius, style: .continuous))
-            .opacity(isEnabled || isBusy ? 1 : 0.45)
     }
 }
 
@@ -292,7 +298,7 @@ struct TrustTextButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .trustFont(14, weight: .medium)
-            .foregroundStyle((color ?? palette.muted).opacity(configuration.isPressed ? 0.55 : 1))
+            .foregroundStyle(color ?? palette.chromeMuted)
             .frame(minHeight: 44)
             .contentShape(Rectangle())
     }

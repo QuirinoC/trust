@@ -689,7 +689,7 @@ final class AppModel: ObservableObject {
         await client.prepare()
         guard hasCurrentAgeAuthorization(generation: authorizationGeneration) else { return }
         #if DEBUG
-        if ProcessInfo.processInfo.environment["TRUST_DEV_SESSION"] == "1" {
+        if ProcessInfo.processInfo.environment["TRUST_DEV_SESSION"] == "1", !suppressDevelopmentAutoSignIn {
             await signInWithLocalAPI()
             guard hasCurrentAgeAuthorization(generation: authorizationGeneration) else { return }
             await store.loadProducts()
@@ -760,12 +760,32 @@ final class AppModel: ObservableObject {
         isAgeAccessAllowed = false
         ageGateBlockedByParent = false
         phase = .ageChecking
-        let decision = await ageAssurance.evaluate(
+        let decision: AgeAssuranceCoordinator.Decision
+#if DEBUG
+        let environment = ProcessInfo.processInfo.environment
+        if environment["TRUST_AGE_TEST_MODE"] == "1" {
+            // Explicit UI/API age fixtures must stay local across rechecks such as
+            // sign-out. In particular, do not turn their deterministic DOB path into
+            // a live Apple age-service request. Keep the unavailable fixture closed.
+            decision = environment["TRUST_AGE_TEST_UNAVAILABLE"] == "1"
+                ? .unavailable
+                : ageAssurance.evaluateLocalAttestationForDebugTest()
+        } else {
+            decision = await ageAssurance.evaluate(
+                forceAppleAgeRange: forceAppleAgeRange,
+                isCurrent: { [weak self] in
+                    self?.ageAccessState.isCurrentEvaluation(evaluationGeneration) == true
+                }
+            )
+        }
+#else
+        decision = await ageAssurance.evaluate(
             forceAppleAgeRange: forceAppleAgeRange,
             isCurrent: { [weak self] in
                 self?.ageAccessState.isCurrentEvaluation(evaluationGeneration) == true
             }
         )
+#endif
         guard ageAccessState.isCurrentEvaluation(evaluationGeneration) else { return }
         switch decision {
         case .permitted:
@@ -1549,7 +1569,12 @@ final class AppModel: ObservableObject {
             && accountGeneration == accountGenerationAtStart
     }
 
+    /// An explicit sign-out must stay signed out. Development launches otherwise
+    /// create a new local session as soon as the age check is already permitted.
+    private var suppressDevelopmentAutoSignIn = false
+
     func signOut() {
+        suppressDevelopmentAutoSignIn = true
         clearAccountSession()
         ageAssurance.resetAccountAttestations()
         ageUpdateQuestion = nil

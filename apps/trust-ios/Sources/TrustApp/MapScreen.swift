@@ -223,7 +223,7 @@ struct MapScreen: View {
     }
 
     private func subtitle(_ pin: AppModel.MapPin, _ member: TrustedPerson, now: Date) -> String {
-        let presence = member.visiblePresence?.label ?? TrustCopy.presenceHiddenBadge
+        let presence = member.viewerPresenceLabel
         let time = pin.point.timestamp.formatted(date: .abbreviated, time: .shortened)
         let locationStatus = pin.live
             ? TrustCopy.locationFreshness(timestamp: pin.point.timestamp, now: now)

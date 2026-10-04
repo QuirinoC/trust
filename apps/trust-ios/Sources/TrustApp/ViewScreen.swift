@@ -197,7 +197,7 @@ struct ViewScreen: View {
         if let presence = member.visiblePresence {
             TrustBadge(glyph: presence == .home ? "house" : "figure.walk", text: presence.label)
         } else {
-            TrustBadge(glyph: "lock", text: TrustCopy.presenceHiddenBadge)
+            TrustBadge(glyph: "circle.dotted", text: member.viewerPresenceLabel)
         }
     }
 
@@ -318,8 +318,9 @@ struct TrustMapPin: View {
     var body: some View {
         VStack(spacing: 2) {
             Text(initials)
-                .font(TrustTheme.chrome(13, weight: .bold))
+                .font(TrustTheme.label(13))
                 .foregroundStyle(palette.accentOn)
+                .accessibilityHidden(true)
                 .frame(width: 40, height: 40)
                 .background(live ? palette.pinLive : palette.pinLook)
                 .clipShape(Circle())
@@ -338,8 +339,9 @@ struct TrustMapPin: View {
                 .shadow(color: .black.opacity(0.22), radius: 5, y: 2)
             if let ageCaption {
                 Text(ageCaption)
-                    .font(TrustTheme.chrome(9, weight: .semibold))
+                    .font(TrustTheme.label(11))
                     .foregroundStyle(palette.ink)
+                    .accessibilityHidden(true)
                     .padding(.horizontal, 4)
                     .padding(.vertical, 2)
                     .background(palette.paper.opacity(0.94), in: Capsule())

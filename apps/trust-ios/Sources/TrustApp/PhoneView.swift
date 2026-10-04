@@ -128,7 +128,7 @@ struct PhoneView: View {
                     }
 
                     TrustFieldLabel(title: TrustCopy.verificationCode, hint: nil) {
-                        TextField(TrustCopy.codePlaceholderShort, text: $model.phoneCodeDraft)
+                        TextField("", text: $model.phoneCodeDraft, prompt: Text(TrustCopy.codePlaceholderShort).foregroundStyle(palette.muted))
                             .textContentType(.oneTimeCode)
                             .keyboardType(.numberPad)
                             .textInputAutocapitalization(.never)

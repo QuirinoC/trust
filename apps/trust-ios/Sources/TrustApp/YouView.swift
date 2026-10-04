@@ -5,6 +5,7 @@ import TrustCore
 struct YouView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.trustPalette) private var palette
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @AppStorage(TrustAppearance.storageKey) private var appearance = TrustAppearance.system.rawValue
     @AppStorage(TrustAppLanguage.storageKey) private var appLanguage = TrustAppLanguage.system.rawValue
     @State private var showingDeleteAccount = false
@@ -12,51 +13,59 @@ struct YouView: View {
     @State private var showingLocation = false
 
     var body: some View {
-        VStack(spacing: 0) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-                    TrustPageTitle(text: TrustCopy.you)
-                        .padding(.top, 20)
+        GeometryReader { geometry in
+            VStack(spacing: 0) {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0) {
+                        TrustPageTitle(text: TrustCopy.you)
+                            .padding(.top, 20)
 
-                    profileCard
-                        .padding(.top, 22)
+                        profileCard
+                            .padding(.top, 22)
 
-                    myLocationRow
-                        .padding(.top, 20)
-                        .padding(.bottom, 22)
+                        myLocationRow
+                            .padding(.top, 20)
+                            .padding(.bottom, 22)
 
-                    plusCard
-                        .padding(.bottom, 22)
+                        plusCard
+                            .padding(.bottom, 22)
 
-                    TrustSectionHeading(TrustCopy.preferences)
-                        .padding(.bottom, 4)
-                    appearanceRow
-                        .padding(.bottom, 18)
-                    languageRow
-                        .padding(.bottom, 18)
+                        TrustSectionHeading(TrustCopy.preferences)
+                            .padding(.bottom, 4)
+                        appearanceRow
+                            .padding(.bottom, 18)
+                        languageRow
+                            .padding(.bottom, 18)
 
-                    TrustSectionHeading(TrustCopy.account)
-                        .padding(.bottom, 4)
-                    Button(TrustCopy.signOut) { model.signOut() }
-                        .buttonStyle(TrustTextButtonStyle())
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.bottom, 8)
-                    Button(TrustCopy.deleteAccount) { showingDeleteAccount = true }
-                        .buttonStyle(TrustTextButtonStyle(color: palette.danger))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .accessibilityIdentifier("delete-account")
+                        TrustSectionHeading(TrustCopy.account)
+                            .padding(.bottom, 4)
+                        Button(TrustCopy.signOut) { model.signOut() }
+                            .buttonStyle(TrustTextButtonStyle())
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.bottom, 8)
+                            .accessibilityIdentifier("sign-out")
+                        Button(TrustCopy.deleteAccount) { showingDeleteAccount = true }
+                            .buttonStyle(TrustTextButtonStyle(color: palette.danger))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .accessibilityIdentifier("delete-account")
+                    }
+                    .padding(.horizontal, TrustTheme.gutter)
+                    .padding(.bottom, 28)
+                    .trustReadableWidth()
                 }
-                .padding(.horizontal, TrustTheme.gutter)
-                .padding(.bottom, 28)
-                .trustReadableWidth()
+                .clipped()
+                .accessibilityIdentifier("you-content")
+                legalLinks
             }
-            legalLinks
+            .frame(width: geometry.size.width, height: geometry.size.height)
+            .clipped()
         }
         .background(palette.paper.ignoresSafeArea())
         .confirmationDialog(TrustCopy.deleteAccountConfirm, isPresented: $showingDeleteAccount, titleVisibility: .visible) {
             Button(TrustCopy.deleteAccount, role: .destructive) {
                 Task { await model.deleteAccount() }
             }
+            .accessibilityIdentifier("delete-account-confirm")
             Button(TrustCopy.cancel, role: .cancel) {}
         }
         .sheet(isPresented: $showingAvatarPicker) {
@@ -82,20 +91,14 @@ struct YouView: View {
             Rectangle()
                 .fill(palette.line)
                 .frame(height: 1)
-            HStack(spacing: 8) {
-                Link(TrustCopy.privacy, destination: AppConfiguration.privacyURL)
-                    .frame(minHeight: 44)
-                Text("·")
-                Link(TrustCopy.terms, destination: AppConfiguration.termsURL)
-                    .frame(minHeight: 44)
-                Text("·")
-                Link(TrustCopy.support, destination: AppConfiguration.supportURL)
-                    .frame(minHeight: 44)
-                    .accessibilityIdentifier("support-link")
+            let layout = dynamicTypeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(spacing: 0))
+                : AnyLayout(HStackLayout(spacing: 16))
+            layout {
+                legalLink(TrustCopy.privacy, url: AppConfiguration.privacyURL, identifier: "privacy-link")
+                legalLink(TrustCopy.terms, url: AppConfiguration.termsURL, identifier: "terms-link")
+                legalLink(TrustCopy.support, url: AppConfiguration.supportURL, identifier: "support-link")
             }
-            .font(TrustTheme.ui(12))
-            .foregroundStyle(palette.muted)
-            .tint(palette.muted)
             .frame(maxWidth: .infinity)
         }
         .padding(.horizontal, TrustTheme.gutter)
@@ -104,19 +107,40 @@ struct YouView: View {
         .background(palette.paper)
     }
 
+    private func legalLink(_ title: String, url: URL, identifier: String) -> some View {
+        Link(title, destination: url)
+            .font(.body)
+            .foregroundStyle(Color.primary)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, minHeight: 44)
+            .contentShape(Rectangle())
+            .accessibilityIdentifier(identifier)
+            .accessibilityRemoveTraits(.isButton)
+            .accessibilityAddTraits(.isLink)
+    }
+
     // MARK: Profile and personal settings
 
     private var appearanceRow: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "circle.lefthalf.filled")
-                .font(.system(size: 18))
-                .foregroundStyle(palette.accent)
-                .frame(width: 28)
-                .accessibilityHidden(true)
-            Text(TrustCopy.appearance)
-                .trustFont(15, weight: .medium)
-                .foregroundStyle(palette.ink)
-            Spacer(minLength: 8)
+        let usesStackedLayout = dynamicTypeSize.isAccessibilitySize
+        let layout = usesStackedLayout
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
+            : AnyLayout(HStackLayout(spacing: 12))
+        return layout {
+            HStack(spacing: 12) {
+                Image(systemName: "circle.lefthalf.filled")
+                    .font(.system(size: 18))
+                    .foregroundStyle(palette.accent)
+                    .frame(width: 28)
+                    .accessibilityHidden(true)
+                Text(TrustCopy.appearance)
+                    .trustFont(15, weight: .medium)
+                    .foregroundStyle(palette.ink)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if !usesStackedLayout {
+                Spacer(minLength: 8)
+            }
             Picker(TrustCopy.appearance, selection: $appearance) {
                 ForEach(TrustAppearance.allCases) { option in
                     Text(option.title).tag(option.rawValue)
@@ -127,6 +151,7 @@ struct YouView: View {
             .accessibilityLabel(TrustCopy.appearance)
             .accessibilityValue((TrustAppearance(rawValue: appearance) ?? .system).title)
             .accessibilityIdentifier("appearance-preference")
+            .frame(maxWidth: usesStackedLayout ? .infinity : nil, alignment: .leading)
         }
         .padding(.horizontal, 14)
         .frame(minHeight: 52)
@@ -134,16 +159,25 @@ struct YouView: View {
     }
 
     private var languageRow: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "globe")
-                .font(.system(size: 18))
-                .foregroundStyle(palette.accent)
-                .frame(width: 28)
-                .accessibilityHidden(true)
-            Text(TrustCopy.language)
-                .trustFont(15, weight: .medium)
-                .foregroundStyle(palette.ink)
-            Spacer(minLength: 8)
+        let usesStackedLayout = dynamicTypeSize.isAccessibilitySize
+        let layout = usesStackedLayout
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
+            : AnyLayout(HStackLayout(spacing: 12))
+        return layout {
+            HStack(spacing: 12) {
+                Image(systemName: "globe")
+                    .font(.system(size: 18))
+                    .foregroundStyle(palette.accent)
+                    .frame(width: 28)
+                    .accessibilityHidden(true)
+                Text(TrustCopy.language)
+                    .trustFont(15, weight: .medium)
+                    .foregroundStyle(palette.ink)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if !usesStackedLayout {
+                Spacer(minLength: 8)
+            }
             Picker(TrustCopy.language, selection: Binding(
                 get: { appLanguage },
                 set: { language in
@@ -165,6 +199,7 @@ struct YouView: View {
                 let value = TrustAppLanguage(rawValue: language) ?? .system
                 model.traceUIInteraction("picker language observed: \(value.rawValue)")
             }
+            .frame(maxWidth: usesStackedLayout ? .infinity : nil, alignment: .leading)
         }
         .padding(.horizontal, 14)
         .frame(minHeight: 52)
@@ -202,6 +237,8 @@ struct YouView: View {
                             .foregroundStyle(palette.muted)
                     }
                     .buttonStyle(.plain)
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
                     .accessibilityLabel(TrustCopy.copyHandle)
                     .accessibilityIdentifier("copy-own-handle")
                     .accessibilityValue("@\(handle)")
@@ -407,10 +444,11 @@ struct ViewLogRow: View {
             Text(event.logLine(youID: youID))
                 .font(TrustTheme.ui(14))
                 .foregroundStyle(palette.ink)
-            Text("\(event.at.formatted(date: .omitted, time: .shortened)) · \(event.logKindLabel)")
+                .fixedSize(horizontal: false, vertical: true)
+            Text("\(event.at.formatted(date: .abbreviated, time: .shortened)) · \(event.logKindLabel)")
                 .font(TrustTheme.ui(12))
                 .foregroundStyle(palette.muted)
-                .accessibilityLabel("\(event.at.formatted(date: .complete, time: .shortened)) · \(event.logKindLabel)")
+                .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.vertical, 12)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -443,6 +481,7 @@ struct ViewLogView: View {
                         .padding(.bottom, 18)
                 } else {
                     Color.clear.frame(height: 12)
+                        .accessibilityHidden(true)
                 }
 
                 if model.lookLog.isEmpty {
@@ -479,6 +518,7 @@ struct ViewLogView: View {
                     }
                     .buttonStyle(TrustOutlineButtonStyle(compact: true))
                     .padding(.top, 18)
+                    .accessibilityIdentifier("export-log")
                 }
             }
             .padding(.horizontal, TrustTheme.gutter)

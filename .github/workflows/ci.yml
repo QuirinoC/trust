@@ -41,10 +41,18 @@ jobs:
       - name: Run API and Postgres integration tests
         env:
           ConnectionStrings__Postgres: Host=127.0.0.1;Port=5433;Database=trust;Username=trust;Password=trust
-        run: dotnet test apps/trust-api/TrustApi.sln --configuration Release
+        run: >-
+          dotnet test apps/trust-api/TrustApi.sln
+          --configuration Release
+          --results-directory "$RUNNER_TEMP/trust-api-results"
+          --logger "trx;LogFileName=trust-api.trx"
+      - name: Verify PostgreSQL integration coverage
+        run: python3 apps/trust-ios/Scripts/verify_api_postgres_coverage.py "$RUNNER_TEMP/trust-api-results/trust-api.trx"
 
   ios:
-    runs-on: macos-26
+    runs-on: xcode-27
+    env:
+      DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer
     steps:
       - uses: actions/checkout@v4
       - name: Validate localization coverage and freshness
@@ -52,13 +60,26 @@ jobs:
           python3 apps/trust-ios/Scripts/emit_localizations.py
           python3 apps/trust-ios/Scripts/validate_localizations.py
           git diff --exit-code -- 'apps/trust-ios/Resources/**/Localizable.strings' 'apps/trust-ios/Resources/**/InfoPlist.strings'
-      - uses: maxim-lobanov/setup-xcode@v1
-        with:
-          xcode-version: "26.6"
+      - name: Verify default Xcode 27 toolchain
+        run: |
+          if [[ ! -d "$DEVELOPER_DIR" ]]; then
+            echo "The expected Xcode developer directory is missing: $DEVELOPER_DIR"
+            exit 1
+          fi
+          xcodebuild -version | tee "$RUNNER_TEMP/trust-xcode-version.txt"
+          xcode_path=$(xcode-select -p)
+          echo "Selected Xcode: $xcode_path"
+          xcode_version=$(awk '/^Xcode / { print $2; exit }' "$RUNNER_TEMP/trust-xcode-version.txt")
+          ios_sdk_version=$(xcrun --sdk iphonesimulator --show-sdk-version)
+          echo "iOS Simulator SDK: $ios_sdk_version"
+          if [[ "$xcode_version" != 27.* || "$ios_sdk_version" != 27.* ]]; then
+            echo "Expected Xcode 27 and iOS Simulator SDK 27; got Xcode '$xcode_version', SDK '$ios_sdk_version' from '$xcode_path'."
+            exit 1
+          fi
       - name: Install and boot iPhone 17 Pro simulator
         run: |
           find_available_runtime() {
-            xcrun simctl list runtimes -j | jq -r '[.runtimes[] | select(.isAvailable and (.identifier | startswith("com.apple.CoreSimulator.SimRuntime.iOS-")))] | sort_by(.version | split(".") | map(tonumber)) | last | .identifier // empty'
+            xcrun simctl list runtimes -j | jq -r '[.runtimes[] | select(.isAvailable and (.identifier | startswith("com.apple.CoreSimulator.SimRuntime.iOS-")) and (.version | startswith("27.")))] | sort_by(.version | split(".") | map(tonumber)) | last | .identifier // empty'
           }
 
           runtime_id=$(find_available_runtime)
@@ -88,6 +109,48 @@ jobs:
           -derivedDataPath "$RUNNER_TEMP/trust-derived-data"
           CODE_SIGNING_ALLOWED=NO
           test
+      - name: Install and boot wide iPad simulator
+        run: |
+          runtime_id=$(xcrun simctl list runtimes -j | jq -r '[.runtimes[] | select(.isAvailable and (.identifier | startswith("com.apple.CoreSimulator.SimRuntime.iOS-")) and (.version | startswith("27.")))] | sort_by(.version | split(".") | map(tonumber)) | last | .identifier // empty')
+          device_type_id=$(xcrun simctl list devicetypes -j | jq -r '[.devicetypes[] | select(.name | startswith("iPad Pro 13-inch"))] | sort_by(.name) | first | .identifier // empty')
+          if [[ -z "$runtime_id" || -z "$device_type_id" ]]; then
+            echo "Could not find an available iOS runtime or iPad Pro 13-inch simulator type."
+            xcrun simctl list runtimes
+            xcrun simctl list devicetypes | grep -F 'iPad Pro 13-inch' || true
+            exit 1
+          fi
+
+          simulator_id=$(xcrun simctl create "Trust CI Wide iPad" "$device_type_id" "$runtime_id")
+          echo "TRUST_WIDE_SIMULATOR_ID=$simulator_id" >> "$GITHUB_ENV"
+          xcrun simctl boot "$simulator_id"
+          xcrun simctl bootstatus "$simulator_id" -b
+      - name: Run wide-window layout test on iPad
+        run: >-
+          xcodebuild
+          -project apps/trust-ios/Trust.xcodeproj
+          -scheme Trust
+          -destination "platform=iOS Simulator,id=$TRUST_WIDE_SIMULATOR_ID"
+          -derivedDataPath "$RUNNER_TEMP/trust-derived-data"
+          -only-testing:TrustUITests/TrustUsageTests/testWideWindowKeepsPeopleToTheRightOfTheMap
+          -resultBundlePath "$RUNNER_TEMP/trust-wide-layout.xcresult"
+          CODE_SIGNING_ALLOWED=NO
+          test
+      - name: Verify wide-window layout test identity passed
+        if: always()
+        run: |
+          result_bundle="$RUNNER_TEMP/trust-wide-layout.xcresult"
+          if [[ ! -d "$result_bundle" ]]; then
+            echo "The wide-window iPad test result bundle is missing."
+            exit 1
+          fi
+          xcrun xcresulttool get test-results summary --path "$result_bundle" \
+            | tee "$RUNNER_TEMP/trust-wide-layout-summary.json"
+          xcrun xcresulttool get test-results tests --path "$result_bundle" \
+            > "$RUNNER_TEMP/trust-wide-layout-tests.json"
+          python3 apps/trust-ios/Scripts/verify_xcresult_test_identity.py \
+            --summary "$RUNNER_TEMP/trust-wide-layout-summary.json" \
+            --tests "$RUNNER_TEMP/trust-wide-layout-tests.json" \
+            --identity TrustUsageTests/testWideWindowKeepsPeopleToTheRightOfTheMap
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 9.0.x
@@ -148,15 +211,14 @@ jobs:
             exit 1
           fi
 
-          xcrun xcresulttool get test-results summary --path "$result_bundle" --format json \
-            | tee "$RUNNER_TEMP/trust-local-e2e-summary.json" \
-            | jq -e '
-                .result == "Passed" and
-                .totalTestCount == 15 and
-                .passedTests == 5 and
-                .skippedTests == 10 and
-                .failedTests == 0
-              '
+          xcrun xcresulttool get test-results summary --path "$result_bundle" \
+            | tee "$RUNNER_TEMP/trust-local-e2e-summary.json"
+          xcrun xcresulttool get test-results tests --path "$result_bundle" \
+            > "$RUNNER_TEMP/trust-local-e2e-tests.json"
+          python3 apps/trust-ios/Scripts/verify_local_e2e_coverage.py \
+            --summary "$RUNNER_TEMP/trust-local-e2e-summary.json" \
+            --tests "$RUNNER_TEMP/trust-local-e2e-tests.json" \
+            --source apps/trust-ios/Tests/TrustUITests/TrustRealAPIFeatureTests.swift
       - name: Collect DEBUG UI interaction traces
         if: always() && env.TRUST_SIMULATOR_ID != ''
         continue-on-error: true
@@ -173,6 +235,10 @@ jobs:
             ${{ runner.temp }}/trust-derived-data/Logs/Test/*.xcresult
             ${{ runner.temp }}/trust-local-e2e.xcresult
             ${{ runner.temp }}/trust-local-e2e-summary.json
+            ${{ runner.temp }}/trust-local-e2e-tests.json
+            ${{ runner.temp }}/trust-wide-layout.xcresult
+            ${{ runner.temp }}/trust-wide-layout-summary.json
+            ${{ runner.temp }}/trust-wide-layout-tests.json
             ${{ runner.temp }}/trust-local-e2e-api.log
             ${{ runner.temp }}/trust-sharing-flow.log
           if-no-files-found: warn

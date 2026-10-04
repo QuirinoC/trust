@@ -6,7 +6,9 @@ struct MainShellView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.trustPalette) private var palette
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @AppStorage(TrustAppLanguage.storageKey) private var appLanguage = TrustAppLanguage.system.rawValue
+    @State private var tabBarHeight: CGFloat = 68
 
     var body: some View {
         VStack(spacing: 0) {
@@ -14,25 +16,37 @@ struct MainShellView: View {
                 TrustOfflineBanner(since: since) { Task { await model.refresh() } }
             }
             ZStack {
+                // Keep People mounted so its map camera and sheet detent survive tab
+                // changes. CircleView renders only Color.clear while another tab is
+                // selected, so the MapKit view itself stays unmounted.
                 CircleView()
-                    .opacity(model.selectedTab == .circle ? 1 : 0)
+                    .zIndex(model.selectedTab == .circle ? 1 : 0)
                     .allowsHitTesting(model.selectedTab == .circle)
                     .accessibilityHidden(model.selectedTab != .circle)
-                SharingView()
-                    .opacity(model.selectedTab == .sharing ? 1 : 0)
-                    .allowsHitTesting(model.selectedTab == .sharing)
-                    .accessibilityHidden(model.selectedTab != .sharing)
-                ViewLogView(inSheet: false, asTab: true)
-                    .opacity(model.selectedTab == .log ? 1 : 0)
-                    .allowsHitTesting(model.selectedTab == .log)
-                    .accessibilityHidden(model.selectedTab != .log)
-                YouView()
-                    .opacity(model.selectedTab == .you ? 1 : 0)
-                    .allowsHitTesting(model.selectedTab == .you)
-                    .accessibilityHidden(model.selectedTab != .you)
+
+                if model.selectedTab != .circle {
+                    Group {
+                        switch model.selectedTab {
+                        case .circle:
+                            EmptyView()
+                        case .sharing:
+                            SharingView()
+                        case .log:
+                            ViewLogView(inSheet: false, asTab: true)
+                        case .you:
+                            YouView()
+                        }
+                    }
+                    .zIndex(1)
+                }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             tabBar
+                .onGeometryChange(for: CGFloat.self) { proxy in
+                    proxy.size.height
+                } action: { height in
+                    tabBarHeight = height
+                }
                 // TrustCopy resolves these titles to Strings outside SwiftUI's
                 // locale lookup. Refresh only the bar when the preference changes.
                 .id(appLanguage)
@@ -42,7 +56,7 @@ struct MainShellView: View {
             if let toast = model.toast {
                 TrustToastView(toast: toast) { model.toast = nil }
                     .padding(.horizontal, 20)
-                    .padding(.bottom, 68)
+                    .padding(.bottom, tabBarHeight)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
@@ -151,53 +165,24 @@ struct MainShellView: View {
     }
 
     private var tabBar: some View {
-        HStack(spacing: 4) {
-            ForEach(MainTab.allCases) { tab in
-                let selected = model.selectedTab == tab
-                Button {
-                    model.traceUIInteraction("tab callback: \(tab.rawValue)")
-                    model.selectedTab = tab
-                } label: {
-                    VStack(spacing: 5) {
-                        Image(systemName: tab.systemImage)
-                            .font(.system(size: 19, weight: selected ? .semibold : .regular))
-                            .frame(height: 21)
-                            .overlay(alignment: .topTrailing) {
-                                if tab == .sharing, model.connectionRequests.incoming.count > 0 {
-                                    Text(model.connectionRequests.incoming.count > 9 ? "9+" : "\(model.connectionRequests.incoming.count)")
-                                        .font(.system(size: 9, weight: .bold))
-                                        .foregroundStyle(.white)
-                                        .padding(.horizontal, 4)
-                                        .frame(minWidth: 15, minHeight: 15)
-                                        .background(Capsule().fill(palette.danger))
-                                        .offset(x: 9, y: -7)
-                                        .accessibilityHidden(true)
-                                }
-                            }
-                        Text(tab.title)
-                            .font(.system(size: 11, weight: selected ? .semibold : .medium))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.8)
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(spacing: 2) {
+                    HStack(spacing: 4) {
+                        tabButton(.circle, accessibilityLayout: true)
+                        tabButton(.sharing, accessibilityLayout: true)
                     }
-                    .foregroundStyle(selected ? palette.accent : palette.muted)
-                    .frame(maxWidth: .infinity, minHeight: 56)
-                    .background {
-                        if selected {
-                            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                .fill(palette.accentSoft)
-                                .padding(.horizontal, 4)
-                        }
+                    HStack(spacing: 4) {
+                        tabButton(.log, accessibilityLayout: true)
+                        tabButton(.you, accessibilityLayout: true)
                     }
-                    .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel(
-                    tab == .sharing && !model.connectionRequests.incoming.isEmpty
-                        ? TrustCopy.sharingRequestsAccessibility(model.connectionRequests.incoming.count)
-                        : tab.title
-                )
-                .accessibilityIdentifier("tab-\(tab.rawValue)")
-                .accessibilityAddTraits(selected ? .isSelected : [])
+            } else {
+                HStack(spacing: 4) {
+                    ForEach(MainTab.allCases) { tab in
+                        tabButton(tab, accessibilityLayout: false)
+                    }
+                }
             }
         }
         .padding(.horizontal, 10)
@@ -205,6 +190,74 @@ struct MainShellView: View {
         .padding(.bottom, 4)
         .background(palette.surface.ignoresSafeArea(edges: .bottom))
         .overlay(alignment: .top) { Rectangle().fill(palette.line).frame(height: 0.7) }
-        .shadow(color: .black.opacity(0.05), radius: 12, x: 0, y: -4)
+    }
+
+    private func tabButton(_ tab: MainTab, accessibilityLayout: Bool) -> some View {
+        let selected = model.selectedTab == tab
+        return Button {
+            model.traceUIInteraction("tab callback: \(tab.rawValue)")
+            model.selectedTab = tab
+        } label: {
+            Group {
+                if accessibilityLayout {
+                    VStack(spacing: 2) {
+                        tabImage(tab, selected: selected, accessibilityLayout: true)
+                            .frame(height: 20)
+                        Text(tab.title)
+                            .font(.caption)
+                            .foregroundStyle(Color.primary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 56)
+                } else {
+                    VStack(spacing: 5) {
+                        tabImage(tab, selected: selected, accessibilityLayout: false)
+                        Text(tab.title)
+                            .font(.caption)
+                            .foregroundStyle(Color.primary)
+                            .lineLimit(2)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 56)
+                }
+            }
+            .background {
+                if selected {
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(palette.accentSoft)
+                        .padding(.horizontal, 4)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(
+            tab == .sharing && !model.connectionRequests.incoming.isEmpty
+                ? TrustCopy.sharingRequestsAccessibility(model.connectionRequests.incoming.count)
+                : tab.title
+        )
+        .accessibilityIdentifier("tab-\(tab.rawValue)")
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
+    private func tabImage(_ tab: MainTab, selected: Bool, accessibilityLayout: Bool) -> some View {
+        Image(systemName: tab.systemImage)
+            .font(accessibilityLayout ? .system(size: 20) : .body)
+            .fontWeight(selected ? .semibold : .regular)
+            .foregroundStyle(Color.primary)
+            .accessibilityHidden(true)
+            .overlay(alignment: .topTrailing) {
+                if tab == .sharing, model.connectionRequests.incoming.count > 0 {
+                    Text(model.connectionRequests.incoming.count > 9 ? "9+" : "\(model.connectionRequests.incoming.count)")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 4)
+                        .frame(minWidth: 15, minHeight: 15)
+                        .background(Capsule().fill(palette.danger))
+                        .offset(x: 9, y: -7)
+                        .accessibilityHidden(true)
+                }
+            }
     }
 }

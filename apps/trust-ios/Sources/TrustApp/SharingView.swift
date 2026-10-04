@@ -5,6 +5,7 @@ import TrustCore
 struct SharingView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.trustPalette) private var palette
+    @Environment(\.colorScheme) private var colorScheme
     @State private var activeConfirmation: SharingConfirmation?
     @State private var showingHomeStatus = false
 
@@ -86,7 +87,7 @@ struct SharingView: View {
 
                     if model.outboundActiveCount > 0 {
                         Button(TrustCopy.stopAll) { activeConfirmation = .stopAll }
-                            .buttonStyle(TrustTextButtonStyle(color: palette.danger))
+                            .buttonStyle(TrustTextButtonStyle(color: colorScheme == .dark ? Color(hex: 0xFFB4AE) : Color(hex: 0x8C1A12)))
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.top, 22)
                             .accessibilityIdentifier("stop-all-sharing")
@@ -102,6 +103,7 @@ struct SharingView: View {
                 // pull-to-refresh gesture to work before anyone has been added.
                 .frame(minHeight: geometry.size.height, alignment: .top)
             }
+            .clipped()
             .background(palette.paper.ignoresSafeArea())
             .refreshable {
                 await model.refresh()
@@ -243,8 +245,9 @@ struct OutboundRow: View {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(spacing: 8) {
                         personLabel
-                        Spacer(minLength: 4)
+                            .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
                         actionsMenu
+                            .fixedSize()
                     }
                     modeControl
                 }
@@ -274,6 +277,7 @@ struct OutboundRow: View {
                         .trustFont(14, weight: .semibold)
                         .foregroundStyle(palette.ink)
                         .lineLimit(1)
+                        .minimumScaleFactor(0.7)
                     if model.isUpdatingShare(personID: member.id) {
                         ProgressView()
                             .controlSize(.mini)
@@ -288,14 +292,25 @@ struct OutboundRow: View {
                         .accessibilityIdentifier("sharing-summary-\(member.firstName.lowercased())")
                 }
             }
+            .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
         }
     }
 
     private var modeControl: some View {
-        HStack(spacing: 1) {
-            modeButton(.off, label: TrustCopy.off)
-            modeButton(.sealed, label: TrustCopy.sealed)
-            modeButton(.always, label: TrustCopy.always, locked: !model.coverage.canShareAvailable)
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(spacing: 3) {
+                    modeButton(.off, label: TrustCopy.off)
+                    modeButton(.sealed, label: TrustCopy.sealed)
+                    modeButton(.always, label: TrustCopy.always, locked: !model.coverage.canShareAvailable)
+                }
+            } else {
+                HStack(spacing: 1) {
+                    modeButton(.off, label: TrustCopy.off)
+                    modeButton(.sealed, label: TrustCopy.sealed)
+                    modeButton(.always, label: TrustCopy.always, locked: !model.coverage.canShareAvailable)
+                }
+            }
         }
         .padding(3)
         .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(palette.surface))

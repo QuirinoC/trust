@@ -154,6 +154,13 @@ class Handler(BaseHTTPRequestHandler):
                 RELEASE_HELD.clear()
             self.respond_json(200, {"armed": True})
             return
+        if self.path == "/__test/arm-circle-failure":
+            with LOCK:
+                STATE["hold_next_circle"] = False
+                STATE["fail_next_circle"] = True
+                STATE["holding"] = False
+            self.respond_json(200, {"armed": True})
+            return
         if self.path == "/__test/arm-stop-all":
             with LOCK:
                 STATE.update({

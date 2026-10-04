@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		B1C2D3E4F5061728394A5B6C /* Trust.storekit in Resources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B5C /* Trust.storekit */; };
 		00585D58BD36F3EFA822DA36 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 63242874F15C117B93D74C2D /* InfoPlist.strings */; };
 		06C22804C292C872FF35523A /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = BF4B0475D551D63F000821DA /* Localizable.strings */; };
 		0A2BDB08D8BE78D54C86926F /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 482B3013C3B6C0C8532F5DE6 /* LoginView.swift */; };
@@ -127,6 +128,7 @@
 
 /* Begin PBXFileReference section */
 		08790634D294CA76972CD49E /* TrustInternal.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = TrustInternal.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A1B2C3D4E5F60718293A4B5C /* Trust.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; name = Trust.storekit; path = "../../Resources/Trust.storekit"; sourceTree = "<group>"; };
 		09A50789FA9420E08F581CBC /* PhoneView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneView.swift; sourceTree = "<group>"; };
 		0D907524021AC2732B10CC12 /* MapKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MapKit.framework; path = System/Library/Frameworks/MapKit.framework; sourceTree = SDKROOT; };
 		0F1E3DD239C74673D1C841A9 /* HandleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HandleView.swift; sourceTree = "<group>"; };
@@ -326,6 +328,7 @@
 				22D943C757DCC8579D80D2C5 /* TrustAgeGateTests.swift */,
 				D0929D5A5788EE4C0AB1DF23 /* TrustRealAPIFeatureTests.swift */,
 				D5A777201D5537C1D7D029F3 /* TrustUsageTests.swift */,
+				A1B2C3D4E5F60718293A4B5C /* Trust.storekit */,
 			);
 			path = TrustUITests;
 			sourceTree = "<group>";
@@ -398,6 +401,7 @@
 			buildConfigurationList = C748FDBE6714445EDE1DFB0F /* Build configuration list for PBXNativeTarget "TrustUITests" */;
 			buildPhases = (
 				12021F589B025AD88394AFBD /* Sources */,
+				C1D2E3F405061728394A5B6D /* Resources */,
 			);
 			buildRules = (
 			);
@@ -508,6 +512,14 @@
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		C1D2E3F405061728394A5B6D /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B1C2D3E4F5061728394A5B6C /* Trust.storekit in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		918475D0B3753E718F5F118C /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;

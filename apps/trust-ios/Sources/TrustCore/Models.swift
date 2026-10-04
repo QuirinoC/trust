@@ -564,10 +564,17 @@ public struct TrustedPerson: Identifiable, Equatable, Sendable {
     /// True only when the server said their share toward you is Off.
     public var isNotSharingWithYou: Bool { inboundPresentation?.isOff == true }
 
-    /// Home / Away when visible; nil means the row reads "presence hidden".
+    /// Home or Away when the other person has shared that status.
+    /// Nil covers Hidden, no grant, and no signal yet. Callers show "No signal"
+    /// so a Hidden choice is not revealed.
     public var visiblePresence: HomePresenceKind? {
         guard let state = homePresence?.state, state == .home || state == .away else { return nil }
         return state
+    }
+
+    /// What another person is allowed to read. Hidden stays indistinguishable from no signal.
+    public var viewerPresenceLabel: String {
+        visiblePresence?.label ?? TrustCopy.presenceUnknown
     }
 
     public init(

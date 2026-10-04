@@ -1695,6 +1695,7 @@ final class LookServiceTests: XCTestCase {
         let row = service.circle.first { $0.id == jordan }!
         XCTAssertNil(row.homePresence)
         XCTAssertNil(row.visiblePresence)
+        XCTAssertEqual(row.viewerPresenceLabel, "No signal", "Hidden must read as no signal, not as a revealed Hidden choice.")
 
         service.setPresenceForTesting(personID: jordan, .away)
         XCTAssertEqual(service.circle.first { $0.id == jordan }!.visiblePresence, .away)

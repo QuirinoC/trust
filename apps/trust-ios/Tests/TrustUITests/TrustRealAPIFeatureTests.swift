@@ -1367,18 +1367,33 @@ final class TrustRealAPIFeatureTests: XCTestCase {
         XCTAssertTrue(noMatch.waitForExistence(timeout: 10), "An unmatched complete phone number should show a no-match state.")
         XCTAssertEqual(app.buttons["invite-to-trust"].label, "Share invite link", "The action should describe the native share sheet, without claiming the number is unregistered.")
         attachScreenshot(of: app, named: "Requests - No match invite")
-        let outgoingBeforeInvite = (api.connectionRequests(token: mainSession.token)?["sent"] as? [[String: Any]])?.count ?? 0
+        let requestsBeforeInvite = try XCTUnwrap(api.connectionRequests(token: mainSession.token), "The sender's connection-request state must be available before sharing an invite.")
+        let outgoingBeforeInvite = try XCTUnwrap(requestsBeforeInvite["sent"] as? [[String: Any]], "The sender's request list must be available before sharing an invite.").count
         app.buttons["invite-to-trust"].tap()
         let nativeShareSheet = app.otherElements["ActivityListView"]
         XCTAssertTrue(nativeShareSheet.waitForExistence(timeout: 10), "Tapping Invite should open the native share sheet.")
-        let copyAction = app.cells.matching(identifier: "actionGroupCell")
+        let copyActionInApp = app.cells.matching(identifier: "actionGroupCell")
             .matching(NSPredicate(format: "label == %@", "Copy")).firstMatch
-        XCTAssertTrue(copyAction.waitForExistence(timeout: 5), "The native share sheet should offer its Copy action.")
+        // iOS 27 exposes the share sheet's remote action list through its own
+        // process, while Trust still sees ActivityListView as a remote container.
+        let sharingUI = XCUIApplication(bundleIdentifier: "com.apple.SharingUIService")
+        let copyActionInSharingUI = sharingUI.descendants(matching: .any)
+            .matching(NSPredicate(format: "label == %@", "Copy")).firstMatch
+        XCTAssertTrue(
+            copyActionInApp.waitForExistence(timeout: 1) || copyActionInSharingUI.waitForExistence(timeout: 5),
+            "The native share sheet should offer its Copy action.\nTrust app:\n\(app.debugDescription)\nSharing UI:\n\(sharingUI.debugDescription)"
+        )
         attachScreenshot(of: app, named: "Requests - Native invite share sheet")
-        app.buttons["header.closeButton"].tap()
+        let closeButtonInApp = app.buttons["header.closeButton"]
+        let closeButtonInSharingUI = sharingUI.descendants(matching: .any)
+            .matching(identifier: "header.closeButton").firstMatch
+        if closeButtonInApp.waitForExistence(timeout: 1), closeButtonInApp.isHittable {
+            closeButtonInApp.tap()
+        } else if closeButtonInSharingUI.waitForExistence(timeout: 3), closeButtonInSharingUI.isHittable {
+            closeButtonInSharingUI.tap()
+        }
         let clearLookup = app.buttons["clear-connection-lookup"]
-        // Earlier iOS 27.1 runs ignored close and swipe, but the latest run dismissed
-        // normally. Keep the swipe fallback conditional so it is used only if needed.
+        // Swipe only if the native close control did not reveal the Add screen.
         if !waitUntil(timeout: 2, condition: { clearLookup.isHittable }) {
             nativeShareSheet.swipeDown()
         }
@@ -1402,7 +1417,9 @@ final class TrustRealAPIFeatureTests: XCTestCase {
         }
         XCTAssertTrue(returnedFromShareSheet, "The Add screen should be recoverable after dismissing or relaunching from the native share sheet.")
         XCTAssertEqual(api.circle(token: mainSession.token)?["you"].flatMap { ($0 as? [String: Any])?["id"] as? String }, mainSession.personID, "Recovery must return to the same authenticated account.")
-        XCTAssertEqual((api.connectionRequests(token: mainSession.token)?["sent"] as? [[String: Any]])?.count ?? 0, outgoingBeforeInvite, "Looking up or sharing an invite must not create a connection request.")
+        let requestsAfterInvite = try XCTUnwrap(api.connectionRequests(token: mainSession.token), "The sender's connection-request state must be available after sharing an invite.")
+        let outgoingAfterInvite = try XCTUnwrap(requestsAfterInvite["sent"] as? [[String: Any]], "The sender's request list must be available after sharing an invite.").count
+        XCTAssertEqual(outgoingAfterInvite, outgoingBeforeInvite, "Looking up or sharing an invite must not create a connection request.")
         if didRelaunchAfterShareSheet {
             let recovery = XCTAttachment(string: "iOS 27.1 did not dismiss the native share sheet with close or swipe; the test explicitly relaunched and reopened Add. The authenticated person ID and server request count were checked after recovery.")
             recovery.name = "Diagnostics - iOS 27.1 share-sheet recovery"
@@ -1784,6 +1801,1321 @@ final class TrustRealAPIFeatureTests: XCTestCase {
         XCTAssertFalse(app.buttons["view-open-map"].exists, "Relaunch must not reveal a snapshot retained from the prior relationship.")
     }
 
+    func testYouDiscoveryOffBlocksPhoneSearchAndDeleteRemovesTheAccount() throws {
+        let suffix = UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
+        let phones = Array(LocalTrustAPI.reservedPhonePool().shuffled().prefix(2))
+        let ownerPhone = "+1\(phones[1])"
+        let ownerHandle = "ow\(suffix.prefix(8))"
+        let ownerDeviceID = "trust-disc-owner-\(suffix)"
+        let ownerName = "Own\(suffix.prefix(6))"
+        let searcher = try makeTestAccount(
+            displayName: "Find\(suffix.prefix(6))",
+            deviceID: "trust-disc-find-\(suffix)",
+            handle: "fd\(suffix.prefix(8))",
+            phone: "+1\(phones[0])"
+        )
+        let owner = try makeTestAccount(
+            displayName: ownerName,
+            deviceID: ownerDeviceID,
+            handle: ownerHandle,
+            phone: ownerPhone
+        )
+        defer {
+            api.deleteAccount(token: owner.token)
+            api.deleteAccount(token: searcher.token)
+        }
+        XCTAssertEqual(api.setPhoneDiscovery(true, token: owner.token), 204)
+        let matched = api.request("POST", "/api/v1/people/lookup", token: searcher.token, body: ["phone": ownerPhone])
+        XCTAssertEqual(matched.status, 200, "An opted-in verified number should resolve before discovery is turned off.")
+        XCTAssertEqual((matched.json as? [String: Any])?["handle"] as? String, ownerHandle)
+
+        let app = launchDevelopmentApp(deviceID: ownerDeviceID, displayName: ownerName)
+        defer { app.terminate() }
+        XCTAssertTrue(app.buttons["tab-you"].waitForExistence(timeout: 20))
+        app.buttons["tab-you"].tap()
+        let toggle = app.switches["phone-discovery-toggle"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 8))
+        XCTAssertTrue(isSwitchOn(toggle), "The You switch should show the server opt-in before the person turns it off.")
+        toggle.tap()
+        XCTAssertTrue(waitUntil(timeout: 10) {
+            (self.api.circle(token: owner.token)?["you"] as? [String: Any])?["discoveryEnabled"] as? Bool == false
+        }, "Turning the You switch off should persist discovery consent as off.")
+        let hidden = api.request("POST", "/api/v1/people/lookup", token: searcher.token, body: ["phone": ownerPhone])
+        XCTAssertEqual(hidden.status, 404, "Phone discovery must stop matching after the person turns it off.")
+        XCTAssertEqual(api.lookupPerson(handle: ownerHandle, token: searcher.token), owner.personID, "An exact handle should still resolve when phone discovery is off.")
+
+        XCTAssertTrue(scrollUpUntilHittable(app.buttons["delete-account"], in: app))
+        app.buttons["delete-account"].tap()
+        let confirm = app.buttons.matching(identifier: "delete-account-confirm")
+        XCTAssertTrue(confirm.firstMatch.waitForExistence(timeout: 5))
+        // SwiftUI exposes two automation aliases for one confirmation action.
+        confirm.element(boundBy: 0).tap()
+        XCTAssertTrue(waitUntil(timeout: 15) {
+            self.api.request("GET", "/api/v1/circle", token: owner.token).status == 401
+        }, "Deleting from You should remove the account on the server.")
+        app.terminate()
+        app.launch()
+        let restoredHandle = app.buttons["copy-own-handle"]
+        let cameBack = restoredHandle.waitForExistence(timeout: 12)
+        if cameBack {
+            XCTAssertNotEqual(restoredHandle.value as? String, "@\(ownerHandle)", "Relaunch must not restore the deleted account's handle.")
+        }
+    }
+
+    func testPauseForOneHourThenSealedAgainPersistsOnTheServer() throws {
+        let fixture = try makeConnectedFixture(prefix: "pauseui")
+        defer {
+            api.deleteAccount(token: fixture.peer.token)
+            api.deleteAccount(token: fixture.main.token)
+        }
+        let app = launchDevelopmentApp(deviceID: fixture.mainDeviceID, displayName: fixture.mainName)
+        defer { app.terminate() }
+        XCTAssertTrue(app.buttons["tab-sharing"].waitForExistence(timeout: 20))
+        app.buttons["tab-sharing"].tap()
+        let key = fixture.peerName.lowercased()
+        let sealed = app.buttons["sharing-mode-sealed-\(key)"]
+        XCTAssertTrue(sealed.waitForExistence(timeout: 12), app.debugDescription)
+        sealed.tap()
+        let later = app.buttons["always-explainer-later"]
+        if later.waitForExistence(timeout: 2) { later.tap() }
+        XCTAssertTrue(waitUntil(timeout: 10) {
+            self.inboundPresentation(personID: fixture.main.personID, token: fixture.peer.token) == "untilTheyLook"
+        }, "Sealed should be the resting mode before Pause.")
+        let actions = app.buttons["sharing-actions-\(key)"]
+        XCTAssertTrue(actions.waitForExistence(timeout: 5))
+        actions.tap()
+        let pause = app.buttons["pause-sharing-\(key)"]
+        XCTAssertTrue(pause.waitForExistence(timeout: 5))
+        pause.tap()
+        let oneHour = app.buttons["pause-duration-3600"]
+        XCTAssertTrue(oneHour.waitForExistence(timeout: 5))
+        oneHour.tap()
+        XCTAssertTrue(waitUntil(timeout: 10) {
+            self.inboundPresentation(personID: fixture.main.personID, token: fixture.peer.token) == "paused"
+        }, "A one-hour Pause chosen in Sharing should persist on the server.")
+        XCTAssertTrue(app.staticTexts["sharing-summary-\(key)"].waitForExistence(timeout: 8))
+        app.buttons["sharing-mode-sealed-\(key)"].tap()
+        XCTAssertTrue(waitUntil(timeout: 10) {
+            self.inboundPresentation(personID: fixture.main.personID, token: fixture.peer.token) == "untilTheyLook"
+        }, "Choosing Sealed again should end the Pause and restore that mode.")
+    }
+
+    func testPauseForEightHoursPersistsTheEndTime() throws {
+        let fixture = try makeConnectedFixture(prefix: "pause8")
+        defer {
+            api.deleteAccount(token: fixture.peer.token)
+            api.deleteAccount(token: fixture.main.token)
+        }
+        let app = launchDevelopmentApp(deviceID: fixture.mainDeviceID, displayName: fixture.mainName)
+        defer { app.terminate() }
+        XCTAssertTrue(app.buttons["tab-sharing"].waitForExistence(timeout: 20))
+        app.buttons["tab-sharing"].tap()
+        let key = fixture.peerName.lowercased()
+        let sealed = app.buttons["sharing-mode-sealed-\(key)"]
+        XCTAssertTrue(sealed.waitForExistence(timeout: 12), app.debugDescription)
+        sealed.tap()
+        XCTAssertTrue(waitUntil(timeout: 10) {
+            self.inboundPresentation(personID: fixture.main.personID, token: fixture.peer.token) == "untilTheyLook"
+        })
+        app.buttons["sharing-actions-\(key)"].tap()
+        let pause = app.buttons["pause-sharing-\(key)"]
+        XCTAssertTrue(pause.waitForExistence(timeout: 5))
+        pause.tap()
+        let eightHours = app.buttons["pause-duration-28800"]
+        XCTAssertTrue(eightHours.waitForExistence(timeout: 5), app.debugDescription)
+        let chosenAt = Date()
+        eightHours.tap()
+        XCTAssertTrue(waitUntil(timeout: 10) {
+            guard let share = self.api.member(personID: fixture.main.personID, token: fixture.peer.token)?["inboundShare"] as? [String: Any],
+                  share["presentation"] as? String == "paused",
+                  let until = share["pauseUntil"] as? String else { return false }
+            let parser = ISO8601DateFormatter()
+            parser.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            let fallback = ISO8601DateFormatter()
+            guard let end = parser.date(from: until) ?? fallback.date(from: until) else { return false }
+            let hours = end.timeIntervalSince(chosenAt) / 3600
+            return hours > 7.5 && hours < 8.5 && (share["revertsTo"] as? String) == "untilTheyLook"
+        }, "An eight-hour Pause should end about eight hours later and return to Sealed.")
+        attachScreenshot(of: app, named: "Sharing - eight hour pause")
+    }
+
+    func testPauseFromAlwaysForOneDayRestoresAlways() throws {
+        let fixture = try makeConnectedFixture(prefix: "pausealways")
+        defer {
+            api.deleteAccount(token: fixture.peer.token)
+            api.deleteAccount(token: fixture.main.token)
+        }
+        XCTAssertEqual(api.request("POST", "/api/v1/circle/entitlement", token: fixture.main.token, body: ["reviewUnlock": true]).status, 204)
+        let app = launchDevelopmentApp(deviceID: fixture.mainDeviceID, displayName: fixture.mainName)
+        defer { app.terminate() }
+        XCTAssertTrue(app.buttons["tab-sharing"].waitForExistence(timeout: 20))
+        app.buttons["tab-sharing"].tap()
+        let key = fixture.peerName.lowercased()
+        let always = app.buttons["sharing-mode-always-\(key)"]
+        XCTAssertTrue(always.waitForExistence(timeout: 12), app.debugDescription)
+        always.tap()
+        let later = app.buttons["always-explainer-later"]
+        if later.waitForExistence(timeout: 2) { later.tap() }
+        XCTAssertTrue(waitUntil(timeout: 10) {
+            self.inboundPresentation(personID: fixture.main.personID, token: fixture.peer.token) == "always"
+        }, "Always should be the resting mode before Pause. Review unlock is not a purchase.")
+        app.buttons["sharing-actions-\(key)"].tap()
+        let pause = app.buttons["pause-sharing-\(key)"]
+        XCTAssertTrue(pause.waitForExistence(timeout: 5))
+        pause.tap()
+        let oneDay = app.buttons["pause-duration-86400"]
+        XCTAssertTrue(oneDay.waitForExistence(timeout: 5), app.debugDescription)
+        let chosenAt = Date()
+        oneDay.tap()
+        XCTAssertTrue(waitUntil(timeout: 10) {
+            guard let share = self.api.member(personID: fixture.main.personID, token: fixture.peer.token)?["inboundShare"] as? [String: Any],
+                  share["presentation"] as? String == "paused",
+                  share["revertsTo"] as? String == "always",
+                  let until = share["pauseUntil"] as? String else { return false }
+            let parser = ISO8601DateFormatter()
+            parser.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            let fallback = ISO8601DateFormatter()
+            guard let end = parser.date(from: until) ?? fallback.date(from: until) else { return false }
+            let hours = end.timeIntervalSince(chosenAt) / 3600
+            return hours > 23 && hours < 25
+        }, "A one-day Pause from Always should end about one day later and return to Always.")
+        attachScreenshot(of: app, named: "Sharing - one day pause from Always")
+    }
+
+    func testFreeHistoryOmitsTheTwoDayOldPointThatPlusKeeps() throws {
+        let suffix = UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
+        let phones = Array(LocalTrustAPI.reservedPhonePool().shuffled().prefix(2))
+        let viewerName = "Hist\(suffix.prefix(4))"
+        let subjectName = "Trail\(suffix.prefix(4))"
+        let viewer = try makeTestAccount(
+            displayName: viewerName,
+            deviceID: "trust-hist-viewer-\(suffix)",
+            handle: "hv\(suffix.prefix(8))",
+            phone: "+1\(phones[0])"
+        )
+        let subject = try makeTestAccount(
+            displayName: subjectName,
+            deviceID: "trust-hist-subject-\(suffix)",
+            handle: "ht\(suffix.prefix(8))",
+            phone: "+1\(phones[1])"
+        )
+        defer {
+            api.deleteAccount(token: subject.token)
+            api.deleteAccount(token: viewer.token)
+        }
+        try connect(viewer, to: subject)
+        XCTAssertEqual(api.request("POST", "/api/v1/circle/entitlement", token: subject.token, body: ["reviewUnlock": true]).status, 204)
+        _ = try setResting("always", personID: viewer.personID, owner: subject)
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        for age: TimeInterval in [0, -(48 * 60 * 60)] {
+            XCTAssertEqual(
+                api.request(
+                    "POST",
+                    "/api/v1/location",
+                    token: subject.token,
+                    body: [
+                        "timestamp": formatter.string(from: Date().addingTimeInterval(age)),
+                        "latitude": 47.61,
+                        "longitude": -122.33,
+                        "batteryPercent": 70,
+                        "isCharging": false
+                    ]
+                ).status,
+                204
+            )
+        }
+        func historyCount() -> Int {
+            let payload = api.request("GET", "/api/v1/people/\(subject.personID)/history", token: viewer.token).json as? [String: Any]
+            return (payload?["points"] as? [Any])?.count ?? -1
+        }
+        XCTAssertEqual(historyCount(), 1, "A free viewer should receive only the point inside 24 hours.")
+
+        let app = launchDevelopmentApp(deviceID: "trust-hist-viewer-\(suffix)", displayName: viewerName)
+        defer { app.terminate() }
+        let row = app.buttons["person-row-\(subjectName.lowercased())"]
+        XCTAssertTrue(row.waitForExistence(timeout: 20), app.debugDescription)
+        row.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["person-history-visit-0"].waitForExistence(timeout: 12), app.debugDescription)
+        XCTAssertFalse(app.descendants(matching: .any)["person-history-visit-1"].exists, "The two-day-old point must stay out of a free history.")
+
+        XCTAssertEqual(api.request("POST", "/api/v1/circle/entitlement", token: viewer.token, body: ["reviewUnlock": true]).status, 204)
+        XCTAssertEqual(historyCount(), 2, "Plus should keep the two-day-old point. Review unlock is not a purchase.")
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(row.waitForExistence(timeout: 20))
+        row.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["person-history-visit-1"].waitForExistence(timeout: 12), "Plus history should show both visits.\n\(app.debugDescription)")
+        attachScreenshot(of: app, named: "Person history - Plus keeps two days")
+    }
+
+    func testPauseForTwoDaysAndThreeDaysPersistsTheEndTimes() throws {
+        let fixture = try makeConnectedFixture(prefix: "pause23")
+        defer {
+            api.deleteAccount(token: fixture.peer.token)
+            api.deleteAccount(token: fixture.main.token)
+        }
+        let app = launchDevelopmentApp(deviceID: fixture.mainDeviceID, displayName: fixture.mainName)
+        defer { app.terminate() }
+        XCTAssertTrue(app.buttons["tab-sharing"].waitForExistence(timeout: 20))
+        app.buttons["tab-sharing"].tap()
+        let key = fixture.peerName.lowercased()
+        let sealed = app.buttons["sharing-mode-sealed-\(key)"]
+        XCTAssertTrue(sealed.waitForExistence(timeout: 12), app.debugDescription)
+        sealed.tap()
+        XCTAssertTrue(waitUntil(timeout: 10) {
+            self.inboundPresentation(personID: fixture.main.personID, token: fixture.peer.token) == "untilTheyLook"
+        })
+
+        func choosePause(_ identifier: String, hoursRange: ClosedRange<Double>, restores: String) {
+            app.buttons["sharing-actions-\(key)"].tap()
+            let pause = app.buttons["pause-sharing-\(key)"]
+            XCTAssertTrue(pause.waitForExistence(timeout: 5))
+            pause.tap()
+            let choice = app.buttons[identifier]
+            XCTAssertTrue(choice.waitForExistence(timeout: 5), app.debugDescription)
+            let chosenAt = Date()
+            choice.tap()
+            XCTAssertTrue(waitUntil(timeout: 10) {
+                guard let share = self.api.member(personID: fixture.main.personID, token: fixture.peer.token)?["inboundShare"] as? [String: Any],
+                      share["presentation"] as? String == "paused",
+                      share["revertsTo"] as? String == restores,
+                      let until = share["pauseUntil"] as? String else { return false }
+                let parser = ISO8601DateFormatter()
+                parser.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+                let fallback = ISO8601DateFormatter()
+                guard let end = parser.date(from: until) ?? fallback.date(from: until) else { return false }
+                let hours = end.timeIntervalSince(chosenAt) / 3600
+                return hoursRange.contains(hours)
+            }, "\(identifier) should pause until that duration and then return to \(restores).")
+            let summary = app.staticTexts["sharing-summary-\(key)"]
+            XCTAssertTrue(summary.waitForExistence(timeout: 8))
+            XCTAssertTrue(summary.label.contains("Paused until"))
+        }
+
+        choosePause("pause-duration-172800", hoursRange: 47...49, restores: "untilTheyLook")
+        app.buttons["sharing-mode-sealed-\(key)"].tap()
+        XCTAssertTrue(waitUntil(timeout: 10) {
+            self.inboundPresentation(personID: fixture.main.personID, token: fixture.peer.token) == "untilTheyLook"
+        }, "Choosing Sealed should end the two-day Pause.")
+        choosePause("pause-duration-259200", hoursRange: 71...73, restores: "untilTheyLook")
+        attachScreenshot(of: app, named: "Sharing - two and three day pause")
+    }
+
+    func testViewerSeesPauseAndNoTrailWhileSharingIsPaused() throws {
+        let suffix = UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
+        let phones = Array(LocalTrustAPI.reservedPhonePool().shuffled().prefix(2))
+        let viewerName = "Hold\(suffix.prefix(4))"
+        let subjectName = "Quiet\(suffix.prefix(4))"
+        let viewer = try makeTestAccount(
+            displayName: viewerName,
+            deviceID: "trust-pause-viewer-\(suffix)",
+            handle: "pv\(suffix.prefix(8))",
+            phone: "+1\(phones[0])"
+        )
+        let subject = try makeTestAccount(
+            displayName: subjectName,
+            deviceID: "trust-pause-subject-\(suffix)",
+            handle: "ps\(suffix.prefix(8))",
+            phone: "+1\(phones[1])"
+        )
+        defer {
+            api.deleteAccount(token: subject.token)
+            api.deleteAccount(token: viewer.token)
+        }
+        try connect(viewer, to: subject)
+        XCTAssertEqual(api.request("POST", "/api/v1/circle/entitlement", token: subject.token, body: ["reviewUnlock": true]).status, 204)
+        _ = try setResting("always", personID: viewer.personID, owner: subject)
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        XCTAssertEqual(
+            api.request(
+                "POST",
+                "/api/v1/location",
+                token: subject.token,
+                body: [
+                    "timestamp": formatter.string(from: Date()),
+                    "latitude": 47.62,
+                    "longitude": -122.34,
+                    "batteryPercent": 80,
+                    "isCharging": false
+                ]
+            ).status,
+            204
+        )
+
+        let app = launchDevelopmentApp(deviceID: "trust-pause-viewer-\(suffix)", displayName: viewerName)
+        defer { app.terminate() }
+        let row = app.buttons["person-row-\(subjectName.lowercased())"]
+        XCTAssertTrue(row.waitForExistence(timeout: 20), app.debugDescription)
+        row.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["person-history-visit-0"].waitForExistence(timeout: 12), app.debugDescription)
+        app.terminate()
+
+        try pauseShare("1h", personID: viewer.personID, owner: subject)
+        XCTAssertEqual(
+            api.request("GET", "/api/v1/people/\(subject.personID)/history", token: viewer.token).status,
+            409,
+            "History must stop while the share is paused."
+        )
+        app.launch()
+        XCTAssertTrue(row.waitForExistence(timeout: 20), app.debugDescription)
+        XCTAssertTrue(row.label.localizedCaseInsensitiveContains("pause"), row.label)
+        row.tap()
+        let status = app.descendants(matching: .any).matching(identifier: "person-status").firstMatch
+        XCTAssertTrue(status.waitForExistence(timeout: 12), app.debugDescription)
+        XCTAssertEqual(status.label, "Pause")
+        XCTAssertFalse(app.descendants(matching: .any)["person-history-visit-0"].exists)
+        XCTAssertFalse(app.buttons["person-profile-peek"].exists)
+        attachScreenshot(of: app, named: "Person - paused share hides the trail")
+    }
+
+    func testAlwaysPointOlderThanFiveMinutesShowsTheStaleCue() throws {
+        let suffix = UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
+        let phones = Array(LocalTrustAPI.reservedPhonePool().shuffled().prefix(2))
+        let viewerName = "StaleView\(suffix.prefix(4))"
+        let subjectName = "StalePeer\(suffix.prefix(4))"
+        let viewer = try makeTestAccount(
+            displayName: viewerName,
+            deviceID: "trust-stale-viewer-\(suffix)",
+            handle: "sv\(suffix.prefix(8))",
+            phone: "+1\(phones[0])"
+        )
+        let subject = try makeTestAccount(
+            displayName: subjectName,
+            deviceID: "trust-stale-subject-\(suffix)",
+            handle: "sp\(suffix.prefix(8))",
+            phone: "+1\(phones[1])"
+        )
+        defer {
+            api.deleteAccount(token: subject.token)
+            api.deleteAccount(token: viewer.token)
+        }
+        try connect(viewer, to: subject)
+        // Always sharing requires Plus on the subject. The live pin is withheld until the
+        // viewer is covered too. This review unlock is not a StoreKit purchase.
+        XCTAssertEqual(api.request("POST", "/api/v1/circle/entitlement", token: subject.token, body: ["reviewUnlock": true]).status, 204)
+        XCTAssertEqual(api.request("POST", "/api/v1/circle/entitlement", token: viewer.token, body: ["reviewUnlock": true]).status, 204)
+        let connectionID = try XCTUnwrap(activeConnectionID(personID: viewer.personID, token: subject.token))
+        let revision = try XCTUnwrap(activeShareRevision(personID: viewer.personID, token: subject.token))
+        XCTAssertEqual(
+            api.request(
+                "PATCH",
+                "/api/v1/people/\(viewer.personID)/share",
+                token: subject.token,
+                body: ["connectionId": connectionID, "revision": revision, "resting": "always"]
+            ).status,
+            204
+        )
+        let staleAt = Date().addingTimeInterval(-(6 * 60))
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        XCTAssertEqual(
+            api.request(
+                "POST",
+                "/api/v1/location",
+                token: subject.token,
+                body: [
+                    "timestamp": formatter.string(from: staleAt),
+                    "latitude": 47.61,
+                    "longitude": -122.33,
+                    "batteryPercent": 80,
+                    "isCharging": false
+                ]
+            ).status,
+            204
+        )
+
+        let app = launchDevelopmentApp(deviceID: "trust-stale-viewer-\(suffix)", displayName: viewerName)
+        defer { app.terminate() }
+        XCTAssertTrue(app.buttons["tab-circle"].waitForExistence(timeout: 20))
+        let row = app.buttons["person-row-\(subjectName.lowercased())"]
+        XCTAssertTrue(row.waitForExistence(timeout: 15), app.debugDescription)
+        XCTAssertTrue(row.label.localizedCaseInsensitiveContains("out of date"), "A live point older than five minutes should say it may be out of date.\n\(row.label)")
+        let mapPin = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] %@ AND NOT identifier BEGINSWITH %@", "out of date", "person-row")).firstMatch
+        XCTAssertTrue(mapPin.waitForExistence(timeout: 8), "The map pin should repeat the stale cue.\n\(app.debugDescription)")
+        row.tap()
+        let personStatus = app.descendants(matching: .any).matching(
+            NSPredicate(format: "identifier == %@ AND label CONTAINS[c] %@", "person-status", "out of date")
+        ).firstMatch
+        XCTAssertTrue(personStatus.waitForExistence(timeout: 8), "The selected person should repeat the stale cue.\n\(app.debugDescription)")
+        attachScreenshot(of: app, named: "People - stale Always point")
+    }
+
+    func testRelaunchAfterPeerStopDropsTheCachedAlwaysShare() throws {
+        let suffix = UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
+        let phones = Array(LocalTrustAPI.reservedPhonePool().shuffled().prefix(2))
+        let viewerName = "RelView\(suffix.prefix(4))"
+        let subjectName = "RelPeer\(suffix.prefix(4))"
+        let viewerDeviceID = "trust-rel-viewer-\(suffix)"
+        let viewer = try makeTestAccount(
+            displayName: viewerName,
+            deviceID: viewerDeviceID,
+            handle: "rv\(suffix.prefix(8))",
+            phone: "+1\(phones[0])"
+        )
+        let subject = try makeTestAccount(
+            displayName: subjectName,
+            deviceID: "trust-rel-subject-\(suffix)",
+            handle: "rp\(suffix.prefix(8))",
+            phone: "+1\(phones[1])"
+        )
+        defer {
+            api.deleteAccount(token: subject.token)
+            api.deleteAccount(token: viewer.token)
+        }
+        try connect(viewer, to: subject)
+        XCTAssertEqual(api.request("POST", "/api/v1/circle/entitlement", token: subject.token, body: ["reviewUnlock": true]).status, 204)
+        XCTAssertEqual(api.request("POST", "/api/v1/circle/entitlement", token: viewer.token, body: ["reviewUnlock": true]).status, 204)
+        _ = try setResting("always", personID: viewer.personID, owner: subject)
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        XCTAssertEqual(
+            api.request(
+                "POST",
+                "/api/v1/location",
+                token: subject.token,
+                body: [
+                    "timestamp": formatter.string(from: Date()),
+                    "latitude": 47.61,
+                    "longitude": -122.33,
+                    "batteryPercent": 70,
+                    "isCharging": false
+                ]
+            ).status,
+            204
+        )
+
+        let app = launchDevelopmentApp(deviceID: viewerDeviceID, displayName: viewerName)
+        defer { app.terminate() }
+        let row = app.buttons["person-row-\(subjectName.lowercased())"]
+        XCTAssertTrue(row.waitForExistence(timeout: 20), app.debugDescription)
+        XCTAssertFalse(row.label.localizedCaseInsensitiveContains("chose off"), "The row should show the live share before the app is closed.\n\(row.label)")
+        app.terminate()
+        _ = try setResting("off", personID: viewer.personID, owner: subject)
+        app.launch()
+        XCTAssertTrue(row.waitForExistence(timeout: 20), app.debugDescription)
+        XCTAssertTrue(waitUntil(timeout: 15) {
+            row.label.localizedCaseInsensitiveContains("chose off")
+        }, "Relaunch must replace the cached Always share with the server's Off.\n\(row.label)")
+        row.tap()
+        XCTAssertFalse(app.descendants(matching: .any)["person-history"].waitForExistence(timeout: 3), "A stopped Always share must not keep its trail after relaunch.")
+    }
+
+    func testOfflineCircleReadKeepsTheShareUntilReconnectShowsPeerStop() throws {
+        guard api.raceProxyState() != nil else {
+            throw XCTSkip("Requires the isolated loopback fault proxy.")
+        }
+        let suffix = UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
+        let phones = Array(LocalTrustAPI.reservedPhonePool().shuffled().prefix(2))
+        let viewerName = "OffView\(suffix.prefix(4))"
+        let subjectName = "OffPeer\(suffix.prefix(4))"
+        let viewer = try makeTestAccount(
+            displayName: viewerName,
+            deviceID: "trust-off-viewer-\(suffix)",
+            handle: "ov\(suffix.prefix(8))",
+            phone: "+1\(phones[0])"
+        )
+        let subject = try makeTestAccount(
+            displayName: subjectName,
+            deviceID: "trust-off-subject-\(suffix)",
+            handle: "op\(suffix.prefix(8))",
+            phone: "+1\(phones[1])"
+        )
+        defer {
+            api.deleteAccount(token: subject.token)
+            api.deleteAccount(token: viewer.token)
+        }
+        try connect(viewer, to: subject)
+        XCTAssertEqual(api.request("POST", "/api/v1/circle/entitlement", token: subject.token, body: ["reviewUnlock": true]).status, 204)
+        XCTAssertEqual(api.request("POST", "/api/v1/circle/entitlement", token: viewer.token, body: ["reviewUnlock": true]).status, 204)
+        _ = try setResting("always", personID: viewer.personID, owner: subject)
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        XCTAssertEqual(
+            api.request(
+                "POST",
+                "/api/v1/location",
+                token: subject.token,
+                body: [
+                    "timestamp": formatter.string(from: Date()),
+                    "latitude": 47.61,
+                    "longitude": -122.33,
+                    "batteryPercent": 70,
+                    "isCharging": false
+                ]
+            ).status,
+            204
+        )
+
+        let app = launchDevelopmentApp(deviceID: "trust-off-viewer-\(suffix)", displayName: viewerName)
+        defer { app.terminate() }
+        let row = app.buttons["person-row-\(subjectName.lowercased())"]
+        XCTAssertTrue(row.waitForExistence(timeout: 20), app.debugDescription)
+        XCTAssertFalse(row.label.localizedCaseInsensitiveContains("chose off"), row.label)
+        XCTAssertTrue(api.armCircleReadFailure())
+        app.buttons["tab-sharing"].tap()
+        let banner = app.descendants(matching: .any)["offline-banner"]
+        XCTAssertTrue(banner.waitForExistence(timeout: 10), "A failed circle read should show the offline banner.\n\(app.debugDescription)")
+        _ = try setResting("off", personID: viewer.personID, owner: subject)
+        app.buttons["tab-circle"].tap()
+        XCTAssertTrue(waitUntil(timeout: 15) {
+            row.exists && row.label.localizedCaseInsensitiveContains("chose off") && !banner.exists
+        }, "Reconnect should replace the cached Always share with Off and clear the offline banner.\n\(row.label)")
+    }
+
+    func testFreeSeatLimitStopsTheSixthPersonUntilPlus() throws {
+        let suffix = UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
+        let phones = Array(LocalTrustAPI.reservedPhonePool().shuffled().prefix(7))
+        let hostName = "Host\(suffix.prefix(4))"
+        let host = try makeTestAccount(
+            displayName: hostName,
+            deviceID: "trust-seat-host-\(suffix)",
+            handle: "hs\(suffix.prefix(8))",
+            phone: "+1\(phones[0])"
+        )
+        var friends: [DisposableSession] = []
+        for index in 0..<5 {
+            let friend = try makeTestAccount(
+                displayName: "Seat\(index)\(suffix.prefix(2))",
+                deviceID: "trust-seat-\(index)-\(suffix)",
+                handle: "s\(index)\(suffix.prefix(7))",
+                phone: "+1\(phones[index + 1])"
+            )
+            friends.append(friend)
+            try connect(friend, to: host)
+        }
+        let extraHandle = "sx\(suffix.prefix(8))"
+        let extra = try makeTestAccount(
+            displayName: "Sixth\(suffix.prefix(4))",
+            deviceID: "trust-seat-extra-\(suffix)",
+            handle: extraHandle,
+            phone: "+1\(phones[6])"
+        )
+        defer {
+            api.deleteAccount(token: extra.token)
+            for friend in friends { api.deleteAccount(token: friend.token) }
+            api.deleteAccount(token: host.token)
+        }
+        let request = api.request(
+            "POST",
+            "/api/v1/connection-requests",
+            token: extra.token,
+            body: ["recipientId": host.personID]
+        )
+        XCTAssertEqual(request.status, 200, "The sixth request can stay pending until someone accepts it.")
+
+        func memberCount() -> Int {
+            (self.api.circle(token: host.token)?["members"] as? [Any])?.count ?? -1
+        }
+        XCTAssertEqual(memberCount(), 5)
+
+        let app = launchDevelopmentApp(deviceID: "trust-seat-host-\(suffix)", displayName: hostName)
+        defer { app.terminate() }
+        XCTAssertTrue(app.buttons["tab-sharing"].waitForExistence(timeout: 20))
+        app.buttons["tab-sharing"].tap()
+        let accept = app.buttons["accept-connection-request-\(extraHandle)"]
+        XCTAssertTrue(accept.waitForExistence(timeout: 12), app.debugDescription)
+        if !accept.isHittable { app.swipeUp() }
+        accept.tap()
+        let notice = app.staticTexts["connection-requests-error"]
+        XCTAssertTrue(notice.waitForExistence(timeout: 12), app.debugDescription)
+        XCTAssertEqual(notice.label, "Free is 5 people. Plus is 20.")
+        XCTAssertEqual(memberCount(), 5, "The refused accept must leave the circle at five.")
+
+        XCTAssertEqual(api.request("POST", "/api/v1/circle/entitlement", token: host.token, body: ["reviewUnlock": true]).status, 204)
+        let retry = app.buttons["connection-requests-error"]
+        XCTAssertTrue(retry.waitForExistence(timeout: 5), app.debugDescription)
+        retry.tap()
+        XCTAssertTrue(accept.waitForExistence(timeout: 12), app.debugDescription)
+        accept.tap()
+        XCTAssertTrue(waitUntil(timeout: 12) { memberCount() == 6 }, "Plus should accept the sixth person. Review unlock is not a purchase.")
+        attachScreenshot(of: app, named: "Sharing - sixth person after Plus")
+    }
+
+    func testFreeViewerSeesTheTrailButNotTheLivePin() throws {
+        let suffix = UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
+        let phones = Array(LocalTrustAPI.reservedPhonePool().shuffled().prefix(2))
+        let viewerName = "FreePin\(suffix.prefix(4))"
+        let subjectName = "Live\(suffix.prefix(4))"
+        let viewer = try makeTestAccount(
+            displayName: viewerName,
+            deviceID: "trust-freepin-viewer-\(suffix)",
+            handle: "fp\(suffix.prefix(8))",
+            phone: "+1\(phones[0])"
+        )
+        let subject = try makeTestAccount(
+            displayName: subjectName,
+            deviceID: "trust-freepin-subject-\(suffix)",
+            handle: "lp\(suffix.prefix(8))",
+            phone: "+1\(phones[1])"
+        )
+        defer {
+            api.deleteAccount(token: subject.token)
+            api.deleteAccount(token: viewer.token)
+        }
+        try connect(viewer, to: subject)
+        XCTAssertEqual(api.request("POST", "/api/v1/circle/entitlement", token: subject.token, body: ["reviewUnlock": true]).status, 204)
+        _ = try setResting("always", personID: viewer.personID, owner: subject)
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        XCTAssertEqual(
+            api.request(
+                "POST",
+                "/api/v1/location",
+                token: subject.token,
+                body: [
+                    "timestamp": formatter.string(from: Date()),
+                    "latitude": 47.63,
+                    "longitude": -122.32,
+                    "batteryPercent": 64,
+                    "isCharging": true
+                ]
+            ).status,
+            204
+        )
+        let withheld = try XCTUnwrap(api.member(personID: subject.personID, token: viewer.token))
+        XCTAssertEqual(withheld["inboundLive"] as? Bool, true)
+        XCTAssertTrue(withheld["live"] == nil || withheld["live"] is NSNull, "A free circle must omit the live coordinate.")
+
+        let app = launchDevelopmentApp(deviceID: "trust-freepin-viewer-\(suffix)", displayName: viewerName)
+        defer { app.terminate() }
+        let row = app.buttons["person-row-\(subjectName.lowercased())"]
+        XCTAssertTrue(row.waitForExistence(timeout: 20), app.debugDescription)
+        XCTAssertTrue(row.label.localizedCaseInsensitiveContains("Always is Plus"), row.label)
+        XCTAssertTrue(app.staticTexts["0 on map · 1 not shown"].waitForExistence(timeout: 8), app.debugDescription)
+        let pin = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "\(subjectName), ")).firstMatch
+        XCTAssertFalse(pin.exists, "A free viewer must not get a live map pin.\n\(app.debugDescription)")
+        row.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["person-history-visit-0"].waitForExistence(timeout: 12), app.debugDescription)
+
+        XCTAssertEqual(api.request("POST", "/api/v1/circle/entitlement", token: viewer.token, body: ["reviewUnlock": true]).status, 204)
+        let revealed = try XCTUnwrap(api.member(personID: subject.personID, token: viewer.token))
+        XCTAssertNotNil(revealed["live"] as? [String: Any], "Plus should receive the live coordinate. Review unlock is not a purchase.")
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(row.waitForExistence(timeout: 20), app.debugDescription)
+        XCTAssertFalse(row.label.localizedCaseInsensitiveContains("Always is Plus"), row.label)
+        XCTAssertTrue(app.staticTexts["1 on map · 0 not shown"].waitForExistence(timeout: 8), app.debugDescription)
+        XCTAssertTrue(pin.waitForExistence(timeout: 8), "Plus should show the live pin.\n\(app.debugDescription)")
+        attachScreenshot(of: app, named: "People - Plus live pin")
+    }
+
+    func testViewerMapShowsTheAlwaysPointAndItsTime() throws {
+        let suffix = UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
+        let phones = Array(LocalTrustAPI.reservedPhonePool().shuffled().prefix(2))
+        let viewerName = "MapView\(suffix.prefix(4))"
+        let subjectName = "MapPeer\(suffix.prefix(4))"
+        let viewer = try makeTestAccount(
+            displayName: viewerName,
+            deviceID: "trust-map-viewer-\(suffix)",
+            handle: "mv\(suffix.prefix(8))",
+            phone: "+1\(phones[0])"
+        )
+        let subject = try makeTestAccount(
+            displayName: subjectName,
+            deviceID: "trust-map-subject-\(suffix)",
+            handle: "mp\(suffix.prefix(8))",
+            phone: "+1\(phones[1])"
+        )
+        defer {
+            api.deleteAccount(token: subject.token)
+            api.deleteAccount(token: viewer.token)
+        }
+        try connect(viewer, to: subject)
+        XCTAssertEqual(api.request("POST", "/api/v1/circle/entitlement", token: subject.token, body: ["reviewUnlock": true]).status, 204)
+        XCTAssertEqual(api.request("POST", "/api/v1/circle/entitlement", token: viewer.token, body: ["reviewUnlock": true]).status, 204)
+        _ = try setResting("always", personID: viewer.personID, owner: subject)
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        XCTAssertEqual(
+            api.request(
+                "POST",
+                "/api/v1/location",
+                token: subject.token,
+                body: [
+                    "timestamp": formatter.string(from: Date()),
+                    "latitude": 47.61,
+                    "longitude": -122.33,
+                    "batteryPercent": 80,
+                    "isCharging": false
+                ]
+            ).status,
+            204
+        )
+
+        let app = launchDevelopmentApp(deviceID: "trust-map-viewer-\(suffix)", displayName: viewerName)
+        defer { app.terminate() }
+        let row = app.buttons["person-row-\(subjectName.lowercased())"]
+        XCTAssertTrue(row.waitForExistence(timeout: 20), app.debugDescription)
+        let pin = app.buttons.matching(NSPredicate(
+            format: "label CONTAINS[c] %@ AND NOT identifier BEGINSWITH %@",
+            subjectName,
+            "person-row"
+        )).firstMatch
+        XCTAssertTrue(pin.waitForExistence(timeout: 8), "The viewer's map should show the Always point.\n\(app.debugDescription)")
+        pin.tap()
+        let openMap = app.buttons["view-open-map"]
+        XCTAssertTrue(openMap.waitForExistence(timeout: 8), "Opening the pin should offer the circle map.\n\(app.debugDescription)")
+        openMap.tap()
+        let time = app.descendants(matching: .any).matching(identifier: "map-selected-location-time").firstMatch
+        XCTAssertTrue(time.waitForExistence(timeout: 8), "The map detail should show when the point was updated.\n\(app.debugDescription)")
+        XCTAssertTrue(time.label.localizedCaseInsensitiveContains("updated"), time.label)
+        attachScreenshot(of: app, named: "Viewer map - Always point")
+    }
+
+    func testCoveredAccountCanChooseAlwaysFromTheSharingControl() throws {
+        let fixture = try makeConnectedFixture(prefix: "alwaysui")
+        defer {
+            api.deleteAccount(token: fixture.peer.token)
+            api.deleteAccount(token: fixture.main.token)
+        }
+        XCTAssertEqual(api.request("POST", "/api/v1/circle/entitlement", token: fixture.main.token, body: ["reviewUnlock": true]).status, 204)
+        let app = launchDevelopmentApp(deviceID: fixture.mainDeviceID, displayName: fixture.mainName)
+        defer { app.terminate() }
+        XCTAssertTrue(app.buttons["tab-sharing"].waitForExistence(timeout: 20))
+        app.buttons["tab-sharing"].tap()
+        let key = fixture.peerName.lowercased()
+        let always = app.buttons["sharing-mode-always-\(key)"]
+        XCTAssertTrue(always.waitForExistence(timeout: 12), app.debugDescription)
+        always.tap()
+        let later = app.buttons["always-explainer-later"]
+        if later.waitForExistence(timeout: 2) { later.tap() }
+        XCTAssertTrue(waitUntil(timeout: 10) {
+            self.inboundPresentation(personID: fixture.main.personID, token: fixture.peer.token) == "always"
+        }, "A covered account choosing Always in Sharing should persist on the server. Review unlock is not a StoreKit purchase.")
+        XCTAssertTrue(always.isSelected)
+    }
+
+    func testCoveredAccountCanExportTheActivityLog() throws {
+        let suffix = UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
+        let phones = Array(LocalTrustAPI.reservedPhonePool().shuffled().prefix(2))
+        let viewerName = "Exp\(suffix.prefix(4))"
+        let subjectName = "Sub\(suffix.prefix(4))"
+        let viewer = try makeTestAccount(
+            displayName: viewerName,
+            deviceID: "trust-export-viewer-\(suffix)",
+            handle: "ex\(suffix.prefix(8))",
+            phone: "+1\(phones[0])"
+        )
+        let subject = try makeTestAccount(
+            displayName: subjectName,
+            deviceID: "trust-export-subject-\(suffix)",
+            handle: "su\(suffix.prefix(8))",
+            phone: "+1\(phones[1])"
+        )
+        defer {
+            api.deleteAccount(token: subject.token)
+            api.deleteAccount(token: viewer.token)
+        }
+        try connect(viewer, to: subject)
+        XCTAssertEqual(api.request("POST", "/api/v1/circle/entitlement", token: viewer.token, body: ["reviewUnlock": true]).status, 204)
+        XCTAssertEqual(api.request("POST", "/api/v1/circle/entitlement", token: subject.token, body: ["reviewUnlock": true]).status, 204)
+        _ = try setResting("always", personID: viewer.personID, owner: subject)
+        XCTAssertEqual(
+            api.request("POST", "/api/v1/views", token: viewer.token, body: ["subjectId": subject.personID]).status,
+            200
+        )
+
+        let app = launchDevelopmentApp(deviceID: "trust-export-viewer-\(suffix)", displayName: viewerName)
+        defer { app.terminate() }
+        XCTAssertTrue(app.buttons["tab-log"].waitForExistence(timeout: 20))
+        app.buttons["tab-log"].tap()
+        let export = app.buttons["export-log"]
+        for _ in 0..<4 {
+            if export.exists, export.isHittable { break }
+            app.swipeUp()
+        }
+        XCTAssertTrue(export.waitForExistence(timeout: 8), "A covered account with activity should be able to export the log.\n\(app.debugDescription)")
+        XCTAssertEqual(export.label, "Export log")
+        export.tap()
+        let shareSheet = app.otherElements["ActivityListView"]
+        let copy = app.buttons["Copy"]
+        XCTAssertTrue(
+            shareSheet.waitForExistence(timeout: 8) || copy.waitForExistence(timeout: 2),
+            "Export should open the share sheet.\n\(app.debugDescription)"
+        )
+        attachScreenshot(of: app, named: "Activity - export share sheet")
+    }
+
+    func testFreeAccountWithActivityDoesNotSeeExport() throws {
+        let suffix = UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
+        let phones = Array(LocalTrustAPI.reservedPhonePool().shuffled().prefix(2))
+        let viewerName = "Free\(suffix.prefix(4))"
+        let subjectName = "Seal\(suffix.prefix(4))"
+        let viewer = try makeTestAccount(
+            displayName: viewerName,
+            deviceID: "trust-free-export-\(suffix)",
+            handle: "fe\(suffix.prefix(8))",
+            phone: "+1\(phones[0])"
+        )
+        let subject = try makeTestAccount(
+            displayName: subjectName,
+            deviceID: "trust-free-subject-\(suffix)",
+            handle: "fs\(suffix.prefix(8))",
+            phone: "+1\(phones[1])"
+        )
+        defer {
+            api.deleteAccount(token: subject.token)
+            api.deleteAccount(token: viewer.token)
+        }
+        try connect(viewer, to: subject)
+        _ = try setResting("sealed", personID: viewer.personID, owner: subject)
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        XCTAssertEqual(
+            api.request(
+                "POST",
+                "/api/v1/location",
+                token: subject.token,
+                body: [
+                    "timestamp": formatter.string(from: Date()),
+                    "latitude": 47.61,
+                    "longitude": -122.33,
+                    "batteryPercent": 80,
+                    "isCharging": false
+                ]
+            ).status,
+            204
+        )
+        XCTAssertEqual(
+            api.request("POST", "/api/v1/looks", token: viewer.token, body: ["subjectId": subject.personID, "confirmed": true]).status,
+            200
+        )
+        let circle = try XCTUnwrap(api.circle(token: viewer.token), "The free account circle response must be available.")
+        let you = try XCTUnwrap(circle["you"] as? [String: Any], "The circle response must include the account profile.")
+        let hasCircle = try XCTUnwrap(you["hasCircle"] as? Bool, "The profile must report its Plus circle entitlement.")
+        XCTAssertFalse(hasCircle, "A free account must not have a Plus circle.")
+
+        let app = launchDevelopmentApp(deviceID: "trust-free-export-\(suffix)", displayName: viewerName)
+        defer { app.terminate() }
+        XCTAssertTrue(app.buttons["tab-log"].waitForExistence(timeout: 20))
+        app.buttons["tab-log"].tap()
+        let looked = "You looked at \(subjectName)."
+        XCTAssertTrue(app.staticTexts[looked].waitForExistence(timeout: 12), app.debugDescription)
+        app.swipeUp()
+        XCTAssertFalse(app.buttons["export-log"].exists, "A free account must not export the activity log.")
+        attachScreenshot(of: app, named: "Activity - no export when free")
+    }
+
+    func testYouLegalLinksOpenThePublicPages() throws {
+        let suffix = UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
+        let phones = LocalTrustAPI.reservedPhonePool()
+        let name = "Legal\(suffix.prefix(4))"
+        let session = try makeTestAccount(
+            displayName: name,
+            deviceID: "trust-legal-\(suffix)",
+            handle: "lg\(suffix.prefix(8))",
+            phone: "+1\(phones[0])"
+        )
+        defer { api.deleteAccount(token: session.token) }
+        let app = launchDevelopmentApp(deviceID: "trust-legal-\(suffix)", displayName: name)
+        defer { app.terminate() }
+        XCTAssertTrue(app.buttons["tab-you"].waitForExistence(timeout: 20))
+        app.buttons["tab-you"].tap()
+        let links = app.descendants(matching: .any)
+        let privacy = links["privacy-link"]
+        let terms = links["terms-link"]
+        let support = links["support-link"]
+        XCTAssertTrue(privacy.waitForExistence(timeout: 8))
+        XCTAssertTrue(terms.exists)
+        XCTAssertTrue(support.exists)
+        XCTAssertEqual(privacy.elementType, .link)
+        XCTAssertEqual(terms.elementType, .link)
+        XCTAssertEqual(support.elementType, .link)
+        XCTAssertEqual(privacy.label, "Privacy")
+        XCTAssertEqual(terms.label, "Terms")
+        XCTAssertEqual(support.label, "Support")
+        let safari = XCUIApplication(bundleIdentifier: "com.apple.mobilesafari")
+        for (link, page, heading) in [
+            (privacy, "Privacy", "What we collect"),
+            (terms, "Terms", "Who it is for"),
+            (support, "Support", "Getting started")
+        ] {
+            link.tap()
+            XCTAssertTrue(safari.wait(for: .runningForeground, timeout: 20), "\(page) should open in the browser.")
+            let pageHeading = safari.webViews.descendants(matching: .staticText).matching(NSPredicate(format: "label == %@", heading)).firstMatch
+            XCTAssertTrue(pageHeading.waitForExistence(timeout: 20), "Safari should show the \(page) page heading '\(heading)'.")
+            attachScreenshot(of: safari, named: "You - \(page) opened in Safari at \(heading)")
+            app.activate()
+            XCTAssertTrue(app.buttons["tab-you"].waitForExistence(timeout: 10), "Return to You before opening the next public page.")
+        }
+    }
+
+    func testActivityShowsLooksInBothDirections() throws {
+        let suffix = UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
+        let phones = Array(LocalTrustAPI.reservedPhonePool().shuffled().prefix(2))
+        let viewerName = "Ada\(suffix.prefix(4))"
+        let subjectName = "Bea\(suffix.prefix(4))"
+        let viewer = try makeTestAccount(
+            displayName: viewerName,
+            deviceID: "trust-act-viewer-\(suffix)",
+            handle: "ad\(suffix.prefix(8))",
+            phone: "+1\(phones[0])"
+        )
+        let subject = try makeTestAccount(
+            displayName: subjectName,
+            deviceID: "trust-act-subject-\(suffix)",
+            handle: "be\(suffix.prefix(8))",
+            phone: "+1\(phones[1])"
+        )
+        defer {
+            api.deleteAccount(token: subject.token)
+            api.deleteAccount(token: viewer.token)
+        }
+        try connect(viewer, to: subject)
+        func uploadLocation(token: String) {
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            XCTAssertEqual(
+                api.request(
+                    "POST",
+                    "/api/v1/location",
+                    token: token,
+                    body: [
+                        "timestamp": formatter.string(from: Date()),
+                        "latitude": 47.61,
+                        "longitude": -122.33,
+                        "batteryPercent": 80,
+                        "isCharging": false
+                    ]
+                ).status,
+                204
+            )
+        }
+        _ = try setResting("sealed", personID: viewer.personID, owner: subject)
+        uploadLocation(token: subject.token)
+        XCTAssertEqual(
+            api.request("POST", "/api/v1/looks", token: viewer.token, body: ["subjectId": subject.personID, "confirmed": true]).status,
+            200
+        )
+        _ = try setResting("sealed", personID: subject.personID, owner: viewer)
+        uploadLocation(token: viewer.token)
+        XCTAssertEqual(
+            api.request("POST", "/api/v1/looks", token: subject.token, body: ["subjectId": viewer.personID, "confirmed": true]).status,
+            200
+        )
+
+        let app = launchDevelopmentApp(deviceID: "trust-act-viewer-\(suffix)", displayName: viewerName)
+        defer { app.terminate() }
+        XCTAssertTrue(app.buttons["tab-log"].waitForExistence(timeout: 20))
+        app.buttons["tab-log"].tap()
+        let youLooked = "You looked at \(subjectName)."
+        let theyLooked = "\(subjectName) looked at you."
+        XCTAssertTrue(waitUntil(timeout: 12) {
+            app.staticTexts[youLooked].exists && app.staticTexts[theyLooked].exists
+        }, "Activity should show the Look you made and the Look they made.\n\(app.debugDescription)")
+    }
+
+    func testActivityShowsViewsInBothDirectionsAndARemoval() throws {
+        let suffix = UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
+        let phones = Array(LocalTrustAPI.reservedPhonePool().shuffled().prefix(2))
+        let viewerName = "Cyd\(suffix.prefix(4))"
+        let subjectName = "Dee\(suffix.prefix(4))"
+        let viewer = try makeTestAccount(
+            displayName: viewerName,
+            deviceID: "trust-view-viewer-\(suffix)",
+            handle: "cy\(suffix.prefix(8))",
+            phone: "+1\(phones[0])"
+        )
+        let subject = try makeTestAccount(
+            displayName: subjectName,
+            deviceID: "trust-view-subject-\(suffix)",
+            handle: "de\(suffix.prefix(8))",
+            phone: "+1\(phones[1])"
+        )
+        defer {
+            api.deleteAccount(token: subject.token)
+            api.deleteAccount(token: viewer.token)
+        }
+        try connect(viewer, to: subject)
+        XCTAssertEqual(api.request("POST", "/api/v1/circle/entitlement", token: viewer.token, body: ["reviewUnlock": true]).status, 204)
+        XCTAssertEqual(api.request("POST", "/api/v1/circle/entitlement", token: subject.token, body: ["reviewUnlock": true]).status, 204)
+        _ = try setResting("always", personID: subject.personID, owner: viewer)
+        _ = try setResting("always", personID: viewer.personID, owner: subject)
+        XCTAssertEqual(
+            api.request("POST", "/api/v1/views", token: viewer.token, body: ["subjectId": subject.personID]).status,
+            200
+        )
+        XCTAssertEqual(
+            api.request("POST", "/api/v1/views", token: subject.token, body: ["subjectId": viewer.personID]).status,
+            200
+        )
+        let connectionID = try XCTUnwrap(activeConnectionID(personID: subject.personID, token: viewer.token))
+        XCTAssertEqual(
+            api.request("POST", "/api/v1/people/\(subject.personID)/revoke", token: viewer.token, body: ["connectionId": connectionID]).status,
+            204
+        )
+
+        let app = launchDevelopmentApp(deviceID: "trust-view-viewer-\(suffix)", displayName: viewerName)
+        defer { app.terminate() }
+        XCTAssertTrue(app.buttons["tab-log"].waitForExistence(timeout: 20))
+        app.buttons["tab-log"].tap()
+        let youViewed = "You viewed \(subjectName)."
+        let theyViewed = "\(subjectName) viewed you."
+        let youRemoved = "You removed \(subjectName)."
+        XCTAssertTrue(waitUntil(timeout: 12) {
+            app.staticTexts[youViewed].exists && app.staticTexts[theyViewed].exists && app.staticTexts[youRemoved].exists
+        }, "Activity should show both Views and the removal.\n\(app.debugDescription)")
+        app.terminate()
+
+        let subjectApp = launchDevelopmentApp(deviceID: "trust-view-subject-\(suffix)", displayName: subjectName)
+        defer { subjectApp.terminate() }
+        XCTAssertTrue(subjectApp.buttons["tab-log"].waitForExistence(timeout: 20))
+        subjectApp.buttons["tab-log"].tap()
+        let theyRemoved = "\(viewerName) removed you."
+        XCTAssertTrue(waitUntil(timeout: 12) {
+            subjectApp.staticTexts[theyRemoved].exists
+        }, "The other account should see that they were removed.\n\(subjectApp.debugDescription)")
+    }
+
+    func testDiscoveryOffHidesUnconnectedPicturesAndKeepsTheConnectedOne() throws {
+        let suffix = UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
+        let phones = Array(LocalTrustAPI.reservedPhonePool().shuffled().prefix(3))
+        let ownerName = "Pic\(suffix.prefix(4))"
+        let ownerHandle = "pi\(suffix.prefix(8))"
+        let ownerPhone = "+1\(phones[0])"
+        let owner = try makeTestAccount(displayName: ownerName, deviceID: "trust-pic-owner-\(suffix)", handle: ownerHandle, phone: ownerPhone)
+        let stranger = try makeTestAccount(displayName: "Str\(suffix.prefix(4))", deviceID: "trust-pic-stranger-\(suffix)", handle: "st\(suffix.prefix(8))", phone: "+1\(phones[1])")
+        let friend = try makeTestAccount(displayName: "Fri\(suffix.prefix(4))", deviceID: "trust-pic-friend-\(suffix)", handle: "fr\(suffix.prefix(8))", phone: "+1\(phones[2])")
+        defer {
+            api.deleteAccount(token: friend.token)
+            api.deleteAccount(token: stranger.token)
+            api.deleteAccount(token: owner.token)
+        }
+        XCTAssertEqual(api.putAvatarPreset("fox", token: owner.token), 200)
+        XCTAssertEqual(api.setPhoneDiscovery(true, token: owner.token), 204)
+        let visible = api.request("POST", "/api/v1/people/lookup", token: stranger.token, body: ["phone": ownerPhone])
+        XCTAssertEqual(visible.status, 200)
+        XCTAssertEqual((visible.json as? [String: Any]).flatMap { ($0["avatar"] as? [String: Any])?["presetId"] as? String }, "fox")
+        try connect(friend, to: owner)
+
+        let app = launchDevelopmentApp(deviceID: "trust-pic-owner-\(suffix)", displayName: ownerName)
+        defer { app.terminate() }
+        XCTAssertTrue(app.buttons["tab-you"].waitForExistence(timeout: 20))
+        app.buttons["tab-you"].tap()
+        let toggle = app.switches["phone-discovery-toggle"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 8))
+        XCTAssertTrue(isSwitchOn(toggle))
+        toggle.tap()
+        XCTAssertTrue(waitUntil(timeout: 10) {
+            (self.api.circle(token: owner.token)?["you"] as? [String: Any])?["discoveryEnabled"] as? Bool == false
+        })
+
+        XCTAssertEqual(api.request("POST", "/api/v1/people/lookup", token: stranger.token, body: ["phone": ownerPhone]).status, 404)
+        let hiddenHandle = api.request("POST", "/api/v1/people/lookup", token: stranger.token, body: ["handle": ownerHandle])
+        XCTAssertEqual(hiddenHandle.status, 200)
+        XCTAssertNil((hiddenHandle.json as? [String: Any])?["avatar"], "An unconnected handle match must not include the picture after discovery is off.")
+        let connectedHandle = api.request("POST", "/api/v1/people/lookup", token: friend.token, body: ["handle": ownerHandle])
+        XCTAssertEqual(connectedHandle.status, 200)
+        XCTAssertEqual((connectedHandle.json as? [String: Any]).flatMap { ($0["avatar"] as? [String: Any])?["presetId"] as? String }, "fox", "A connected person still receives the picture.")
+        let circleAvatar = (api.member(personID: owner.personID, token: friend.token)?["person"] as? [String: Any])?["avatar"] as? [String: Any]
+        XCTAssertEqual(circleAvatar?["presetId"] as? String, "fox")
+        app.buttons["tab-sharing"].tap()
+        let friendName = "Fri\(suffix.prefix(4))"
+        XCTAssertTrue(app.descendants(matching: .any)["sharing-mode-group-\(friendName.lowercased())"].waitForExistence(timeout: 8), "The connection stays on Sharing after discovery is turned off.")
+    }
+
+    func testYouCanChooseAProfileIconAndAConnectedPersonReceivesIt() throws {
+        let suffix = UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
+        let phones = Array(LocalTrustAPI.reservedPhonePool().shuffled().prefix(2))
+        let ownerName = "PicUi\(suffix.prefix(4))"
+        let friendName = "PicFr\(suffix.prefix(4))"
+        let owner = try makeTestAccount(
+            displayName: ownerName,
+            deviceID: "trust-avatar-owner-\(suffix)",
+            handle: "au\(suffix.prefix(8))",
+            phone: "+1\(phones[0])"
+        )
+        let friend = try makeTestAccount(
+            displayName: friendName,
+            deviceID: "trust-avatar-friend-\(suffix)",
+            handle: "af\(suffix.prefix(8))",
+            phone: "+1\(phones[1])"
+        )
+        defer {
+            api.deleteAccount(token: friend.token)
+            api.deleteAccount(token: owner.token)
+        }
+        try connect(friend, to: owner)
+
+        let app = launchDevelopmentApp(deviceID: "trust-avatar-owner-\(suffix)", displayName: ownerName)
+        defer { app.terminate() }
+        XCTAssertTrue(app.buttons["tab-you"].waitForExistence(timeout: 20))
+        app.buttons["tab-you"].tap()
+        let edit = app.buttons["edit-profile-picture"]
+        XCTAssertTrue(edit.waitForExistence(timeout: 8))
+        edit.tap()
+        let fox = app.buttons["Fox icon"]
+        XCTAssertTrue(fox.waitForExistence(timeout: 8), app.debugDescription)
+        fox.tap()
+        let save = app.buttons["avatar-save"]
+        XCTAssertTrue(save.waitForExistence(timeout: 5))
+        XCTAssertTrue(save.isEnabled)
+        save.tap()
+        XCTAssertTrue(waitUntil(timeout: 12) { !save.exists }, "Saving the icon should close the picker.")
+        XCTAssertTrue(waitUntil(timeout: 10) {
+            let avatar = (self.api.circle(token: owner.token)?["you"] as? [String: Any])?["avatar"] as? [String: Any]
+            return avatar?["presetId"] as? String == "fox"
+        }, "The saved icon should be stored for this account.")
+        let peerAvatar = (api.member(personID: owner.personID, token: friend.token)?["person"] as? [String: Any])?["avatar"] as? [String: Any]
+        XCTAssertEqual(peerAvatar?["presetId"] as? String, "fox", "A connected person should receive the chosen icon.")
+        attachScreenshot(of: app, named: "You - fox profile icon")
+    }
+
+    func testRemovingTheProfileIconClearsItForAConnectedPerson() throws {
+        let suffix = UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
+        let phones = Array(LocalTrustAPI.reservedPhonePool().shuffled().prefix(2))
+        let ownerName = "Clr\(suffix.prefix(4))"
+        let friendName = "See\(suffix.prefix(4))"
+        let owner = try makeTestAccount(
+            displayName: ownerName,
+            deviceID: "trust-clear-owner-\(suffix)",
+            handle: "cl\(suffix.prefix(8))",
+            phone: "+1\(phones[0])"
+        )
+        let friend = try makeTestAccount(
+            displayName: friendName,
+            deviceID: "trust-clear-friend-\(suffix)",
+            handle: "se\(suffix.prefix(8))",
+            phone: "+1\(phones[1])"
+        )
+        defer {
+            api.deleteAccount(token: friend.token)
+            api.deleteAccount(token: owner.token)
+        }
+        try connect(friend, to: owner)
+        XCTAssertEqual(api.putAvatarPreset("fox", token: owner.token), 200)
+
+        let app = launchDevelopmentApp(deviceID: "trust-clear-owner-\(suffix)", displayName: ownerName)
+        defer { app.terminate() }
+        XCTAssertTrue(app.buttons["tab-you"].waitForExistence(timeout: 20))
+        app.buttons["tab-you"].tap()
+        let edit = app.buttons["edit-profile-picture"]
+        XCTAssertTrue(edit.waitForExistence(timeout: 8))
+        edit.tap()
+        let options = app.buttons["avatar-photo-options"]
+        XCTAssertTrue(options.waitForExistence(timeout: 8), app.debugDescription)
+        options.tap()
+        let remove = app.buttons["avatar-remove"]
+        XCTAssertTrue(remove.waitForExistence(timeout: 5), app.debugDescription)
+        remove.tap()
+        let save = app.buttons["avatar-save"]
+        XCTAssertTrue(save.waitForExistence(timeout: 5))
+        XCTAssertTrue(save.isEnabled)
+        save.tap()
+        XCTAssertTrue(waitUntil(timeout: 12) { !save.exists }, "Removing the icon should close the picker.")
+        XCTAssertTrue(waitUntil(timeout: 10) {
+            let avatar = (self.api.circle(token: owner.token)?["you"] as? [String: Any])?["avatar"]
+            return avatar == nil || avatar is NSNull
+        }, "The account should no longer store a profile icon.")
+        let peerAvatar = (api.member(personID: owner.personID, token: friend.token)?["person"] as? [String: Any])?["avatar"]
+        XCTAssertTrue(peerAvatar == nil || peerAvatar is NSNull, "A connected person should stop receiving the removed icon.")
+        attachScreenshot(of: app, named: "You - profile icon removed")
+    }
+
+    func testSignOutReturnsToTheAgeGateWithoutDeletingTheAccount() throws {
+        let suffix = UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
+        let phone = "+1\(LocalTrustAPI.reservedPhonePool().shuffled()[0])"
+        let name = "Sign\(suffix.prefix(4))"
+        let session = try makeTestAccount(
+            displayName: name,
+            deviceID: "trust-signout-\(suffix)",
+            handle: "so\(suffix.prefix(8))",
+            phone: phone
+        )
+        defer { api.deleteAccount(token: session.token) }
+
+        let app = launchDevelopmentApp(deviceID: "trust-signout-\(suffix)", displayName: name)
+        defer { app.terminate() }
+        XCTAssertTrue(app.buttons["tab-you"].waitForExistence(timeout: 20))
+        app.buttons["tab-you"].tap()
+        let signOut = app.buttons["sign-out"]
+        for _ in 0..<5 {
+            if signOut.exists, signOut.isHittable { break }
+            app.swipeUp()
+        }
+        XCTAssertTrue(signOut.waitForExistence(timeout: 5), app.debugDescription)
+        XCTAssertTrue(signOut.isHittable, "Sign out should be on screen.\n\(app.debugDescription)")
+        signOut.tap()
+        let signedOut = app.buttons["local-api-sign-in"]
+        let ageGate = app.textFields["age-birth-month"]
+        XCTAssertTrue(
+            signedOut.waitForExistence(timeout: 10) || ageGate.exists,
+            "Sign out should leave the account screens.\n\(app.debugDescription)"
+        )
+        XCTAssertFalse(app.buttons["tab-circle"].exists)
+        XCTAssertEqual(api.request("GET", "/api/v1/circle", token: session.token).status, 200, "Sign out is local. The account remains on the server.")
+        attachScreenshot(of: app, named: "Signed out - age gate")
+    }
+
+    func testFreeAccountAlwaysOpensThePaywallAndDoesNotStartSharing() throws {
+        let fixture = try makeConnectedFixture(prefix: "paywall")
+        defer {
+            api.deleteAccount(token: fixture.peer.token)
+            api.deleteAccount(token: fixture.main.token)
+        }
+        let app = launchDevelopmentApp(deviceID: fixture.mainDeviceID, displayName: fixture.mainName)
+        defer { app.terminate() }
+        XCTAssertTrue(app.buttons["tab-sharing"].waitForExistence(timeout: 20))
+        app.buttons["tab-sharing"].tap()
+        let key = fixture.peerName.lowercased()
+        let always = app.buttons["sharing-mode-always-\(key)"]
+        XCTAssertTrue(always.waitForExistence(timeout: 12), app.debugDescription)
+        always.tap()
+        let close = app.buttons["plus-close"]
+        XCTAssertTrue(close.waitForExistence(timeout: 12), "Always without Plus should open the paywall.\n\(app.debugDescription)")
+        XCTAssertTrue(app.descendants(matching: .any)["plus-subscription-store"].waitForExistence(timeout: 8))
+        XCTAssertEqual(
+            inboundPresentation(personID: fixture.main.personID, token: fixture.peer.token),
+            "off",
+            "Opening Plus must not start Always sharing."
+        )
+        close.tap()
+        XCTAssertTrue(waitUntil(timeout: 5) { !close.exists })
+        XCTAssertFalse(always.isSelected)
+    }
+
+    /// The paywall lists the StoreKit Testing prices. Try It Free on this simulator
+    /// asks for an Apple Account, so this test does not score a purchase.
+    func testStoreKitTestingPaywallListsTheLocalPrices() throws {
+        let fixture = try makeConnectedFixture(prefix: "storekit")
+        defer {
+            api.deleteAccount(token: fixture.peer.token)
+            api.deleteAccount(token: fixture.main.token)
+        }
+        let app = launchDevelopmentApp(deviceID: fixture.mainDeviceID, displayName: fixture.mainName)
+        defer { app.terminate() }
+        XCTAssertTrue(app.buttons["tab-sharing"].waitForExistence(timeout: 20))
+        app.buttons["tab-sharing"].tap()
+        let always = app.buttons["sharing-mode-always-\(fixture.peerName.lowercased())"]
+        XCTAssertTrue(always.waitForExistence(timeout: 12), app.debugDescription)
+        always.tap()
+        XCTAssertTrue(app.buttons["plus-close"].waitForExistence(timeout: 12))
+        let monthly = app.buttons.matching(NSPredicate(
+            format: "identifier == 'Subscription Store View Default Picker Item' AND label CONTAINS[c] 'Plus Monthly' AND label CONTAINS '$7.99'"
+        )).firstMatch
+        let annual = app.buttons.matching(NSPredicate(
+            format: "identifier == 'Subscription Store View Default Picker Item' AND label CONTAINS[c] 'Plus Annual' AND label CONTAINS '$69.99'"
+        )).firstMatch
+        let purchase = app.buttons["Subscription Store View Button"]
+        XCTAssertTrue(monthly.waitForExistence(timeout: 12), app.debugDescription)
+        XCTAssertTrue(annual.waitForExistence(timeout: 5), app.debugDescription)
+        XCTAssertTrue(monthly.label.localizedCaseInsensitiveContains("per month"), monthly.label)
+        XCTAssertTrue(annual.label.localizedCaseInsensitiveContains("per year"), annual.label)
+        XCTAssertTrue(monthly.label.localizedCaseInsensitiveContains("7 days free"), monthly.label)
+        XCTAssertTrue(annual.label.localizedCaseInsensitiveContains("7 days free"), annual.label)
+        XCTAssertTrue(purchase.exists, app.debugDescription)
+        XCTAssertTrue(purchase.label.contains("7.99"), purchase.label)
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'restore'")).firstMatch.waitForExistence(timeout: 5), "Restore Subscription should be available without activating it.")
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'Terms of Service'")).firstMatch.waitForExistence(timeout: 5), "Terms of Service should be available from the paywall.")
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'Privacy Policy'")).firstMatch.waitForExistence(timeout: 5), "Privacy Policy should be available from the paywall.")
+        let circle = try XCTUnwrap(api.circle(token: fixture.main.token), "The free account circle response must be available.")
+        let you = try XCTUnwrap(circle["you"] as? [String: Any], "The circle response must include the account profile.")
+        let hasCircle = try XCTUnwrap(you["hasCircle"] as? Bool, "The profile must report its Plus circle entitlement.")
+        XCTAssertFalse(hasCircle, "Opening the paywall must not grant Plus.")
+    }
+
     private func makeConnectedFixture(prefix: String) throws -> ConnectedTestFixture {
         let suffix = UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
         let mainName = "RaceMain\(suffix.prefix(6))"
@@ -1801,7 +3133,9 @@ final class TrustRealAPIFeatureTests: XCTestCase {
     private func makeTestAccount(displayName: String, deviceID: String, handle: String, phone: String) throws -> DisposableSession {
         let session = try XCTUnwrap(api.developmentSession(name: displayName, deviceID: deviceID))
         XCTAssertEqual(api.putHandle(handle, token: session.token), 204)
-        XCTAssertTrue(api.verifyPhone(phone: phone, token: session.token), "The fixture phone must be verified through the Development OTP path.")
+        let verified = api.verifyPhone(phone: phone, token: session.token)
+        if !verified { api.deleteAccount(token: session.token) }
+        XCTAssertTrue(verified, "The fixture phone must be verified through the Development OTP path.")
         return session
     }
 
@@ -1881,6 +3215,20 @@ final class TrustRealAPIFeatureTests: XCTestCase {
             body: ["connectionId": connectionID, "revision": revision, "resting": resting]
         ).status, 204)
         return connectionID
+    }
+
+    private func pauseShare(_ pause: String, personID: String, owner: DisposableSession) throws {
+        let connectionID = try XCTUnwrap(activeConnectionID(personID: personID, token: owner.token))
+        let revision = try XCTUnwrap(activeShareRevision(personID: personID, token: owner.token))
+        XCTAssertEqual(
+            api.request(
+                "PATCH",
+                "/api/v1/people/\(personID)/share",
+                token: owner.token,
+                body: ["connectionId": connectionID, "revision": revision, "pause": pause]
+            ).status,
+            204
+        )
     }
 
     private func launchDevelopmentApp(deviceID: String, displayName: String, arguments: [String] = []) -> XCUIApplication {
@@ -2229,6 +3577,10 @@ private final class LocalTrustAPI {
         (200..<300).contains(request("POST", "/__test/arm", body: [:]).status)
     }
 
+    func armCircleReadFailure() -> Bool {
+        (200..<300).contains(request("POST", "/__test/arm-circle-failure", body: [:]).status)
+    }
+
     func armHistoryRace() -> Bool {
         (200..<300).contains(request("POST", "/__test/arm-history", body: [:]).status)
     }
@@ -2317,14 +3669,22 @@ private final class LocalTrustAPI {
     }
 
     func verifyPhone(phone: String, token: String) -> Bool {
-        let sent = request("POST", "/api/v1/me/phone/send", token: token, body: ["phone": phone])
-        guard (200..<300).contains(sent.status),
-              let payload = sent.json as? [String: Any],
-              // A development code is returned only on the no-SMS path.
-              let code = payload["developmentCode"] as? String,
-              code.count == 6,
-              code.allSatisfy(\.isNumber) else { return false }
-        return (200..<300).contains(request("POST", "/api/v1/me/phone/verify", token: token, body: ["phone": phone, "code": code]).status)
+        for _ in 0..<4 {
+            let sent = request("POST", "/api/v1/me/phone/send", token: token, body: ["phone": phone])
+            if sent.status == 429 {
+                let seconds = (sent.json as? [String: Any])?["retryAfterSeconds"] as? Int ?? 61
+                Thread.sleep(forTimeInterval: TimeInterval(min(max(seconds, 1), 75)))
+                continue
+            }
+            guard (200..<300).contains(sent.status),
+                  let payload = sent.json as? [String: Any],
+                  // A development code is returned only on the no-SMS path.
+                  let code = payload["developmentCode"] as? String,
+                  code.count == 6,
+                  code.allSatisfy(\.isNumber) else { return false }
+            return (200..<300).contains(request("POST", "/api/v1/me/phone/verify", token: token, body: ["phone": phone, "code": code]).status)
+        }
+        return false
     }
 
     func connectionRequests(token: String) -> [String: Any]? {

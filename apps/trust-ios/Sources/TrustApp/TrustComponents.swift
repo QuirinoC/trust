@@ -124,7 +124,6 @@ struct TrustAvatar: View {
         }
             .frame(width: size, height: size)
             .clipShape(Circle())
-            .overlay(Circle().stroke(palette.ink.opacity(0.03), lineWidth: 1))
             .accessibilityHidden(true)
             .task(id: photoTaskKey) {
                 photo = nil
@@ -136,10 +135,12 @@ struct TrustAvatar: View {
     private var initials: some View {
         Text(name.trustInitials)
             // Initials are decorative; full names remain available to VoiceOver nearby.
-            .font(.system(size: size * 0.40, weight: .semibold, design: .rounded))
+            .font(.system(TrustTheme.textStyle(for: max(11, size * 0.40)), design: .rounded).weight(.bold))
+            .accessibilityHidden(true)
+            .accessibilityIdentifier("avatar-initials-\(resolvedPersonID.uuidString)")
             .tracking(-0.5)
             .lineLimit(1)
-            .minimumScaleFactor(0.5)
+            .minimumScaleFactor(0.2)
             .allowsTightening(true)
             .foregroundStyle(palette.ink)
             .frame(width: size * 0.78, height: size * 0.78)
@@ -199,7 +200,7 @@ struct TrustStatusLine: View {
     }
 }
 
-/// `.badge` — pill with glyph: "Home", "Presence hidden".
+/// `.badge` — pill with glyph: "Home", "Away", or "No signal".
 struct TrustBadge: View {
     let glyph: String
     let text: String
@@ -431,6 +432,7 @@ struct TrustOfflineBanner: View {
         .padding(.horizontal, TrustTheme.gutter)
         .padding(.vertical, 6)
         .background(palette.surface)
+        .accessibilityIdentifier("offline-banner")
     }
 }
 

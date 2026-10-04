@@ -186,14 +186,14 @@ struct CircleView: View {
         VStack(alignment: .leading, spacing: 5) {
             TrustPageTitle(text: TrustCopy.people, size: 28)
             Text(TrustCopy.onMap(count: pins.count, sealed: max(0, model.circle.count - pins.count)))
-                .trustFont(12, weight: .medium)
-                .foregroundStyle(palette.chromeMuted)
+                .trustFont(12, weight: .semibold)
+                .foregroundStyle(palette.ink)
         }
         .padding(.horizontal, 18)
         .padding(.top, 10)
         .padding(.bottom, 12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.ultraThinMaterial)
+        .background(palette.paper)
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .padding(.horizontal, TrustTheme.gutter)
         .padding(.top, 8)
@@ -239,7 +239,7 @@ struct CircleView: View {
                     .fill(palette.line)
                     .frame(width: 36, height: 5)
                     .padding(.vertical, 10)
-                    .frame(maxWidth: .infinity)
+                    .frame(maxWidth: .infinity, minHeight: 44)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -258,7 +258,6 @@ struct CircleView: View {
         .frame(maxWidth: .infinity)
         .background(palette.sheet)
         .clipShape(UnevenRoundedRectangle(topLeadingRadius: 22, topTrailingRadius: 22, style: .continuous))
-        .shadow(color: .black.opacity(0.14), radius: 16, y: -4)
         .accessibilityElement(children: .contain)
     }
 
@@ -338,6 +337,7 @@ struct CircleView: View {
                     .accessibilityIdentifier("people-list")
             }
         }
+        .clipped()
     }
 
     private func sheetDrag(containerHeight: CGFloat) -> some Gesture {
@@ -508,14 +508,14 @@ struct CirclePersonRow: View {
         Group {
             if dynamicTypeSize.isAccessibilitySize {
                 VStack(alignment: .leading, spacing: 8) {
-                    personButton(multiline: true)
+                    personButton
                     if canPeek {
                         HStack { Spacer(minLength: 0); peekButton }
                     }
                 }
             } else {
                 HStack(alignment: .center, spacing: 12) {
-                    personButton(multiline: false)
+                    personButton
                     if canPeek { peekButton }
                 }
             }
@@ -524,7 +524,7 @@ struct CirclePersonRow: View {
         .frame(maxWidth: .infinity, minHeight: 68, alignment: .leading)
     }
 
-    private func personButton(multiline: Bool) -> some View {
+    private var personButton: some View {
         TimelineView(.periodic(from: .now, by: 60)) { context in
             Button {
                 model.openPerson(member)
@@ -535,13 +535,11 @@ struct CirclePersonRow: View {
                         Text(member.person.displayName)
                             .trustFont(16, weight: .semibold)
                             .foregroundStyle(palette.ink)
-                            .lineLimit(multiline ? 2 : 1)
-                            .fixedSize(horizontal: false, vertical: multiline)
+                            .fixedSize(horizontal: false, vertical: true)
                         Text(statusText(at: context.date))
                             .trustFont(13)
                             .foregroundStyle(palette.muted)
-                            .lineLimit(multiline ? 2 : 1)
-                            .fixedSize(horizontal: false, vertical: multiline)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                     Spacer(minLength: 8)
                 }
@@ -565,10 +563,11 @@ struct CirclePersonRow: View {
         } label: {
             Text(peekIsLook ? TrustCopy.look : TrustCopy.view)
                 .trustFont(13, weight: .semibold)
-                .foregroundStyle(peekIsLook ? palette.accent : palette.muted)
+                .foregroundStyle(peekIsLook ? palette.accent : palette.chromeMuted)
                 .padding(.horizontal, 14)
                 .frame(minWidth: 66, minHeight: 44)
-                .background(Capsule().stroke(peekIsLook ? palette.accentSoft : palette.line, lineWidth: 1))
+                .background(Capsule().fill(palette.surface))
+                .overlay(Capsule().stroke(peekIsLook ? palette.accentSoft : palette.line, lineWidth: 1))
         }
         .buttonStyle(.plain)
         .accessibilityLabel(peekIsLook ? TrustCopy.lookHint(name: member.firstName) : TrustCopy.viewHint(name: member.firstName))
@@ -586,8 +585,7 @@ struct CirclePersonRow: View {
         }
         if member.isPaused { return TrustCopy.pause }
         if isNotSharing { return TrustCopy.choseOff(name: member.firstName) }
-        if let presence = member.visiblePresence { return presence.label }
-        return TrustCopy.presenceHiddenBadge
+        return member.viewerPresenceLabel
     }
 }
 
@@ -740,6 +738,7 @@ struct PersonScreen: View {
                         Text(statusText(member))
                             .trustFont(15)
                             .foregroundStyle(palette.muted)
+                            .accessibilityIdentifier("person-status")
                     }
                 }
                 .padding(.top, 8)
@@ -797,10 +796,17 @@ struct PersonScreen: View {
     }
 
     private func statusText(_ member: TrustedPerson) -> String {
+        if member.isAvailable {
+            return TrustCopy.availableLocationStatus(
+                timestamp: member.livePoint?.timestamp,
+                now: Date(),
+                viewerHasPlus: model.coverage.isCovered,
+                presence: member.visiblePresence?.label
+            )
+        }
         if member.isPaused { return TrustCopy.pause }
         if member.isNotSharingWithYou { return TrustCopy.choseOff(name: member.firstName) }
-        if let presence = member.visiblePresence { return presence.label }
-        return TrustCopy.presenceHiddenBadge
+        return member.viewerPresenceLabel
     }
 
     private func directionText(_ member: TrustedPerson) -> String {
