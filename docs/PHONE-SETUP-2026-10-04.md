@@ -43,7 +43,25 @@ No real carrier SMS, physical-device Apple authentication/AppTransaction, APNs, 
 
 The disposable returning account and temporary token were deleted. Task-owned PostgreSQL 5434, Memory APIs 5089/5090, and the fault proxy were stopped. Duo returned to its initial shutdown state; Pro remains booted as it was initially. Logs, result bundles, screenshots, and the isolated PostgreSQL data directory remain in the evidence root.
 
-No production data, deployed API, deployment credentials, review/release/age/privacy entitlement flags, or uploaded build changed. Release requires an independently authorized API deployment applying migration 022 and a new iOS build; the old server safely retains its older pacing but cannot provide the new correction allowance. Commit/push and final main CI are owned by the parent integration task.
+No production data, deployed API, deployment credentials, review/release/age/privacy entitlement flags, or uploaded build changed. Release requires an independently authorized API deployment applying migration 022 and a new iOS build; the old server safely retains its older pacing but cannot provide the new correction allowance.
+
+## Integration and CI
+
+The implementation was committed as `0415389d307cb8b201208239af473f494235f164`, fast-forward merged into `main`, and pushed. Canonical catalog generation followed as `ab5e8727a1e1b7c7950f7c9fb8241664e8e05dea`; translation values were unchanged and a second generation was byte-identical.
+
+[CI 37188773235](https://github.com/QuirinoC/trust/actions/runs/37188773235) passed API and web but failed iOS before build because the newly appended catalog entries differed from the generator's alphabetical order. The catalog fix preserves the freshness check. [CI 37188923773](https://github.com/QuirinoC/trust/actions/runs/37188923773) on `ab5e872` completed successfully in all three jobs:
+
+| CI check | Final result |
+| --- | --- |
+| API/PostgreSQL | 216 passed, 0 failed, 0 skipped |
+| Web routes | Passed |
+| Localization coverage/freshness | Passed |
+| Xcode TrustCoreTests | 103 passed, 0 failed |
+| Standard iOS UI | 44 cases: 26 passed, 18 explicit setup skips, 0 failed |
+| Isolated Development API UI | 15 cases: 5 passed, 10 explicit setup skips, 0 failed |
+| Isolated UI exact-count assertion | Passed |
+
+The 15 age-assurance UI passes are included in the 26 standard UI passes. Paired-role and fault-proxy cases require their configured setup; skips are not passes. The final documentation-only closure does not change the app, API, or CI source validated at `ab5e872`.
 
 ## Pending physical-device validation
 
