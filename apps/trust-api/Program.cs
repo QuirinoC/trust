@@ -57,6 +57,18 @@ builder.Services.AddRazorPages();
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.OnRejected = async (context, cancellationToken) =>
+    {
+        if (context.HttpContext.Request.Path.Equals("/api/v1/me/phone/send", StringComparison.OrdinalIgnoreCase)
+            && context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
+        {
+            var now = context.HttpContext.RequestServices.GetRequiredService<TimeProvider>().GetUtcNow();
+            var seconds = Math.Max(1, (int)Math.Ceiling(retryAfter.TotalSeconds));
+            context.HttpContext.Response.Headers.RetryAfter = seconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            await context.HttpContext.Response.WriteAsJsonAsync(new TrustApi.Contracts.V1.ApiError(
+                "otp_cooldown", "Please wait before requesting another code.", now, now.AddSeconds(seconds), seconds), cancellationToken);
+        }
+    };
 
     static string PartitionKey(HttpContext context) =>
         context.Connection.RemoteIpAddress?.ToString() ?? "local";

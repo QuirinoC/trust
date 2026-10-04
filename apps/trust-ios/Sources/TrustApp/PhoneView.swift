@@ -10,23 +10,21 @@ struct PhoneView: View {
     private enum Field { case phone, code }
 
     var body: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            content(now: context.date)
+        }
+    }
+
+    private func content(now: Date) -> some View {
         VStack(spacing: 0) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
-                    if model.canReturnFromPhoneVerification {
-                        HStack {
-                            Spacer()
-                            Button(TrustCopy.later) { model.returnFromConnectionPhoneVerification() }
-                                .buttonStyle(TrustTextButtonStyle(color: palette.muted))
-                                .accessibilityIdentifier("return-to-app-from-phone-verification")
-                        }
-                    }
                     TrustWordmark().padding(.bottom, model.phoneCodeSent ? 14 : 30)
 
                     if model.phoneCodeSent {
-                        codeEntry
+                        codeEntry(now: now)
                     } else {
-                        phoneEntry
+                        phoneEntry(now: now)
                     }
 
                     Button(TrustCopy.signOut) { model.signOut() }
@@ -50,7 +48,7 @@ struct PhoneView: View {
         }
     }
 
-    private var phoneEntry: some View {
+    private func phoneEntry(now: Date) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             Text(TrustCopy.yourPhone)
                 .font(TrustTheme.display(32))
@@ -78,11 +76,11 @@ struct PhoneView: View {
                                     .frame(width: 24, height: 24)
                                     .accessibilityHidden(true)
                             }
-                            Text(model.isSendingPhone ? TrustCopy.sendingCode : TrustCopy.sendCode)
+                            Text(model.isSendingPhone ? TrustCopy.sendingCode : sendLabel(now: now, resend: false))
                         }
                     }
-                    .buttonStyle(TrustFilledButtonStyle(isBusy: model.isSendingPhone))
-                    .disabled(model.isSendingPhone || model.phoneDraft.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .buttonStyle(PhoneSendButtonStyle(coolingDown: model.phoneRetrySeconds(at: now) > 0, isBusy: model.isSendingPhone))
+                    .disabled(model.isSendingPhone || model.phoneRetrySeconds(at: now) > 0 || model.phoneDraft.trimmingCharacters(in: .whitespaces).isEmpty)
                     .accessibilityIdentifier("send-phone-code")
 
                     Text(TrustCopy.phoneConsentDetails)
@@ -90,13 +88,14 @@ struct PhoneView: View {
                         .foregroundStyle(palette.muted)
                         .fixedSize(horizontal: false, vertical: true)
 
+                    retryNotice(now: now)
                     phoneNotice
                 }
             }
         }
     }
 
-    private var codeEntry: some View {
+    private func codeEntry(now: Date) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             Text(TrustCopy.verifyPhoneTitle)
                 .font(TrustTheme.display(29))
@@ -114,7 +113,7 @@ struct PhoneView: View {
                         Image(systemName: "message.fill")
                             .foregroundStyle(palette.accent)
                             .accessibilityHidden(true)
-                        Text(model.phoneDraft)
+                        Text(model.challengedPhone)
                             .trustFont(15, weight: .semibold)
                             .foregroundStyle(palette.ink)
                             .lineLimit(1)
@@ -124,7 +123,7 @@ struct PhoneView: View {
                         Button(TrustCopy.editPhone) { editPhoneNumber() }
                             .font(TrustTheme.ui(13, weight: .semibold))
                             .foregroundStyle(palette.accent)
-                            .disabled(model.isSendingPhone)
+                            .frame(minWidth: 44, minHeight: 44)
                             .accessibilityIdentifier("edit-phone-number")
                     }
 
@@ -166,19 +165,37 @@ struct PhoneView: View {
 
                     HStack {
                         Spacer(minLength: 0)
-                        Button(TrustCopy.resendCode) {
+                        Button(sendLabel(now: now, resend: true)) {
                             focused = nil
                             Task { await model.sendPhoneCode(action: .resendCode) }
                         }
-                        .font(TrustTheme.ui(13, weight: .medium))
-                        .foregroundStyle(palette.accent)
-                        .disabled(model.isSendingPhone)
+                        .buttonStyle(PhoneSendButtonStyle(coolingDown: model.phoneRetrySeconds(at: now) > 0, isBusy: model.isSendingPhone))
+                        .disabled(model.isSendingPhone || model.phoneRetrySeconds(at: now) > 0)
                         .accessibilityIdentifier("send-phone-code")
                     }
 
+                    retryNotice(now: now)
                     phoneNotice
                 }
             }
+        }
+    }
+
+    private func sendLabel(now: Date, resend: Bool) -> String {
+        let seconds = model.phoneRetrySeconds(at: now)
+        guard seconds > 0 else { return resend ? TrustCopy.resendCode : TrustCopy.sendCode }
+        let duration = String(format: "%d:%02d", seconds / 60, seconds % 60)
+        return TrustCopy.phoneRetryButton(duration, resend: resend)
+    }
+
+    @ViewBuilder
+    private func retryNotice(now: Date) -> some View {
+        if model.phoneRetrySeconds(at: now) > 0, let deadline = model.phoneRetryDeadline {
+            Text(TrustCopy.phoneRetryExplanation(deadline.formatted(date: Calendar.current.isDateInToday(deadline) ? .omitted : .abbreviated, time: .standard)))
+                .trustFont(13)
+                .foregroundStyle(palette.muted)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("phone-retry-notice")
         }
     }
 
@@ -230,10 +247,25 @@ struct PhoneView: View {
     }
 
     private func editPhoneNumber() {
-        model.cancelPendingPhoneSend()
-        model.phoneCodeSent = false
-        model.phoneCodeDraft = ""
-        model.phoneNotice = nil
+        model.editPhoneNumber()
         focused = .phone
+    }
+}
+
+/// The wait state uses an adaptive neutral fill and full-contrast text.
+private struct PhoneSendButtonStyle: ButtonStyle {
+    let coolingDown: Bool
+    let isBusy: Bool
+    @Environment(\.trustPalette) private var palette
+    @Environment(\.isEnabled) private var isEnabled
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .trustFont(16, weight: .semibold)
+            .foregroundStyle(coolingDown ? palette.ink : palette.accentOn)
+            .padding(.horizontal, 16)
+            .frame(maxWidth: .infinity, minHeight: 52)
+            .background(coolingDown ? palette.line : palette.accent)
+            .clipShape(RoundedRectangle(cornerRadius: TrustTheme.controlRadius, style: .continuous))
+            .opacity(coolingDown || isEnabled || isBusy ? 1 : 0.45)
     }
 }

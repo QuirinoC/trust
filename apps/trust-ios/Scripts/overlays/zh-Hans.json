@@ -530,5 +530,8 @@
   "remove_person_confirm_body": "对方将从你的列表中移除，双方的共享都会停止。",
   "stop_all_confirm_body": "在你重新选择共享模式之前，任何人都无法看到你的位置或在家／外出状态。",
   "sending_code": "正在发送验证码…",
-  "phone_request_pending": "请稍候…"
+  "phone_request_pending": "请稍候…",
+  "phone_send_countdown": "%@后发送验证码",
+  "phone_resend_countdown": "%@后重新发送",
+  "phone_retry_explanation": "你可以在%@（当地时间）请求新验证码。你仍可编辑号码。"
 }

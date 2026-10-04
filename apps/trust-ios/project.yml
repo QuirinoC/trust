@@ -154,7 +154,7 @@ targets:
         CFBundleDevelopmentRegion: en
         CFBundleLocalizations: [en, zh-Hans, ja, de, fr, pt-BR]
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
-        TRUST_SKIP_PHONE_VERIFICATION: YES
+        TRUST_SKIP_PHONE_VERIFICATION: NO
         TRUST_BASE_URL: $(TRUST_BASE_URL)
         LSApplicationCategoryType: public.app-category.lifestyle
         UIApplicationSupportsIndirectInputEvents: true

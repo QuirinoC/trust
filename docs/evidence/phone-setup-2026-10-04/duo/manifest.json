@@ -1,0 +1,44 @@
+[
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Local E2E",
+        "deviceId" : "C6495E9A-B165-46E1-97F9-0B92ABBDDC0D",
+        "deviceName" : "iPhone Duo",
+        "exportedFileName" : "B8A70E32-397C-4EDC-BD83-4257A4253330.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "Phone - Persisted countdown dark_0_B18062CF-20EA-41CB-9BF7-0A4E6E3C4CC5.png",
+        "timestamp" : 1791101422.514
+      },
+      {
+        "configurationName" : "Local E2E",
+        "deviceId" : "C6495E9A-B165-46E1-97F9-0B92ABBDDC0D",
+        "deviceName" : "iPhone Duo",
+        "exportedFileName" : "35171A54-FC03-4AFB-A36C-C999308EB6D6.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "Phone - Edit countdown dark_0_5F16D6B0-5647-407A-B63A-2FC90D1385DB.png",
+        "timestamp" : 1791101414.402
+      },
+      {
+        "configurationName" : "Local E2E",
+        "deviceId" : "C6495E9A-B165-46E1-97F9-0B92ABBDDC0D",
+        "deviceName" : "iPhone Duo",
+        "exportedFileName" : "A177D8EA-3ABA-4293-B175-202C7E03F797.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "Phone - Restored code countdown dark_0_62F38B0B-E740-4BF1-B6DC-311464EDC48B.png",
+        "timestamp" : 1791101411.239
+      },
+      {
+        "configurationName" : "Local E2E",
+        "deviceId" : "C6495E9A-B165-46E1-97F9-0B92ABBDDC0D",
+        "deviceName" : "iPhone Duo",
+        "exportedFileName" : "65570867-B78E-48F5-AF8B-38E33C9B8B4F.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "Phone - Third code countdown light_0_67D992B6-ACEB-4ADB-A9BD-F66A189AD5F6.png",
+        "timestamp" : 1791101404.477
+      }
+    ],
+    "testIdentifier" : "TrustRealAPIFeatureTests/testRequiredPhoneCorrectionsCooldownEditRelaunchAndReturningVerifiedAccount()",
+    "testIdentifierURL" : "test://com.apple.xcode/Trust/TrustUITests/TrustRealAPIFeatureTests/testRequiredPhoneCorrectionsCooldownEditRelaunchAndReturningVerifiedAccount"
+  }
+]

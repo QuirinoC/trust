@@ -573,7 +573,9 @@ public static class TrustEndpoints
             return Results.Ok(new SendPhoneCodeResponse(
                 result.ExpiresAt,
                 result.ResendAfterSeconds,
-                result.DevelopmentCode));
+                result.DevelopmentCode, result.Retry.ServerTime, result.Retry.ResendRetryAt,
+                result.Retry.CorrectionRetryAt, result.Retry.ImmediateNumberAttemptsRemaining, result.Retry.NormalizedPhone,
+                result.Retry.AccountRetryAt, result.Retry.AccountWindowStartedAt, result.Retry.AccountSendCount));
         }
         catch (TrustException exception)
         {
@@ -1630,20 +1632,20 @@ public static class TrustEndpoints
             or "invalid_phone" or "invalid_name" or "invalid_handle" or "reserved_handle"
             or "otp_invalid" or "otp_expired"
             or "otp_exhausted" or "otp_cooldown" =>
-            Results.BadRequest(new ApiError(exception.Code, exception.Message)),
-        "verification_required" => Results.Json(new ApiError(exception.Code, exception.Message), statusCode: StatusCodes.Status403Forbidden),
-        "request_not_found" => Results.NotFound(new ApiError(exception.Code, exception.Message)),
+            Results.BadRequest(ApiError.From(exception)),
+        "verification_required" => Results.Json(ApiError.From(exception), statusCode: StatusCodes.Status403Forbidden),
+        "request_not_found" => Results.NotFound(ApiError.From(exception)),
         "request_expired" or "request_declined_recently" or "request_limit"
             or "connection_changed" or "share_state_changed" or "presence_state_changed" or "client_update_required" =>
-            Results.Json(new ApiError(exception.Code, exception.Message), statusCode: StatusCodes.Status409Conflict),
+            Results.Json(ApiError.From(exception), statusCode: StatusCodes.Status409Conflict),
         "otp_not_configured" or "otp_send_failed" =>
-            Results.Json(new ApiError(exception.Code, exception.Message), statusCode: StatusCodes.Status503ServiceUnavailable),
+            Results.Json(ApiError.From(exception), statusCode: StatusCodes.Status503ServiceUnavailable),
         "not_connected" or "pair_inactive" or "no_location" or "phone_in_use" or "phone_unavailable" or "handle_in_use"
             or "share_off" or "look_requires_sealed" or "view_requires_available" =>
-            Results.Json(new ApiError(exception.Code, exception.Message), statusCode: StatusCodes.Status409Conflict),
+            Results.Json(ApiError.From(exception), statusCode: StatusCodes.Status409Conflict),
         "seat_limit" or "pro_required" =>
-            Results.Json(new ApiError(exception.Code, exception.Message), statusCode: StatusCodes.Status402PaymentRequired),
-        _ => Results.Json(new ApiError(exception.Code, exception.Message), statusCode: StatusCodes.Status400BadRequest)
+            Results.Json(ApiError.From(exception), statusCode: StatusCodes.Status402PaymentRequired),
+        _ => Results.Json(ApiError.From(exception), statusCode: StatusCodes.Status400BadRequest)
     };
 }
 

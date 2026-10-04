@@ -1281,6 +1281,11 @@ public sealed class PostgresTrustStore(string connectionString) : ITrustStore
     public async Task UpsertPhoneChallengeAsync(PhoneChallenge challenge, CancellationToken cancellationToken)
     {
         await using var connection = await OpenAsync(cancellationToken);
+        await UpsertPhoneChallengeAsync(connection, null, challenge, cancellationToken);
+    }
+
+    private static async Task UpsertPhoneChallengeAsync(NpgsqlConnection connection, NpgsqlTransaction? transaction, PhoneChallenge challenge, CancellationToken cancellationToken)
+    {
         await using var command = new NpgsqlCommand(
             """
             INSERT INTO trust.phone_challenges (
@@ -1295,7 +1300,7 @@ public sealed class PostgresTrustStore(string connectionString) : ITrustStore
                 send_count = EXCLUDED.send_count,
                 window_started_at = EXCLUDED.window_started_at;
             """,
-            connection);
+            connection, transaction);
         command.Parameters.AddWithValue(challenge.AccountId);
         command.Parameters.AddWithValue(challenge.PhoneE164);
         command.Parameters.AddWithValue(challenge.CodeHash);
@@ -1317,18 +1322,21 @@ public sealed class PostgresTrustStore(string connectionString) : ITrustStore
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    public async Task RecordPhoneSmsConsentAsync(
-        PhoneSmsConsentEvent consentEvent,
-        CancellationToken cancellationToken)
+    public async Task RecordPhoneSmsConsentAsync(PhoneSmsConsentEvent consentEvent, CancellationToken cancellationToken)
     {
         await using var connection = await OpenAsync(cancellationToken);
+        await RecordPhoneSmsConsentAsync(connection, null, consentEvent, cancellationToken);
+    }
+
+    private static async Task RecordPhoneSmsConsentAsync(NpgsqlConnection connection, NpgsqlTransaction? transaction, PhoneSmsConsentEvent consentEvent, CancellationToken cancellationToken)
+    {
         await using var command = new NpgsqlCommand(
             """
             INSERT INTO trust.phone_sms_consent_events (
                 account_id, phone_e164, disclosure_key, disclosure_version, consented_at, source, action)
             VALUES ($1, $2, $3, $4, $5, $6, $7);
             """,
-            connection);
+            connection, transaction);
         command.Parameters.AddWithValue(consentEvent.AccountId);
         command.Parameters.AddWithValue(consentEvent.PhoneE164);
         command.Parameters.AddWithValue(
@@ -1376,96 +1384,82 @@ public sealed class PostgresTrustStore(string connectionString) : ITrustStore
         return events;
     }
 
-    public async Task<bool> TryReserveSmsAsync(IReadOnlyList<SmsSendBudget> budgets, DateTimeOffset now, CancellationToken cancellationToken)
+    public async Task<bool> TryReserveSmsAsync(IReadOnlyList<SmsSendBudget> budgets, DateTimeOffset now, CancellationToken cancellationToken) =>
+        (await ReserveSmsAsync(budgets.Select(row => row.ScopeKey).ToArray(), null, null, now, cancellationToken)).Accepted;
+
+    public Task<PhoneSmsReservation> ReservePhoneSmsAsync(IReadOnlyList<string> keys, PhoneChallenge challenge,
+        PhoneSmsConsentEvent consent, DateTimeOffset now, CancellationToken cancellationToken) =>
+        ReserveSmsAsync(keys, challenge, consent, now, cancellationToken);
+
+    private async Task<PhoneSmsReservation> ReserveSmsAsync(IReadOnlyList<string> requestedKeys, PhoneChallenge? challenge,
+        PhoneSmsConsentEvent? consent, DateTimeOffset now, CancellationToken cancellationToken)
     {
         await using var connection = await OpenAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
-        var keys = budgets.Select(budget => budget.ScopeKey).Order(StringComparer.Ordinal).ToArray();
+        if (challenge is not null)
+        {
+            await using var accountLock = new NpgsqlCommand("SELECT account_id FROM trust.accounts WHERE account_id = $1 FOR UPDATE;", connection, transaction);
+            accountLock.Parameters.AddWithValue(challenge.AccountId);
+            if (await accountLock.ExecuteScalarAsync(cancellationToken) is null) throw TrustException.Unauthorized();
+        }
+        var keys = requestedKeys.Order(StringComparer.Ordinal).ToArray();
         await using (var seed = new NpgsqlCommand(
-            "INSERT INTO trust.sms_send_budgets (scope_key, window_started_at, send_count) SELECT key, $2, 0 FROM unnest($1::text[]) AS key ON CONFLICT (scope_key) DO NOTHING;",
-            connection,
-            transaction))
+            "INSERT INTO trust.sms_send_budgets (scope_key, window_started_at, send_count, phone_attempts) SELECT key, $2, 0, CASE WHEN key LIKE 'account:%' THEN ARRAY[]::text[] END FROM unnest($1::text[]) AS key ON CONFLICT (scope_key) DO NOTHING;",
+            connection, transaction))
         {
             seed.Parameters.AddWithValue(keys);
             seed.Parameters.AddWithValue(now);
             await seed.ExecuteNonQueryAsync(cancellationToken);
         }
-
-        var current = new Dictionary<string, SmsSendBudget>(StringComparer.Ordinal);
+        var rows = new List<SmsSendBudget>();
         await using (var read = new NpgsqlCommand(
-            "SELECT scope_key, window_started_at, send_count, last_sent_at FROM trust.sms_send_budgets WHERE scope_key = ANY($1) ORDER BY scope_key FOR UPDATE;",
-            connection,
-            transaction))
+            "SELECT scope_key, window_started_at, send_count, last_sent_at, phone_attempts FROM trust.sms_send_budgets WHERE scope_key = ANY($1) ORDER BY scope_key FOR UPDATE;",
+            connection, transaction))
         {
             read.Parameters.AddWithValue(keys);
             await using var reader = await read.ExecuteReaderAsync(cancellationToken);
             while (await reader.ReadAsync(cancellationToken))
             {
-                current[reader.GetString(0)] = new SmsSendBudget(
-                    reader.GetString(0),
-                    reader.GetFieldValue<DateTimeOffset>(1),
-                    reader.GetInt32(2),
-                    reader.IsDBNull(3) ? null : reader.GetFieldValue<DateTimeOffset>(3));
+                var row = new SmsSendBudget(reader.GetString(0), reader.GetFieldValue<DateTimeOffset>(1), reader.GetInt32(2),
+                    reader.IsDBNull(3) ? null : reader.GetFieldValue<DateTimeOffset>(3), reader.IsDBNull(4) ? null : reader.GetFieldValue<string[]>(4));
+                rows.Add(row);
             }
         }
-
-        foreach (var proposed in budgets)
+        var latest = rows.Select(row => row.LastSentAt).OfType<DateTimeOffset>().DefaultIfEmpty(now).Max();
+        if (latest > now) now = latest;
+        rows = rows.Select(row => PhoneSmsPolicy.Normalize(row, row.ScopeKey, now)).ToList();
+        if (challenge is not null) challenge = challenge with { SentAt = now, WindowStartedAt = now, ExpiresAt = now.AddMinutes(10) };
+        if (consent is not null) consent = consent with { ConsentedAt = now };
+        var account = rows.FirstOrDefault(row => row.ScopeKey.StartsWith("account:", StringComparison.Ordinal));
+        var correction = account is not null && PhoneSmsPolicy.IsNewCorrection(account, challenge?.PhoneE164);
+        var deadline = PhoneSmsPolicy.Deadline(rows, now, correction);
+        if (deadline > now) return new(false, PhoneSmsPolicy.Metadata(rows, challenge?.PhoneE164, now, deadline));
+        rows = rows.Select(row => PhoneSmsPolicy.Increment(row, challenge?.PhoneE164, now)).ToList();
+        foreach (var row in rows)
         {
-            var row = current[proposed.ScopeKey];
-            var window = proposed.ScopeKey.Contains("-day", StringComparison.Ordinal)
-                ? TimeSpan.FromHours(24)
-                : TimeSpan.FromHours(1);
-            var expired = now - row.WindowStartedAt >= window;
-            var count = expired ? 0 : row.SendCount;
-            var limit = proposed.ScopeKey == SmsSendBudget.GlobalDayKey() ? 40 : 8;
-            if (count >= limit)
-            {
-                await transaction.RollbackAsync(cancellationToken);
-                return false;
-            }
-
-            if (!expired
-                && (proposed.ScopeKey.StartsWith("account:", StringComparison.Ordinal)
-                    || proposed.ScopeKey.StartsWith("phone:", StringComparison.Ordinal))
-                && row.LastSentAt is { } lastSent)
-            {
-                var seconds = count <= 1 ? 45 : Math.Min(45 << Math.Min(count - 1, 4), 180);
-                if (now - lastSent < TimeSpan.FromSeconds(seconds))
-                {
-                    await transaction.RollbackAsync(cancellationToken);
-                    return false;
-                }
-            }
-        }
-
-        foreach (var proposed in budgets)
-        {
-            var row = current[proposed.ScopeKey];
-            var expired = now - row.WindowStartedAt >= (proposed.ScopeKey.Contains("-day", StringComparison.Ordinal)
-                ? TimeSpan.FromHours(24)
-                : TimeSpan.FromHours(1));
             await using var update = new NpgsqlCommand(
-                "UPDATE trust.sms_send_budgets SET window_started_at = $2, send_count = $3, last_sent_at = $4 WHERE scope_key = $1;",
-                connection,
-                transaction);
-            update.Parameters.AddWithValue(proposed.ScopeKey);
-            update.Parameters.AddWithValue(expired ? now : row.WindowStartedAt);
-            update.Parameters.AddWithValue((expired ? 0 : row.SendCount) + 1);
+                "UPDATE trust.sms_send_budgets SET window_started_at = $2, send_count = $3, last_sent_at = $4, phone_attempts = $5 WHERE scope_key = $1;",
+                connection, transaction);
+            update.Parameters.AddWithValue(row.ScopeKey);
+            update.Parameters.AddWithValue(row.WindowStartedAt);
+            update.Parameters.AddWithValue(row.SendCount);
             update.Parameters.AddWithValue(now);
+            update.Parameters.AddWithValue(NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Text, (object?)row.PhoneAttempts ?? DBNull.Value);
             await update.ExecuteNonQueryAsync(cancellationToken);
         }
-
+        if (challenge is not null) await UpsertPhoneChallengeAsync(connection, transaction, challenge, cancellationToken);
+        if (consent is not null) await RecordPhoneSmsConsentAsync(connection, transaction, consent, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-        return true;
+        return new(true, PhoneSmsPolicy.Metadata(rows, challenge?.PhoneE164, now, now));
     }
 
-    public async Task<int?> IncrementPhoneChallengeFailureAsync(Guid accountId, string phoneE164, DateTimeOffset now, int maxAttempts, CancellationToken cancellationToken)
+    public async Task<int?> IncrementPhoneChallengeFailureAsync(Guid accountId, string phoneE164, string expectedCodeHash, DateTimeOffset now, int maxAttempts, CancellationToken cancellationToken)
     {
         await using var connection = await OpenAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
         int? attempts;
         await using (var update = new NpgsqlCommand(
-            "UPDATE trust.phone_challenges SET attempts = attempts + 1 WHERE account_id = $1 AND phone_e164 = $2 AND expires_at > $3 AND attempts < $4 RETURNING attempts;",
+            "UPDATE trust.phone_challenges SET attempts = attempts + 1 WHERE account_id = $1 AND phone_e164 = $2 AND expires_at > $3 AND attempts < $4 AND code_hash = $5 RETURNING attempts;",
             connection,
             transaction))
         {
@@ -1473,6 +1467,7 @@ public sealed class PostgresTrustStore(string connectionString) : ITrustStore
             update.Parameters.AddWithValue(phoneE164);
             update.Parameters.AddWithValue(now);
             update.Parameters.AddWithValue(maxAttempts);
+            update.Parameters.AddWithValue(expectedCodeHash);
             var value = await update.ExecuteScalarAsync(cancellationToken);
             attempts = value is null or DBNull ? null : Convert.ToInt32(value);
         }
@@ -1495,6 +1490,11 @@ public sealed class PostgresTrustStore(string connectionString) : ITrustStore
     {
         await using var connection = await OpenAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        await using (var accountLock = new NpgsqlCommand("SELECT account_id FROM trust.accounts WHERE account_id = $1 FOR UPDATE;", connection, transaction))
+        {
+            accountLock.Parameters.AddWithValue(accountId);
+            if (await accountLock.ExecuteScalarAsync(cancellationToken) is null) return false;
+        }
         string? storedHash = null;
         DateTimeOffset expiresAt = default;
         var attempts = maxAttempts;
@@ -1555,7 +1555,7 @@ public sealed class PostgresTrustStore(string connectionString) : ITrustStore
         await using var connection = await OpenAsync(cancellationToken);
         await using var command = new NpgsqlCommand(
             """
-            SELECT scope_key, window_started_at, send_count, last_sent_at
+            SELECT scope_key, window_started_at, send_count, last_sent_at, phone_attempts
             FROM trust.sms_send_budgets
             WHERE scope_key = $1;
             """,
@@ -1571,7 +1571,8 @@ public sealed class PostgresTrustStore(string connectionString) : ITrustStore
             reader.GetString(0),
             reader.GetFieldValue<DateTimeOffset>(1),
             reader.GetInt32(2),
-            reader.IsDBNull(3) ? null : reader.GetFieldValue<DateTimeOffset>(3));
+            reader.IsDBNull(3) ? null : reader.GetFieldValue<DateTimeOffset>(3),
+            reader.IsDBNull(4) ? null : reader.GetFieldValue<string[]>(4));
     }
 
     public async Task UpsertSmsSendBudgetAsync(SmsSendBudget budget, CancellationToken cancellationToken)
@@ -1579,18 +1580,20 @@ public sealed class PostgresTrustStore(string connectionString) : ITrustStore
         await using var connection = await OpenAsync(cancellationToken);
         await using var command = new NpgsqlCommand(
             """
-            INSERT INTO trust.sms_send_budgets (scope_key, window_started_at, send_count, last_sent_at)
-            VALUES ($1, $2, $3, $4)
+            INSERT INTO trust.sms_send_budgets (scope_key, window_started_at, send_count, last_sent_at, phone_attempts)
+            VALUES ($1, $2, $3, $4, $5)
             ON CONFLICT (scope_key) DO UPDATE SET
                 window_started_at = EXCLUDED.window_started_at,
                 send_count = EXCLUDED.send_count,
-                last_sent_at = EXCLUDED.last_sent_at;
+                last_sent_at = EXCLUDED.last_sent_at,
+                phone_attempts = EXCLUDED.phone_attempts;
             """,
             connection);
         command.Parameters.AddWithValue(budget.ScopeKey);
         command.Parameters.AddWithValue(budget.WindowStartedAt);
         command.Parameters.AddWithValue(budget.SendCount);
         command.Parameters.AddWithValue((object?)budget.LastSentAt ?? DBNull.Value);
+        command.Parameters.AddWithValue(NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Text, (object?)budget.PhoneAttempts ?? DBNull.Value);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 

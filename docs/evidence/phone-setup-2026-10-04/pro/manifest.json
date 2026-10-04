@@ -1,0 +1,44 @@
+[
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Local E2E",
+        "deviceId" : "61DC2501-3A93-4123-A6D5-D3512AF07464",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "CAE55A82-1C78-44DE-8967-3E0AE8A06BA7.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "Phone - Persisted countdown dark_0_7330A494-6110-4276-BDCE-7D059C2BD5E3.png",
+        "timestamp" : 1791101323.634
+      },
+      {
+        "configurationName" : "Local E2E",
+        "deviceId" : "61DC2501-3A93-4123-A6D5-D3512AF07464",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "1F4A4F5B-FF68-40AD-A6B9-6457AA40F148.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "Phone - Edit countdown dark_0_14536595-C4C8-4936-812E-99CB76550ED9.png",
+        "timestamp" : 1791101318.17
+      },
+      {
+        "configurationName" : "Local E2E",
+        "deviceId" : "61DC2501-3A93-4123-A6D5-D3512AF07464",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "5CBD3F2F-E62B-4CC1-9EB9-689029ADDFA8.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "Phone - Restored code countdown dark_0_CEF8FBA5-49C9-47B3-ADEC-C0E44003D6E5.png",
+        "timestamp" : 1791101315.208
+      },
+      {
+        "configurationName" : "Local E2E",
+        "deviceId" : "61DC2501-3A93-4123-A6D5-D3512AF07464",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "39D588E2-AE95-4982-8050-74EF5EFE909D.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "Phone - Third code countdown light_0_AF5CC923-472D-4C32-A38B-D2989F52FABD.png",
+        "timestamp" : 1791101310.616
+      }
+    ],
+    "testIdentifier" : "TrustRealAPIFeatureTests/testRequiredPhoneCorrectionsCooldownEditRelaunchAndReturningVerifiedAccount()",
+    "testIdentifierURL" : "test://com.apple.xcode/Trust/TrustUITests/TrustRealAPIFeatureTests/testRequiredPhoneCorrectionsCooldownEditRelaunchAndReturningVerifiedAccount"
+  }
+]

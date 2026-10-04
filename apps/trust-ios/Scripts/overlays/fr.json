@@ -530,5 +530,8 @@
   "remove_person_confirm_body": "Cette personne quitte votre liste Personnes et le partage s’arrête dans les deux sens.",
   "stop_all_confirm_body": "Personne ne verra votre position ni votre statut À la maison/Absent tant que vous n’aurez pas choisi à nouveau des modes de partage.",
   "sending_code": "Envoi du code…",
-  "phone_request_pending": "Veuillez patienter…"
+  "phone_request_pending": "Veuillez patienter…",
+  "phone_send_countdown": "Envoyer le code dans %@",
+  "phone_resend_countdown": "Renvoyer dans %@",
+  "phone_retry_explanation": "Vous pourrez demander un autre code à %@ (heure locale). Vous pouvez toujours modifier le numéro."
 }

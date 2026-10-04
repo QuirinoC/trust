@@ -210,7 +210,15 @@ public sealed record SendPhoneCodeResponse(
     DateTimeOffset ExpiresAt,
     int ResendAfterSeconds,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    string? DevelopmentCode);
+    string? DevelopmentCode,
+    DateTimeOffset ServerTime,
+    DateTimeOffset ResendRetryAt,
+    DateTimeOffset CorrectionRetryAt,
+    int ImmediateNumberAttemptsRemaining,
+    string? NormalizedPhone,
+    DateTimeOffset AccountRetryAt,
+    DateTimeOffset? AccountWindowStartedAt,
+    int AccountSendCount);
 
 public sealed record EntitlementRequest(string? ProductId, bool ReviewUnlock, string? SignedTransactionInfo);
 
@@ -231,7 +239,18 @@ public sealed record CheckoutRequest(string Interval);
 
 public sealed record CheckoutResponse(string Url);
 
-public sealed record ApiError(string Code, string Message);
+public sealed record ApiError(string Code, string Message,
+    DateTimeOffset? ServerTime = null, DateTimeOffset? RetryAt = null, int? RetryAfterSeconds = null,
+    DateTimeOffset? ResendRetryAt = null, DateTimeOffset? CorrectionRetryAt = null,
+    int? ImmediateNumberAttemptsRemaining = null, string? NormalizedPhone = null,
+    DateTimeOffset? AccountRetryAt = null, DateTimeOffset? AccountWindowStartedAt = null, int? AccountSendCount = null)
+{
+    public static ApiError From(TrustException exception) => new(exception.Code, exception.Message,
+        exception.PhoneRetry?.ServerTime, exception.PhoneRetry?.RetryAt, exception.PhoneRetry?.RetryAfterSeconds,
+        exception.PhoneRetry?.ResendRetryAt, exception.PhoneRetry?.CorrectionRetryAt,
+        exception.PhoneRetry?.ImmediateNumberAttemptsRemaining, exception.PhoneRetry?.NormalizedPhone,
+        exception.PhoneRetry?.AccountRetryAt, exception.PhoneRetry?.AccountWindowStartedAt, exception.PhoneRetry?.AccountSendCount);
+}
 
 public static class ContractMap
 {

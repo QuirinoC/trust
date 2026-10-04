@@ -4,6 +4,8 @@
 
 ## Completed locally
 
+- Required phone setup and correction retries passed focused Pro/Duo, delayed-response, disclosure, and same-verified-account checks on 4 October. API/PostgreSQL passed 216 tests; TrustCore passed 103. See [PHONE-SETUP-2026-10-04.md](PHONE-SETUP-2026-10-04.md) for the precise evidence and untested physical/accessibility scopes. Historical build 45 is unchanged.
+
 - Two simulator accounts completed onboarding, opted into phone discovery, found one another using fictional Development fixtures, sent and accepted a request, and removed and re-added the connection. A new connection returned to sharing Off in both directions.
 - The pair exercised Sealed and Always sharing, reciprocal Home/Away presence grants, a Sealed Look with a map snapshot and matching Activity receipt, Home set and simulated movement, Home update and clear, Hidden suppression, Stop, and removal.
 - Separate UI and API checks cover request cancellation, history loading and access removal after Stop, Stop All failure/retry, and delayed Circle/Look responses around revocation. The latest paired result passed 1/1 on both iPhone 17 Pro and iPhone Duo with zero skips or failures.

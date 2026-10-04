@@ -239,7 +239,8 @@ public sealed record SmsSendBudget(
     string ScopeKey,
     DateTimeOffset WindowStartedAt,
     int SendCount,
-    DateTimeOffset? LastSentAt)
+    DateTimeOffset? LastSentAt,
+    string[]? PhoneAttempts = null)
 {
     public static string AccountKey(Guid accountId) => $"account:{accountId:N}";
 
@@ -463,6 +464,7 @@ public static class PauseShare
 public sealed class TrustException : Exception
 {
     public string Code { get; }
+    public PhoneRetryMetadata? PhoneRetry { get; init; }
 
     public TrustException(string code, string message) : base(message)
     {
@@ -648,8 +650,9 @@ public interface ITrustStore
     Task ClearPhoneChallengeAsync(Guid accountId, CancellationToken cancellationToken);
     Task RecordPhoneSmsConsentAsync(PhoneSmsConsentEvent consentEvent, CancellationToken cancellationToken);
     Task<IReadOnlyList<PhoneSmsConsentEvent>> ListPhoneSmsConsentEventsAsync(Guid accountId, CancellationToken cancellationToken);
+    Task<PhoneSmsReservation> ReservePhoneSmsAsync(IReadOnlyList<string> keys, PhoneChallenge challenge, PhoneSmsConsentEvent consent, DateTimeOffset now, CancellationToken cancellationToken);
     Task<bool> TryReserveSmsAsync(IReadOnlyList<SmsSendBudget> budgets, DateTimeOffset now, CancellationToken cancellationToken);
-    Task<int?> IncrementPhoneChallengeFailureAsync(Guid accountId, string phoneE164, DateTimeOffset now, int maxAttempts, CancellationToken cancellationToken);
+    Task<int?> IncrementPhoneChallengeFailureAsync(Guid accountId, string phoneE164, string expectedCodeHash, DateTimeOffset now, int maxAttempts, CancellationToken cancellationToken);
     Task<bool> TryCompletePhoneChallengeAsync(Guid accountId, string phoneE164, string codeHash, DateTimeOffset verifiedAt, int maxAttempts, CancellationToken cancellationToken);
     Task<SmsSendBudget?> GetSmsSendBudgetAsync(string scopeKey, CancellationToken cancellationToken);
     Task UpsertSmsSendBudgetAsync(SmsSendBudget budget, CancellationToken cancellationToken);

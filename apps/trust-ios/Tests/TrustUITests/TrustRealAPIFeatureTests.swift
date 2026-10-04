@@ -28,6 +28,124 @@ final class TrustRealAPIFeatureTests: XCTestCase {
         super.tearDown()
     }
 
+    func testRequiredPhoneCorrectionsCooldownEditRelaunchAndReturningVerifiedAccount() throws {
+        let suffix = String(UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(8)).lowercased()
+        let deviceID = "phone-setup-\(suffix)"
+        let session = try XCTUnwrap(api.developmentSession(name: "Phone setup", deviceID: deviceID))
+        defer { api.deleteAccount(token: session.token) }
+        XCTAssertEqual(api.request("PUT", "/api/v1/me/handle", token: session.token, body: ["handle": "ph\(suffix)"]).status, 204)
+        let numbers = Array(LocalTrustAPI.reservedPhonePool().shuffled().prefix(4))
+        let app = launchDevelopmentApp(deviceID: deviceID, displayName: "Phone setup", arguments: ["-appearancePreference", "light", "-trust.appLanguage", "en"])
+        defer { app.terminate() }
+        XCTAssertTrue(app.textFields["phone-number"].waitForExistence(timeout: 15))
+        XCTAssertFalse(app.buttons["tab-sharing"].exists)
+        XCTAssertFalse(app.buttons["return-to-app-from-phone-verification"].exists)
+        var lastCode = ""
+        for (index, number) in numbers.prefix(3).enumerated() {
+            let field = app.textFields["phone-number"]
+            XCTAssertTrue(field.waitForExistence(timeout: 5))
+            field.tap()
+            let current = field.value as? String ?? ""
+            field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count) + "+1\(number)")
+            XCTAssertFalse(app.textFields["phone-code"].exists, "Typing never sends a text.")
+            let send = app.buttons["send-phone-code"]
+            XCTAssertTrue(send.isEnabled, "First number and two distinct corrections must be immediately available.")
+            send.tap()
+            XCTAssertTrue(app.textFields["phone-code"].waitForExistence(timeout: 10))
+            XCTAssertTrue(app.staticTexts["phone-notice"].waitForExistence(timeout: 5))
+            lastCode = app.staticTexts["phone-notice"].label.filter(\.isNumber)
+            XCTAssertEqual(lastCode.count, 6)
+            XCTAssertFalse(app.buttons["send-phone-code"].isEnabled)
+            XCTAssertTrue(app.buttons["edit-phone-number"].isEnabled)
+            XCTAssertTrue(app.buttons["edit-phone-number"].isHittable)
+            XCTAssertFalse(app.buttons["tab-sharing"].exists)
+            if index < 2 { app.buttons["edit-phone-number"].tap() }
+        }
+        let code = app.textFields["phone-code"]
+        code.tap()
+        code.typeText(lastCode)
+        XCTAssertTrue(app.buttons["verify-phone-code"].isEnabled, "Send cooldown must not block Verify.")
+        attachScreenshot(of: app, named: "Phone - Third code countdown light")
+        app.terminate()
+        app.launchArguments = ["-appearancePreference", "dark", "-trust.appLanguage", "en"]
+        app.launch()
+        XCTAssertTrue(app.textFields["phone-code"].waitForExistence(timeout: 15))
+        XCTAssertEqual(app.textFields["phone-code"].value as? String, "123456", "Relaunch must not persist the OTP.")
+        XCTAssertTrue(app.buttons["edit-phone-number"].isEnabled)
+        attachScreenshot(of: app, named: "Phone - Restored code countdown dark")
+        app.buttons["edit-phone-number"].tap()
+        XCTAssertTrue(app.textFields["phone-number"].waitForExistence(timeout: 5))
+        let fourth = app.textFields["phone-number"]
+        fourth.tap()
+        fourth.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: (fourth.value as? String ?? "").count) + "+1\(numbers[3])")
+        XCTAssertFalse(app.buttons["send-phone-code"].isEnabled, "A fourth distinct number must wait too.")
+        XCTAssertTrue(app.staticTexts["phone-retry-notice"].exists)
+        attachScreenshot(of: app, named: "Phone - Edit countdown dark")
+        app.terminate()
+        app.launchArguments = ["-appearancePreference", "dark", "-trust.appLanguage", "en"]
+        app.launch()
+        XCTAssertTrue(app.textFields["phone-number"].waitForExistence(timeout: 15))
+        let field = app.textFields["phone-number"]
+        field.tap()
+        field.typeText("+1\(numbers[3])")
+        XCTAssertFalse(app.buttons["send-phone-code"].isEnabled, "The account retry deadline must survive relaunch.")
+        attachScreenshot(of: app, named: "Phone - Persisted countdown dark")
+        // Complete the already-sent challenge on the local Development API, then relaunch
+        // the same server-verified identity to prove setup does not request another SMS.
+        XCTAssertEqual(api.request("POST", "/api/v1/me/phone/verify", token: session.token,
+            body: ["phone": "+1\(numbers[2])", "code": lastCode]).status, 204)
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(app.buttons["tab-sharing"].waitForExistence(timeout: 15))
+        XCTAssertFalse(app.textFields["phone-number"].exists)
+        XCTAssertEqual((api.circle(token: session.token)?["you"] as? [String: Any])?["phoneVerified"] as? Bool, true)
+    }
+
+    func testLatePhoneResponsesAfterEditPreserveRetryWithoutOpeningCodeOrHome() throws {
+        guard api.raceProxyState() != nil else { throw XCTSkip("Requires the isolated loopback fault proxy.") }
+        let suffix = String(UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(8)).lowercased()
+        let deviceID = "phone-race-\(suffix)"
+        let session = try XCTUnwrap(api.developmentSession(name: "Phone race", deviceID: deviceID))
+        defer { api.deleteAccount(token: session.token) }
+        XCTAssertEqual(api.request("PUT", "/api/v1/me/handle", token: session.token, body: ["handle": "pr\(suffix)"]).status, 204)
+        let numbers = Array(LocalTrustAPI.reservedPhonePool().shuffled().prefix(2))
+        let app = launchDevelopmentApp(deviceID: deviceID, displayName: "Phone race")
+        defer { app.terminate() }
+        let field = app.textFields["phone-number"]
+        XCTAssertTrue(field.waitForExistence(timeout: 15))
+        func enter(_ value: String) {
+            field.tap()
+            field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: (field.value as? String ?? "").count) + value)
+        }
+        enter("+1\(numbers[0])")
+        XCTAssertEqual(api.request("POST", "/__test/arm-phone-send").status, 200)
+        app.buttons["send-phone-code"].tap()
+        XCTAssertTrue(waitForProxyState(timeout: 8) { $0["held_resource"] as? String == "phone_send" })
+        enter("+1\(numbers[1])")
+        XCTAssertTrue(api.releaseHeldResponse())
+        XCTAssertTrue(waitUntil(timeout: 5) { app.buttons["send-phone-code"].isEnabled })
+        XCTAssertFalse(app.textFields["phone-code"].exists)
+        enter("+1\(numbers[0])")
+        XCTAssertFalse(app.buttons["send-phone-code"].isEnabled, "The late accepted reservation must retain its retry deadline.")
+        enter("+1\(numbers[1])")
+        XCTAssertTrue(app.buttons["send-phone-code"].isEnabled)
+        app.buttons["send-phone-code"].tap()
+        let code = app.textFields["phone-code"]
+        XCTAssertTrue(code.waitForExistence(timeout: 10))
+        let digits = app.staticTexts["phone-notice"].label.filter(\.isNumber)
+        code.tap(); code.typeText(digits)
+        XCTAssertEqual(api.request("POST", "/__test/arm-phone-verify").status, 200)
+        app.buttons["verify-phone-code"].tap()
+        XCTAssertTrue(waitForProxyState(timeout: 8) { $0["held_resource"] as? String == "phone_verify" })
+        app.buttons["edit-phone-number"].tap()
+        XCTAssertTrue(api.releaseHeldResponse())
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["tab-sharing"].exists)
+        attachScreenshot(of: app, named: "Phone - Late verification remains on edited entry")
+        app.terminate(); app.launch()
+        XCTAssertTrue(app.buttons["tab-sharing"].waitForExistence(timeout: 15), "A new session fetch may use the server-verified account.")
+    }
+
     func testManualHomeChoicesReachServerAndRetirePreviousNotice() throws {
         guard api.raceProxyState() != nil else { throw XCTSkip("Requires the isolated loopback fault proxy.") }
         let fixture = try makeConnectedFixture(prefix: "home-notice")
@@ -1765,8 +1883,9 @@ final class TrustRealAPIFeatureTests: XCTestCase {
         return connectionID
     }
 
-    private func launchDevelopmentApp(deviceID: String, displayName: String) -> XCUIApplication {
+    private func launchDevelopmentApp(deviceID: String, displayName: String, arguments: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
+        app.launchArguments = arguments
         app.launchEnvironment["TRUST_BASE_URL"] = LocalTrustAPI.baseURL
         app.launchEnvironment["TRUST_STRICT_API"] = "1"
         app.launchEnvironment["TRUST_UI_TEST"] = "1"

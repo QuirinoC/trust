@@ -30,6 +30,14 @@ struct SendPhoneCodePayload: Decodable {
     var expiresAt: Date
     var resendAfterSeconds: Int
     var developmentCode: String?
+    var serverTime: Date?
+    var resendRetryAt: Date?
+    var correctionRetryAt: Date?
+    var immediateNumberAttemptsRemaining: Int?
+    var normalizedPhone: String?
+    var accountRetryAt: Date?
+    var accountWindowStartedAt: Date?
+    var accountSendCount: Int?
 }
 
 struct AddPersonByPhonePayload: Decodable {
@@ -199,6 +207,16 @@ struct InvitePayload: Decodable {
 struct APIErrorPayload: Decodable {
     var code: String?
     var message: String?
+    var serverTime: Date?
+    var retryAt: Date?
+    var retryAfterSeconds: Int?
+    var resendRetryAt: Date?
+    var correctionRetryAt: Date?
+    var immediateNumberAttemptsRemaining: Int?
+    var normalizedPhone: String?
+    var accountRetryAt: Date?
+    var accountWindowStartedAt: Date?
+    var accountSendCount: Int?
 }
 
 struct CircleSnapshot {
@@ -233,6 +251,7 @@ enum TrustClientError: LocalizedError {
     case serverUnavailable(Int)
     /// A known API error code (`pro_required`, `share_off`, …) with plain copy already mapped.
     case api(code: String, message: String)
+    case phoneRetry(code: String, message: String, details: APIErrorPayload)
     /// Unknown server message — passed through.
     case server(String)
     case appTransactionUnverified
@@ -250,6 +269,7 @@ enum TrustClientError: LocalizedError {
 
     var apiCode: String? {
         if case .api(let code, _) = self { return code }
+        if case .phoneRetry(let code, _, _) = self { return code }
         return nil
     }
 
@@ -275,7 +295,7 @@ enum TrustClientError: LocalizedError {
             #else
             return TrustCopy.serverUnavailable
             #endif
-        case .api(_, let message):
+        case .api(_, let message), .phoneRetry(_, let message, _):
             return message
         case .server(let message):
             return message
@@ -1129,7 +1149,8 @@ final class TrustClient {
         if isCircleRequest {
             Self.networkLogger.info("GET /api/v1/circle received HTTP \(http.statusCode, privacy: .public) elapsedMs=\(Self.elapsedMilliseconds(since: startedAt), privacy: .public)")
         }
-        if [502, 503, 504].contains(http.statusCode) {
+        if [502, 503, 504].contains(http.statusCode),
+           (try? decoder.decode(APIErrorPayload.self, from: data))?.retryAt == nil {
             throw TrustClientError.serverUnavailable(http.statusCode)
         }
         if http.statusCode == 401 {
@@ -1149,6 +1170,9 @@ final class TrustClient {
             notifyCurrentAccountIfPrivacyHold(code: error.code, request: request)
             let message = TrustCopy.apiError(code: error.code, fallback: error.message)
             if let code = error.code, !code.isEmpty {
+                if error.retryAt != nil || error.retryAfterSeconds != nil {
+                    throw TrustClientError.phoneRetry(code: code, message: message, details: error)
+                }
                 throw TrustClientError.api(code: code, message: message)
             }
             throw TrustClientError.server(message)

@@ -12,7 +12,8 @@ namespace TrustApi.Application;
 public sealed record PhoneCodeSendResult(
     DateTimeOffset ExpiresAt,
     int ResendAfterSeconds,
-    string? DevelopmentCode);
+    string? DevelopmentCode,
+    PhoneRetryMetadata Retry);
 
 public sealed record AddPersonByPhoneResult(string Outcome, bool SmsSent, string? DevelopmentCode);
 
@@ -74,67 +75,36 @@ public sealed class PhoneVerificationService(
             throw TrustException.PhoneUnavailable();
         }
 
+        var bypass = environment.IsDevelopment() && !sms.IsConfigured;
+        if (!sms.IsConfigured && !bypass) throw TrustException.OtpNotConfigured();
         var now = time.GetUtcNow();
-        var existing = await store.GetPhoneChallengeAsync(accountId, cancellationToken);
-        var samePhone = existing is not null
-            && string.Equals(existing.PhoneE164, e164, StringComparison.Ordinal);
-        var windowStarted = samePhone ? existing!.WindowStartedAt : now;
-        var sendCount = samePhone ? existing!.SendCount : 0;
-        if (now - windowStarted >= TimeSpan.FromHours(1))
-        {
-            windowStarted = now;
-            sendCount = 0;
-        }
-
-        if (sendCount >= MaxSendsPerHour)
-        {
-            throw TrustException.OtpCooldown();
-        }
-
-        if (samePhone && now - existing!.SentAt < TimeSpan.FromSeconds(ResendCooldownSeconds))
-        {
-            throw TrustException.OtpCooldown();
-        }
-
-        var gate = await GateSmsAsync(accountId, e164, now, cancellationToken);
         var code = RandomNumberGenerator.GetInt32(0, 1_000_000).ToString("D6");
-        var challenge = new PhoneChallenge(
-            accountId,
-            e164,
-            Hash(accountId, e164, code),
-            now.AddSeconds(CodeTtlSeconds),
-            0,
-            now,
-            sendCount + 1,
-            windowStarted);
-        await CommitSmsAsync(gate, cancellationToken);
-        await store.RecordPhoneSmsConsentAsync(
-            new PhoneSmsConsentEvent(
-                accountId,
-                e164,
-                consentVersion is null ? null : PhoneConsentDisclosureKey,
-                consentVersion,
-                now,
-                consentVersion is null ? LegacyPhoneConsentSource : PhoneConsentSource,
-                consentAction),
-            cancellationToken);
-        await store.UpsertPhoneChallengeAsync(challenge, cancellationToken);
-
-        if (!gate.Bypass)
+        var challenge = new PhoneChallenge(accountId, e164, Hash(accountId, e164, code),
+            now.AddSeconds(CodeTtlSeconds), 0, now, 1, now);
+        var keys = new List<string> { SmsSendBudget.AccountKey(accountId), SmsSendBudget.PhoneKey(e164), SmsSendBudget.AccountDayKey(accountId) };
+        if (!bypass) keys.Add(SmsSendBudget.GlobalDayKey());
+        var reservation = await store.ReservePhoneSmsAsync(keys, challenge,
+            new PhoneSmsConsentEvent(accountId, e164,
+                consentVersion is null ? null : PhoneConsentDisclosureKey, consentVersion, now,
+                consentVersion is null ? LegacyPhoneConsentSource : PhoneConsentSource, consentAction),
+            now, cancellationToken);
+        if (!reservation.Accepted)
+            throw new TrustException("otp_cooldown", "Please wait before requesting another code.") { PhoneRetry = reservation.Retry };
+        var retry = reservation.Retry;
+        if (!bypass)
         {
-            await DeliverCodeAsync(e164, code, cancellationToken);
-            logger.LogInformation(
-                "Sent phone verification SMS to {Phone} for account {AccountId}.",
-                PhoneE164.Mask(e164),
-                accountId);
-            return new PhoneCodeSendResult(challenge.ExpiresAt, NextResendSeconds(gate), null);
+            try { await DeliverCodeAsync(e164, code, cancellationToken); }
+            catch (TrustException exception)
+            {
+                var responseNow = time.GetUtcNow();
+                throw new TrustException(exception.Code, exception.Message) { PhoneRetry = retry with
+                { ServerTime = responseNow, RetryAt = retry.ResendRetryAt, RetryAfterSeconds = Math.Max(0, (int)Math.Ceiling((retry.ResendRetryAt - responseNow).TotalSeconds)) } };
+            }
         }
-
-        logger.LogInformation(
-            "Development phone verification bypass for {Phone} account {AccountId}; SMS was not sent.",
-            PhoneE164.Mask(e164),
-            accountId);
-        return new PhoneCodeSendResult(challenge.ExpiresAt, NextResendSeconds(gate), code);
+        logger.LogInformation("Reserved phone verification for {Phone} account {AccountId}; SMS bypass: {Bypass}.", PhoneE164.Mask(e164), accountId, bypass);
+        var completedAt = time.GetUtcNow();
+        return new PhoneCodeSendResult(reservation.Retry.ServerTime.AddSeconds(CodeTtlSeconds),
+            retry.ResendPacingSeconds, bypass ? code : null, retry with { ServerTime = completedAt });
     }
 
     /// Phone entry always creates the ordinary invite. Looking up a number never reveals
@@ -187,7 +157,6 @@ public sealed class PhoneVerificationService(
 
         if (challenge.Attempts >= MaxAttempts)
         {
-            await store.ClearPhoneChallengeAsync(accountId, cancellationToken);
             throw TrustException.OtpExhausted();
         }
 
@@ -197,6 +166,7 @@ public sealed class PhoneVerificationService(
             var attempts = await store.IncrementPhoneChallengeFailureAsync(
                 accountId,
                 e164,
+                challenge.CodeHash,
                 now,
                 MaxAttempts,
                 cancellationToken);
@@ -234,70 +204,6 @@ public sealed class PhoneVerificationService(
         await store.FindAccountAsync(accountId, cancellationToken)
         ?? throw TrustException.Unauthorized();
 
-    private async Task<SmsGate> GateSmsAsync(
-        Guid accountId,
-        string e164,
-        DateTimeOffset now,
-        CancellationToken cancellationToken)
-    {
-        var bypass = environment.IsDevelopment() && !sms.IsConfigured;
-        var account = NormalizeBudget(
-            await store.GetSmsSendBudgetAsync(SmsSendBudget.AccountKey(accountId), cancellationToken),
-            SmsSendBudget.AccountKey(accountId),
-            now,
-            TimeSpan.FromHours(1));
-        var phone = NormalizeBudget(
-            await store.GetSmsSendBudgetAsync(SmsSendBudget.PhoneKey(e164), cancellationToken),
-            SmsSendBudget.PhoneKey(e164),
-            now,
-            TimeSpan.FromHours(1));
-        var accountDay = NormalizeBudget(
-            await store.GetSmsSendBudgetAsync(SmsSendBudget.AccountDayKey(accountId), cancellationToken),
-            SmsSendBudget.AccountDayKey(accountId),
-            now,
-            TimeSpan.FromHours(24));
-        var globalDay = bypass
-            ? new SmsSendBudget(SmsSendBudget.GlobalDayKey(), now, 0, null)
-            : NormalizeBudget(
-                await store.GetSmsSendBudgetAsync(SmsSendBudget.GlobalDayKey(), cancellationToken),
-                SmsSendBudget.GlobalDayKey(),
-                now,
-                TimeSpan.FromHours(24));
-        if (account.SendCount >= MaxSendsPerHour
-            || phone.SendCount >= MaxSendsPerHour
-            || accountDay.SendCount >= MaxSendsPerDay
-            || (!bypass && globalDay.SendCount >= MaxGlobalSendsPerDay))
-        {
-            throw TrustException.OtpCooldown();
-        }
-
-        if (RemainingWait(account, now) > TimeSpan.Zero || RemainingWait(phone, now) > TimeSpan.Zero)
-        {
-            throw TrustException.OtpCooldown();
-        }
-
-        if (!sms.IsConfigured && !bypass)
-        {
-            throw TrustException.OtpNotConfigured();
-        }
-
-        return new SmsGate(now, account, phone, accountDay, globalDay, bypass);
-    }
-
-    private async Task CommitSmsAsync(SmsGate gate, CancellationToken cancellationToken)
-    {
-        IReadOnlyList<SmsSendBudget> budgets = gate.Bypass
-            ? [gate.Account, gate.Phone, gate.AccountDay]
-            : [gate.Account, gate.Phone, gate.AccountDay, gate.GlobalDay];
-        if (!await store.TryReserveSmsAsync(
-            budgets,
-            gate.Now,
-            cancellationToken))
-        {
-            throw TrustException.OtpCooldown();
-        }
-    }
-
     private async Task DeliverCodeAsync(string e164, string code, CancellationToken cancellationToken)
     {
         try
@@ -318,50 +224,6 @@ public sealed class PhoneVerificationService(
         }
     }
 
-    private static SmsSendBudget NormalizeBudget(
-        SmsSendBudget? budget,
-        string key,
-        DateTimeOffset now,
-        TimeSpan window)
-    {
-        if (budget is null || now - budget.WindowStartedAt >= window)
-        {
-            return new SmsSendBudget(key, now, 0, budget?.LastSentAt);
-        }
-
-        return budget;
-    }
-
-    private static TimeSpan RemainingWait(SmsSendBudget budget, DateTimeOffset now)
-    {
-        if (budget.LastSentAt is not { } sent)
-        {
-            return TimeSpan.Zero;
-        }
-
-        var neededSeconds = budget.SendCount <= 0
-            ? ResendCooldownSeconds
-            : BackoffSeconds(budget.SendCount);
-        var elapsed = now - sent;
-        var needed = TimeSpan.FromSeconds(neededSeconds);
-        return elapsed >= needed ? TimeSpan.Zero : needed - elapsed;
-    }
-
-    private static int NextResendSeconds(SmsGate gate) =>
-        Math.Max(BackoffSeconds(gate.Account.SendCount + 1), BackoffSeconds(gate.Phone.SendCount + 1));
-
-    /// First resend waits <see cref="ResendCooldownSeconds"/>. Later resends double, capped at 3 minutes.
-    private static int BackoffSeconds(int sendsAlreadyInWindow)
-    {
-        if (sendsAlreadyInWindow <= 1)
-        {
-            return ResendCooldownSeconds;
-        }
-
-        var shift = Math.Min(sendsAlreadyInWindow - 1, 4);
-        return Math.Min(ResendCooldownSeconds << shift, MaxBackoffSeconds);
-    }
-
     private string Hash(Guid accountId, string e164, string code)
     {
         var key = Encoding.UTF8.GetBytes(SessionIssuer.RequireKey(auth.SigningKey));
@@ -376,11 +238,4 @@ public sealed class PhoneVerificationService(
         return a.Length == b.Length && CryptographicOperations.FixedTimeEquals(a, b);
     }
 
-    private sealed record SmsGate(
-        DateTimeOffset Now,
-        SmsSendBudget Account,
-        SmsSendBudget Phone,
-        SmsSendBudget AccountDay,
-        SmsSendBudget GlobalDay,
-        bool Bypass);
 }

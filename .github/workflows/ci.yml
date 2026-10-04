@@ -152,9 +152,9 @@ jobs:
             | tee "$RUNNER_TEMP/trust-local-e2e-summary.json" \
             | jq -e '
                 .result == "Passed" and
-                .totalTestCount == 13 and
-                .passedTests == 4 and
-                .skippedTests == 9 and
+                .totalTestCount == 15 and
+                .passedTests == 5 and
+                .skippedTests == 10 and
                 .failedTests == 0
               '
       - name: Collect DEBUG UI interaction traces

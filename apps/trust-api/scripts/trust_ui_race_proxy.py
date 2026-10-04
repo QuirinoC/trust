@@ -16,6 +16,8 @@ import urllib.request
 UPSTREAM = "http://127.0.0.1:5090"
 LOCK = threading.Lock()
 STATE = {
+    "hold_next_phone_send": False,
+    "hold_next_phone_verify": False,
     "hold_next_circle": False,
     "hold_next_history": False,
     "hold_next_look": False,
@@ -170,6 +172,12 @@ class Handler(BaseHTTPRequestHandler):
                 })
             self.respond_json(200, {"armed": True})
             return
+        if self.path in ("/__test/arm-phone-send", "/__test/arm-phone-verify"):
+            with LOCK:
+                STATE["hold_next_phone_send" if self.path.endswith("send") else "hold_next_phone_verify"] = True
+                RELEASE_HELD.clear()
+            self.respond_json(200, {"armed": True})
+            return
         if self.path == "/__test/arm-home-presence":
             with LOCK:
                 STATE["hold_next_home_presence"] = True
@@ -212,6 +220,8 @@ class Handler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length", "0"))
         body = self.rfile.read(length) if length else None
         path = self.path
+        is_phone_send = self.command == "POST" and path.split("?", 1)[0] == "/api/v1/me/phone/send"
+        is_phone_verify = self.command == "POST" and path.split("?", 1)[0] == "/api/v1/me/phone/verify"
         is_circle = self.command == "GET" and path.split("?", 1)[0] == "/api/v1/circle"
         is_home_presence = self.command == "POST" and path.split("?", 1)[0] == "/api/v1/me/home/presence"
         is_history = self.command == "GET" and path.split("?", 1)[0].startswith("/api/v1/people/") and path.endswith("/history")
@@ -265,6 +275,10 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         with LOCK:
+            hold_this_phone_send = is_phone_send and STATE["hold_next_phone_send"]
+            hold_this_phone_verify = is_phone_verify and STATE["hold_next_phone_verify"]
+            if hold_this_phone_send: STATE["hold_next_phone_send"] = False
+            if hold_this_phone_verify: STATE["hold_next_phone_verify"] = False
             hold_this_home_presence = is_home_presence and STATE["hold_next_home_presence"]
             if hold_this_home_presence:
                 STATE["hold_next_home_presence"] = False
@@ -317,7 +331,7 @@ class Handler(BaseHTTPRequestHandler):
             with LOCK:
                 key = str(status)
                 STATE["home_presence_responses"][key] = STATE["home_presence_responses"].get(key, 0) + 1
-        held_resource = "circle" if hold_this_circle else "history" if hold_this_history else "look" if hold_this_look else "home_presence" if hold_this_home_presence else None
+        held_resource = "phone_send" if hold_this_phone_send else "phone_verify" if hold_this_phone_verify else "circle" if hold_this_circle else "history" if hold_this_history else "look" if hold_this_look else "home_presence" if hold_this_home_presence else None
         if held_resource:
             with LOCK:
                 STATE["holding"] = True

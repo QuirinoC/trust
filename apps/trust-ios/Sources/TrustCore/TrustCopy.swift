@@ -670,6 +670,14 @@ public enum TrustCopy {
     public static func inviteMessage(code: String) -> String {
         "\(inviteLine)\nhttps://jointrust.app/i/\(code)"
     }
+    public static func phoneRetryButton(_ duration: String, resend: Bool) -> String {
+        resend ? format("phone_resend_countdown", defaultValue: "Resend in %@", duration)
+            : format("phone_send_countdown", defaultValue: "Send code in %@", duration)
+    }
+    public static func phoneRetryExplanation(_ localTime: String) -> String {
+        format("phone_retry_explanation", defaultValue: "You can request another code at %@ (your local time). You can still edit the number.", localTime)
+    }
+
     public static var yourPhone: String { value("your_phone", defaultValue: "Your phone") }
     public static var phoneIntro: String {
         value("phone_intro", defaultValue: "Phone verification is required.")

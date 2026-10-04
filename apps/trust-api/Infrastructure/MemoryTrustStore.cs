@@ -1049,84 +1049,68 @@ public sealed class MemoryTrustStore : ITrustStore
         return Task.FromResult(events);
     }
 
-    public async Task<bool> TryReserveSmsAsync(IReadOnlyList<SmsSendBudget> budgets, DateTimeOffset now, CancellationToken cancellationToken)
+    public async Task<bool> TryReserveSmsAsync(IReadOnlyList<SmsSendBudget> budgets, DateTimeOffset now, CancellationToken cancellationToken) =>
+        (await ReserveSmsAsync(budgets.Select(row => row.ScopeKey).ToArray(), null, null, now, cancellationToken)).Accepted;
+
+    public Task<PhoneSmsReservation> ReservePhoneSmsAsync(IReadOnlyList<string> keys, PhoneChallenge challenge,
+        PhoneSmsConsentEvent consent, DateTimeOffset now, CancellationToken cancellationToken) =>
+        ReserveSmsAsync(keys, challenge, consent, now, cancellationToken);
+
+    private async Task<PhoneSmsReservation> ReserveSmsAsync(IReadOnlyList<string> keys, PhoneChallenge? challenge,
+        PhoneSmsConsentEvent? consent, DateTimeOffset now, CancellationToken cancellationToken)
     {
         await _smsGate.WaitAsync(cancellationToken);
         try
         {
-            foreach (var proposed in budgets)
+            lock (_gate)
             {
-                var current = _smsBudgets.GetValueOrDefault(proposed.ScopeKey);
-                var window = proposed.ScopeKey.Contains("-day", StringComparison.Ordinal)
-                    ? TimeSpan.FromHours(24)
-                    : TimeSpan.FromHours(1);
-                var expired = current is null || now - current.WindowStartedAt >= window;
-                var count = expired ? 0 : current!.SendCount;
-                var limit = proposed.ScopeKey == SmsSendBudget.GlobalDayKey() ? 40 : 8;
-                if (count >= limit)
-                {
-                    return false;
-                }
-
-                if (!expired
-                    && (proposed.ScopeKey.StartsWith("account:", StringComparison.Ordinal)
-                        || proposed.ScopeKey.StartsWith("phone:", StringComparison.Ordinal))
-                    && current!.LastSentAt is { } lastSent)
-                {
-                    var seconds = count <= 1 ? 45 : Math.Min(45 << Math.Min(count - 1, 4), 180);
-                    if (now - lastSent < TimeSpan.FromSeconds(seconds))
-                    {
-                        return false;
-                    }
-                }
+                if (challenge is not null && !_accounts.ContainsKey(challenge.AccountId)) throw TrustException.Unauthorized();
+                var latest = keys.Select(key => _smsBudgets.GetValueOrDefault(key)?.LastSentAt).OfType<DateTimeOffset>().DefaultIfEmpty(now).Max();
+                if (latest > now) now = latest;
+                if (challenge is not null) challenge = challenge with { SentAt = now, WindowStartedAt = now, ExpiresAt = now.AddMinutes(10) };
+                if (consent is not null) consent = consent with { ConsentedAt = now };
+                var rows = keys.Select(key => PhoneSmsPolicy.Normalize(_smsBudgets.GetValueOrDefault(key), key, now)).ToArray();
+                var account = rows.FirstOrDefault(row => row.ScopeKey.StartsWith("account:", StringComparison.Ordinal));
+                var correction = account is not null && PhoneSmsPolicy.IsNewCorrection(account, challenge?.PhoneE164);
+                var deadline = PhoneSmsPolicy.Deadline(rows, now, correction);
+                if (deadline > now) return new(false, PhoneSmsPolicy.Metadata(rows, challenge?.PhoneE164, now, deadline));
+                rows = rows.Select(row => PhoneSmsPolicy.Increment(row, challenge?.PhoneE164, now)).ToArray();
+                foreach (var row in rows) _smsBudgets[row.ScopeKey] = row;
+                if (challenge is not null) _phoneChallenges[challenge.AccountId] = challenge;
+                if (consent is not null) _phoneSmsConsentEvents[Guid.NewGuid()] = consent;
+                return new(true, PhoneSmsPolicy.Metadata(rows, challenge?.PhoneE164, now, now));
             }
-
-            foreach (var proposed in budgets)
-            {
-                var current = _smsBudgets.GetValueOrDefault(proposed.ScopeKey);
-                var window = proposed.ScopeKey.Contains("-day", StringComparison.Ordinal)
-                    ? TimeSpan.FromHours(24)
-                    : TimeSpan.FromHours(1);
-                var expired = current is null || now - current.WindowStartedAt >= window;
-                var count = expired ? 0 : current!.SendCount;
-                _smsBudgets[proposed.ScopeKey] = new SmsSendBudget(
-                    proposed.ScopeKey,
-                    expired ? now : current!.WindowStartedAt,
-                    count + 1,
-                    now);
-            }
-
-            return true;
         }
-        finally
-        {
-            _smsGate.Release();
-        }
+        finally { _smsGate.Release(); }
     }
 
-    public async Task<int?> IncrementPhoneChallengeFailureAsync(Guid accountId, string phoneE164, DateTimeOffset now, int maxAttempts, CancellationToken cancellationToken)
+    public async Task<int?> IncrementPhoneChallengeFailureAsync(Guid accountId, string phoneE164, string expectedCodeHash, DateTimeOffset now, int maxAttempts, CancellationToken cancellationToken)
     {
         await _smsGate.WaitAsync(cancellationToken);
         try
         {
-            if (!_phoneChallenges.TryGetValue(accountId, out var challenge)
-                || challenge.PhoneE164 != phoneE164
-                || challenge.ExpiresAt <= now)
+            lock (_gate)
             {
-                return null;
-            }
+                if (!_phoneChallenges.TryGetValue(accountId, out var challenge)
+                    || challenge.PhoneE164 != phoneE164
+                    || challenge.CodeHash != expectedCodeHash
+                    || challenge.ExpiresAt <= now)
+                {
+                    return null;
+                }
 
-            var attempts = challenge.Attempts + 1;
-            if (attempts >= maxAttempts)
-            {
-                _phoneChallenges.TryRemove(accountId, out _);
-            }
-            else
-            {
-                _phoneChallenges[accountId] = challenge with { Attempts = attempts };
-            }
+                var attempts = challenge.Attempts + 1;
+                if (attempts >= maxAttempts)
+                {
+                    _phoneChallenges.TryRemove(accountId, out _);
+                }
+                else
+                {
+                    _phoneChallenges[accountId] = challenge with { Attempts = attempts };
+                }
 
-            return attempts;
+                return attempts;
+            }
         }
         finally
         {
@@ -1139,29 +1123,32 @@ public sealed class MemoryTrustStore : ITrustStore
         await _smsGate.WaitAsync(cancellationToken);
         try
         {
-            if (!_phoneChallenges.TryGetValue(accountId, out var challenge)
-                || challenge.PhoneE164 != phoneE164
-                || challenge.CodeHash != codeHash
-                || challenge.ExpiresAt <= verifiedAt
-                || challenge.Attempts >= maxAttempts)
+            lock (_gate)
             {
+                if (!_phoneChallenges.TryGetValue(accountId, out var challenge)
+                    || challenge.PhoneE164 != phoneE164
+                    || challenge.CodeHash != codeHash
+                    || challenge.ExpiresAt <= verifiedAt
+                    || challenge.Attempts >= maxAttempts)
+                {
+                    return false;
+                }
+
+                if (_accounts.Values.Any(account => account.Id != accountId
+                && account.PhoneE164 == phoneE164 && account.PhoneVerifiedAt is not null))
+                {
+                    throw TrustException.PhoneInUse();
+                }
+
+                if (_accounts.TryGetValue(accountId, out var account))
+                {
+                    _accounts[accountId] = account with { PhoneE164 = phoneE164, PhoneVerifiedAt = verifiedAt };
+                    _phoneChallenges.TryRemove(accountId, out _);
+                    return true;
+                }
+
                 return false;
             }
-
-            if (_accounts.Values.Any(account => account.Id != accountId
-                && account.PhoneE164 == phoneE164 && account.PhoneVerifiedAt is not null))
-            {
-                throw TrustException.PhoneInUse();
-            }
-
-            if (_accounts.TryGetValue(accountId, out var account))
-            {
-                _accounts[accountId] = account with { PhoneE164 = phoneE164, PhoneVerifiedAt = verifiedAt };
-                _phoneChallenges.TryRemove(accountId, out _);
-                return true;
-            }
-
-            return false;
         }
         finally
         {

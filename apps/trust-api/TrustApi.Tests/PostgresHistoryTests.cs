@@ -258,7 +258,7 @@ public sealed class PostgresHistoryTests
             1,
             now), CancellationToken.None);
         var failures = await Task.WhenAll(Enumerable.Range(0, 12).Select(_ =>
-            store.IncrementPhoneChallengeFailureAsync(account.Id, phone, now, 5, CancellationToken.None)));
+            store.IncrementPhoneChallengeFailureAsync(account.Id, phone, "not-the-code", now, 5, CancellationToken.None)));
         Assert.Equal(new int?[] { 1, 2, 3, 4, 5 }, failures.Where(value => value is not null).Order().ToArray());
         Assert.Equal(7, failures.Count(value => value is null));
         Assert.Null(await store.GetPhoneChallengeAsync(account.Id, CancellationToken.None));

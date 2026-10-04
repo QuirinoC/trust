@@ -530,5 +530,8 @@
   "remove_person_confirm_body": "この人は「つながり」リストから削除され、双方向の共有が停止します。",
   "stop_all_confirm_body": "共有モードを再び選ぶまで、誰にもあなたの位置情報や在宅／外出ステータスは表示されません。",
   "sending_code": "コードを送信中…",
-  "phone_request_pending": "しばらくお待ちください…"
+  "phone_request_pending": "しばらくお待ちください…",
+  "phone_send_countdown": "%@後にコードを送信",
+  "phone_resend_countdown": "%@後に再送信",
+  "phone_retry_explanation": "%@（現地時間）に別のコードをリクエストできます。番号の編集は引き続き可能です。"
 }

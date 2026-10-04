@@ -530,3 +530,9 @@
 "your_phone" = "Seu telefone";
 "your_profile" = "Seu perfil";
 "your_status" = "Seu status";
+
+"phone_send_countdown" = "Enviar código em %@";
+
+"phone_resend_countdown" = "Reenviar em %@";
+
+"phone_retry_explanation" = "Você poderá pedir outro código às %@ (horário local). Ainda pode editar o número.";

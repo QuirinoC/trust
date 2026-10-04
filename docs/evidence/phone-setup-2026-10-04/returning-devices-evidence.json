@@ -1,0 +1,12 @@
+{
+  "sameDevelopmentIdentityOnBothDevices": true,
+  "reservationsBeforeLaunches": 1,
+  "reservationsAfterLaunches": 1,
+  "serverVerifiedBeforeLaunches": true,
+  "screenshots": [
+    "returning-verified-pro.png",
+    "returning-verified-duo-active.png"
+  ],
+  "bothPeopleScreensVisuallyConfirmed": true,
+  "fixtureScope": "Disposable synthetic Development account; deleted after verification."
+}

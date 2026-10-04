@@ -107,6 +107,7 @@ final class AppModel: ObservableObject {
 
     @Published var phase: AppPhase {
         didSet {
+            if oldValue == .phone && phase != .phone { cancelPendingPhoneSend() }
             if Self.isUnavailableVerificationPhase(oldValue), !Self.isUnavailableVerificationPhase(phase) {
                 ageUnavailableStopAllState = .idle
             }
@@ -215,6 +216,43 @@ final class AppModel: ObservableObject {
     @Published var phoneCodeSent = false
     @Published var isSendingPhone = false
     private var phoneSendGeneration: UInt64 = 0
+    @Published private(set) var challengedPhone = ""
+    @Published private(set) var phoneRetry = TrustPhoneRetryState()
+    private var phoneRetryAccountID: String?
+    private var authenticatedPerson: Person?
+
+    private func loadPhoneRetry() {
+        guard let id = TrustSessionIdentity.accountID(from: auth.sessionToken)?.uuidString.lowercased() else { return }
+        guard phoneRetryAccountID != id else { return }
+        phoneRetryAccountID = id
+        phoneRetry = UserDefaults.standard.data(forKey: "trust.phoneRetry.\(id)")
+            .flatMap { try? JSONDecoder().decode(TrustPhoneRetryState.self, from: $0) } ?? TrustPhoneRetryState()
+        if phoneRetry.showingCode == true, let number = phoneRetry.challengeNumber,
+           let expiresAt = phoneRetry.challengeExpiresAt, expiresAt > Date() {
+            challengedPhone = number
+            phoneDraft = number
+            phoneCodeSent = true
+        }
+    }
+
+    private func clearPrivatePhoneRetry() {
+        if let id = TrustSessionIdentity.accountID(from: auth.sessionToken)?.uuidString.lowercased() {
+            UserDefaults.standard.removeObject(forKey: "trust.phoneRetry.\(id)")
+        }
+        phoneRetry = TrustPhoneRetryState()
+    }
+
+    private func savePhoneRetry() {
+        guard let id = phoneRetryAccountID, let data = try? JSONEncoder().encode(phoneRetry) else { return }
+        UserDefaults.standard.set(data, forKey: "trust.phoneRetry.\(id)")
+    }
+
+    func phoneRetrySeconds(at now: Date) -> Int {
+        phoneRetry.secondsRemaining(for: phoneCodeSent ? challengedPhone : phoneDraft, now: now)
+    }
+
+    var phoneRetryDeadline: Date? { phoneRetry.deadline(for: phoneCodeSent ? challengedPhone : phoneDraft) }
+
 
     @Published var addPhoneDraft = ""
     @Published private(set) var isAddingByPhone = false
@@ -290,6 +328,10 @@ final class AppModel: ObservableObject {
         let preservePendingInvite = auth.sessionToken == nil
         ageUnavailableStopAllState = .idle
         accountGeneration &+= 1
+        cancelPendingPhoneSend()
+        authenticatedPerson = nil
+        phoneRetryAccountID = nil
+        phoneRetry = TrustPhoneRetryState()
         lastRefreshAttemptAt = nil
         setAccountDataScope(nil)
         if accountChanged {
@@ -840,6 +882,7 @@ final class AppModel: ObservableObject {
 
     private func handleConsentRevocation() {
         guard auth.isAuthenticated else { return }
+        clearPrivatePhoneRetry()
         clearAccountSession()
         isAgeAccessAllowed = false
         ageGateBlockedByParent = false
@@ -931,6 +974,7 @@ final class AppModel: ObservableObject {
         // phase keeps the normal app surface inaccessible, and the API rejects all
         // other operations while this account remains held.
         auth.markCurrentSessionPrivacyHeld()
+        clearPrivatePhoneRetry()
         clearAccountSession(preservingPrivacyHoldDeletionSession: true)
         isAgeAccessAllowed = false
         ageGateBlockedByParent = false
@@ -1406,6 +1450,7 @@ final class AppModel: ObservableObject {
                !isUITestLaunch {
                 try await claimDebugHandle(deviceId: deviceId)
             }
+            authenticatedPerson = session.you.model
             await refresh(enterHome: true, fallbackOnboardingComplete: true)
             receipts.prepare(client: client)
         } catch is CancellationError {
@@ -1478,6 +1523,7 @@ final class AppModel: ObservableObject {
                     ),
                     token: client.token ?? ""
                 )
+                authenticatedPerson = session.you.model
                 guard await registerCurrentAppTransactionForConsentRevocation() else { return }
                 await refresh(enterHome: true, fallbackOnboardingComplete: session.you.model.onboardingComplete)
             case .google:
@@ -1514,6 +1560,9 @@ final class AppModel: ObservableObject {
 
     private func clearAccountSession(preservingPrivacyHoldDeletionSession: Bool = false) {
         let pushRemovalToken = client.token ?? auth.sessionToken
+        authenticatedPerson = nil
+        phoneRetryAccountID = nil
+        phoneRetry = TrustPhoneRetryState()
         accountGeneration &+= 1
         isAppTransactionLinked = false
         ageUnavailableStopAllState = .idle
@@ -1588,7 +1637,12 @@ final class AppModel: ObservableObject {
         do {
             try await client.deleteAccount(authorizedToken: deletingHeldAccount ? deletingToken : nil)
             guard deletingToken == auth.sessionToken else { return }
+            accountGeneration &+= 1
+            let deletedGeneration = accountGeneration
+            cancelPendingPhoneSend()
+            clearPrivatePhoneRetry()
             await receipts.unregister(authorizedToken: deletingToken)
+            guard deletingToken == auth.sessionToken, accountGeneration == deletedGeneration else { return }
             store.clearAfterSignOut()
             signOut()
         } catch {
@@ -2924,17 +2978,15 @@ final class AppModel: ObservableObject {
     }
 
     func beginConnectionPhoneVerification() {
-        connectionRequiresPhoneVerification = false
-        canReturnFromPhoneVerification = true
+        showingAddPersonSheet = false
+        canReturnFromPhoneVerification = false
         resetPhoneDraft()
-        phase = .phone
+        routeAfterAuth(onboardingComplete: false)
     }
 
     func returnFromConnectionPhoneVerification() {
-        guard canReturnFromPhoneVerification else { return }
         canReturnFromPhoneVerification = false
-        resetPhoneDraft()
-        phase = .home
+        routeAfterAuth(onboardingComplete: false)
     }
 
     func copyOwnHandle() {
@@ -3271,11 +3323,13 @@ final class AppModel: ObservableObject {
             return
         }
         #endif
+        guard canAccessAccountData else { return }
+        loadPhoneRetry()
         let next: AppPhase
-        if let you = snapshot?.you {
+        if let you = snapshot?.you ?? authenticatedPerson {
             next = Self.phase(for: you)
         } else {
-            next = onboardingComplete ? .home : .handle
+            next = .handle
         }
         if next == .handle {
             if phase != .handle {
@@ -3294,50 +3348,86 @@ final class AppModel: ObservableObject {
 
     /// Handle first, then a verified phone, then Home. A missing phone never lands on Home.
     private static func phase(for you: Person) -> AppPhase {
-        let handleReady: Bool
-        if let handle = you.handle, case .valid = TrustHandle.status(of: handle) {
-            handleReady = true
-        } else {
-            handleReady = false
+        switch TrustPhoneSetupRoute.route(handle: you.handle, phoneVerified: you.phoneVerified) {
+        case .handle: return .handle
+        case .phone: return .phone
+        case .home: return .home
         }
-        if !handleReady { return .handle }
-        if !you.phoneVerified && !AppConfiguration.skipsPhoneVerification { return .phone }
-        return .home
     }
 
     func sendPhoneCode(action: PhoneConsentAction) async {
         phoneNotice = nil
         phoneNoticeIsConflict = false
-        let phone = phoneDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !phone.isEmpty, !isSendingPhone else {
+        loadPhoneRetry()
+        let phone = (action == .resendCode ? challengedPhone : phoneDraft).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !phone.isEmpty, !isSendingPhone, phoneRetry.secondsRemaining(for: phone, now: Date()) == 0 else {
             if phone.isEmpty { phoneNotice = TrustCopy.enterPhone }
             return
         }
-        guard requireOnline() else { return }
+        guard phase == .phone, let operation = currentAccountOperation(), requireOnline() else { return }
+        let ageGeneration = ageAccessState.generation
         phoneSendGeneration &+= 1
         let generation = phoneSendGeneration
         isSendingPhone = true
-        defer {
-            if generation == phoneSendGeneration {
-                isSendingPhone = false
-            }
-        }
+        defer { if generation == phoneSendGeneration { isSendingPhone = false } }
         do {
             let sent = try await client.sendPhoneCode(phone: phone, consentAction: action)
-            guard generation == phoneSendGeneration,
-                  phoneDraft.trimmingCharacters(in: .whitespacesAndNewlines) == phone else { return }
+            guard isCurrentAccount(operation: operation), canAccessAccountData,
+                  hasCurrentAgeAuthorization(generation: ageGeneration) else { return }
+            let now = Date()
+            phoneRetry.apply(phone: sent.normalizedPhone ?? phone, serverTime: sent.serverTime,
+                resendAt: sent.resendRetryAt ?? (sent.serverTime ?? now).addingTimeInterval(Double(sent.resendAfterSeconds)),
+                correctionAt: sent.correctionRetryAt, remaining: sent.immediateNumberAttemptsRemaining, accepted: true, now: now,
+                accountAt: sent.accountRetryAt, accountWindow: sent.accountWindowStartedAt, accountCount: sent.accountSendCount)
+            savePhoneRetry()
+            guard phoneOperationIsCurrent(operation, ageGeneration: ageGeneration, generation: generation),
+                  action == .resendCode || phoneDraft.trimmingCharacters(in: .whitespacesAndNewlines) == phone else { return }
+            challengedPhone = sent.normalizedPhone ?? phone
+            phoneRetry.challengeNumber = challengedPhone
+            phoneRetry.challengeExpiresAt = now.addingTimeInterval(sent.expiresAt.timeIntervalSince(sent.serverTime ?? now))
+            phoneRetry.showingCode = true
+            savePhoneRetry()
+            phoneCodeDraft = ""
             phoneCodeSent = true
             phoneNotice = sent.developmentCode.map(TrustCopy.developmentPhoneCode)
         } catch {
-            guard generation == phoneSendGeneration,
-                  phoneDraft.trimmingCharacters(in: .whitespacesAndNewlines) == phone else { return }
+            guard isCurrentAccount(operation: operation), canAccessAccountData,
+                  hasCurrentAgeAuthorization(generation: ageGeneration) else { return }
+            if case TrustClientError.phoneRetry(let code, _, let details) = error {
+                let now = Date()
+                let retryAt = details.retryAt ?? (details.serverTime ?? now).addingTimeInterval(Double(details.retryAfterSeconds ?? 0))
+                phoneRetry.apply(phone: details.normalizedPhone ?? phone, serverTime: details.serverTime,
+                    resendAt: details.resendRetryAt, correctionAt: details.correctionRetryAt,
+                    remaining: details.immediateNumberAttemptsRemaining, retryAt: retryAt,
+                    accepted: code == "otp_send_failed", now: now,
+                    accountAt: details.accountRetryAt, accountWindow: details.accountWindowStartedAt, accountCount: details.accountSendCount)
+                if details.immediateNumberAttemptsRemaining == nil {
+                    phoneRetry.globalDeadline = now.addingTimeInterval(retryAt.timeIntervalSince(details.serverTime ?? now))
+                }
+                savePhoneRetry()
+            }
+            guard phoneOperationIsCurrent(operation, ageGeneration: ageGeneration, generation: generation),
+                  action == .resendCode || phoneDraft.trimmingCharacters(in: .whitespacesAndNewlines) == phone else { return }
             phoneNotice = plainMessage(for: error)
             phoneNoticeIsConflict = ["phone_unavailable", "phone_in_use"].contains((error as? TrustClientError)?.apiCode ?? "")
         }
     }
 
-    /// Invalidates any outstanding send when the user leaves phone verification.
-    /// A response for an older phone choice must not reopen code entry.
+    func editPhoneNumber() {
+        cancelPendingPhoneSend()
+        phoneCodeSent = false
+        phoneCodeDraft = ""
+        phoneNotice = nil
+        phoneRetry.showingCode = false
+        savePhoneRetry()
+    }
+
+    private func phoneOperationIsCurrent(_ operation: TrustAccountOperation, ageGeneration: UInt64, generation: UInt64) -> Bool {
+        phase == .phone && generation == phoneSendGeneration && isCurrentAccount(operation: operation)
+            && canAccessAccountData && hasCurrentAgeAuthorization(generation: ageGeneration)
+    }
+
+    /// Invalidates send and verify callbacks after editing, leaving setup, or changing account.
     func cancelPendingPhoneSend() {
         phoneSendGeneration &+= 1
         isSendingPhone = false
@@ -3345,20 +3435,35 @@ final class AppModel: ObservableObject {
 
     func verifyPhoneCode() async {
         phoneNoticeIsConflict = false
-        let phone = phoneDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let phone = challengedPhone
         let code = phoneCodeDraft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !phone.isEmpty, !code.isEmpty, !isSendingPhone else {
             if code.isEmpty { phoneNotice = TrustCopy.enterPhoneCode }
             return
         }
-        guard requireOnline() else { return }
+        guard phase == .phone, let operation = currentAccountOperation(), requireOnline() else { return }
+        let ageGeneration = ageAccessState.generation
+        phoneSendGeneration &+= 1
+        let generation = phoneSendGeneration
         isSendingPhone = true
-        defer { isSendingPhone = false }
+        defer { if generation == phoneSendGeneration { isSendingPhone = false } }
         do {
             try await client.verifyPhoneCode(phone: phone, code: code)
+            guard phoneOperationIsCurrent(operation, ageGeneration: ageGeneration, generation: generation), challengedPhone == phone else { return }
             phoneNotice = nil
-            await finishOnboardingIfComplete()
+            recordConfirmedCircleMutation()
+            let mutationGeneration = confirmedCircleMutationBarrier.capture()
+            let result = try await client.refreshCircle(operation: operation) { [weak self] in self?.currentAccountOperation() }
+            guard phoneOperationIsCurrent(operation, ageGeneration: ageGeneration, generation: generation), challengedPhone == phone else { return }
+            guard confirmedCircleMutationBarrier.permitsCommit(startedAt: mutationGeneration) else { return }
+            guard client.commitCircleRefresh(result, operation: operation, currentOperation: { [weak self] in self?.currentAccountOperation() }) else { return }
+            snapshot = result.snapshot
+            setAccountDataScope(result.snapshot.you.id.uuidString.lowercased())
+            phoneRetry.showingCode = false
+            savePhoneRetry()
+            routeAfterAuth(onboardingComplete: false)
         } catch {
+            guard phoneOperationIsCurrent(operation, ageGeneration: ageGeneration, generation: generation), challengedPhone == phone else { return }
             phoneNotice = plainMessage(for: error)
             phoneNoticeIsConflict = ["phone_unavailable", "phone_in_use"].contains((error as? TrustClientError)?.apiCode ?? "")
         }
@@ -3367,6 +3472,7 @@ final class AppModel: ObservableObject {
     private func resetPhoneDraft() {
         cancelPendingPhoneSend()
         phoneDraft = ""
+        challengedPhone = ""
         phoneCodeDraft = ""
         phoneNotice = nil
         phoneNoticeIsConflict = false
