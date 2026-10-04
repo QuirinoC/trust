@@ -347,6 +347,9 @@
 "phone_number" = "電話番号";
 "phone_placeholder" = "(415) 555-0100";
 "phone_request_pending" = "しばらくお待ちください…";
+"phone_resend_countdown" = "%@後に再送信";
+"phone_retry_explanation" = "%@（現地時間）に別のコードをリクエストできます。番号の編集は引き続き可能です。";
+"phone_send_countdown" = "%@後にコードを送信";
 "photo_options" = "写真のオプション";
 "pin_accessibility" = "%@。%@。";
 "plus" = "Plus";
@@ -530,9 +533,3 @@
 "your_phone" = "電話番号";
 "your_profile" = "プロフィール";
 "your_status" = "あなたのステータス";
-
-"phone_send_countdown" = "%@後にコードを送信";
-
-"phone_resend_countdown" = "%@後に再送信";
-
-"phone_retry_explanation" = "%@（現地時間）に別のコードをリクエストできます。番号の編集は引き続き可能です。";

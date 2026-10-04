@@ -347,6 +347,9 @@
 "phone_number" = "电话号码";
 "phone_placeholder" = "(415) 555-0100";
 "phone_request_pending" = "请稍候…";
+"phone_resend_countdown" = "%@后重新发送";
+"phone_retry_explanation" = "你可以在%@（当地时间）请求新验证码。你仍可编辑号码。";
+"phone_send_countdown" = "%@后发送验证码";
 "photo_options" = "照片选项";
 "pin_accessibility" = "%@。 %@。";
 "plus" = "加";
@@ -530,9 +533,3 @@
 "your_phone" = "你的电话";
 "your_profile" = "你的个人资料";
 "your_status" = "你的状态";
-
-"phone_send_countdown" = "%@后发送验证码";
-
-"phone_resend_countdown" = "%@后重新发送";
-
-"phone_retry_explanation" = "你可以在%@（当地时间）请求新验证码。你仍可编辑号码。";

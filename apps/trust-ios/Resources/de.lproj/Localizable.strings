@@ -347,6 +347,9 @@
 "phone_number" = "Telefonnummer";
 "phone_placeholder" = "(415) 555-0100";
 "phone_request_pending" = "Bitte warten…";
+"phone_resend_countdown" = "Erneut senden in %@";
+"phone_retry_explanation" = "Du kannst ab %@ (Ortszeit) einen neuen Code anfordern. Du kannst die Nummer weiterhin ändern.";
+"phone_send_countdown" = "Code senden in %@";
 "photo_options" = "Fotooptionen";
 "pin_accessibility" = "%@. %@.";
 "plus" = "Plus";
@@ -530,9 +533,3 @@
 "your_phone" = "Dein Telefon";
 "your_profile" = "Dein Profil";
 "your_status" = "Dein Status";
-
-"phone_send_countdown" = "Code senden in %@";
-
-"phone_resend_countdown" = "Erneut senden in %@";
-
-"phone_retry_explanation" = "Du kannst ab %@ (Ortszeit) einen neuen Code anfordern. Du kannst die Nummer weiterhin ändern.";
