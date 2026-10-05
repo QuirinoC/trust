@@ -4,20 +4,20 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Trust: Location Sharing</title>
-    <meta name="description" content="Choose what each person can see. Review location checks recorded in Trust. Adding someone never starts sharing." />
+    <meta name="description" content="See Trust's current location-sharing screens. Choose what each person can see, review checks recorded in Trust, and keep each new connection Off until you choose." />
     <link rel="canonical" href="https://jointrust.app/" />
     <meta name="theme-color" content="#F6F8FC" />
     <meta name="color-scheme" content="light dark" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Trust" />
     <meta property="og:title" content="Trust: Location Sharing" />
-    <meta property="og:description" content="Choose what each person can see. Review location checks recorded in Trust. Adding someone never starts sharing." />
+    <meta property="og:description" content="See Trust's current location-sharing screens. Choose what each person can see, review checks recorded in Trust, and keep each new connection Off until you choose." />
     <meta property="og:url" content="https://jointrust.app/" />
     <meta name="twitter:card" content="summary" />
     <meta name="twitter:title" content="Trust: Location Sharing" />
-    <meta name="twitter:description" content="Choose what each person can see. Review location checks recorded in Trust. Adding someone never starts sharing." />
+    <meta name="twitter:description" content="See Trust's current location-sharing screens. Choose what each person can see, review checks recorded in Trust, and keep each new connection Off until you choose." />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/styles.css?v=location-sharing" />
+    <link rel="stylesheet" href="/styles.css?v=screenshots-2026-10" />
   </head>
   <body class="home">
     <header class="top">
@@ -39,13 +39,37 @@
           <a class="invite-action" href="mailto:hello@collapsetechnologies.com?subject=Trust%20beta%20access">Email us about beta access <span aria-hidden="true">↗</span></a>
           <p class="availability">Public TestFlight access is not open yet.</p>
         </div>
-        <div class="hero-art" aria-hidden="true">
-          <div class="art-glow"></div>
-          <svg class="together-lines" viewBox="0 0 320 190" focusable="false">
-            <path class="mark-ink" d="M32 146.3 C76.8 93.1 156.8 38 224 24.7" />
-            <path class="mark-blue" d="M86.4 165.3 C128 117.8 201.6 76 281.6 57" />
-            <path class="mark-teal" d="M169.6 163.4 Q214.4 119.7 268.8 115.9" />
-          </svg>
+        <div class="hero-art">
+          <img
+            class="hero-screen"
+            src="/screenshots/map.webp"
+            width="1320"
+            height="2868"
+            alt="Trust's current Map screen shows a location snapshot and which people are not on the map."
+            fetchpriority="high"
+          />
+        </div>
+      </section>
+
+      <section class="screen-section" aria-labelledby="screens-title">
+        <div class="section-heading">
+          <p class="eyebrow">Screens from Trust</p>
+          <h2 id="screens-title">Location, with a choice at every step.</h2>
+          <p class="section-copy">These screens are captured from the current iPhone app. Each connection starts with sharing Off; choose a mode for each person.</p>
+        </div>
+        <div class="screen-grid">
+          <figure class="screen-card">
+            <img src="/screenshots/look.webp" width="1320" height="2868" alt="Trust screen for confirming a Sealed Look and receiving one location snapshot." loading="lazy" />
+            <figcaption><h3>One confirmed check</h3><p>A Sealed Look returns one snapshot of the latest location point Trust has stored.</p></figcaption>
+          </figure>
+          <figure class="screen-card">
+            <img src="/screenshots/share.webp" width="1320" height="2868" alt="Trust sharing controls for setting what each connected person can see." loading="lazy" />
+            <figcaption><h3>Controls for each person</h3><p>Choose Off, Sealed, or Always separately for each connection.</p></figcaption>
+          </figure>
+          <figure class="screen-card">
+            <img src="/screenshots/log.webp" width="1320" height="2868" alt="Trust activity screen showing recorded location checks and views." loading="lazy" />
+            <figcaption><h3>Activity in Trust</h3><p>Review checks and views recorded in the app.</p></figcaption>
+          </figure>
         </div>
       </section>
 
@@ -56,7 +80,7 @@
         </div>
         <div class="feature-grid">
           <article class="feature-card"><span class="feature-index">01</span><h3>Add someone</h3><p>Find an account by handle or phone. Accepting a connection does not start sharing.</p></article>
-          <article class="feature-card"><span class="feature-index">02</span><h3>Choose what they can see</h3><p>A confirmed check returns one location snapshot. Live location is a separate choice.</p></article>
+          <article class="feature-card"><span class="feature-index">02</span><h3>Choose what they can see</h3><p>Choose Sealed or Always sharing for each person. With Sealed, the viewer confirms each Look to receive one location snapshot.</p></article>
           <article class="feature-card"><span class="feature-index">03</span><h3>Review and change access</h3><p>Activity records location checks in Trust. Pause sharing for a while or stop it at any time.</p></article>
         </div>
       </section>

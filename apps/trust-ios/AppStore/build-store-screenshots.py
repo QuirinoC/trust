@@ -10,7 +10,7 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 
 ROOT = Path(__file__).resolve().parent
-SET = ROOT / "Screenshots" / "2026-09"
+SET = ROOT / "Screenshots" / "2026-10"
 FONT_BOLD = "/System/Library/Fonts/Avenir Next.ttc"
 FONT_REGULAR = "/System/Library/Fonts/HelveticaNeue.ttc"
 
@@ -178,15 +178,73 @@ def make_iphone_65_panels() -> None:
         print(f"{output}: 1242×2688, RGB")
 
 
+def export_website_screenshots() -> None:
+    """Publish optimized current app screens to the site's public assets."""
+    web_root = ROOT.parents[1] / "jointrust-web" / "public"
+    website_screenshots = web_root / "screenshots"
+    website_screenshots.mkdir(parents=True, exist_ok=True)
+
+    for route in ("map", "look", "share", "log"):
+        source = SET / "raw" / "iphone-69" / f"{route}.png"
+        output = website_screenshots / f"{route}.webp"
+        Image.open(source).convert("RGB").save(output, format="WEBP", quality=86, method=6)
+        print(f"{output}: {output.stat().st_size:,} bytes (WebP)")
+
+    phone_source = SET / "raw" / "iphone-69" / "phone.png"
+    phone_output = web_root / "sms-opt-in.png"
+    Image.open(phone_source).convert("RGB").save(phone_output, format="PNG", optimize=True)
+    print(f"{phone_output}: {phone_output.stat().st_size:,} bytes (PNG)")
+
+
+def validate_sources(
+    selected: list[str],
+    devices: dict[str, tuple[str, tuple[int, int]]],
+    include_website: bool,
+) -> None:
+    """Check every needed raw image before replacing any composed panels."""
+    required = [
+        (SET / "raw" / devices[device][0] / f"{route}.png", devices[device][1])
+        for device in selected
+        for route, _, _ in STORY
+    ]
+    if include_website:
+        required.append((SET / "raw" / "iphone-69" / "phone.png", devices["iphone"][1]))
+
+    problems: list[str] = []
+    for source, expected in required:
+        if not source.is_file():
+            problems.append(f"missing {source.relative_to(SET)}")
+            continue
+        try:
+            with Image.open(source) as image:
+                actual = image.size
+                image.verify()
+            if actual != expected:
+                problems.append(
+                    f"{source.relative_to(SET)} is {actual[0]}×{actual[1]}, "
+                    f"expected {expected[0]}×{expected[1]}"
+                )
+        except (OSError, ValueError) as error:
+            problems.append(f"unreadable {source.relative_to(SET)}: {error}")
+
+    if problems:
+        details = "\n".join(f"  - {problem}" for problem in problems)
+        raise SystemExit(f"Raw screenshots are incomplete; no output panels were replaced:\n{details}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--device", choices=("iphone", "ipad", "all"), default="all")
+    parser.add_argument("--website", action="store_true", help="Export optimized screenshots to jointrust-web/public after the iPhone panels are built")
     args = parser.parse_args()
+    if args.website and args.device == "ipad":
+        parser.error("--website requires --device iphone or --device all")
     devices = {
         "iphone": ("iphone-69", (1320, 2868)),
         "ipad": ("ipad-13", (2064, 2752)),
     }
     selected = list(devices) if args.device == "all" else [args.device]
+    validate_sources(selected, devices, args.website)
     for device in selected:
         folder, expected = devices[device]
         raw = SET / "raw" / folder
@@ -199,6 +257,8 @@ def main() -> None:
             make_panel(raw / f"{route}.png", out / f"{index:02d}-{route}.png", index, story, expected)
     if "iphone" in selected:
         make_iphone_65_panels()
+    if args.website:
+        export_website_screenshots()
 
 
 if __name__ == "__main__":

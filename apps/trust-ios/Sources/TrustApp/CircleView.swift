@@ -14,6 +14,7 @@ struct CircleView: View {
     @GestureState private var dragTranslation: CGFloat = 0
 
     private var pins: [AppModel.MapPin] { model.homeMapPins }
+    private var pinLocations: [CircleMapPinLocation] { pins.map(CircleMapPinLocation.init) }
 
     var body: some View {
         Group {
@@ -62,15 +63,26 @@ struct CircleView: View {
         }
         .onAppear {
             model.prepareMapLocation()
-            if !userMovedMap { fitAll() }
+            fitOrFocusSelectedView()
         }
-        .onChange(of: pins.map(\.id)) { _, _ in
-            if !userMovedMap { fitAll() }
+        .onChange(of: pinLocations) { _, _ in
+            fitOrFocusSelectedView()
+        }
+        .onChange(of: model.circlePath) { _, path in
+            if case let .view(personID)? = path.last {
+                // Entering a specific person's view should reveal their pin,
+                // even when the person previously panned the map manually.
+                // A new manual pan inside View can suspend following again.
+                userMovedMap = false
+                focusMap(on: personID)
+            } else {
+                fitOrFocusSelectedView()
+            }
         }
         .onChange(of: model.location.lastFix) { _, fix in
             guard fix != nil, !didFitInitialCamera, !userMovedMap else { return }
             didFitInitialCamera = true
-            fitAll()
+            fitOrFocusSelectedView()
         }
         .onChange(of: position.positionedByUser) { _, movedByUser in
             if movedByUser { userMovedMap = true }
@@ -427,6 +439,27 @@ struct CircleView: View {
         }
     }
 
+    private func focusMap(on personID: UUID) {
+        guard let point = pins.first(where: { $0.id == personID })?.point else { return }
+        let region = MKCoordinateRegion(
+            center: point.coordinate,
+            span: MKCoordinateSpan(latitudeDelta: 0.12, longitudeDelta: 0.12)
+        )
+        withAnimation(.easeInOut(duration: 0.35)) {
+            position = .region(region)
+        }
+    }
+
+    private func fitOrFocusSelectedView() {
+        guard !userMovedMap else { return }
+        if case let .view(personID)? = model.circlePath.last,
+           pins.contains(where: { $0.id == personID }) {
+            focusMap(on: personID)
+        } else {
+            fitAll()
+        }
+    }
+
     /// Street-level camera. Pins spread across cities must not zoom the home map out to a globe.
     private func metroRegion(for coordinates: [CLLocationCoordinate2D]) -> MKCoordinateRegion? {
         guard !coordinates.isEmpty else {
@@ -460,6 +493,18 @@ struct CircleView: View {
         return MKCoordinateRegion(center: center, span: span)
     }
 
+}
+
+private struct CircleMapPinLocation: Equatable {
+    let id: UUID
+    let latitude: Double
+    let longitude: Double
+
+    init(_ pin: AppModel.MapPin) {
+        id = pin.id
+        latitude = pin.point.coordinate.latitude
+        longitude = pin.point.coordinate.longitude
+    }
 }
 
 private enum PeopleSheetDetent: CGFloat, CaseIterable {

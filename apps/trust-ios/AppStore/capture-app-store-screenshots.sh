@@ -9,9 +9,11 @@ BUNDLE="com.collapsetechnologies.trust"
 RUNTIME="com.apple.CoreSimulator.SimRuntime.iOS-26-5"
 DERIVED="${DERIVED:-/private/tmp/trust-appstore-screenshots-derived-data}"
 APP="${DERIVED}/Build/Products/Debug-iphonesimulator/Trust.app"
-OUTPUT_ROOT="${OUTPUT_ROOT:-${ROOT}/AppStore/Screenshots/2026-09/raw}"
-# The initial warmup opens the map; capture the six current store panels.
-SHOTS=(map look share view log lookup)
+OUTPUT_ROOT="${OUTPUT_ROOT:-${ROOT}/AppStore/Screenshots/2026-10/raw}"
+CAPTURE_DEVICES="${TRUST_CAPTURE_DEVICES:-all}"
+# The initial warmup opens the map; capture the six store panels and the phone
+# verification screen used by the public SMS consent page.
+SHOTS=(map look share view log lookup phone)
 
 IPHONE_TYPE="com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro-Max"
 IPAD_TYPE="com.apple.CoreSimulator.SimDeviceType.iPad-Pro-13-inch-M5-12GB"
@@ -64,8 +66,15 @@ capture_device() {
     SIMCTL_CHILD_TRUST_DEMO=1 SIMCTL_CHILD_TRUST_UI_TEST=1 SIMCTL_CHILD_TRUST_SCREENSHOT="$shot" \
       xcrun simctl launch --terminate-running-process "$udid" "$BUNDLE" >/dev/null
     sleep 5
-    # Match the displayed clock to the real local time at capture.
-    xcrun simctl status_bar "$udid" override --time "$(date '+%-I:%M')"
+    # A bare 12-hour time is marked AM by iPadOS even when it is afternoon.
+    # Keep the iPad status bar unambiguous; iPhone hides the AM/PM marker.
+    local display_time
+    if [[ "$name" == "Trust ASC 13" ]]; then
+      display_time="$(date '+%H:%M')"
+    else
+      display_time="$(date '+%-I:%M')"
+    fi
+    xcrun simctl status_bar "$udid" override --time "$display_time"
     xcrun simctl io "$udid" screenshot "${outdir}/${shot}.png"
     echo "  wrote ${outdir}/${shot}.png"
   done
@@ -73,6 +82,10 @@ capture_device() {
 }
 
 cd "$ROOT"
+if [[ "$CAPTURE_DEVICES" != "all" && "$CAPTURE_DEVICES" != "iphone" && "$CAPTURE_DEVICES" != "ipad" ]]; then
+  echo "TRUST_CAPTURE_DEVICES must be all, iphone, or ipad." >&2
+  exit 1
+fi
 if [[ "${TRUST_ALLOW_PARALLEL_SIMULATORS:-0}" != "1" ]] && xcrun simctl list devices booted | grep -q '(Booted)'; then
   echo "Shut down the current simulator before capturing; this script uses one simulator at a time." >&2
   echo "If the other simulator is intentionally in use, set TRUST_ALLOW_PARALLEL_SIMULATORS=1; capture uses and deletes its own simulator." >&2
@@ -85,7 +98,11 @@ xcodebuild -project Trust.xcodeproj -scheme Trust \
   -derivedDataPath "$DERIVED" \
   -quiet build
 
-capture_device "Trust ASC 6.9" "$IPHONE_TYPE" "${OUTPUT_ROOT}/iphone-69"
-capture_device "Trust ASC 13" "$IPAD_TYPE" "${OUTPUT_ROOT}/ipad-13"
+if [[ "$CAPTURE_DEVICES" == "all" || "$CAPTURE_DEVICES" == "iphone" ]]; then
+  capture_device "Trust ASC 6.9" "$IPHONE_TYPE" "${OUTPUT_ROOT}/iphone-69"
+fi
+if [[ "$CAPTURE_DEVICES" == "all" || "$CAPTURE_DEVICES" == "ipad" ]]; then
+  capture_device "Trust ASC 13" "$IPAD_TYPE" "${OUTPUT_ROOT}/ipad-13"
+fi
 
 echo "Done. Review ${OUTPUT_ROOT}/ before composing or uploading assets to App Store Connect."

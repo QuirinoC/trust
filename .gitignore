@@ -21,4 +21,4 @@ AuthKey_*.p8
 .swiftpm/
 
 # Simulator source captures are reproducible; keep only composed store panels in Git.
-/apps/trust-ios/AppStore/Screenshots/2026-09/raw/
+/apps/trust-ios/AppStore/Screenshots/*/raw/

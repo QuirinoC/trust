@@ -16,6 +16,6 @@ npm test
 npm run deploy
 ```
 
-Deploy the updated privacy page with the API migration that starts recording the SMS consent events it describes.
+Website copy and API migrations deploy independently. Verify each privacy and SMS disclosure against the current app behavior and the registered Twilio campaign before publishing; campaign registration verification is tracked in the deployment runbook.
 
 Apex and `www` are Worker custom domains (proxied). `www` 301s to `https://jointrust.app`.
