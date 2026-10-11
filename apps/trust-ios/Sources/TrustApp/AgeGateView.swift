@@ -230,6 +230,8 @@ struct AgeGateView: View {
                         .trustFont(13)
                         .foregroundStyle(palette.muted)
                         .frame(maxWidth: .infinity, minHeight: 36)
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel(TrustCopy.ageGateStopAllPending)
                         .accessibilityIdentifier("age-stop-all-status")
                     case .success:
                         Text(TrustCopy.ageGateStopAllSuccess)

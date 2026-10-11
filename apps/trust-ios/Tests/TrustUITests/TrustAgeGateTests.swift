@@ -70,8 +70,7 @@ final class TrustAgeGateTests: XCTestCase {
         let confirm = app.buttons.matching(identifier: "age-stop-all-confirm").firstMatch
         XCTAssertTrue(confirm.waitForExistence(timeout: 5))
         confirm.tap()
-        let status = element("age-stop-all-status", in: app)
-        XCTAssertTrue(status.waitForExistence(timeout: 5))
+        let status = waitForStopAllStatus(in: app, containing: ["sharing is off"], timeout: 5)
         XCTAssertTrue(status.label.localizedCaseInsensitiveContains("sharing is off"))
         XCTAssertFalse(stop.isEnabled)
         assertDeclinedAgeRange(in: app)
@@ -113,8 +112,8 @@ final class TrustAgeGateTests: XCTestCase {
         assertAppTransactionUnavailable(in: app)
         element("age-stop-all-sharing", in: app).tap()
         app.buttons.matching(identifier: "age-stop-all-confirm").firstMatch.tap()
-        XCTAssertTrue(element("age-stop-all-status", in: app).waitForExistence(timeout: 5))
-        XCTAssertTrue(element("age-stop-all-status", in: app).label.localizedCaseInsensitiveContains("sharing is off"))
+        let status = waitForStopAllStatus(in: app, containing: ["sharing is off"], timeout: 5)
+        XCTAssertTrue(status.label.localizedCaseInsensitiveContains("sharing is off"))
 
         app.terminate()
         app.launch()
@@ -146,8 +145,7 @@ final class TrustAgeGateTests: XCTestCase {
         XCTAssertTrue(confirm.waitForExistence(timeout: 5))
         confirm.tap()
 
-        let status = element("age-stop-all-status", in: app)
-        XCTAssertTrue(status.waitForExistence(timeout: 30))
+        let status = waitForStopAllStatus(in: app, containing: ["confirm", "may still be on"], timeout: 30)
         XCTAssertTrue(status.label.localizedCaseInsensitiveContains("confirm"))
         XCTAssertTrue(status.label.localizedCaseInsensitiveContains("may still be on"))
         XCTAssertTrue(element("age-gate-title", in: app).exists, "A failed stop request must leave the age gate closed.")
@@ -171,8 +169,7 @@ final class TrustAgeGateTests: XCTestCase {
         XCTAssertTrue(confirm.waitForExistence(timeout: 5))
         confirm.tap()
 
-        let pending = element("age-stop-all-status", in: app)
-        XCTAssertTrue(pending.waitForExistence(timeout: 5))
+        _ = waitForStopAllStatus(in: app, containing: ["stopping sharing"], timeout: 5)
         let retry = element("age-gate-retry", in: app)
         XCTAssertTrue(retry.exists)
         XCTAssertFalse(retry.isEnabled, "Age-check retry must not move the screen while Stop All is pending.")
@@ -219,8 +216,7 @@ final class TrustAgeGateTests: XCTestCase {
         let confirm = app.buttons.matching(identifier: "age-stop-all-confirm").firstMatch
         XCTAssertTrue(confirm.waitForExistence(timeout: 5))
         confirm.tap()
-        let status = element("age-stop-all-status", in: app)
-        XCTAssertTrue(status.waitForExistence(timeout: 5))
+        let status = waitForStopAllStatus(in: app, containing: ["sharing is off"], timeout: 5)
         XCTAssertTrue(element("age-gate-title", in: app).exists, "Stop success must not unlock the account.")
         XCTAssertFalse(element("local-api-sign-in", in: app).exists, "Stop success must not navigate to sign-in.")
         XCTAssertFalse(element("tab-circle", in: app).exists, "Stop success must not open the app home.")
@@ -388,6 +384,25 @@ final class TrustAgeGateTests: XCTestCase {
 
     private func element(_ identifier: String, in app: XCUIApplication) -> XCUIElement {
         app.descendants(matching: .any)[identifier]
+    }
+
+    private func waitForStopAllStatus(
+        in app: XCUIApplication,
+        containing fragments: [String],
+        timeout: TimeInterval
+    ) -> XCUIElement {
+        let status = element("age-stop-all-status", in: app)
+        let predicates = fragments.map { NSPredicate(format: "label CONTAINS[cd] %@", $0) }
+        let expectation = XCTNSPredicateExpectation(
+            predicate: NSCompoundPredicate(andPredicateWithSubpredicates: predicates),
+            object: status
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [expectation], timeout: timeout),
+            .completed,
+            "Expected Stop All status to contain: \(fragments.joined(separator: ", "))."
+        )
+        return status
     }
 
     private func assertUnavailableAgeCheck(in app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) {
