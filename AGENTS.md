@@ -2,6 +2,7 @@
 
 ## Product and design
 - Follow `docs/DESIGN.md` for the current visual direction and screen intent. Keep consent explicit, privacy language accurate, and sharing off until a person chooses a mode.
+- Latest explicit user corrections override dated reviews, research mockups, and screenshot captures. Do not restore superseded designs from those records; use `docs/DESIGN.md` for active design guidance.
 - Preserve the existing route identifiers, accessibility identifiers, and API contracts unless the task specifically changes them.
 - Keep system light and dark appearances readable. Use `TrustPalette.paper` and shared Trust components for iOS UI.
 

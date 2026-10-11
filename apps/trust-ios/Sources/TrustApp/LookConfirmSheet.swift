@@ -21,21 +21,23 @@ struct LookConfirmSheet: View {
                         Image(systemName: "xmark")
                             .font(.system(size: 14, weight: .semibold))
                             .foregroundStyle(palette.ink)
-                            .frame(width: 44, height: 44)
+                            .frame(width: 36, height: 36)
                             .background(Circle().stroke(palette.line, lineWidth: 1))
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(TrustCopy.close)
                 }
-                .padding(.bottom, 22)
+                .padding(.bottom, 16)
 
                 TrustEyebrow(text: TrustCopy.confirm, size: 10)
                 Text(TrustCopy.lookAtTitle(name: first))
-                    .font(TrustTheme.display(34))
-                    .tracking(-1)
+                    .font(TrustTheme.display(28))
+                    .tracking(-0.5)
                     .foregroundStyle(palette.ink)
-                    .padding(.top, 10)
-                    .padding(.bottom, 14)
+                    .padding(.top, 6)
+                    .padding(.bottom, 12)
                     .accessibilityAddTraits(.isHeader)
 
                 (Text(TrustCopy.thenOneSnapshot).fontWeight(.semibold).foregroundColor(palette.ink)
@@ -49,7 +51,7 @@ struct LookConfirmSheet: View {
 
             }
             .padding(.horizontal, 26)
-            .padding(.top, 18)
+            .padding(.top, 12)
             .padding(.bottom, 16)
             .trustReadableWidth()
         }

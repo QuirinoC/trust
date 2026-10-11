@@ -20,7 +20,7 @@ struct AddSomeoneSection: View {
             .accessibilityIdentifier("add-someone-button")
 
             // Old invitation links still open a direct, explicit accept card. The
-            // ordinary Add sheet has no code, link, or phone paths.
+            // Add sheet handles exact handle/phone lookup and eligible no-match links.
             if model.linkedInviteCode != nil {
                 TrustCard(fill: palette.surface) {
                     VStack(alignment: .leading, spacing: 10) {
@@ -62,6 +62,7 @@ struct AddSomeoneSection: View {
 struct AddPersonSheet: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.trustPalette) private var palette
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @FocusState private var handleFocused: Bool
 
     var body: some View {
@@ -70,7 +71,7 @@ struct AddPersonSheet: View {
                 VStack(alignment: .leading, spacing: 20) {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(TrustCopy.findYourPerson)
-                            .trustFont(27, weight: .semibold)
+                            .trustFont(28, weight: .semibold)
                             .foregroundStyle(palette.ink)
                             .accessibilityIdentifier("add-person-heading")
                         Text(TrustCopy.addPersonExplanation)
@@ -150,6 +151,7 @@ struct AddPersonSheet: View {
 
                     if let result = model.connectionLookup {
                         lookupResult(result)
+                            .transition(.opacity)
                     }
                     if model.connectionLookupIsNoMatch {
                         VStack(alignment: .leading, spacing: 16) {
@@ -184,10 +186,11 @@ struct AddPersonSheet: View {
                     }
                 }
                 .padding(.horizontal, TrustTheme.gutter)
-                .padding(.top, 16)
+                .padding(.top, 12)
                 .padding(.bottom, 32)
                 .frame(maxWidth: TrustTheme.readableWidth, alignment: .leading)
                 .frame(maxWidth: .infinity, alignment: .center)
+                .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: model.connectionLookup?.relationship)
             }
             .background(palette.paper.ignoresSafeArea())
             .navigationBarTitleDisplayMode(.inline)
@@ -245,6 +248,8 @@ struct AddPersonSheet: View {
 
             action(for: result)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .id(result.relationship)
+                .transition(.opacity)
         }
         .padding(.top, 4)
         .accessibilityElement(children: .contain)
@@ -265,9 +270,17 @@ struct AddPersonSheet: View {
                 .foregroundStyle(palette.muted)
                 .accessibilityIdentifier("connection-lookup-sent")
         case "incoming":
-            Button(TrustCopy.acceptRequest) {
+            Button {
                 guard let id = result.requestId else { return }
                 model.acceptConnectionRequest(id: id)
+            } label: {
+                HStack(spacing: 8) {
+                    Text(TrustCopy.acceptRequest)
+                    if let id = result.requestId, model.actingOnConnectionRequestIDs.contains(id) {
+                        ProgressView().tint(palette.accentOn)
+                            .accessibilityHidden(true)
+                    }
+                }
             }
             .buttonStyle(TrustFilledButtonStyle())
             .disabled(result.requestId == nil || (result.requestId.map { model.actingOnConnectionRequestIDs.contains($0) } ?? false))
@@ -276,10 +289,12 @@ struct AddPersonSheet: View {
             Button {
                 model.sendConnectionRequest()
             } label: {
-                if model.isSendingConnectionRequest {
-                    ProgressView().tint(palette.accentOn)
-                } else {
+                HStack(spacing: 8) {
                     Text(TrustCopy.sendRequest)
+                    if model.isSendingConnectionRequest {
+                        ProgressView().tint(palette.accentOn)
+                            .accessibilityHidden(true)
+                    }
                 }
             }
             .buttonStyle(TrustFilledButtonStyle())
@@ -385,6 +400,7 @@ struct HandleInitials: View {
 struct ConnectionRequestsSection: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.trustPalette) private var palette
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -457,6 +473,8 @@ struct ConnectionRequestsSection: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("connection-requests-section")
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: model.connectionRequests.incoming.map(\.id))
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: model.connectionRequests.sent.map(\.id))
     }
 
     private func requestRow(_ request: ConnectionRequestDTO, incoming: Bool) -> some View {
@@ -469,7 +487,14 @@ struct ConnectionRequestsSection: View {
                     .lineLimit(1)
                     .accessibilityIdentifier("connection-request-handle-\(request.otherParty.handle)")
                 Spacer(minLength: 4)
-                if !incoming {
+                if model.actingOnConnectionRequestIDs.contains(request.id) {
+                    ProgressView()
+                        .controlSize(.mini)
+                        .accessibilityHidden(true)
+                    Text(TrustCopy.pending)
+                        .trustFont(12, weight: .medium)
+                        .foregroundStyle(palette.muted)
+                } else if !incoming {
                     Text(TrustCopy.pending)
                         .trustFont(12, weight: .medium)
                         .foregroundStyle(palette.muted)
@@ -478,15 +503,7 @@ struct ConnectionRequestsSection: View {
 
             HStack(spacing: 10) {
                 if incoming {
-                    Button {
-                        model.acceptConnectionRequest(request)
-                    } label: {
-                        if model.actingOnConnectionRequestIDs.contains(request.id) {
-                            ProgressView().tint(palette.accentOn)
-                        } else {
-                            Text(TrustCopy.acceptRequest)
-                        }
-                    }
+                    Button(TrustCopy.acceptRequest) { model.acceptConnectionRequest(request) }
                         .buttonStyle(TrustFilledButtonStyle(expand: false))
                         .disabled(model.actingOnConnectionRequestIDs.contains(request.id))
                         .accessibilityIdentifier("accept-connection-request-\(request.otherParty.handle)")
@@ -505,5 +522,6 @@ struct ConnectionRequestsSection: View {
         .padding(.vertical, 11)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("connection-request-\(incoming ? "incoming" : "sent")-\(request.otherParty.handle)")
+        .transition(.opacity)
     }
 }

@@ -1591,6 +1591,140 @@ final class TrustRealAPIFeatureTests: XCTestCase {
         XCTAssertNotEqual(connectionID, "", "The fixture should retain the connection identity it exercised.")
     }
 
+    func testShareModeSelectionWaitsForSuccessAndPreservesPausedStateOnFailure() throws {
+        guard api.raceProxyState() != nil else {
+            throw XCTSkip("This regression requires the loopback race proxy on port 5089, forwarding to the isolated Development API on port 5090.")
+        }
+        let fixture = try makeConnectedFixture(prefix: "share-ack")
+        defer {
+            api.deleteAccount(token: fixture.peer.token)
+            api.deleteAccount(token: fixture.main.token)
+        }
+        let personID = fixture.peer.personID
+        let peer = fixture.peerName.lowercased()
+        XCTAssertEqual(outboundPresentation(personID: personID, token: fixture.main.token), "off")
+        let initialRevision = try XCTUnwrap(activeShareRevision(personID: personID, token: fixture.main.token))
+
+        let app = launchDevelopmentApp(
+            deviceID: fixture.mainDeviceID,
+            displayName: fixture.mainName,
+            arguments: ["-appearancePreference", "light", "-trust.appLanguage", "en"]
+        )
+        defer { app.terminate() }
+        XCTAssertTrue(app.buttons["tab-sharing"].waitForExistence(timeout: 15))
+        app.buttons["tab-sharing"].tap()
+        let group = app.descendants(matching: .any)["sharing-mode-group-\(peer)"]
+        XCTAssertTrue(group.waitForExistence(timeout: 15), app.debugDescription)
+        let off = app.buttons["sharing-mode-off-\(peer)"]
+        let sealed = app.buttons["sharing-mode-sealed-\(peer)"]
+        let always = app.buttons["sharing-mode-always-\(peer)"]
+        let pending = app.staticTexts["sharing-pending-\(peer)"]
+        let summary = app.staticTexts["sharing-summary-\(peer)"]
+        XCTAssertTrue(off.isSelected)
+        XCTAssertTrue(off.isEnabled)
+
+        XCTAssertTrue(api.armShareResponse(failureAfterRelease: false))
+        sealed.tap()
+        XCTAssertTrue(waitForProxyState(timeout: 12) {
+            $0["holding"] as? Bool == true && $0["held_resource"] as? String == "share"
+        }, "The proxy should hold the successful Share response after the API has processed it.")
+        XCTAssertEqual(outboundPresentation(personID: personID, token: fixture.main.token), "untilTheyLook")
+        XCTAssertEqual(activeShareRevision(personID: personID, token: fixture.main.token), initialRevision + 1)
+        XCTAssertTrue(off.isSelected, "Pending state must leave the last-confirmed Off selection visible.")
+        XCTAssertFalse(sealed.isSelected)
+        XCTAssertTrue(pending.waitForExistence(timeout: 5))
+        XCTAssertTrue(off.isEnabled, "Off stays available while another mode update is pending.")
+        XCTAssertEqual(api.raceProxyState()?["share_ack_count"] as? Int, 0,
+                       "The client must not receive an acknowledgement until the held response is released.")
+
+        off.tap()
+        XCTAssertTrue(app.alerts.firstMatch.waitForExistence(timeout: 5), "Off during an update must retain the explicit Stop confirmation.")
+        let cancelStop = app.alerts.buttons["Cancel"]
+        XCTAssertTrue(cancelStop.waitForExistence(timeout: 3))
+        cancelStop.tap()
+        XCTAssertFalse(app.alerts.firstMatch.exists)
+        XCTAssertTrue(off.isSelected)
+        XCTAssertTrue(pending.exists)
+        XCTAssertEqual(api.raceProxyState()?["share_ack_count"] as? Int, 0, "Canceling the Stop alert must not send another share request.")
+
+        XCTAssertTrue(api.releaseHeldResponse())
+        XCTAssertTrue(waitForProxyState(timeout: 12) { ($0["share_ack_count"] as? Int ?? 0) == 1 })
+        XCTAssertTrue(waitUntil(timeout: 12) { sealed.isSelected && !pending.exists }, "The selection should change only after the successful response arrives.")
+        XCTAssertEqual(outboundPresentation(personID: personID, token: fixture.main.token), "untilTheyLook")
+        let sealedRevision = try XCTUnwrap(activeShareRevision(personID: personID, token: fixture.main.token))
+        XCTAssertEqual(sealedRevision, initialRevision + 1)
+        let firstShareExplainer = app.buttons["always-explainer-later"]
+        if firstShareExplainer.waitForExistence(timeout: 3) {
+            XCTAssertTrue(firstShareExplainer.isHittable)
+            firstShareExplainer.tap()
+            XCTAssertFalse(firstShareExplainer.waitForExistence(timeout: 3), "Dismiss only the first-share permission explanation before continuing the race fixture.")
+        }
+
+        app.buttons["sharing-actions-\(peer)"].tap()
+        let pause = app.buttons["pause-sharing-\(peer)"]
+        XCTAssertTrue(pause.waitForExistence(timeout: 5))
+        pause.tap()
+        let oneHour = app.buttons["pause-duration-3600"]
+        XCTAssertTrue(oneHour.waitForExistence(timeout: 5))
+        oneHour.tap()
+        XCTAssertTrue(waitUntil(timeout: 10) {
+            summary.exists && summary.label.localizedCaseInsensitiveContains("paused")
+                && self.outboundPresentation(personID: personID, token: fixture.main.token) == "paused"
+                && !pending.exists && sealed.isEnabled
+        }, "The fixture must enter a real one-hour pause through the app before the failure case.")
+        let pausedSummary = summary.label
+        let pausedRevision = try XCTUnwrap(activeShareRevision(personID: personID, token: fixture.main.token))
+        XCTAssertEqual(pausedRevision, sealedRevision + 1)
+        XCTAssertFalse(off.isSelected)
+        XCTAssertFalse(sealed.isSelected)
+        XCTAssertFalse(always.isSelected)
+
+        XCTAssertTrue(api.armShareResponse(failureAfterRelease: true))
+        sealed.tap()
+        XCTAssertTrue(waitForProxyState(timeout: 12) {
+            $0["holding"] as? Bool == true && $0["held_resource"] as? String == "share"
+        }, "The failed Share response should be held before it reaches the API.")
+        XCTAssertEqual(outboundPresentation(personID: personID, token: fixture.main.token), "paused",
+                       "The failure path must not mutate backend state before release.")
+        XCTAssertEqual(activeShareRevision(personID: personID, token: fixture.main.token), pausedRevision)
+        XCTAssertEqual(summary.label, pausedSummary, "Paused-until context remains visible during a pending mode request.")
+        XCTAssertTrue(pending.waitForExistence(timeout: 5))
+        XCTAssertTrue(off.isEnabled)
+        XCTAssertFalse(off.isSelected)
+        XCTAssertFalse(sealed.isSelected)
+        XCTAssertFalse(always.isSelected)
+        XCTAssertTrue(api.releaseHeldResponse())
+        XCTAssertTrue(waitForProxyState(timeout: 12) { ($0["share_failure_count"] as? Int ?? 0) == 1 })
+        XCTAssertTrue(waitUntil(timeout: 12) { !pending.exists }, "The failed request should finish without changing the confirmed paused state.")
+        XCTAssertEqual(api.raceProxyState()?["share_ack_count"] as? Int, 0, "A failed Share response must not count as an acknowledgement.")
+        XCTAssertEqual(outboundPresentation(personID: personID, token: fixture.main.token), "paused")
+        XCTAssertEqual(activeShareRevision(personID: personID, token: fixture.main.token), pausedRevision)
+        XCTAssertEqual(summary.label, pausedSummary)
+        XCTAssertFalse(off.isSelected)
+        XCTAssertFalse(sealed.isSelected)
+        XCTAssertFalse(always.isSelected)
+
+        XCTAssertTrue(api.armShareResponse(failureAfterRelease: false))
+        sealed.tap()
+        XCTAssertTrue(waitForProxyState(timeout: 12) {
+            $0["holding"] as? Bool == true && $0["held_resource"] as? String == "share"
+        }, "Retry should hold the successful Share response after backend processing.")
+        XCTAssertEqual(summary.label, pausedSummary, "The confirmed pause remains the visible state until retry acknowledgement.")
+        XCTAssertTrue(pending.waitForExistence(timeout: 5))
+        XCTAssertFalse(off.isSelected)
+        XCTAssertFalse(sealed.isSelected)
+        XCTAssertFalse(always.isSelected)
+        XCTAssertEqual(outboundPresentation(personID: personID, token: fixture.main.token), "untilTheyLook")
+        XCTAssertEqual(activeShareRevision(personID: personID, token: fixture.main.token), pausedRevision + 1)
+        XCTAssertEqual(api.raceProxyState()?["share_ack_count"] as? Int, 0)
+        XCTAssertTrue(api.releaseHeldResponse())
+        XCTAssertTrue(waitForProxyState(timeout: 12) { ($0["share_ack_count"] as? Int ?? 0) == 1 })
+        XCTAssertTrue(waitUntil(timeout: 12) { sealed.isSelected && !summary.exists && !pending.exists })
+        XCTAssertEqual(outboundPresentation(personID: personID, token: fixture.main.token), "untilTheyLook")
+        XCTAssertEqual(activeShareRevision(personID: personID, token: fixture.main.token), pausedRevision + 1)
+        attachScreenshot(of: app, named: "Sharing - acknowledged Sealed retry after a held failure")
+    }
+
     func testRemoveStaysAbsentAfterStaleCircleResponseAndRelaunch() throws {
         guard api.raceProxyState() != nil else {
             throw XCTSkip("This regression requires the loopback race proxy on port 5089, forwarding to the isolated Development API on port 5090.")
@@ -2235,6 +2369,11 @@ private final class LocalTrustAPI {
 
     func armLookRace() -> Bool {
         (200..<300).contains(request("POST", "/__test/arm-look", body: [:]).status)
+    }
+
+    func armShareResponse(failureAfterRelease: Bool) -> Bool {
+        let path = failureAfterRelease ? "/__test/arm-share-failure" : "/__test/arm-share"
+        return (200..<300).contains(request("POST", path, body: [:]).status)
     }
 
     func armStopAllFailure() -> Bool {

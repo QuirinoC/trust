@@ -8,6 +8,68 @@ final class TrustUsageTests: XCTestCase {
         continueAfterFailure = false
     }
 
+    func testPeopleMapPinRemainsAboveListAtEveryDetent() {
+        let variants = [(false, "UICTContentSizeCategoryL"),
+                        (true, "UICTContentSizeCategoryL"),
+                        (false, "UICTContentSizeCategoryAccessibilityXXXL")]
+        for (dark, textSize) in variants {
+            let app = launchDemo(dark: dark, route: "circle", contentSize: textSize)
+            let handle = app.buttons["people-sheet-detent"]
+            let header = app.otherElements["people-map-header"]
+            let pin = app.buttons.matching(
+                NSPredicate(format: "identifier BEGINSWITH %@", "people-map-pin-")
+            ).firstMatch
+            XCTAssertTrue(handle.waitForExistence(timeout: 20))
+            XCTAssertTrue(header.waitForExistence(timeout: 5))
+            XCTAssertTrue(pin.waitForExistence(timeout: 10), "The fixture must expose a location pin.")
+
+            // Expand by tapping, then drag down to the compact detent. Check the real
+            // annotation hit region, not a duplicated camera calculation.
+            for (index, detent) in ["Half height", "Expanded", "Compact"].enumerated() {
+                let selected = XCTNSPredicateExpectation(
+                    predicate: NSPredicate(format: "value == %@", detent), object: handle)
+                XCTAssertEqual(XCTWaiter.wait(for: [selected], timeout: 5), .completed)
+                var visibleSince: TimeInterval?
+                let unobscured = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+                    let now = ProcessInfo.processInfo.systemUptime
+                    let frame = pin.frame
+                    let sheet = handle.frame
+                    let window = app.windows.firstMatch.frame
+                    let visible = pin.exists && !frame.isEmpty
+                        && frame.maxY <= sheet.minY + 1
+                        && frame.minX >= window.minX && frame.maxX <= window.maxX
+                        && frame.minY >= header.frame.maxY - 1
+                    if !visible { visibleSince = nil; return false }
+                    if visibleSince == nil { visibleSince = now }
+                    return now - (visibleSince ?? now) >= 0.5
+                }, object: nil)
+                let viewportResult = XCTWaiter.wait(for: [unobscured], timeout: 10)
+                if viewportResult != .completed {
+                    add(XCTAttachment(screenshot: app.screenshot()))
+                    add(XCTAttachment(string: "Pin: \(pin.frame); header: \(header.frame); panel: \(handle.frame)"))
+                }
+                XCTAssertEqual(viewportResult, .completed,
+                               "The entire pin must remain above the People panel at \(detent).")
+                XCTAssertGreaterThanOrEqual(handle.frame.height, 44)
+                let capture = XCTAttachment(screenshot: app.screenshot())
+                capture.name = "People viewport - \(detent) - \(dark ? "dark" : "light") - \(textSize)"
+                capture.lifetime = .keepAlways
+                add(capture)
+                if index == 0 {
+                    handle.tap()
+                } else if index == 1 {
+                    handle.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+                        .press(forDuration: 0.15, thenDragTo: app.coordinate(
+                            withNormalizedOffset: CGVector(dx: 0.5, dy: 0.85)))
+                }
+            }
+            pin.tap()
+            XCTAssertTrue(app.staticTexts["person-sharing-directions"].waitForExistence(timeout: 5),
+                          "The visible pin must remain actionable after resizing the panel.")
+            app.terminate()
+        }
+    }
+
     func testLookRecordsOneSnapshotAndSealedPersonHasNoHistory() {
         let app = launchDemo()
         XCTAssertTrue(app.buttons["tab-circle"].waitForExistence(timeout: 20))
@@ -161,6 +223,239 @@ final class TrustUsageTests: XCTestCase {
         remove.tap()
         tapConfirmationAction("remove-person-confirm", in: app)
         XCTAssertFalse(app.descendants(matching: .any)["sharing-mode-group-maya"].waitForExistence(timeout: 2))
+    }
+
+    func testSharingCompactRowGeometryAtStandardTextAcrossShippedLocales() {
+        let variants: [(language: String, labels: [String], dark: Bool)] = [
+            ("en", ["Off", "Sealed", "Always"], false),
+            ("de", ["Aus", "Versiegelt", "Immer"], false),
+            ("fr", ["Désactivé", "Scellé", "Toujours"], false),
+            ("ja", ["オフ", "封印", "常時"], false),
+            ("pt-BR", ["Desativado", "Lacrado", "Sempre"], false),
+            ("zh-Hans", ["离开", "密封的", "总是"], false),
+            ("en", ["Off", "Sealed", "Always"], true)
+        ]
+
+        for variant in variants {
+            let app = XCUIApplication()
+            app.launchEnvironment["TRUST_DEMO"] = "1"
+            app.launchEnvironment["TRUST_UI_TEST"] = "1"
+            app.launchEnvironment["TRUST_SCREENSHOT"] = "share"
+            app.launchArguments += [
+                "-appearancePreference", variant.dark ? "dark" : "light",
+                "-trust.appLanguage", variant.language,
+                "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryL"
+            ]
+            app.launch()
+            XCTAssertTrue(app.buttons["tab-sharing"].waitForExistence(timeout: 20))
+            app.buttons["tab-sharing"].tap()
+
+            let viewport = app.scrollViews["sharing-scroll"]
+            let row = app.descendants(matching: .any)["sharing-mode-group-maya"]
+            let name = row.staticTexts.matching(NSPredicate(format: "label == %@", "Maya Chen")).firstMatch
+            let off = app.buttons["sharing-mode-off-maya"]
+            let sealed = app.buttons["sharing-mode-sealed-maya"]
+            let always = app.buttons["sharing-mode-always-maya"]
+            let actions = app.buttons["sharing-actions-maya"]
+            XCTAssertTrue(viewport.waitForExistence(timeout: 5))
+            XCTAssertTrue(row.waitForExistence(timeout: 8), "Maya's row should be present in \(variant.language).")
+
+            for _ in 0..<8 where !row.isHittable {
+                viewport.swipeUp()
+            }
+            XCTAssertTrue(name.waitForExistence(timeout: 5), "The row must retain Maya's identity.")
+            let controls = [row, name, off, sealed, always, actions]
+            guard let frames = steadyVisibleFrames(controls, in: viewport, app: app) else {
+                XCTFail("Sharing row geometry did not remain steady and hittable in \(variant.language).")
+                add(XCTAttachment(screenshot: app.screenshot()))
+                app.terminate()
+                continue
+            }
+
+            let rowFrame = frames[0]
+            let nameFrame = frames[1]
+            let offFrame = frames[2]
+            let sealedFrame = frames[3]
+            let alwaysFrame = frames[4]
+            let actionsFrame = frames[5]
+            let screen = app.frame
+            let epsilon: CGFloat = 1
+            XCTAssertGreaterThan(min(nameFrame.maxY, offFrame.maxY) - max(nameFrame.minY, offFrame.minY), 0,
+                                 "The name and mode controls must share one horizontal row.")
+            XCTAssertGreaterThan(min(offFrame.maxY, sealedFrame.maxY) - max(offFrame.minY, sealedFrame.minY), 0)
+            XCTAssertGreaterThan(min(sealedFrame.maxY, alwaysFrame.maxY) - max(sealedFrame.minY, alwaysFrame.minY), 0)
+            XCTAssertGreaterThan(min(alwaysFrame.maxY, actionsFrame.maxY) - max(alwaysFrame.minY, actionsFrame.minY), 0)
+            XCTAssertLessThanOrEqual(nameFrame.maxX, offFrame.minX + epsilon)
+            XCTAssertLessThanOrEqual(offFrame.maxX + 3, sealedFrame.minX,
+                                     "Localized labels need visible separation inside the segmented control.")
+            XCTAssertLessThanOrEqual(sealedFrame.maxX + 3, alwaysFrame.minX,
+                                     "Localized labels need visible separation inside the segmented control.")
+            XCTAssertLessThanOrEqual(alwaysFrame.maxX, actionsFrame.minX + epsilon)
+            for frame in [nameFrame, offFrame, sealedFrame, alwaysFrame, actionsFrame] {
+                XCTAssertGreaterThanOrEqual(frame.minX, rowFrame.minX - epsilon)
+                XCTAssertLessThanOrEqual(frame.maxX, rowFrame.maxX + epsilon)
+                XCTAssertGreaterThanOrEqual(frame.minY, rowFrame.minY - epsilon)
+                XCTAssertLessThanOrEqual(frame.maxY, rowFrame.maxY + epsilon)
+                XCTAssertGreaterThanOrEqual(frame.minX, screen.minX - epsilon)
+                XCTAssertLessThanOrEqual(frame.maxX, screen.maxX + epsilon)
+                XCTAssertGreaterThanOrEqual(frame.minY, screen.minY - epsilon)
+                XCTAssertLessThanOrEqual(frame.maxY, screen.maxY + epsilon)
+                XCTAssertGreaterThanOrEqual(frame.minY, viewport.frame.minY - epsilon)
+                XCTAssertLessThanOrEqual(frame.maxY, viewport.frame.maxY + epsilon)
+            }
+            XCTAssertLessThanOrEqual(rowFrame.height, 76,
+                                     "An unpaused normal-size row must stay compact without a permanent consequence paragraph.")
+            XCTAssertFalse(app.staticTexts["sharing-summary-maya"].exists,
+                           "An unpaused row should not add a repeated mode explanation.")
+            XCTAssertEqual([off.label, sealed.label], Array(variant.labels.prefix(2)),
+                           "Each mode button must expose its complete localized label.")
+            XCTAssertTrue(always.label.hasPrefix(variant.labels[2]),
+                          "The Always button must expose its complete localized label, with any access note after it.")
+            for button in [off, sealed, always, actions] {
+                XCTAssertGreaterThanOrEqual(button.frame.width, 43.99)
+                XCTAssertGreaterThanOrEqual(button.frame.height, 43.99)
+                XCTAssertTrue(button.isHittable)
+            }
+            XCTAssertTrue(name.isHittable)
+            let geometry = XCTAttachment(string: "language=\(variant.language) dark=\(variant.dark) category=Large screen=\(screen) row=\(rowFrame) name=\(nameFrame) Off=\(offFrame) Sealed=\(sealedFrame) Always=\(alwaysFrame) menu=\(actionsFrame)")
+            geometry.name = "Sharing compact row geometry - \(variant.language) - \(variant.dark ? "dark" : "light")"
+            geometry.lifetime = .keepAlways
+            add(geometry)
+            let screenshot = XCTAttachment(screenshot: app.screenshot())
+            screenshot.name = "Sharing compact row - \(variant.language) - \(variant.dark ? "dark" : "light")"
+            screenshot.lifetime = .keepAlways
+            add(screenshot)
+            app.terminate()
+        }
+    }
+
+    func testMapSelectionKeepsPersonAndLocationContextTogether() {
+        let app = launchDemo(route: "view")
+        XCTAssertTrue(app.buttons["circle-back"].waitForExistence(timeout: 20))
+        app.buttons["circle-back"].tap()
+        let maya = app.buttons["person-row-maya"]
+        XCTAssertTrue(maya.waitForExistence(timeout: 8))
+        maya.tap()
+        let look = app.buttons["person-profile-peek"]
+        XCTAssertTrue(look.waitForExistence(timeout: 5))
+        look.tap()
+        XCTAssertTrue(app.buttons["confirm-look-notify"].waitForExistence(timeout: 5))
+        app.buttons["confirm-look-notify"].tap()
+        let openMap = app.buttons["view-open-map"]
+        XCTAssertTrue(openMap.waitForExistence(timeout: 8))
+        openMap.tap()
+
+        let back = app.buttons["map-back-to-people"]
+        XCTAssertTrue(back.waitForExistence(timeout: 8))
+        let map = app.descendants(matching: .any)["map-screen-canvas"]
+        XCTAssertTrue(map.waitForExistence(timeout: 8))
+        let showLeo = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Show Leo")).firstMatch
+        let showMaya = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Show Maya")).firstMatch
+        XCTAssertTrue(showLeo.waitForExistence(timeout: 8), "The Plus demo map should contain Leo's live pin.")
+        XCTAssertTrue(showMaya.waitForExistence(timeout: 8), "The confirmed Look should add Maya's snapshot pin.")
+
+        let name = app.descendants(matching: .any)["map-selected-person-name"]
+        let time = app.descendants(matching: .any)["map-selected-location-time"]
+        let selectedPersonAction = app.buttons["map-view-selected-person"]
+        showLeo.tap()
+        XCTAssertTrue(waitForSteadyMapDetail(name: name, time: time, expectedName: "Leo Park", expectedContext: "Always"))
+        XCTAssertTrue(showLeo.isSelected)
+        XCTAssertTrue(selectedPersonAction.label.contains("Leo"))
+        showMaya.tap()
+        XCTAssertTrue(waitForSteadyMapDetail(name: name, time: time, expectedName: "Maya Chen", expectedContext: "Snapshot"))
+        XCTAssertTrue(showMaya.isSelected)
+        XCTAssertTrue(selectedPersonAction.label.contains("Maya"))
+        showLeo.tap()
+        XCTAssertTrue(waitForSteadyMapDetail(name: name, time: time, expectedName: "Leo Park", expectedContext: "Always"))
+        XCTAssertTrue(showLeo.isSelected)
+        XCTAssertTrue(selectedPersonAction.label.contains("Leo"))
+        showMaya.tap()
+        XCTAssertTrue(waitForSteadyMapDetail(name: name, time: time, expectedName: "Maya Chen", expectedContext: "Snapshot"))
+        XCTAssertTrue(showMaya.isSelected)
+        let detailTime = time.label
+        let snapshotPrefix = "Snapshot · "
+        XCTAssertTrue(detailTime.hasPrefix(snapshotPrefix), "The selected Sealed person must retain the dated one-time snapshot label.")
+        let snapshotTime = detailTime.dropFirst(snapshotPrefix.count).components(separatedBy: " · ").first ?? ""
+        XCTAssertFalse(snapshotTime.isEmpty)
+        XCTAssertEqual(name.label, "Maya Chen")
+        XCTAssertTrue(selectedPersonAction.label.contains("Maya"))
+        selectedPersonAction.tap()
+        let viewedName = app.staticTexts["Maya"]
+        XCTAssertTrue(viewedName.waitForExistence(timeout: 8), "Opening the selected map action should keep Maya as the viewed person.")
+        let viewedFreshness = app.staticTexts["view-location-freshness"]
+        XCTAssertTrue(viewedFreshness.waitForExistence(timeout: 5))
+        XCTAssertTrue(viewedFreshness.label.contains(snapshotTime), "The opened View should preserve the selected snapshot time.")
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Map selection - Maya snapshot beside Leo live pin"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
+    func testSharingGermanExtraExtraLargeRowBoundary() {
+        let app = XCUIApplication()
+        app.launchEnvironment["TRUST_DEMO"] = "1"
+        app.launchEnvironment["TRUST_UI_TEST"] = "1"
+        app.launchEnvironment["TRUST_SCREENSHOT"] = "share"
+        app.launchArguments += [
+            "-appearancePreference", "light",
+            "-trust.appLanguage", "de",
+            "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryXXL"
+        ]
+        app.launch()
+        XCTAssertTrue(app.buttons["tab-sharing"].waitForExistence(timeout: 20))
+        app.buttons["tab-sharing"].tap()
+
+        let viewport = app.scrollViews["sharing-scroll"]
+        let row = app.descendants(matching: .any)["sharing-mode-group-maya"]
+        let name = row.staticTexts.matching(NSPredicate(format: "label == %@", "Maya Chen")).firstMatch
+        let off = app.buttons["sharing-mode-off-maya"]
+        let sealed = app.buttons["sharing-mode-sealed-maya"]
+        let always = app.buttons["sharing-mode-always-maya"]
+        let actions = app.buttons["sharing-actions-maya"]
+        XCTAssertTrue(viewport.waitForExistence(timeout: 5))
+        XCTAssertTrue(row.waitForExistence(timeout: 8))
+        for _ in 0..<8 where !row.isHittable { viewport.swipeUp() }
+        guard let frames = steadyVisibleFrames([row, name, off, sealed, always, actions], in: viewport, app: app) else {
+            XCTFail("German XXL Sharing controls did not remain steady and hittable.")
+            add(XCTAttachment(screenshot: app.screenshot()))
+            app.terminate()
+            return
+        }
+        let rowFrame = frames[0]
+        let nameFrame = frames[1]
+        let offFrame = frames[2]
+        let sealedFrame = frames[3]
+        let alwaysFrame = frames[4]
+        let actionsFrame = frames[5]
+        XCTAssertGreaterThan(min(nameFrame.maxY, offFrame.maxY) - max(nameFrame.minY, offFrame.minY), 0)
+        XCTAssertGreaterThan(min(offFrame.maxY, sealedFrame.maxY) - max(offFrame.minY, sealedFrame.minY), 0)
+        XCTAssertGreaterThan(min(sealedFrame.maxY, alwaysFrame.maxY) - max(sealedFrame.minY, alwaysFrame.minY), 0)
+        XCTAssertLessThanOrEqual(nameFrame.maxX, offFrame.minX + 1)
+        XCTAssertLessThanOrEqual(offFrame.maxX + 3, sealedFrame.minX,
+                                 "German XXL labels must not touch inside the segmented control.")
+        XCTAssertLessThanOrEqual(sealedFrame.maxX + 3, alwaysFrame.minX,
+                                 "German XXL labels must not touch inside the segmented control.")
+        XCTAssertLessThanOrEqual(alwaysFrame.maxX, actionsFrame.minX + 1)
+        for frame in [nameFrame, offFrame, sealedFrame, alwaysFrame, actionsFrame] {
+            XCTAssertGreaterThanOrEqual(frame.minX, rowFrame.minX - 1)
+            XCTAssertLessThanOrEqual(frame.maxX, rowFrame.maxX + 1)
+            XCTAssertGreaterThanOrEqual(frame.minY, rowFrame.minY - 1)
+            XCTAssertLessThanOrEqual(frame.maxY, rowFrame.maxY + 1)
+            XCTAssertGreaterThanOrEqual(frame.minY, viewport.frame.minY - 1)
+            XCTAssertLessThanOrEqual(frame.maxY, viewport.frame.maxY + 1)
+        }
+        XCTAssertEqual([off.label, sealed.label], ["Aus", "Versiegelt"])
+        XCTAssertTrue(always.label.hasPrefix("Immer"), "Always must remain fully localized, with any Plus note after its label.")
+        for button in [off, sealed, always, actions] {
+            XCTAssertGreaterThanOrEqual(button.frame.width, 43.99)
+            XCTAssertGreaterThanOrEqual(button.frame.height, 43.99)
+            XCTAssertTrue(button.isHittable)
+        }
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Sharing German XXL boundary - horizontal phone row"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        app.terminate()
     }
 
     func testInviteActivityYouAndDarkAppearance() {
@@ -388,21 +683,67 @@ final class TrustUsageTests: XCTestCase {
     }
 
     func testAddPersonControlsRemainReachableWithAccessibilityText() {
-        for dark in [false, true] {
+        let variants: [(dark: Bool, language: String)] = [
+            (false, "en"),
+            (true, "en"),
+            (false, "de")
+        ]
+        for variant in variants {
+            let dark = variant.dark
             let app = XCUIApplication()
             app.launchEnvironment["TRUST_DEMO"] = "1"
             app.launchEnvironment["TRUST_UI_TEST"] = "1"
+            app.launchEnvironment["TRUST_SCREENSHOT"] = "share"
             app.launchArguments += ["-appearancePreference", dark ? "dark" : "light",
-                                    "-trust.appLanguage", "en",
+                                    "-trust.appLanguage", variant.language,
                                     "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
             app.launch()
             XCTAssertTrue(app.buttons["tab-sharing"].waitForExistence(timeout: 20))
             app.buttons["tab-sharing"].tap()
             let sharing = XCTAttachment(screenshot: app.screenshot())
-            sharing.name = "Accessibility text - Sharing - \(dark ? "dark" : "light")"
+            sharing.name = "Accessibility text - Sharing - \(variant.language) - \(dark ? "dark" : "light")"
             sharing.lifetime = .keepAlways
             add(sharing)
-            app.buttons["add-someone-button"].tap()
+            let sharingScroll = app.scrollViews["sharing-scroll"]
+            XCTAssertTrue(sharingScroll.waitForExistence(timeout: 5))
+            let off = app.buttons["sharing-mode-off-maya"]
+            let sealed = app.buttons["sharing-mode-sealed-maya"]
+            let always = app.buttons["sharing-mode-always-maya"]
+            XCTAssertTrue(off.waitForExistence(timeout: 5))
+            XCTAssertTrue(sealed.exists)
+            XCTAssertTrue(always.exists)
+            func nudgeSharingScroll(forward: Bool) {
+                let startY: CGFloat = forward ? 0.78 : 0.30
+                let endY: CGFloat = forward ? 0.54 : 0.54
+                let start = sharingScroll.coordinate(withNormalizedOffset: CGVector(dx: 0.82, dy: startY))
+                let end = sharingScroll.coordinate(withNormalizedOffset: CGVector(dx: 0.82, dy: endY))
+                start.press(forDuration: 0.05, thenDragTo: end)
+            }
+            for _ in 0..<24 {
+                if off.isHittable && sealed.isHittable && always.isHittable { break }
+                let controlCenter = (off.frame.midY + always.frame.midY) / 2
+                nudgeSharingScroll(forward: controlCenter > sharingScroll.frame.midY)
+            }
+            XCTAssertTrue(off.isHittable, "Off must remain reachable in the Sharing row.")
+            XCTAssertTrue(off.isEnabled, "Off remains an enabled choice alongside Maya's confirmed Sealed state.")
+            XCTAssertTrue(sealed.isHittable, "Sealed must remain reachable in the Sharing row.")
+            XCTAssertTrue(always.isHittable, "Always must remain reachable in the Sharing row.")
+            for control in [off, sealed, always] {
+                XCTAssertGreaterThanOrEqual(control.frame.width, 43.99)
+                XCTAssertGreaterThanOrEqual(control.frame.height, 43.99)
+            }
+            XCTAssertTrue(sealed.isSelected, "Maya's initial confirmed mode should remain Sealed while Off remains available.")
+            let modes = XCTAttachment(screenshot: app.screenshot())
+            modes.name = "Accessibility text - Sharing modes - \(variant.language) - \(dark ? "dark" : "light")"
+            modes.lifetime = .keepAlways
+            add(modes)
+            let addSomeone = app.buttons["add-someone-button"]
+            for _ in 0..<24 {
+                if addSomeone.isHittable { break }
+                nudgeSharingScroll(forward: addSomeone.frame.midY > sharingScroll.frame.midY)
+            }
+            XCTAssertTrue(addSomeone.isHittable)
+            addSomeone.tap()
             let field = app.textFields["connection-handle"]
             XCTAssertTrue(field.waitForExistence(timeout: 5))
             field.tap()
@@ -415,23 +756,131 @@ final class TrustUsageTests: XCTestCase {
             XCTAssertTrue(close.isHittable)
             XCTAssertGreaterThanOrEqual(close.frame.height, 43.99)
             let lookup = XCTAttachment(screenshot: app.screenshot())
-            lookup.name = "Accessibility text - Add keyboard - \(dark ? "dark" : "light")"
+            lookup.name = "Accessibility text - Add keyboard - \(variant.language) - \(dark ? "dark" : "light")"
             lookup.lifetime = .keepAlways
             add(lookup)
             clear.tap()
-            XCTAssertEqual(field.value as? String, "Handle or phone number")
+            XCTAssertEqual(field.value as? String, field.placeholderValue)
             close.tap()
             XCTAssertTrue(app.buttons["add-someone-button"].waitForExistence(timeout: 5))
             app.terminate()
         }
     }
 
-    private func launchDemo(dark: Bool? = nil, route: String? = nil, forceEnglish: Bool = true) -> XCUIApplication {
+    private func steadyVisibleFrames(
+        _ elements: [XCUIElement],
+        in viewport: XCUIElement,
+        app: XCUIApplication,
+        stableFor: TimeInterval = 0.35,
+        timeout: TimeInterval = 8
+    ) -> [CGRect]? {
+        let start = ProcessInfo.processInfo.systemUptime
+        let deadline = start + timeout
+        var previous: [CGRect]?
+        var stableSince: TimeInterval?
+        var samples: [String] = []
+        var settled: [CGRect]?
+
+        while ProcessInfo.processInfo.systemUptime < deadline {
+            let now = ProcessInfo.processInfo.systemUptime
+            let frames = elements.map(\.frame)
+            let screen = app.frame
+            let viewportFrame = viewport.frame
+            let geometryValid = frames.allSatisfy { frame in
+                frame.width > 0 && frame.height > 0
+                    && frame.minX >= screen.minX - 1 && frame.maxX <= screen.maxX + 1
+                    && frame.minY >= screen.minY - 1 && frame.maxY <= screen.maxY + 1
+                    && frame.minX >= viewportFrame.minX - 1 && frame.maxX <= viewportFrame.maxX + 1
+                    && frame.minY >= viewportFrame.minY - 1 && frame.maxY <= viewportFrame.maxY + 1
+            }
+            let visible = elements.allSatisfy(\.exists)
+                && elements.dropFirst().allSatisfy(\.isHittable)
+                && geometryValid
+            if visible, let previous, previous == frames {
+                if stableSince == nil { stableSince = now }
+                if let stableSince, now - stableSince >= stableFor {
+                    settled = frames
+                    break
+                }
+            } else if visible {
+                previous = frames
+                stableSince = now
+            } else {
+                previous = nil
+                stableSince = nil
+            }
+            samples.append(String(format: "t=%.3f visible=%@ geometry=%@ frames=%@ stable=%.3f",
+                                  now - start, String(visible), String(geometryValid),
+                                  frames.map { NSCoder.string(for: $0) }.joined(separator: "; "),
+                                  stableSince.map { now - $0 } ?? 0))
+            let remaining = deadline - ProcessInfo.processInfo.systemUptime
+            if remaining > 0 {
+                RunLoop.current.run(until: Date().addingTimeInterval(min(0.1, remaining)))
+            }
+        }
+
+        let witness = XCTAttachment(string: samples.joined(separator: "\n"))
+        witness.name = "Stable visible frame witness"
+        witness.lifetime = .keepAlways
+        add(witness)
+        return settled
+    }
+
+    private func waitForSteadyMapDetail(
+        name: XCUIElement,
+        time: XCUIElement,
+        expectedName: String,
+        expectedContext: String,
+        timeout: TimeInterval = 8,
+        stableFor: TimeInterval = 0.25
+    ) -> Bool {
+        let started = ProcessInfo.processInfo.systemUptime
+        let deadline = started + timeout
+        var previous: [String]?
+        var stableSince: TimeInterval?
+        var samples: [String] = []
+        var settled = false
+
+        while ProcessInfo.processInfo.systemUptime < deadline {
+            let now = ProcessInfo.processInfo.systemUptime
+            let values = [name.label, time.label]
+            let matches = values[0] == expectedName && values[1].contains(expectedContext)
+            if matches, values == previous {
+                if stableSince == nil { stableSince = now }
+                if let stableSince, now - stableSince >= stableFor {
+                    settled = true
+                    break
+                }
+            } else if matches {
+                previous = values
+                stableSince = now
+            } else {
+                previous = nil
+                stableSince = nil
+            }
+            samples.append(String(format: "t=%.3f matches=%@ name=%@ time=%@ stable=%.3f",
+                                  now - started, String(matches), values[0], values[1],
+                                  stableSince.map { now - $0 } ?? 0))
+            let remaining = deadline - ProcessInfo.processInfo.systemUptime
+            if remaining > 0 {
+                RunLoop.current.run(until: Date().addingTimeInterval(min(0.1, remaining)))
+            }
+        }
+
+        let witness = XCTAttachment(string: samples.joined(separator: "\n"))
+        witness.name = "Map selected person and freshness witness"
+        witness.lifetime = .keepAlways
+        add(witness)
+        return settled
+    }
+
+    private func launchDemo(dark: Bool? = nil, route: String? = nil, forceEnglish: Bool = true, contentSize: String? = nil) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchEnvironment["TRUST_DEMO"] = "1"
         app.launchEnvironment["TRUST_UI_TEST"] = "1"
         if let route { app.launchEnvironment["TRUST_SCREENSHOT"] = route }
         if let dark { app.launchArguments += ["-appearancePreference", dark ? "dark" : "light"] }
+        if let contentSize { app.launchArguments += ["-UIPreferredContentSizeCategoryName", contentSize] }
         // Demo tests assert English copy. The argument-domain override makes each launch
         // independent of the persistent language preference left by other simulator runs.
         if forceEnglish { app.launchArguments += ["-trust.appLanguage", "en"] }

@@ -91,23 +91,21 @@ struct ViewScreen: View {
                         Text(isAvailable ? TrustCopy.liveShare : TrustCopy.oneTimeLook)
                             .trustFont(12)
                             .foregroundStyle(palette.muted)
+                        presenceBadge(member)
                         directionSummary(member)
                     }
                 }
                 .padding(.top, 8)
                 .padding(.bottom, 22)
 
-                presenceBadge(member)
-
                 VStack(alignment: .leading, spacing: 2) {
                     Text(placeName?.primary ?? (isAvailable ? TrustCopy.location : TrustCopy.snapshot))
-                        .font(TrustTheme.display(32))
-                        .tracking(-1)
+                        .font(TrustTheme.display(30))
+                        .tracking(-0.8)
                         .foregroundStyle(palette.ink)
                     if let secondary = placeName?.secondary {
                         Text(secondary)
-                            .font(TrustTheme.display(32))
-                            .tracking(-1)
+                            .trustFont(16, weight: .medium)
                             .foregroundStyle(palette.muted)
                     }
                 }
@@ -121,44 +119,33 @@ struct ViewScreen: View {
                         .foregroundStyle(palette.muted)
                         .accessibilityIdentifier("view-location-freshness")
                 }
-
-                HStack(spacing: 8) {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 12, weight: .semibold))
-                        .accessibilityHidden(true)
-                    Text(isAvailable
-                        ? TrustCopy.receiptViewLogged(name: member.firstName)
-                        : TrustCopy.receiptNotified(name: member.firstName))
-                }
-                .font(TrustTheme.ui(12, weight: .medium))
-                .foregroundStyle(palette.positive)
-                .padding(.top, 18)
-                .padding(.bottom, 20)
+                .padding(.bottom, 8)
 
                 if let point {
                     pinMap(point, name: member.person.displayName)
                         .padding(.bottom, 14)
                 }
 
-
-                HStack(spacing: 10) {
-                    Button {
-                        model.circlePath = [.map]
-                    } label: {
-                        Label(TrustCopy.circleMap, systemImage: "map")
-                    }
-                    .buttonStyle(TrustOutlineButtonStyle(compact: true))
-                    .accessibilityIdentifier("view-open-map")
-                    Button {
-                        model.circlePath = []
-                    } label: {
-                        HStack(spacing: 6) {
-                            Text(TrustCopy.back)
-                            Image(systemName: "arrow.right").font(.system(size: 12, weight: .semibold))
-                        }
-                    }
-                    .buttonStyle(TrustOutlineButtonStyle(compact: true))
+                HStack(spacing: 8) {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(palette.positive)
+                        .accessibilityHidden(true)
+                    Text(isAvailable
+                        ? TrustCopy.receiptViewLogged(name: member.firstName)
+                        : TrustCopy.receiptNotified(name: member.firstName))
+                        .foregroundStyle(palette.ink)
                 }
+                .font(TrustTheme.ui(12, weight: .medium))
+                .padding(.bottom, 18)
+
+                Button {
+                    model.circlePath = [.map]
+                } label: {
+                    Label(TrustCopy.circleMap, systemImage: "map")
+                }
+                .buttonStyle(TrustOutlineButtonStyle(compact: true))
+                .accessibilityIdentifier("view-open-map")
 
                 TrustInfoStrip(
                     glyph: isAvailable ? "eye" : "lock",
@@ -300,7 +287,7 @@ enum PlaceNamer {
             return PlaceName(primary: neighborhood, secondary: city)
         }
         if let city, !city.isEmpty {
-            return PlaceName(primary: city, secondary: placemark.country)
+            return PlaceName(primary: city, secondary: nil)
         }
         return nil
     }

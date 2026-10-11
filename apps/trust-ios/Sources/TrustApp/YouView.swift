@@ -21,12 +21,15 @@ struct YouView: View {
                     profileCard
                         .padding(.top, 22)
 
+                    discoveryCard
+                        .padding(.top, 16)
+
                     myLocationRow
-                        .padding(.top, 20)
-                        .padding(.bottom, 22)
+                        .padding(.top, 16)
+                        .padding(.bottom, 16)
 
                     plusCard
-                        .padding(.bottom, 22)
+                        .padding(.bottom, 18)
 
                     TrustSectionHeading(TrustCopy.preferences)
                         .padding(.bottom, 4)
@@ -107,6 +110,23 @@ struct YouView: View {
     // MARK: Profile and personal settings
 
     private var appearanceRow: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) {
+                appearanceLabel
+                Spacer(minLength: 8)
+                appearancePicker
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                appearanceLabel
+                appearancePicker
+            }
+        }
+        .padding(.horizontal, 14)
+        .frame(minHeight: 52)
+        .background(RoundedRectangle(cornerRadius: TrustTheme.controlRadius, style: .continuous).fill(palette.surface))
+    }
+
+    private var appearanceLabel: some View {
         HStack(spacing: 12) {
             Image(systemName: "circle.lefthalf.filled")
                 .font(.system(size: 18))
@@ -116,24 +136,40 @@ struct YouView: View {
             Text(TrustCopy.appearance)
                 .trustFont(15, weight: .medium)
                 .foregroundStyle(palette.ink)
-            Spacer(minLength: 8)
-            Picker(TrustCopy.appearance, selection: $appearance) {
-                ForEach(TrustAppearance.allCases) { option in
-                    Text(option.title).tag(option.rawValue)
-                }
+        }
+    }
+
+    private var appearancePicker: some View {
+        Picker(TrustCopy.appearance, selection: $appearance) {
+            ForEach(TrustAppearance.allCases) { option in
+                Text(option.title).tag(option.rawValue)
             }
-            .pickerStyle(.menu)
-            .tint(palette.muted)
-            .accessibilityLabel(TrustCopy.appearance)
-            .accessibilityValue((TrustAppearance(rawValue: appearance) ?? .system).title)
-            .accessibilityIdentifier("appearance-preference")
+        }
+        .pickerStyle(.menu)
+        .tint(palette.muted)
+        .accessibilityLabel(TrustCopy.appearance)
+        .accessibilityValue((TrustAppearance(rawValue: appearance) ?? .system).title)
+        .accessibilityIdentifier("appearance-preference")
+    }
+
+    private var languageRow: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) {
+                languageLabel
+                Spacer(minLength: 8)
+                languagePicker
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                languageLabel
+                languagePicker
+            }
         }
         .padding(.horizontal, 14)
         .frame(minHeight: 52)
         .background(RoundedRectangle(cornerRadius: TrustTheme.controlRadius, style: .continuous).fill(palette.surface))
     }
 
-    private var languageRow: some View {
+    private var languageLabel: some View {
         HStack(spacing: 12) {
             Image(systemName: "globe")
                 .font(.system(size: 18))
@@ -143,89 +179,95 @@ struct YouView: View {
             Text(TrustCopy.language)
                 .trustFont(15, weight: .medium)
                 .foregroundStyle(palette.ink)
-            Spacer(minLength: 8)
-            Picker(TrustCopy.language, selection: Binding(
-                get: { appLanguage },
-                set: { language in
-                    let value = TrustAppLanguage(rawValue: language) ?? .system
-                    model.traceUIInteraction("language callback: \(value.rawValue)")
-                    appLanguage = language
-                }
-            )) {
-                ForEach(TrustAppLanguage.allCases) { option in
-                    Text(option.title).tag(option.rawValue)
-                }
-            }
-            .pickerStyle(.menu)
-            .tint(palette.muted)
-            .accessibilityLabel(TrustCopy.language)
-            .accessibilityValue((TrustAppLanguage(rawValue: appLanguage) ?? .system).title)
-            .accessibilityIdentifier("language-preference")
-            .onChange(of: appLanguage) { _, language in
+        }
+    }
+
+    private var languagePicker: some View {
+        Picker(TrustCopy.language, selection: Binding(
+            get: { appLanguage },
+            set: { language in
                 let value = TrustAppLanguage(rawValue: language) ?? .system
-                model.traceUIInteraction("picker language observed: \(value.rawValue)")
+                model.traceUIInteraction("language callback: \(value.rawValue)")
+                appLanguage = language
+            }
+        )) {
+            ForEach(TrustAppLanguage.allCases) { option in
+                Text(option.title).tag(option.rawValue)
             }
         }
-        .padding(.horizontal, 14)
-        .frame(minHeight: 52)
-        .background(RoundedRectangle(cornerRadius: TrustTheme.controlRadius, style: .continuous).fill(palette.surface))
+        .pickerStyle(.menu)
+        .tint(palette.muted)
+        .accessibilityLabel(TrustCopy.language)
+        .accessibilityValue((TrustAppLanguage(rawValue: appLanguage) ?? .system).title)
+        .accessibilityIdentifier("language-preference")
+        .onChange(of: appLanguage) { _, language in
+            let value = TrustAppLanguage(rawValue: language) ?? .system
+            model.traceUIInteraction("picker language observed: \(value.rawValue)")
+        }
     }
 
     private var profileCard: some View {
         TrustCard(fill: palette.surface) {
-            VStack(spacing: 7) {
+            HStack(spacing: 14) {
                 Button { showingAvatarPicker = true } label: {
-                    TrustAvatar(name: model.you.displayName, seed: 0, size: 96, avatar: model.you.avatar, personID: model.you.id)
+                    TrustAvatar(name: model.you.displayName, seed: 0, size: 68, avatar: model.you.avatar, personID: model.you.id)
                         .overlay(alignment: .bottomTrailing) {
                             Image(systemName: "camera.fill")
-                                .font(.system(size: 11, weight: .semibold))
+                                .font(.system(size: 9, weight: .semibold))
                                 .foregroundStyle(palette.accentOn)
-                                .frame(width: 30, height: 30)
+                                .frame(width: 24, height: 24)
                                 .background(Circle().fill(palette.accent))
-                                .overlay(Circle().stroke(palette.surface, lineWidth: 3))
+                                .overlay(Circle().stroke(palette.surface, lineWidth: 2))
                         }
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(TrustCopy.editProfilePicture)
                 .accessibilityIdentifier("edit-profile-picture")
-                Text(model.you.displayName)
-                    .font(TrustTheme.display(23))
-                    .tracking(-0.6)
-                    .foregroundStyle(palette.ink)
-                if let handle = model.you.handle {
-                    Button {
-                        model.copyOwnHandle()
-                    } label: {
-                        Label("@\(handle)", systemImage: "doc.on.doc")
-                            .labelStyle(.titleAndIcon)
-                            .font(TrustTheme.ui(13))
-                            .foregroundStyle(palette.muted)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(TrustCopy.copyHandle)
-                    .accessibilityIdentifier("copy-own-handle")
-                    .accessibilityValue("@\(handle)")
-                }
-                VStack(alignment: .leading, spacing: 5) {
-                    Toggle(TrustCopy.discoveryEnabledLabel, isOn: Binding(
-                        get: { model.you.discoveryEnabled == true },
-                        set: { model.setDiscoveryEnabled($0) }
-                    ))
-                    .tint(palette.accent)
-                    .disabled(model.isUpdatingDiscovery || model.isDemoMode)
-                    .accessibilityIdentifier("phone-discovery-toggle")
-                    Text(TrustCopy.discoveryEnabledExplanation)
-                        .trustFont(12)
-                        .foregroundStyle(palette.muted)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(model.you.displayName)
+                        .font(TrustTheme.display(21))
+                        .tracking(-0.5)
+                        .foregroundStyle(palette.ink)
+                        .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
+                    if let handle = model.you.handle {
+                        Button {
+                            model.copyOwnHandle()
+                        } label: {
+                            Label("@\(handle)", systemImage: "doc.on.doc")
+                                .labelStyle(.titleAndIcon)
+                                .font(TrustTheme.ui(13))
+                                .foregroundStyle(palette.muted)
+                                .frame(minHeight: 44, alignment: .leading)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(TrustCopy.copyHandle)
+                        .accessibilityIdentifier("copy-own-handle")
+                        .accessibilityValue("@\(handle)")
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.top, 12)
-                Text(TrustCopy.changePictureTip)
-                    .trustFont(12)
-                    .foregroundStyle(palette.muted)
             }
-            .frame(maxWidth: .infinity)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private var discoveryCard: some View {
+        TrustCard(fill: palette.surface) {
+            VStack(alignment: .leading, spacing: 7) {
+                Toggle(TrustCopy.discoveryEnabledLabel, isOn: Binding(
+                    get: { model.you.discoveryEnabled == true },
+                    set: { model.setDiscoveryEnabled($0) }
+                ))
+                .tint(palette.accent)
+                .disabled(model.isUpdatingDiscovery || model.isDemoMode)
+                .accessibilityIdentifier("phone-discovery-toggle")
+                Text(TrustCopy.discoveryEnabledExplanation)
+                    .trustFont(13)
+                    .foregroundStyle(palette.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 
@@ -316,7 +358,7 @@ struct YouView: View {
             TrustSectionHeading(TrustCopy.homePlace)
             Text(TrustCopy.homePlaceNote)
                 .trustFont(12)
-                .foregroundStyle(palette.muted)
+                        .foregroundStyle(palette.muted)
                 .fixedSize(horizontal: false, vertical: true)
             Text(model.location.homeIsOwnedByAnotherDevice
                 ? TrustCopy.homeOwnedElsewhereLabel
@@ -401,18 +443,31 @@ struct ViewLogRow: View {
     let event: LookEvent
     let youID: UUID
     @Environment(\.trustPalette) private var palette
+    @Environment(\.locale) private var locale
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(event.logLine(youID: youID))
-                .font(TrustTheme.ui(14))
-                .foregroundStyle(palette.ink)
-            Text("\(event.at.formatted(date: .omitted, time: .shortened)) · \(event.logKindLabel)")
-                .font(TrustTheme.ui(12))
-                .foregroundStyle(palette.muted)
-                .accessibilityLabel("\(event.at.formatted(date: .complete, time: .shortened)) · \(event.logKindLabel)")
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: event.kind == .removed
+                  ? "person.crop.circle.badge.minus"
+                  : (event.viewerID == youID ? "arrow.up.right" : "arrow.down.left"))
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(palette.accent)
+                .frame(width: 30, height: 30)
+                .background(palette.canvas, in: Circle())
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(event.logLine(youID: youID))
+                    .font(TrustTheme.ui(14, weight: .medium))
+                    .foregroundStyle(palette.ink)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text("\(event.at.formatted(Date.FormatStyle(date: .omitted, time: .shortened, locale: locale))) · \(event.logKindLabel)")
+                    .font(TrustTheme.ui(12))
+                    .foregroundStyle(palette.muted)
+                    .accessibilityLabel("\(event.at.formatted(Date.FormatStyle(date: .complete, time: .shortened, locale: locale))) · \(event.logKindLabel)")
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.vertical, 12)
+        .padding(.vertical, 10)
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
     }
@@ -424,6 +479,7 @@ struct ViewLogView: View {
     var asTab: Bool = false
     @EnvironmentObject private var model: AppModel
     @Environment(\.trustPalette) private var palette
+    @Environment(\.locale) private var locale
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -448,7 +504,7 @@ struct ViewLogView: View {
                 if model.lookLog.isEmpty {
                     Text(TrustCopy.noViewsYet)
                         .font(TrustTheme.ui(13))
-                .foregroundStyle(palette.muted)
+                        .foregroundStyle(palette.muted)
                         .padding(18)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .background(palette.surface)
@@ -515,9 +571,13 @@ struct ViewLogView: View {
         var id: Date { date }
         var title: String {
             let calendar = Calendar.current
-            if calendar.isDateInToday(date) { return "Today" }
-            if calendar.isDateInYesterday(date) { return "Yesterday" }
-            return date.formatted(date: .complete, time: .omitted)
+            let formatter = DateFormatter()
+            formatter.calendar = calendar
+            formatter.locale = TrustAppLanguage.currentLocale
+            formatter.doesRelativeDateFormatting = true
+            formatter.dateStyle = .medium
+            formatter.timeStyle = .none
+            return formatter.string(from: date)
         }
     }
 

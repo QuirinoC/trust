@@ -1,7 +1,9 @@
 # jointrust.app
 
 Public landing for **Trust** at [jointrust.app](https://jointrust.app).
-The site follows the current product direction in `docs/DESIGN.md`. The landing page leads with the app's consent-first promise. Sharing is off until a person chooses a mode for each connection.
+The site follows the current product direction in `docs/DESIGN.md`. The landing page leads with location sharing for iPhone and recorded checks made in Trust. Sharing is off until a person chooses a mode for each connection.
+
+The gallery is a dated 5 October 2026 capture set, not a current UI specification. Map and Sharing have changed since those captures. Recapture from the reviewed source before replacing the public or listing images; use `docs/DESIGN.md` for design decisions.
 
 Privacy, terms, support, and the verification-text opt-in live on this host: `/privacy`, `/terms`, `/support`, `/sms`. Invitation links (`/i/:code`) and the Apple association file are served by the Worker; keep those routes intact when updating the design.
 

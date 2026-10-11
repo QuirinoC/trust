@@ -7,6 +7,7 @@ import UIKit
 struct AgeGateView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.trustPalette) private var palette
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var birthMonth = ""
     @State private var birthDay = ""
     @State private var birthYear = ""
@@ -108,7 +109,7 @@ struct AgeGateView: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
-        .animation(.easeOut(duration: 0.22), value: model.toast?.id)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.22), value: model.toast?.id)
         .alert(TrustCopy.deleteAccountConfirm, isPresented: $showingDeleteAccount) {
             Button(TrustCopy.deleteAccount, role: .destructive) {
                 Task { await model.deleteAccount() }

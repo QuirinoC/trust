@@ -1,10 +1,11 @@
 import SwiftUI
 import TrustCore
 
-/// Sharing — name left, mode right. Sealed, Always (Plus), Pause. Add someone lives here.
+/// Sharing — compact Name / Off / Sealed / Always rows, with Pause and Remove in the secondary menu.
 struct SharingView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.trustPalette) private var palette
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var activeConfirmation: SharingConfirmation?
     @State private var showingHomeStatus = false
 
@@ -48,7 +49,7 @@ struct SharingView: View {
                         .accessibilityIdentifier("sharing-intro")
 
                     AddSomeoneSection()
-                        .padding(.top, 20)
+                        .padding(.top, 16)
 
                     if !model.connectionRequests.incoming.isEmpty
                         || !model.connectionRequests.sent.isEmpty
@@ -56,33 +57,36 @@ struct SharingView: View {
                         || model.connectionRequestsNotice != nil
                         || model.connectionRequiresPhoneVerification {
                         ConnectionRequestsSection()
-                            .padding(.top, 24)
+                            .padding(.top, 18)
+                            .transition(.opacity)
                     }
 
                     if !model.circle.isEmpty {
                         TrustSectionHeading(TrustCopy.people)
-                            .padding(.top, 30)
+                            .padding(.top, 22)
                             .padding(.bottom, 4)
                         ForEach(model.circle) { member in
-                            OutboundRow(
-                                member: member,
-                                seed: seed(member),
-                                compact: geometry.size.width < 430,
-                                stackModes: geometry.size.width < 380,
-                                onPause: {
-                                    model.tracePausePresentation("menu callback")
-                                    model.pauseSheetPersonID = member.id
-                                },
-                                onStopSharing: { activeConfirmation = .stopSharing(personID: member.id, name: member.firstName) },
-                                onRemove: { activeConfirmation = .removePerson(personID: member.id, name: member.firstName) }
-                            )
-                            TrustRowDivider()
+                            VStack(spacing: 0) {
+                                OutboundRow(
+                                    member: member,
+                                    seed: seed(member),
+                                    compact: geometry.size.width < 430,
+                                    onPause: {
+                                        model.tracePausePresentation("menu callback")
+                                        model.pauseSheetPersonID = member.id
+                                    },
+                                    onStopSharing: { activeConfirmation = .stopSharing(personID: member.id, name: member.firstName) },
+                                    onRemove: { activeConfirmation = .removePerson(personID: member.id, name: member.firstName) }
+                                )
+                                TrustRowDivider()
+                            }
+                            .transition(.opacity)
                         }
 
                     }
 
                     presenceSection
-                        .padding(.top, 26)
+                        .padding(.top, 22)
 
                     if model.outboundActiveCount > 0 {
                         Button(TrustCopy.stopAll) { activeConfirmation = .stopAll }
@@ -102,10 +106,18 @@ struct SharingView: View {
                 // pull-to-refresh gesture to work before anyone has been added.
                 .frame(minHeight: geometry.size.height, alignment: .top)
             }
-            .background(palette.paper.ignoresSafeArea())
+            .accessibilityIdentifier("sharing-scroll")
             .refreshable {
                 await model.refresh()
             }
+            // Keep oversized Dynamic Type content inside the scroll viewport instead
+            // of drawing underneath the status bar while the page is scrolled.
+            // The background added after this clip still extends through the top inset.
+            .clipShape(Rectangle())
+            .background(palette.paper.ignoresSafeArea())
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: model.connectionRequests.incoming.map(\.id))
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: model.connectionRequests.sent.map(\.id))
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: model.circle.map(\.id))
             .sheet(isPresented: Binding(
                 get: { model.pauseSheetPersonID != nil },
                 set: {
@@ -197,18 +209,19 @@ struct SharingView: View {
     }
 }
 
-/// Name left. Sealed / Always / Pause right. Pause confirms before setting Off.
+/// Connected-person sharing row. Pause is timed; Stop sharing confirms before setting Off.
 struct OutboundRow: View {
     let member: TrustedPerson
     var seed: Int = 0
     var compact = false
-    var stackModes = false
     let onPause: () -> Void
     let onStopSharing: () -> Void
     let onRemove: () -> Void
     @EnvironmentObject private var model: AppModel
     @Environment(\.trustPalette) private var palette
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Namespace private var selectionNamespace
 
     private enum Mode: Hashable { case off, sealed, always }
 
@@ -227,19 +240,19 @@ struct OutboundRow: View {
 
     private var summary: String {
         switch presentation {
-        case .off: return "Not sharing"
+        case .off: return TrustCopy.notSharing
         case .untilTheyLook: return TrustCopy.sealed
         case .always: return TrustCopy.always
         case .paused(let ends, let restores):
             let time = ends.formatted(date: .omitted, time: .shortened)
             let mode = restores == .always ? TrustCopy.always : TrustCopy.sealed
-            return "Paused until \(time) · then \(mode)"
+            return TrustCopy.pauseUntil(time: time, mode: mode)
         }
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if dynamicTypeSize >= .xxxLarge || stackModes || (compact && selection == nil) {
+        Group {
+            if dynamicTypeSize >= .xxxLarge {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(spacing: 8) {
                         personLabel
@@ -249,11 +262,13 @@ struct OutboundRow: View {
                     modeControl
                 }
             } else {
-                HStack(spacing: 8) {
+                HStack(spacing: compact ? 3 : 8) {
                     personLabel
-                        .frame(minWidth: 88, maxWidth: .infinity, alignment: .leading)
+                        .frame(minWidth: compact ? 60 : 88, maxWidth: .infinity, alignment: .leading)
                     modeControl
-                        .frame(width: compact ? 176 : 190)
+                        .fixedSize(horizontal: true, vertical: false)
+                        .frame(minWidth: compact ? 176 : 190)
+                        .layoutPriority(1)
                     actionsMenu
                 }
             }
@@ -273,14 +288,21 @@ struct OutboundRow: View {
                     Text(member.person.displayName)
                         .trustFont(14, weight: .semibold)
                         .foregroundStyle(palette.ink)
-                        .lineLimit(1)
+                        .lineLimit(dynamicTypeSize >= .xxLarge ? 2 : 1)
+                        .fixedSize(horizontal: false, vertical: true)
                     if model.isUpdatingShare(personID: member.id) {
                         ProgressView()
                             .controlSize(.mini)
                             .accessibilityHidden(true)
                     }
                 }
-                if case .paused = presentation {
+                if model.isUpdatingShare(personID: member.id) {
+                    Text(TrustCopy.pending)
+                        .trustFont(11)
+                        .foregroundStyle(palette.muted)
+                        .accessibilityIdentifier("sharing-pending-\(member.firstName.lowercased())")
+                }
+                if presentation.isPaused {
                     Text(summary)
                         .trustFont(11)
                         .foregroundStyle(palette.muted)
@@ -292,13 +314,26 @@ struct OutboundRow: View {
     }
 
     private var modeControl: some View {
-        HStack(spacing: 1) {
-            modeButton(.off, label: TrustCopy.off)
-            modeButton(.sealed, label: TrustCopy.sealed)
-            modeButton(.always, label: TrustCopy.always, locked: !model.coverage.canShareAvailable)
+        Group {
+            if dynamicTypeSize >= .xxxLarge {
+                VStack(spacing: 3) {
+                    modeButton(.off, label: TrustCopy.off, fillWidth: true)
+                    modeButton(.sealed, label: TrustCopy.sealed, fillWidth: true)
+                    modeButton(.always, label: TrustCopy.always, locked: !model.coverage.canShareAvailable, fillWidth: true)
+                }
+            } else {
+                HStack(spacing: 0) {
+                    modeButton(.off, label: TrustCopy.off)
+                    Spacer(minLength: 4)
+                    modeButton(.sealed, label: TrustCopy.sealed)
+                    Spacer(minLength: 4)
+                    modeButton(.always, label: TrustCopy.always, locked: !model.coverage.canShareAvailable)
+                }
+            }
         }
         .padding(3)
         .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(palette.surface))
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: selection)
     }
 
     private var actionsMenu: some View {
@@ -333,7 +368,7 @@ struct OutboundRow: View {
         .accessibilityIdentifier("sharing-actions-\(member.firstName.lowercased())")
     }
 
-    private func modeButton(_ mode: Mode, label: String, locked: Bool = false) -> some View {
+    private func modeButton(_ mode: Mode, label: String, locked: Bool = false, fillWidth: Bool = false) -> some View {
         let selected = selection == mode
         return Button {
             if selected {
@@ -352,15 +387,26 @@ struct OutboundRow: View {
         } label: {
             Text(label)
                 .lineLimit(1)
-            .trustFont(12, weight: selected ? .semibold : .medium)
-            .foregroundStyle(selected ? palette.ink : (locked ? palette.accent : palette.muted))
-            .padding(.horizontal, 4)
-            .frame(maxWidth: .infinity, minHeight: 44, alignment: .center)
-            .contentShape(Rectangle())
-            .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(selected ? palette.paper : .clear))
+                .fixedSize(horizontal: !fillWidth, vertical: false)
+                .trustFont(12, weight: selected ? .semibold : .medium)
+                .foregroundStyle(selected ? palette.ink : palette.muted)
+                .padding(.horizontal, 4)
+                .frame(minWidth: 44, maxWidth: fillWidth ? .infinity : nil, minHeight: 44, alignment: .center)
+                .contentShape(Rectangle())
+                .background {
+                    if selected {
+                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                            .fill(palette.ink.opacity(0.09))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                    .strokeBorder(palette.ink.opacity(0.24), lineWidth: 1)
+                            }
+                            .matchedGeometryEffect(id: "confirmed-mode-highlight-\(member.id)", in: selectionNamespace)
+                    }
+                }
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(locked ? "Always. \(TrustCopy.plus)" : label)
+        .accessibilityLabel(locked ? "\(label). \(TrustCopy.plus)" : label)
         .accessibilityIdentifier("sharing-mode-\(mode)-\(member.firstName.lowercased())")
         .accessibilityAddTraits(selected ? [.isSelected] : [])
         .disabled(mode != .off && model.isUpdatingShare(personID: member.id))

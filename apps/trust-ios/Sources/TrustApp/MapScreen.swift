@@ -2,11 +2,13 @@ import MapKit
 import SwiftUI
 import TrustCore
 
-/// D2 Map — secondary push from View. Pins follow the same Plus gating as home.
-/// Sealed people are never on the map. Regular width: full-bleed map + trailing panel.
+/// D2 Map — secondary push from View. Confirmed Look snapshots and permitted Plus-gated
+/// live pins appear here; a Sealed person without a recorded snapshot has no pin.
+/// Regular width: full-bleed map + trailing panel.
 struct MapScreen: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.trustPalette) private var palette
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var position: MapCameraPosition = .automatic
     @State private var selectedID: UUID?
 
@@ -112,7 +114,7 @@ struct MapScreen: View {
                             stale: pin.live && LocationFreshness.status(timestamp: pin.point.timestamp, now: context.date) == .stale,
                             ageCaption: pin.live ? TrustCopy.locationAgeCaption(timestamp: pin.point.timestamp, now: context.date) : nil
                         )
-                        .onTapGesture { selectedID = pin.id }
+                        .onTapGesture { selectPerson(pin.id) }
                         .accessibilityLabel(TrustCopy.pinAccessibility(name: pin.name, live: pin.live, timestamp: pin.point.timestamp, now: context.date))
                         .accessibilityAddTraits(.isButton)
                         .accessibilityAddTraits(selected?.id == pin.id ? [.isSelected] : [])
@@ -135,34 +137,38 @@ struct MapScreen: View {
                     .padding(.top, 16)
                     .padding(.bottom, 12)
             }
-            HStack(spacing: 14) {
-                if pins.contains(where: \.live) { mapLegend(color: palette.pinLive, title: TrustCopy.always) }
-                if pins.contains(where: { !$0.live }) { mapLegend(color: palette.pinLook, title: TrustCopy.snapshot) }
-                Spacer(minLength: 0)
+            if pins.contains(where: \.live) && pins.contains(where: { !$0.live }) {
+                HStack(spacing: 14) {
+                    mapLegend(color: palette.pinLive, title: TrustCopy.always)
+                    mapLegend(color: palette.pinLook, title: TrustCopy.snapshot)
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, TrustTheme.gutter)
+                .padding(.vertical, 10)
             }
-            .padding(.horizontal, TrustTheme.gutter)
-            .padding(.vertical, 10)
 
             if let selected, let member = model.member(selected.id) {
                 personCard(selected, member)
             }
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(pins) { pin in
-                        Button(pin.name.trustFirstName) { selectedID = pin.id }
-                            .trustFont(13, weight: .medium)
-                            .foregroundStyle(selected?.id == pin.id ? palette.paper : palette.ink)
-                            .padding(.horizontal, 14)
-                            .frame(minHeight: 34)
-                            .background(Capsule().fill(selected?.id == pin.id ? palette.ink : palette.surface))
-                            .accessibilityLabel(TrustCopy.showOnMap(name: pin.name))
-                            .accessibilityAddTraits(selected?.id == pin.id ? [.isSelected] : [])
+            if pins.count > 1 {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(pins) { pin in
+                            Button(pin.name.trustFirstName) { selectPerson(pin.id) }
+                                .trustFont(13, weight: .medium)
+                                .foregroundStyle(selected?.id == pin.id ? palette.paper : palette.ink)
+                                .padding(.horizontal, 14)
+                                .frame(minHeight: 44)
+                                .background(Capsule().fill(selected?.id == pin.id ? palette.ink : palette.surface))
+                                .accessibilityLabel(TrustCopy.showOnMap(name: pin.name))
+                                .accessibilityAddTraits(selected?.id == pin.id ? [.isSelected] : [])
+                        }
                     }
+                    .padding(.horizontal, TrustTheme.gutter)
                 }
-                .padding(.horizontal, TrustTheme.gutter)
+                .padding(.bottom, 12)
             }
-            .padding(.bottom, 12)
 
             if let selected {
                 Button {
@@ -197,20 +203,23 @@ struct MapScreen: View {
                     .trustFont(15, weight: .semibold)
                     .foregroundStyle(palette.ink)
                     .fixedSize(horizontal: false, vertical: true)
+                    .contentTransition(.opacity)
+                    .accessibilityIdentifier("map-selected-person-name")
                 Spacer()
-                TrustBadge(glyph: pin.live ? "eye" : "lock", text: pin.live ? TrustCopy.always : TrustCopy.oneLook)
             }
             TimelineView(.periodic(from: .now, by: 60)) { context in
                 Text(subtitle(pin, member, now: context.date))
                     .trustFont(12)
                     .foregroundStyle(palette.muted)
                     .fixedSize(horizontal: false, vertical: true)
+                    .contentTransition(.opacity)
                     .accessibilityIdentifier("map-selected-location-time")
             }
 
         }
         .padding(.horizontal, TrustTheme.gutter)
         .padding(.bottom, 12)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: selectedID)
         .accessibilityElement(children: .combine)
     }
 
@@ -222,11 +231,20 @@ struct MapScreen: View {
         .accessibilityElement(children: .combine)
     }
 
+    private func selectPerson(_ id: UUID) {
+        guard selected?.id != id else { return }
+        if reduceMotion {
+            selectedID = id
+        } else {
+            withAnimation(.easeInOut(duration: 0.25)) { selectedID = id }
+        }
+    }
+
     private func subtitle(_ pin: AppModel.MapPin, _ member: TrustedPerson, now: Date) -> String {
         let presence = member.visiblePresence?.label ?? TrustCopy.presenceHiddenBadge
         let time = pin.point.timestamp.formatted(date: .abbreviated, time: .shortened)
         let locationStatus = pin.live
-            ? TrustCopy.locationFreshness(timestamp: pin.point.timestamp, now: now)
+            ? "\(TrustCopy.always) · \(TrustCopy.locationFreshness(timestamp: pin.point.timestamp, now: now))"
             : TrustCopy.snapshotAt(time)
         return "\(locationStatus) · \(presence)"
     }

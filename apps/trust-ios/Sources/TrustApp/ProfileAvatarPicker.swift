@@ -10,6 +10,7 @@ struct ProfileAvatarPicker: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.dismiss) private var dismiss
     @Environment(\.trustPalette) private var palette
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var photoItem: PhotosPickerItem?
     @State private var photoData: Data?
@@ -75,7 +76,7 @@ struct ProfileAvatarPicker: View {
                         }
                         .onChange(of: selectedPreset) { _, preset in
                             guard let preset else { return }
-                            withAnimation(.easeInOut(duration: 0.2)) { carousel.scrollTo(preset, anchor: .center) }
+                            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) { carousel.scrollTo(preset, anchor: .center) }
                         }
                     }
 

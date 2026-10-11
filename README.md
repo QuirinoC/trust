@@ -42,4 +42,4 @@ The public pages and canonical legal URLs are served from Cloudflare at `https:/
 
 ## Current release state
 
-The API is deployed and its configured release origin `https://trust-api-u0ft.onrender.com` passed readiness. Start with the [next-agent handoff](docs/NEXT-AGENT-HANDOFF.md) for current open work and use [docs/STATUS.md](docs/STATUS.md) for last-verified provider state. The custom hostname currently has unresolved TLS; use the Render service URL until DNS/TLS is independently verified.
+The API is deployed; its configured release origin `https://trust-api-u0ft.onrender.com` last passed a readiness check on 2026-10-01. Start with the [next-agent handoff](docs/NEXT-AGENT-HANDOFF.md) for current open work and use [docs/STATUS.md](docs/STATUS.md) for dated provider snapshots. The custom hostname had unresolved TLS at that last check; refresh provider state before release actions and use the Render service URL until DNS/TLS is independently verified.

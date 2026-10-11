@@ -21,6 +21,8 @@ STATE = {
     "hold_next_circle": False,
     "hold_next_history": False,
     "hold_next_look": False,
+    "hold_next_share": False,
+    "share_failure_after_release": False,
     "hold_next_home_presence": False,
     "home_presence_responses": {},
     "fail_circle_after_release": False,
@@ -30,6 +32,9 @@ STATE = {
     "held_resource": None,
     "share_ack_count": 0,
     "share_ack_person_ids": [],
+    "share_hold_count": 0,
+    "share_release_count": 0,
+    "share_failure_count": 0,
     "stop_all_ack_count": 0,
     "stop_all_failure_count": 0,
     "revoke_ack_count": 0,
@@ -102,6 +107,8 @@ class Handler(BaseHTTPRequestHandler):
                     "hold_next_circle": True,
                     "hold_next_history": False,
                     "hold_next_look": False,
+                    "hold_next_share": False,
+                    "share_failure_after_release": False,
                     "fail_circle_after_release": True,
                     "fail_next_circle": False,
                     "fail_next_stop_all": False,
@@ -109,6 +116,9 @@ class Handler(BaseHTTPRequestHandler):
                     "held_resource": None,
                     "share_ack_count": 0,
                     "share_ack_person_ids": [],
+                    "share_hold_count": 0,
+                    "share_release_count": 0,
+                    "share_failure_count": 0,
                     "stop_all_ack_count": 0,
                     "stop_all_failure_count": 0,
                     "revoke_ack_count": 0,
@@ -118,6 +128,22 @@ class Handler(BaseHTTPRequestHandler):
                     "history_release_count": 0,
                     "look_hold_count": 0,
                     "look_release_count": 0,
+                })
+                RELEASE_HELD.clear()
+            self.respond_json(200, {"armed": True})
+            return
+        if self.path in ("/__test/arm-share", "/__test/arm-share-failure"):
+            with LOCK:
+                STATE.update({
+                    "hold_next_share": True,
+                    "share_failure_after_release": self.path.endswith("-failure"),
+                    "holding": False,
+                    "held_resource": None,
+                    "share_ack_count": 0,
+                    "share_ack_person_ids": [],
+                    "share_hold_count": 0,
+                    "share_release_count": 0,
+                    "share_failure_count": 0,
                 })
                 RELEASE_HELD.clear()
             self.respond_json(200, {"armed": True})
@@ -194,11 +220,16 @@ class Handler(BaseHTTPRequestHandler):
                 STATE["held_resource"] = None
                 STATE["fail_next_circle"] = STATE["fail_circle_after_release"]
                 STATE["fail_circle_after_release"] = False
-                STATE["stale_release_count"] += 1
+                if released_resource == "share":
+                    STATE["share_failure_after_release"] = False
+                if released_resource != "share":
+                    STATE["stale_release_count"] += 1
                 if released_resource == "history":
                     STATE["history_release_count"] = STATE.get("history_release_count", 0) + 1
                 elif released_resource == "look":
                     STATE["look_release_count"] += 1
+                elif released_resource == "share":
+                    STATE["share_release_count"] += 1
                 RELEASE_HELD.set()
             self.respond_json(200, {"released": True})
             return
@@ -295,6 +326,10 @@ class Handler(BaseHTTPRequestHandler):
             hold_this_look = is_look and STATE["hold_next_look"]
             if hold_this_look:
                 STATE["hold_next_look"] = False
+            hold_this_share = is_share and STATE["hold_next_share"]
+            fail_share_after_release = hold_this_share and STATE["share_failure_after_release"]
+            if hold_this_share:
+                STATE["hold_next_share"] = False
             fail_this_stop_all = is_stop_all and STATE["fail_next_stop_all"]
             if fail_this_stop_all:
                 STATE["fail_next_stop_all"] = False
@@ -306,6 +341,27 @@ class Handler(BaseHTTPRequestHandler):
 
         if fail_this_circle:
             self.respond_json(503, {"error": "deterministic-test-circle-read-failure"})
+            return
+
+        if fail_share_after_release:
+            with LOCK:
+                STATE["holding"] = True
+                STATE["held_resource"] = "share"
+                STATE["share_hold_count"] += 1
+                share_release_count_at_hold = STATE["share_release_count"]
+            if not RELEASE_HELD.wait(timeout=60):
+                with LOCK:
+                    STATE["holding"] = False
+                    STATE["held_resource"] = None
+                self.respond_json(504, {"error": "test-did-not-release-held-share-failure"})
+                return
+            with LOCK:
+                was_explicitly_released = STATE["share_release_count"] > share_release_count_at_hold
+                if was_explicitly_released:
+                    STATE["share_failure_count"] += 1
+            # The failure outcome is captured with this request before waiting. A proxy reset
+            # may also wake the event, but it must never turn this armed failure into an upstream write.
+            self.respond_json(503, {"error": "deterministic-test-share-write-failure"})
             return
 
         headers = {}
@@ -331,7 +387,7 @@ class Handler(BaseHTTPRequestHandler):
             with LOCK:
                 key = str(status)
                 STATE["home_presence_responses"][key] = STATE["home_presence_responses"].get(key, 0) + 1
-        held_resource = "phone_send" if hold_this_phone_send else "phone_verify" if hold_this_phone_verify else "circle" if hold_this_circle else "history" if hold_this_history else "look" if hold_this_look else "home_presence" if hold_this_home_presence else None
+        held_resource = "phone_send" if hold_this_phone_send else "phone_verify" if hold_this_phone_verify else "circle" if hold_this_circle else "history" if hold_this_history else "look" if hold_this_look else "home_presence" if hold_this_home_presence else "share" if hold_this_share else None
         if held_resource:
             with LOCK:
                 STATE["holding"] = True
@@ -340,6 +396,8 @@ class Handler(BaseHTTPRequestHandler):
                     STATE["history_hold_count"] += 1
                 elif held_resource == "look":
                     STATE["look_hold_count"] += 1
+                elif held_resource == "share":
+                    STATE["share_hold_count"] += 1
             if not RELEASE_HELD.wait(timeout=60):
                 with LOCK:
                     STATE["holding"] = False

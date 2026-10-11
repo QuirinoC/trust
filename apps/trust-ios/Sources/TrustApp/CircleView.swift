@@ -6,11 +6,13 @@ import TrustCore
 struct CircleView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.trustPalette) private var palette
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var position: MapCameraPosition = .automatic
     @State private var sheetFraction: CGFloat = PeopleSheetDetent.half.rawValue
     @State private var dragOrigin: CGFloat?
     @State private var userMovedMap = false
     @State private var didFitInitialCamera = false
+    @State private var compactHeaderHeight: CGFloat = 76
     @GestureState private var dragTranslation: CGFloat = 0
 
     private var pins: [AppModel.MapPin] { model.homeMapPins }
@@ -68,6 +70,12 @@ struct CircleView: View {
         .onChange(of: pinLocations) { _, _ in
             fitOrFocusSelectedView()
         }
+        .onChange(of: PeopleSheetDetent.nearest(to: sheetFraction)) { _, _ in
+            // MapKit uses the compact header and the actual panel as safe-area
+            // insets. Refit against that viewport only while we still own camera
+            // placement; an intentional user pan always wins.
+            fitOrFocusSelectedView()
+        }
         .onChange(of: model.circlePath) { _, path in
             if case let .view(personID)? = path.last {
                 // Entering a specific person's view should reveal their pin,
@@ -91,24 +99,24 @@ struct CircleView: View {
     }
 
     private func compactRoot(width: CGFloat, height: CGFloat) -> some View {
-        let sheetHeight = height * liveSheetFraction(containerHeight: height)
-        return ZStack(alignment: .bottom) {
+        let requestedSheetHeight = height * liveSheetFraction(containerHeight: height)
+        // Keep enough of the map visible for a complete pin and its age caption,
+        // even when Dynamic Type makes the header taller or the device is short.
+        let maximumSheetHeight = max(44, height - compactHeaderHeight - 128)
+        let sheetHeight = min(requestedSheetHeight, maximumSheetHeight)
+        return VStack(spacing: 0) {
+            compactMapHeader
             homeMap
-                .ignoresSafeArea(edges: .top)
-            mapTitle
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .clipped()
             peopleSheet(
                 height: sheetHeight,
                 containerHeight: height,
                 listInset: 20
             )
         }
+        .background(palette.paper)
         .frame(width: width, height: height, alignment: .bottom)
-        .overlay(alignment: .bottomTrailing) {
-            recenterButton
-                .padding(.trailing, 16)
-                .padding(.bottom, sheetHeight + 16)
-        }
     }
 
     @ViewBuilder
@@ -185,6 +193,7 @@ struct CircleView: View {
                         .buttonStyle(.plain)
                         .accessibilityLabel(TrustCopy.pinAccessibility(name: pin.name, live: pin.live, timestamp: pin.point.timestamp, now: context.date))
                         .accessibilityHint(TrustCopy.viewLocation(name: pin.name.trustFirstName))
+                        .accessibilityIdentifier("people-map-pin-\(pin.id.uuidString.lowercased())")
                     }
                 }
             }
@@ -192,23 +201,37 @@ struct CircleView: View {
         .mapStyle(.standard(elevation: .flat, emphasis: .muted, pointsOfInterest: .excludingAll))
         .mapControls {}
         .accessibilityLabel(TrustCopy.mapAccessibility)
+        .accessibilityIdentifier("people-map-canvas")
+    }
+
+    private var compactMapHeader: some View {
+        HStack(spacing: 12) {
+            mapTitle
+            Spacer(minLength: 8)
+            recenterButton
+        }
+        .padding(.horizontal, TrustTheme.gutter)
+        .padding(.top, 8)
+        .padding(.bottom, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("people-map-header")
+        .onGeometryChange(for: CGFloat.self) { proxy in
+            proxy.size.height
+        } action: { measuredHeight in
+            guard abs(compactHeaderHeight - measuredHeight) > 1 else { return }
+            compactHeaderHeight = measuredHeight
+        }
     }
 
     private var mapTitle: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            TrustPageTitle(text: TrustCopy.people, size: 28)
+        VStack(alignment: .leading, spacing: 3) {
+            TrustPageTitle(text: TrustCopy.people, size: 24)
             Text(TrustCopy.onMap(count: pins.count, sealed: max(0, model.circle.count - pins.count)))
                 .trustFont(12, weight: .medium)
                 .foregroundStyle(palette.chromeMuted)
+                .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.horizontal, 18)
-        .padding(.top, 10)
-        .padding(.bottom, 12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .padding(.horizontal, TrustTheme.gutter)
-        .padding(.top, 8)
         .allowsHitTesting(false)
     }
 
@@ -250,8 +273,8 @@ struct CircleView: View {
                 Capsule()
                     .fill(palette.line)
                     .frame(width: 36, height: 5)
-                    .padding(.vertical, 10)
                     .frame(maxWidth: .infinity)
+                    .frame(height: 44)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -371,7 +394,7 @@ struct CircleView: View {
                 let delta = -value.translation.height / containerHeight
                 let projected = origin + delta
                     + (-value.predictedEndTranslation.height / containerHeight) * 0.12
-                withAnimation(.interactiveSpring(response: 0.32, dampingFraction: 0.86)) {
+                withAnimation(reduceMotion ? nil : .interactiveSpring(response: 0.32, dampingFraction: 0.86)) {
                     sheetFraction = PeopleSheetDetent.nearest(to: projected).rawValue
                 }
                 dragOrigin = nil
@@ -395,14 +418,14 @@ struct CircleView: View {
         case .decrement: next = max(current - 1, 0)
         @unknown default: return
         }
-        withAnimation(.interactiveSpring(response: 0.32, dampingFraction: 0.86)) {
+        withAnimation(reduceMotion ? nil : .interactiveSpring(response: 0.32, dampingFraction: 0.86)) {
             sheetFraction = detents[next].rawValue
         }
     }
 
     private func toggleDetent() {
         let current = PeopleSheetDetent.nearest(to: sheetFraction)
-        withAnimation(.interactiveSpring(response: 0.32, dampingFraction: 0.86)) {
+        withAnimation(reduceMotion ? nil : .interactiveSpring(response: 0.32, dampingFraction: 0.86)) {
             sheetFraction = (current == .expanded ? PeopleSheetDetent.half : .expanded).rawValue
         }
     }
@@ -430,7 +453,7 @@ struct CircleView: View {
         if includeUser, let fix = model.location.lastFix {
             coordinates.append(fix.coordinate)
         }
-        withAnimation(.easeInOut(duration: 0.35)) {
+        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.35)) {
             if let region = metroRegion(for: coordinates) {
                 position = .region(region)
             } else {
@@ -445,7 +468,7 @@ struct CircleView: View {
             center: point.coordinate,
             span: MKCoordinateSpan(latitudeDelta: 0.12, longitudeDelta: 0.12)
         )
-        withAnimation(.easeInOut(duration: 0.35)) {
+        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.35)) {
             position = .region(region)
         }
     }
@@ -610,10 +633,17 @@ struct CirclePersonRow: View {
         } label: {
             Text(peekIsLook ? TrustCopy.look : TrustCopy.view)
                 .trustFont(13, weight: .semibold)
-                .foregroundStyle(peekIsLook ? palette.accent : palette.muted)
+                .foregroundStyle(palette.accent)
                 .padding(.horizontal, 14)
                 .frame(minWidth: 66, minHeight: 44)
-                .background(Capsule().stroke(peekIsLook ? palette.accentSoft : palette.line, lineWidth: 1))
+                .background {
+                    Capsule()
+                        .fill(peekIsLook ? palette.accentSoft : palette.surface)
+                        .overlay {
+                            Capsule()
+                                .stroke(peekIsLook ? palette.accentSoft : palette.accent.opacity(0.42), lineWidth: 1)
+                        }
+                }
         }
         .buttonStyle(.plain)
         .accessibilityLabel(peekIsLook ? TrustCopy.lookHint(name: member.firstName) : TrustCopy.viewHint(name: member.firstName))

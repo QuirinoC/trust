@@ -5,6 +5,7 @@ import TrustCore
 struct MainShellView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.trustPalette) private var palette
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage(TrustAppLanguage.storageKey) private var appLanguage = TrustAppLanguage.system.rawValue
 
@@ -46,7 +47,7 @@ struct MainShellView: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
-        .animation(.easeOut(duration: 0.22), value: model.toast?.id)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.22), value: model.toast?.id)
         // Authentication and app startup already refresh before entering the home shell.
         // A second unconditional request here races that first call; when the API is
         // waking up, one request can fail and briefly show the offline banner while

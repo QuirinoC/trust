@@ -66,6 +66,7 @@ jobs:
             xcodebuild -downloadPlatform iOS
             runtime_id=$(find_available_runtime)
           fi
+          echo "TRUST_SIMULATOR_RUNTIME_ID=$runtime_id" >> "$GITHUB_ENV"
 
           device_type_id=$(xcrun simctl list devicetypes -j | jq -r '.devicetypes[] | select(.name == "iPhone 17 Pro") | .identifier' | head -n 1)
           if [[ -z "$runtime_id" || -z "$device_type_id" ]]; then
@@ -88,6 +89,49 @@ jobs:
           -derivedDataPath "$RUNNER_TEMP/trust-derived-data"
           CODE_SIGNING_ALLOWED=NO
           test
+      - name: Verify compact Sharing geometry at 375-point width
+        run: |
+          set -euo pipefail
+          pro_id="$TRUST_SIMULATOR_ID"
+          narrow_id=""
+          restore_simulators() {
+            status=$?
+            set +e
+            if [[ -n "$narrow_id" ]]; then
+              xcrun simctl shutdown "$narrow_id" >/dev/null 2>&1
+              xcrun simctl delete "$narrow_id" >/dev/null 2>&1
+            fi
+            xcrun simctl boot "$pro_id" >/dev/null 2>&1
+            xcrun simctl bootstatus "$pro_id" -b >/dev/null 2>&1
+            restore_status=$?
+            if [[ "$status" -ne 0 ]]; then exit "$status"; fi
+            if [[ "$restore_status" -ne 0 ]]; then
+              echo "Failed to restore the iPhone 17 Pro simulator after the narrow-device guard." >&2
+              exit "$restore_status"
+            fi
+            exit 0
+          }
+          trap restore_simulators EXIT
+
+          xcrun simctl shutdown "$pro_id"
+          device_type_id=$(xcrun simctl list devicetypes -j | jq -r '.devicetypes[] | select(.name == "iPhone SE (3rd generation)") | .identifier' | head -n 1)
+          if [[ -z "$device_type_id" || -z "$TRUST_SIMULATOR_RUNTIME_ID" ]]; then
+            echo "Could not find the 375-point iPhone SE simulator type or the installed iOS runtime."
+            exit 1
+          fi
+          narrow_id=$(xcrun simctl create "Trust CI iPhone SE compact guard" "$device_type_id" "$TRUST_SIMULATOR_RUNTIME_ID")
+          xcrun simctl boot "$narrow_id"
+          xcrun simctl bootstatus "$narrow_id" -b
+          xcodebuild \
+            -project apps/trust-ios/Trust.xcodeproj \
+            -scheme Trust \
+            -destination "platform=iOS Simulator,id=$narrow_id" \
+            -derivedDataPath "$RUNNER_TEMP/trust-derived-data" \
+            -only-testing:TrustUITests/TrustUsageTests/testSharingCompactRowGeometryAtStandardTextAcrossShippedLocales \
+            -only-testing:TrustUITests/TrustUsageTests/testSharingGermanExtraExtraLargeRowBoundary \
+            -resultBundlePath "$RUNNER_TEMP/trust-compact-sharing-se.xcresult" \
+            CODE_SIGNING_ALLOWED=NO \
+            test-without-building
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 9.0.x
@@ -152,9 +196,9 @@ jobs:
             | tee "$RUNNER_TEMP/trust-local-e2e-summary.json" \
             | jq -e '
                 .result == "Passed" and
-                .totalTestCount == 15 and
+                .totalTestCount == 16 and
                 .passedTests == 5 and
-                .skippedTests == 10 and
+                .skippedTests == 11 and
                 .failedTests == 0
               '
       - name: Collect DEBUG UI interaction traces
@@ -173,6 +217,7 @@ jobs:
             ${{ runner.temp }}/trust-derived-data/Logs/Test/*.xcresult
             ${{ runner.temp }}/trust-local-e2e.xcresult
             ${{ runner.temp }}/trust-local-e2e-summary.json
+            ${{ runner.temp }}/trust-compact-sharing-se.xcresult
             ${{ runner.temp }}/trust-local-e2e-api.log
             ${{ runner.temp }}/trust-sharing-flow.log
           if-no-files-found: warn
