@@ -36,6 +36,8 @@ The script exercises invite acceptance, Sealed and Always sharing, confirmed Loo
 
 Use Xcode with the `Trust` scheme. If needed, run `xcodegen generate` from `apps/trust-ios`, then run the `Trust` scheme's tests on an available iOS Simulator. See [the iOS README](apps/trust-ios/README.md) and [release runbook](docs/DEPLOYMENT.md) for archive steps. App Store Connect upload requires the configured Apple signing account.
 
+For development from a phone, see [Codex Cloud and Xcode Cloud setup](docs/CLOUD-DEVELOPMENT.md). It includes a disposable Linux test database, cloud setup scripts, and native iOS pre-build checks. Provider activation and TestFlight distribution have separate pending approval steps.
+
 ## Public site
 
 The public pages and canonical legal URLs are served from Cloudflare at `https://jointrust.app`. The API's `/Privacy`, `/Terms`, and `/Support` routes permanently redirect there. Deployment and rollback notes are in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
