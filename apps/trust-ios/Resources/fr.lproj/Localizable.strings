@@ -188,6 +188,7 @@
 "done" = "Fait";
 "edit_phone" = "Modifier";
 "edit_profile_picture" = "Modifier la photo de profil";
+"enable_alerts" = "Activer les alertes";
 "enter_a_code" = "Entrez un code";
 "enter_handle" = "Entrez un handle pour continuer.";
 "enter_phone" = "Entrez un numéro de téléphone.";
@@ -311,7 +312,15 @@
 "not_sharing" = "Ne pas partager";
 "not_sharing_with_you" = "Je ne partage pas avec toi";
 "notification" = "Notification";
+"notifications_allowed" = "Autorisées";
+"notifications_body" = "Trust peut demander des alertes pour les Looks et les arrivées à domicile partagées. Leur livraison n’est pas garantie. Activité enregistre les Looks et les vues.";
+"notifications_check_settings" = "Vérifier dans Réglages";
+"notifications_heading" = "Notifications";
+"notifications_not_enabled" = "Non activées";
 "notifications_off" = "Les notifications sont désactivées dans les paramètres. Les apparences sont toujours affichées dans le journal.";
+"notifications_off_in_settings" = "Désactivées dans Réglages";
+"notifications_quietly_allowed" = "Autorisées discrètement";
+"notifications_requesting" = "Demande d’accès…";
 "now" = "maintenant";
 "off" = "Désactivé";
 "offline" = "Hors ligne";
@@ -375,6 +384,7 @@
 "presence" = "Présence";
 "presence_away" = "Loin";
 "presence_away_copy" = "Affiché comme Absent lorsque vous n'êtes pas chez vous.";
+"presence_grant_details" = "À propos du statut Domicile ou Absent";
 "presence_grant_explanation" = "Statut uniquement, pas la localisation. Si le partage est actif, cela autorise aussi une alerte d’arrivée à domicile. Désactivé, Pause et Masqué le bloquent.";
 "presence_grant_label" = "Prévenez %@ quand je suis chez moi ou absent";
 "presence_grant_updated" = "Préférence de partage du statut mise à jour.";
@@ -409,6 +419,7 @@
 "request_sent" = "Demande envoyée";
 "resend_code" = "Renvoyer le code";
 "restore_purchases" = "Restaurer les achats";
+"resume_paused_mode" = "Reprendre en mode %@";
 "retry" = "Réessayer";
 "review_requests" = "Voir les demandes";
 "row_available" = "%@ · Disponible";

@@ -103,6 +103,7 @@ public enum TrustCopy {
     public static var sharingPresenceExplanation: String { value("sharing_presence_explanation", defaultValue: "Home or Away appears only for people you chose Sealed or Always for. Off, Pause, and Hidden keep your status out of their view.") }
     public static func moreSharingActions(_ name: String) -> String { format("more_sharing_actions", defaultValue: "More sharing actions for %@", name) }
     public static func presenceGrantLabel(_ name: String) -> String { format("presence_grant_label", defaultValue: "Let %@ know when I’m Home or Away", name) }
+    public static var presenceGrantDetails: String { value("presence_grant_details", defaultValue: "About Home or Away") }
     public static var presenceGrantExplanation: String { value("presence_grant_explanation", defaultValue: "Status only, not location. With sharing on, this also allows a Home-arrival alert. Off, Pause, and Hidden suppress it.") }
     public static var presenceGrantUpdated: String { value("presence_grant_updated", defaultValue: "Home/Away sharing preference updated.") }
     public static func sharingDirections(inbound: String, outbound: String) -> String {
@@ -529,6 +530,33 @@ public enum TrustCopy {
     public static func pauseUntil(time: String, mode: String) -> String {
         format("pause_until", defaultValue: "Paused until %@. Back to %@.", time, mode)
     }
+    public static func pauseEndDateTime(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = TrustAppLanguage.currentLocale
+        formatter.calendar = Calendar.current
+        formatter.dateStyle = Calendar.current.isDateInToday(date) ? .none : .medium
+        formatter.timeStyle = .short
+        return formatter.string(from: date)
+    }
+    public static func pauseDurationLabel(_ duration: PauseDuration) -> String {
+        let formatter = DateComponentsFormatter()
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.locale = TrustAppLanguage.currentLocale
+        formatter.calendar = calendar
+        formatter.unitsStyle = .full
+        formatter.maximumUnitCount = 1
+        switch duration {
+        case .oneHour: formatter.allowedUnits = [.hour]
+        case .eightHours: formatter.allowedUnits = [.hour]
+        case .oneDay: formatter.allowedUnits = [.day]
+        case .twoDays: formatter.allowedUnits = [.day]
+        case .threeDays: formatter.allowedUnits = [.day]
+        }
+        return formatter.string(from: duration.seconds) ?? duration.label
+    }
+    public static func resumePaused(mode: String) -> String {
+        format("resume_paused_mode", defaultValue: "Resume %@", mode)
+    }
     public static var stopSharing: String { value("stop_sharing", defaultValue: "Stop sharing") }
     public static var removePerson: String { value("remove_person", defaultValue: "Remove") }
     public static func removePersonConfirm(name: String) -> String {
@@ -789,6 +817,17 @@ public enum TrustCopy {
     public static var seePlus: String { value("see_plus", defaultValue: "See Plus") }
     public static var youHavePlus: String { value("you_have_plus", defaultValue: "You have Plus.") }
     public static var settings: String { value("settings", defaultValue: "Settings") }
+    public static var notificationsHeading: String { value("notifications_heading", defaultValue: "Notifications") }
+    public static var notificationsBody: String {
+        value("notifications_body", defaultValue: "Alerts may be requested for Looks and shared Home arrivals. Delivery is not guaranteed. Activity records Looks and Views.")
+    }
+    public static var notificationsNotEnabled: String { value("notifications_not_enabled", defaultValue: "Not enabled") }
+    public static var notificationsOffInSettings: String { value("notifications_off_in_settings", defaultValue: "Off in Settings") }
+    public static var notificationsAllowed: String { value("notifications_allowed", defaultValue: "Allowed") }
+    public static var notificationsQuietlyAllowed: String { value("notifications_quietly_allowed", defaultValue: "Quietly allowed") }
+    public static var notificationsCheckSettings: String { value("notifications_check_settings", defaultValue: "Check Settings") }
+    public static var notificationsRequesting: String { value("notifications_requesting", defaultValue: "Requesting access…") }
+    public static var enableAlerts: String { value("enable_alerts", defaultValue: "Enable alerts") }
     public static var lookNotifications: String { value("look_notifications", defaultValue: "Look notifications") }
     public static var lookNotificationsBody: String {
         value("look_notifications_body", defaultValue: "Sealed Looks request a notification. Views are logged.")

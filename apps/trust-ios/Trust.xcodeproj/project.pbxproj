@@ -18,7 +18,6 @@
 		178B7A55AD6CCE0921F4718D /* YouView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A8356A446C938EFA37466BE /* YouView.swift */; };
 		187663D82E2A11219A0F304B /* AuthSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FD7594384721372A16D9E19 /* AuthSession.swift */; };
 		193D0475C68E66AF65A7DFD7 /* TrustCoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10CA18C94885D409ED3D7B7 /* TrustCoreTests.swift */; };
-		A034F8A7B24243DEA2321111 /* TrustPhoneSetupTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A034F8A7B24243DEA2321112 /* TrustPhoneSetupTests.swift */; };
 		19BE34C70451CFF5A92EE689 /* CircleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D99492A6161FC4D64E0C386 /* CircleView.swift */; };
 		1D5998C920DF9A63255FA22A /* LookConfirmSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = D82E8777B7F80A59F2D53EFE /* LookConfirmSheet.swift */; };
 		20624BD70DED7D4BF2F8F2C3 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 5BDC5D2F3934AD105418EDE7 /* InfoPlist.strings */; };
@@ -28,6 +27,7 @@
 		2B59C363D0E89485B2FA6536 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 4C8229953A6861B1EAF998E1 /* Localizable.strings */; };
 		2F3CB1F1EFAF7273473E217E /* ProfileAvatarPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = A144B075570E3EC71B3A9E9E /* ProfileAvatarPicker.swift */; };
 		32D9A6ABCEC1A4215D80BC3E /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = CC2380F09F1CF772604EADCB /* Localizable.strings */; };
+		3536D6E6D2CDA1C1A64A66D5 /* TrustPhoneSetupTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46FEA85CB113D010FB90A0EF /* TrustPhoneSetupTests.swift */; };
 		354041B2EFE230A68D8027BE /* MapScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE3BE1E107A89A8B8D4FDBD2 /* MapScreen.swift */; };
 		36CD510268DA16335A9EAD0A /* TrustKeychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 706E76871CAC53B051985DCC /* TrustKeychain.swift */; };
 		373F339637D3D5870BB2CA6C /* LookConfirmSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = D82E8777B7F80A59F2D53EFE /* LookConfirmSheet.swift */; };
@@ -112,11 +112,19 @@
 		EDCFA9A1DC37C2B3CE09D820 /* AgeGateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57B898D038C6021727ABDACD /* AgeGateView.swift */; };
 		F073EE1FC303C57F678D770D /* MainShellView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74231FF47EE26FCD87F0BE18 /* MainShellView.swift */; };
 		F42C31560334B370446854B3 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 5508C24A56E81A67A0FC1D03 /* InfoPlist.strings */; };
+		FA3CFD102051BDDE97FBCCA0 /* RealPushAPNSE2ETests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4302226952571B448B50AAFB /* RealPushAPNSE2ETests.swift */; };
 		FB5A039144351F60575D8744 /* AppConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE3763646FBA2DF7BEE36D79 /* AppConfiguration.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
 		33F4276291AB6CED35DC57E0 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 6BA4264977939CE575AF51B6 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 18755F391E6B12E3A5CFD401;
+			remoteInfo = Trust;
+		};
+		48FB4C8EEF2F456ABCB12D74 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 6BA4264977939CE575AF51B6 /* Project object */;
 			proxyType = 1;
@@ -136,6 +144,8 @@
 		22D943C757DCC8579D80D2C5 /* TrustAgeGateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrustAgeGateTests.swift; sourceTree = "<group>"; };
 		35620E6EF77E541AD03BCD66 /* AgeAssuranceCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgeAssuranceCoordinator.swift; sourceTree = "<group>"; };
 		3DD39690718850F57B59DFBA /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		4302226952571B448B50AAFB /* RealPushAPNSE2ETests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RealPushAPNSE2ETests.swift; sourceTree = "<group>"; };
+		46FEA85CB113D010FB90A0EF /* TrustPhoneSetupTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrustPhoneSetupTests.swift; sourceTree = "<group>"; };
 		47B487800F3DADB918917BA8 /* LocationCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationCoordinator.swift; sourceTree = "<group>"; };
 		482B3013C3B6C0C8532F5DE6 /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
 		4A8356A446C938EFA37466BE /* YouView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouView.swift; sourceTree = "<group>"; };
@@ -157,6 +167,7 @@
 		74231FF47EE26FCD87F0BE18 /* MainShellView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainShellView.swift; sourceTree = "<group>"; };
 		7526B1C396A531BB1264D7D4 /* DeclaredAgeRange.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = DeclaredAgeRange.framework; path = System/Library/Frameworks/DeclaredAgeRange.framework; sourceTree = SDKROOT; };
 		8863CE33D489634538BAC18E /* TrustComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrustComponents.swift; sourceTree = "<group>"; };
+		893275B32856BF35CACA1FD0 /* TrustServiceUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = TrustServiceUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		913C99EC0D7E0E081DA468B0 /* TrustApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrustApp.swift; sourceTree = "<group>"; };
 		93DD05E4CE1F61BF819BD58D /* SharingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharingView.swift; sourceTree = "<group>"; };
 		9616640E4E521FA6F45A24DE /* _PermissionKit_SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = _PermissionKit_SwiftUI.framework; path = System/Library/Frameworks/_PermissionKit_SwiftUI.framework; sourceTree = SDKROOT; };
@@ -177,7 +188,6 @@
 		D08EA0C8184116A2084F89DF /* InfoPlist.strings */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = InfoPlist.strings; path = fr.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		D0929D5A5788EE4C0AB1DF23 /* TrustRealAPIFeatureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrustRealAPIFeatureTests.swift; sourceTree = "<group>"; };
 		D10CA18C94885D409ED3D7B7 /* TrustCoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrustCoreTests.swift; sourceTree = "<group>"; };
-		A034F8A7B24243DEA2321112 /* TrustPhoneSetupTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrustPhoneSetupTests.swift; sourceTree = "<group>"; };
 		D5A777201D5537C1D7D029F3 /* TrustUsageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrustUsageTests.swift; sourceTree = "<group>"; };
 		D82E8777B7F80A59F2D53EFE /* LookConfirmSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LookConfirmSheet.swift; sourceTree = "<group>"; };
 		E0E16CA26F45FCA3514EB874 /* Trust.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Trust.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -255,10 +265,19 @@
 			path = Sources;
 			sourceTree = "<group>";
 		};
+		32684315B9D6E187EA13538B /* TrustServiceUITests */ = {
+			isa = PBXGroup;
+			children = (
+				4302226952571B448B50AAFB /* RealPushAPNSE2ETests.swift */,
+			);
+			path = TrustServiceUITests;
+			sourceTree = "<group>";
+		};
 		3A77478F5D9F4CD47B023114 /* Tests */ = {
 			isa = PBXGroup;
 			children = (
 				D2B18D4EAE5BA97CE48C2680 /* TrustCoreTests */,
+				32684315B9D6E187EA13538B /* TrustServiceUITests */,
 				859AB1766E8063820758CFF7 /* TrustUITests */,
 			);
 			path = Tests;
@@ -356,6 +375,7 @@
 				E0E16CA26F45FCA3514EB874 /* Trust.app */,
 				B23A5C764E9E313CD90E6EB0 /* TrustCoreTests.xctest */,
 				08790634D294CA76972CD49E /* TrustInternal.app */,
+				893275B32856BF35CACA1FD0 /* TrustServiceUITests.xctest */,
 				56F2274E2243FEC94CADC02A /* TrustUITests.xctest */,
 			);
 			name = Products;
@@ -365,7 +385,7 @@
 			isa = PBXGroup;
 			children = (
 				D10CA18C94885D409ED3D7B7 /* TrustCoreTests.swift */,
-				A034F8A7B24243DEA2321112 /* TrustPhoneSetupTests.swift */,
+				46FEA85CB113D010FB90A0EF /* TrustPhoneSetupTests.swift */,
 			);
 			path = TrustCoreTests;
 			sourceTree = "<group>";
@@ -392,6 +412,24 @@
 			productName = Trust;
 			productReference = E0E16CA26F45FCA3514EB874 /* Trust.app */;
 			productType = "com.apple.product-type.application";
+		};
+		2D4B5594003D1FB49243E697 /* TrustServiceUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AA24BFE68759B0EFB712D3BE /* Build configuration list for PBXNativeTarget "TrustServiceUITests" */;
+			buildPhases = (
+				003B62A603AD9BEF77142BAF /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				EFABEDCA2C006B162C06C088 /* PBXTargetDependency */,
+			);
+			name = TrustServiceUITests;
+			packageProductDependencies = (
+			);
+			productName = TrustServiceUITests;
+			productReference = 893275B32856BF35CACA1FD0 /* TrustServiceUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
 		};
 		33753F0B8DE2D72C33BB08C5 /* TrustUITests */ = {
 			isa = PBXNativeTarget;
@@ -463,6 +501,11 @@
 						DevelopmentTeam = 3S529795M9;
 						ProvisioningStyle = Automatic;
 					};
+					2D4B5594003D1FB49243E697 = {
+						DevelopmentTeam = 3S529795M9;
+						ProvisioningStyle = Automatic;
+						TestTargetID = 18755F391E6B12E3A5CFD401;
+					};
 					33753F0B8DE2D72C33BB08C5 = {
 						DevelopmentTeam = 3S529795M9;
 						ProvisioningStyle = Automatic;
@@ -502,6 +545,7 @@
 				18755F391E6B12E3A5CFD401 /* Trust */,
 				B6D7371633099E2C204153CD /* TrustCoreTests */,
 				470681601E41134BCAD20008 /* TrustInternal */,
+				2D4B5594003D1FB49243E697 /* TrustServiceUITests */,
 				33753F0B8DE2D72C33BB08C5 /* TrustUITests */,
 			);
 		};
@@ -555,6 +599,14 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		003B62A603AD9BEF77142BAF /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				FA3CFD102051BDDE97FBCCA0 /* RealPushAPNSE2ETests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		097B3C8247FF94048C1C7474 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -642,7 +694,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				193D0475C68E66AF65A7DFD7 /* TrustCoreTests.swift in Sources */,
-				A034F8A7B24243DEA2321111 /* TrustPhoneSetupTests.swift in Sources */,
+				3536D6E6D2CDA1C1A64A66D5 /* TrustPhoneSetupTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -654,6 +706,11 @@
 			target = 18755F391E6B12E3A5CFD401 /* Trust */;
 			targetProxy = 33F4276291AB6CED35DC57E0 /* PBXContainerItemProxy */;
 		};
+		EFABEDCA2C006B162C06C088 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 18755F391E6B12E3A5CFD401 /* Trust */;
+			targetProxy = 48FB4C8EEF2F456ABCB12D74 /* PBXContainerItemProxy */;
+		};
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
@@ -664,7 +721,7 @@
 				CODE_SIGN_ENTITLEMENTS = Trust.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 47;
+				CURRENT_PROJECT_VERSION = 48;
 				DEVELOPMENT_TEAM = 3S529795M9;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				INFOPLIST_FILE = "Internal-Info.plist";
@@ -756,7 +813,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = Trust.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 47;
+				CURRENT_PROJECT_VERSION = 48;
 				DEVELOPMENT_TEAM = 3S529795M9;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				INFOPLIST_FILE = Info.plist;
@@ -826,13 +883,32 @@
 			};
 			name = Release;
 		};
+		78B7E2DA7AA21F8C49024502 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 3S529795M9;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.collapsetechnologies.trust.service.uitests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = Trust;
+			};
+			name = Release;
+		};
 		879DDC474AD7EC765092A485 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = Trust.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 47;
+				CURRENT_PROJECT_VERSION = 48;
 				DEVELOPMENT_TEAM = 3S529795M9;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				INFOPLIST_FILE = Info.plist;
@@ -858,7 +934,7 @@
 				CODE_SIGN_ENTITLEMENTS = Trust.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 47;
+				CURRENT_PROJECT_VERSION = 48;
 				DEVELOPMENT_TEAM = 3S529795M9;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				INFOPLIST_FILE = "Internal-Info.plist";
@@ -874,6 +950,25 @@
 				SDKROOT = iphoneos;
 				SWIFT_STRICT_CONCURRENCY = targeted;
 				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		A452273DE8444F643397E152 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 3S529795M9;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.collapsetechnologies.trust.service.uitests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = Trust;
 			};
 			name = Debug;
 		};
@@ -991,6 +1086,15 @@
 			buildConfigurations = (
 				55C05B2B667C66FBE5F96C85 /* Debug */,
 				719E4F5F69C63C0F151A69F9 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		AA24BFE68759B0EFB712D3BE /* Build configuration list for PBXNativeTarget "TrustServiceUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A452273DE8444F643397E152 /* Debug */,
+				78B7E2DA7AA21F8C49024502 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;

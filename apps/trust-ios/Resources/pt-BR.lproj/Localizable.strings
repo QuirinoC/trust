@@ -188,6 +188,7 @@
 "done" = "Concluído";
 "edit_phone" = "Editar";
 "edit_profile_picture" = "Editar foto do perfil";
+"enable_alerts" = "Ativar alertas";
 "enter_a_code" = "Digite um código";
 "enter_handle" = "Digite um identificador para continuar.";
 "enter_phone" = "Digite um número de telefone.";
@@ -311,7 +312,15 @@
 "not_sharing" = "Não compartilha";
 "not_sharing_with_you" = "Não compartilha com você";
 "notification" = "Notificação";
+"notifications_allowed" = "Permitidas";
+"notifications_body" = "O Trust pode solicitar alertas para Olhares e chegadas em casa compartilhadas. A entrega não é garantida. A Atividade registra Olhares e Visualizações.";
+"notifications_check_settings" = "Verificar nos Ajustes";
+"notifications_heading" = "Notificações";
+"notifications_not_enabled" = "Não ativadas";
 "notifications_off" = "As notificações estão desativadas nos Ajustes. Olhares continuam aparecendo no registro.";
+"notifications_off_in_settings" = "Desativadas nos Ajustes";
+"notifications_quietly_allowed" = "Permitidas silenciosamente";
+"notifications_requesting" = "Solicitando acesso…";
 "now" = "agora";
 "off" = "Desativado";
 "offline" = "Offline";
@@ -375,6 +384,7 @@
 "presence" = "Presença";
 "presence_away" = "Fora";
 "presence_away_copy" = "Aparece como Fora quando você não está em Casa.";
+"presence_grant_details" = "Sobre Em casa ou Fora";
 "presence_grant_explanation" = "É apenas o status, não a localização. Com o compartilhamento ativo, isso também permite um alerta de chegada em casa. Desativado, Pausa e Oculto impedem a exibição.";
 "presence_grant_label" = "Avisar %@ quando eu estiver em casa ou fora";
 "presence_grant_updated" = "Preferência de compartilhamento de status atualizada.";
@@ -409,6 +419,7 @@
 "request_sent" = "Solicitação enviada";
 "resend_code" = "Reenviar código";
 "restore_purchases" = "Restaurar compras";
+"resume_paused_mode" = "Retomar como %@";
 "retry" = "Tentar novamente";
 "review_requests" = "Ver solicitações";
 "row_available" = "%@ · Disponível";

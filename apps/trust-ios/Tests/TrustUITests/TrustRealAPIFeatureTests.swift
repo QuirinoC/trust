@@ -1918,6 +1918,420 @@ final class TrustRealAPIFeatureTests: XCTestCase {
         XCTAssertFalse(app.buttons["view-open-map"].exists, "Relaunch must not reveal a snapshot retained from the prior relationship.")
     }
 
+    /// Exercises consent revalidation against real HTTP with an isolated store and the existing
+    /// Development entitlement fixture. This is not an Apple purchase/receipt test.
+    func testDelayedHistoryFixtureCannotReappearAfterStopRemoveAndReconnect() throws {
+        guard api.raceProxyState() != nil else {
+            throw XCTSkip("Requires the isolated loopback fault proxy and Development entitlement fixture.")
+        }
+        let fixture = try makeConnectedFixture(prefix: "history-stop-race")
+        defer {
+            api.deleteAccount(token: fixture.peer.token)
+            api.deleteAccount(token: fixture.main.token)
+        }
+        XCTAssertEqual(api.request("POST", "/api/v1/circle/entitlement", token: fixture.peer.token,
+                                   body: ["reviewUnlock": true]).status, 204,
+                       "Only the existing isolated Development fixture supplies Plus in this consent test.")
+        _ = try setResting("always", personID: fixture.main.personID, owner: fixture.peer)
+        XCTAssertEqual(uploadTestLocation(points: makeLocationPoints(count: 3), token: fixture.peer.token), 204)
+        let originalConnection = try XCTUnwrap(activeConnectionID(personID: fixture.peer.personID, token: fixture.main.token))
+        let app = launchDevelopmentApp(deviceID: fixture.mainDeviceID, displayName: fixture.mainName,
+                                       arguments: ["-trust.appLanguage", "en"])
+        defer { app.terminate() }
+        let row = app.buttons["person-row-\(fixture.peerName.lowercased())"]
+        XCTAssertTrue(row.waitForExistence(timeout: 15))
+        XCTAssertTrue(api.armHistoryRace())
+        row.tap()
+        XCTAssertTrue(waitForProxyState(timeout: 12) {
+            $0["held_resource"] as? String == "history" && ($0["history_hold_count"] as? Int) == 1
+                && ($0["history_status_count"] as? Int) == 200 && ($0["history_point_count"] as? Int) == 3
+        }, "The proxy must hold a successful, populated History response before Stop.")
+        XCTAssertTrue(element("person-history-loading", in: app).waitForExistence(timeout: 5))
+
+        _ = try setResting("off", personID: fixture.main.personID, owner: fixture.peer)
+        XCTAssertEqual(api.request("GET", "/api/v1/people/\(fixture.peer.personID)/history", token: fixture.main.token).status, 409)
+        // Do not refresh the app first: the in-flight result itself must revalidate
+        // server consent, just as Look does, before retaining sensitive locations.
+        XCTAssertTrue(api.releaseHeldResponse())
+        XCTAssertTrue(waitForProxyState(timeout: 8) { ($0["history_release_count"] as? Int) == 1 })
+        XCTAssertTrue(waitUntil(timeout: 15) { !self.element("person-history-loading", in: app).exists })
+        XCTAssertFalse(element("person-history", in: app).exists,
+                       "A History body fetched before the peer stopped must not restore visits after Stop.")
+        XCTAssertFalse(element("person-history-visit-0", in: app).exists)
+        XCTAssertFalse(element("person-history-error", in: app).exists,
+                       "Confirmed Stop should reconcile the consent state rather than show a generic loading error.")
+        attachScreenshot(of: app, named: "History - Stopped while response was in flight")
+
+        let replacement = try replaceConnection(subject: fixture.peer, viewer: fixture.main, newShare: "sealed")
+        XCTAssertNotEqual(replacement, originalConnection)
+        app.buttons["tab-sharing"].tap()
+        app.buttons["tab-circle"].tap()
+        if app.buttons["circle-back"].exists { app.buttons["circle-back"].tap() }
+        XCTAssertTrue(row.waitForExistence(timeout: 12))
+        row.tap()
+        XCTAssertTrue(app.buttons["person-profile-peek"].waitForExistence(timeout: 12))
+        XCTAssertFalse(element("person-history", in: app).exists)
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(row.waitForExistence(timeout: 15))
+        row.tap()
+        XCTAssertTrue(app.buttons["person-profile-peek"].waitForExistence(timeout: 12))
+        XCTAssertFalse(element("person-history", in: app).exists,
+                       "Reconnection and relaunch must not recover history from the removed relationship.")
+        XCTAssertEqual(activeConnectionID(personID: fixture.peer.personID, token: fixture.main.token), replacement)
+    }
+
+    func testDelayedHistoryFixtureStaysClosedWhenConsentRefreshIsOffline() throws {
+        guard api.raceProxyState() != nil else { throw XCTSkip("Requires the isolated fault proxy and Development entitlement fixture.") }
+        let fixture = try makeConnectedFixture(prefix: "history-refresh-offline")
+        defer {
+            _ = api.request("POST", "/__test/reconnect", body: [:])
+            api.deleteAccount(token: fixture.peer.token)
+            api.deleteAccount(token: fixture.main.token)
+        }
+        XCTAssertEqual(api.request("POST", "/api/v1/circle/entitlement", token: fixture.peer.token, body: ["reviewUnlock": true]).status, 204)
+        _ = try setResting("always", personID: fixture.main.personID, owner: fixture.peer)
+        XCTAssertEqual(uploadTestLocation(points: makeLocationPoints(count: 3), token: fixture.peer.token), 204)
+        let app = launchDevelopmentApp(deviceID: fixture.mainDeviceID, displayName: fixture.mainName,
+                                       arguments: ["-trust.appLanguage", "en"])
+        defer { app.terminate() }
+        let row = app.buttons["person-row-\(fixture.peerName.lowercased())"]
+        XCTAssertTrue(row.waitForExistence(timeout: 15))
+        XCTAssertTrue(api.armHistoryRace())
+        row.tap()
+        XCTAssertTrue(waitForProxyState(timeout: 12) {
+            $0["held_resource"] as? String == "history" && ($0["history_status_count"] as? Int) == 200
+                && ($0["history_point_count"] as? Int) == 3
+        })
+        _ = try setResting("off", personID: fixture.main.personID, owner: fixture.peer)
+        XCTAssertEqual(api.request("POST", "/__test/arm-offline", body: ["accountId": fixture.main.personID]).status, 200)
+        XCTAssertTrue(api.releaseHeldResponse())
+        XCTAssertTrue(waitForProxyState(timeout: 12) { ($0["offline_circle_count"] as? Int ?? 0) > 0 },
+                      "A sensitive result must attempt authoritative consent revalidation.")
+        XCTAssertTrue(element("person-history-error", in: app).waitForExistence(timeout: 12),
+                      "Unavailable consent must keep locations closed and offer recovery.")
+        XCTAssertFalse(element("person-history", in: app).exists)
+        XCTAssertFalse(element("person-history-visit-0", in: app).exists)
+        XCTAssertFalse(element("person-history-loading", in: app).exists)
+        attachScreenshot(of: app, named: "History - Consent refresh failed closed with Retry")
+        XCTAssertEqual(api.request("POST", "/__test/reconnect", body: [:]).status, 200)
+        app.buttons["tab-sharing"].tap()
+        app.buttons["tab-circle"].tap()
+        XCTAssertTrue(waitUntil(timeout: 12) { !self.element("person-history-error", in: app).exists })
+        XCTAssertFalse(element("person-history", in: app).exists)
+    }
+
+    func testDelayedLookStaysClosedWhenConsentRefreshIsOffline() throws {
+        guard api.raceProxyState() != nil else { throw XCTSkip("Requires the isolated loopback fault proxy.") }
+        let fixture = try makeConnectedFixture(prefix: "look-refresh-offline")
+        defer {
+            _ = api.request("POST", "/__test/reconnect", body: [:])
+            api.deleteAccount(token: fixture.peer.token)
+            api.deleteAccount(token: fixture.main.token)
+        }
+        _ = try setResting("sealed", personID: fixture.main.personID, owner: fixture.peer)
+        XCTAssertEqual(uploadTestLocation(points: makeLocationPoints(count: 1), token: fixture.peer.token), 204)
+        let app = launchDevelopmentApp(deviceID: fixture.mainDeviceID, displayName: fixture.mainName,
+                                       arguments: ["-trust.appLanguage", "en"])
+        defer { app.terminate() }
+        let row = app.buttons["person-row-\(fixture.peerName.lowercased())"]
+        XCTAssertTrue(row.waitForExistence(timeout: 15))
+        row.tap()
+        XCTAssertTrue(api.armLookRace())
+        app.buttons["person-profile-peek"].tap()
+        XCTAssertTrue(app.buttons["confirm-look-notify"].waitForExistence(timeout: 8))
+        app.buttons["confirm-look-notify"].tap()
+        XCTAssertTrue(waitForProxyState(timeout: 12) { $0["held_resource"] as? String == "look" })
+        _ = try setResting("off", personID: fixture.main.personID, owner: fixture.peer)
+        XCTAssertEqual(api.request("POST", "/__test/arm-offline", body: ["accountId": fixture.main.personID]).status, 200)
+        XCTAssertTrue(api.releaseHeldResponse())
+        XCTAssertTrue(waitForProxyState(timeout: 12) { ($0["offline_circle_count"] as? Int ?? 0) > 0 })
+        XCTAssertTrue(waitUntil(timeout: 12) { !app.buttons["confirm-look-notify"].exists })
+        Thread.sleep(forTimeInterval: 0.5)
+        XCTAssertFalse(app.buttons["view-open-map"].exists,
+                       "A successful Look response is insufficient if current consent cannot be revalidated.")
+        XCTAssertFalse(element("person-history", in: app).exists)
+        attachScreenshot(of: app, named: "Look - Consent refresh failed closed")
+        XCTAssertEqual(api.request("POST", "/__test/reconnect", body: [:]).status, 200)
+        app.buttons["tab-sharing"].tap()
+        app.buttons["tab-circle"].tap()
+        XCTAssertTrue(waitUntil(timeout: 12) { !app.buttons["person-profile-peek"].exists })
+        XCTAssertFalse(app.buttons["view-open-map"].exists)
+    }
+
+    func testOfflinePeerRemovalReconcilesAfterRelaunchAndReconnect() throws {
+        guard api.raceProxyState() != nil else { throw XCTSkip("Requires the isolated loopback fault proxy.") }
+        let fixture = try makeConnectedFixture(prefix: "offline-revoke")
+        defer {
+            _ = api.request("POST", "/__test/reconnect", body: [:])
+            api.deleteAccount(token: fixture.peer.token)
+            api.deleteAccount(token: fixture.main.token)
+        }
+        _ = try setResting("sealed", personID: fixture.main.personID, owner: fixture.peer)
+        XCTAssertEqual(uploadTestLocation(points: makeLocationPoints(count: 1), token: fixture.peer.token), 204)
+        let connection = try XCTUnwrap(activeConnectionID(personID: fixture.main.personID, token: fixture.peer.token))
+        let app = launchDevelopmentApp(deviceID: fixture.mainDeviceID, displayName: fixture.mainName,
+                                       arguments: ["-trust.appLanguage", "en"])
+        defer { app.terminate() }
+        let row = app.buttons["person-row-\(fixture.peerName.lowercased())"]
+        XCTAssertTrue(row.waitForExistence(timeout: 15), "Cache the connected peer before interruption.")
+        XCTAssertEqual(api.request("POST", "/__test/arm-offline", body: ["accountId": fixture.main.personID]).status, 200)
+        _ = try setResting("off", personID: fixture.main.personID, owner: fixture.peer)
+        XCTAssertEqual(api.request("POST", "/api/v1/people/\(fixture.main.personID)/revoke", token: fixture.peer.token,
+                                   body: ["connectionId": connection]).status, 204)
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(app.buttons["tab-sharing"].waitForExistence(timeout: 20))
+        app.buttons["tab-sharing"].tap()
+        XCTAssertTrue(waitForProxyState(timeout: 12) { ($0["offline_circle_count"] as? Int ?? 0) > 0 },
+                      "The relaunched account must actually encounter the simulated network outage.")
+        let offline = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Offline · people from")).firstMatch
+        XCTAssertTrue(offline.waitForExistence(timeout: 10), "The person needs visible context that this is cached state.")
+        let share = app.buttons["sharing-mode-off-\(fixture.peerName.lowercased())"]
+        XCTAssertTrue(share.waitForExistence(timeout: 10), "The previously connected peer must actually be restored from the account's disk cache.")
+        XCTAssertFalse(app.buttons["view-open-map"].exists)
+        XCTAssertFalse(element("person-history", in: app).exists)
+        attachScreenshot(of: app, named: "Offline - Relaunched while peer removed the connection")
+
+        XCTAssertEqual(api.request("POST", "/__test/reconnect", body: [:]).status, 200)
+        XCTAssertTrue(successfulCircleOmitsMember(personID: fixture.peer.personID, token: fixture.main.token))
+        app.buttons["tab-circle"].tap()
+        app.buttons["tab-sharing"].tap()
+        XCTAssertTrue(waitUntil(timeout: 15) { !share.exists }, "A successful reconnect must remove the stale sharing controls.")
+        XCTAssertTrue(waitUntil(timeout: 10) { !offline.exists }, "A successful Circle response must clear the offline banner.")
+        app.buttons["tab-circle"].tap()
+        XCTAssertTrue(waitUntil(timeout: 15) { !row.exists }, "The removed peer must disappear after the successful Circle refresh.")
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(app.buttons["tab-circle"].waitForExistence(timeout: 15))
+        XCTAssertFalse(row.exists, "The confirmed removal must replace the offline disk cache.")
+        XCTAssertFalse(element("person-history", in: app).exists)
+        XCTAssertFalse(app.buttons["view-open-map"].exists)
+    }
+
+    func testAddPersonCanRetrySameQueryAndConfirmedSendSurvivesFailedLookup() throws {
+        guard api.raceProxyState() != nil else { throw XCTSkip("Requires the isolated loopback fault proxy.") }
+        let suffix = String(UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(8)).lowercased()
+        let numbers = Array(LocalTrustAPI.reservedPhonePool().shuffled().prefix(2))
+        let main = try makeTestAccount(displayName: "AddMain\(suffix)", deviceID: "add-main-\(suffix)",
+                                       handle: "am\(suffix)", phone: "+1\(numbers[0])")
+        let peer = try makeTestAccount(displayName: "AddPeer\(suffix)", deviceID: "add-peer-\(suffix)",
+                                       handle: "ap\(suffix)", phone: "+1\(numbers[1])")
+        defer { api.deleteAccount(token: peer.token); api.deleteAccount(token: main.token) }
+        let app = launchDevelopmentApp(deviceID: "add-main-\(suffix)", displayName: "AddMain\(suffix)",
+                                       arguments: ["-trust.appLanguage", "en"])
+        defer { app.terminate() }
+        app.buttons["tab-sharing"].tap()
+        app.buttons["add-someone-button"].tap()
+        let query = app.textFields["connection-handle"]
+        XCTAssertTrue(query.waitForExistence(timeout: 10))
+        XCTAssertEqual(api.request("POST", "/__test/arm-lookup-failure", body: [:]).status, 200)
+        query.typeText("ap\(suffix)")
+        XCTAssertTrue(app.staticTexts["connection-lookup-notice"].waitForExistence(timeout: 10))
+        let retry = app.buttons["retry-connection-lookup"]
+        XCTAssertTrue(retry.waitForExistence(timeout: 5), "A failed search must offer recovery without requiring an edit.")
+        XCTAssertTrue(retry.isHittable, "Recovery remains usable with the keyboard visible.")
+        XCTAssertGreaterThanOrEqual(retry.frame.width, 44)
+        XCTAssertGreaterThanOrEqual(retry.frame.height, 44)
+        attachScreenshot(of: app, named: "Add - Failed exact handle with same-query Retry")
+        retry.tap()
+        XCTAssertTrue(app.staticTexts["connection-lookup-handle"].waitForExistence(timeout: 10))
+        XCTAssertEqual(query.value as? String, "ap\(suffix)", "Retry must preserve what the person typed.")
+        XCTAssertFalse(app.staticTexts["connection-lookup-notice"].exists)
+        XCTAssertEqual(api.raceProxyState()?["lookup_failure_count"] as? Int, 1)
+        let sendsBefore = api.raceProxyState()?["connection_send_count"] as? Int ?? 0
+        XCTAssertEqual(api.request("POST", "/__test/arm-lookup-failure-after-send", body: [:]).status, 200)
+        app.buttons["send-connection-request"].tap()
+        XCTAssertTrue(app.staticTexts["connection-lookup-sent"].waitForExistence(timeout: 12),
+                      "A confirmed Send must remain acknowledged even if the following identity refresh fails.")
+        XCTAssertTrue(waitForProxyState(timeout: 8) { ($0["lookup_failure_count"] as? Int) == 2 })
+        XCTAssertFalse(app.buttons["send-connection-request"].exists, "A reconciliation failure must not offer a duplicate Send.")
+        XCTAssertEqual(api.raceProxyState()?["connection_send_count"] as? Int, sendsBefore + 1)
+        XCTAssertEqual((api.connectionRequests(token: main.token)?["sent"] as? [[String: Any]])?.count, 1)
+        XCTAssertTrue((api.circle(token: main.token)?["members"] as? [[String: Any]])?.isEmpty ?? false,
+                      "A pending request must never start a connection or sharing.")
+        attachScreenshot(of: app, named: "Add - Confirmed request stays Pending after refresh failure")
+        XCTAssertTrue(retry.waitForExistence(timeout: 8))
+        XCTAssertEqual(api.request("POST", "/__test/arm-stale-lookup", body: [:]).status, 200)
+        retry.tap()
+        XCTAssertTrue(app.staticTexts["connection-lookup-sent"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["send-connection-request"].exists,
+                       "A contradictory identity lookup must not undo a confirmed pending request.")
+        XCTAssertEqual(api.raceProxyState()?["connection_send_count"] as? Int, sendsBefore + 1)
+        app.buttons["cancel-add-person"].tap()
+        let cancel = app.buttons["cancel-connection-request-ap\(suffix)"]
+        XCTAssertTrue(cancel.waitForExistence(timeout: 10))
+        XCTAssertEqual(api.request("POST", "/__test/arm-request-action-failure", body: [:]).status, 200)
+        cancel.tap()
+        let cancelRetry = app.buttons["retry-connection-request-ap\(suffix)"]
+        XCTAssertTrue(cancelRetry.waitForExistence(timeout: 10), "A failed Cancel must leave a named, retryable request.")
+        XCTAssertEqual((api.connectionRequests(token: main.token)?["sent"] as? [[String: Any]])?.count, 1)
+        XCTAssertEqual(api.request("POST", "/__test/arm-request-refresh-failure", body: [:]).status, 200)
+        cancelRetry.tap()
+        XCTAssertTrue(waitForProxyState(timeout: 8) { ($0["request_list_failure_count"] as? Int ?? 0) > 0 })
+        XCTAssertTrue(waitUntil(timeout: 8) { !cancel.exists && !cancelRetry.exists },
+                      "A confirmed Cancel must remain complete when the follow-up list cannot be loaded.")
+        XCTAssertTrue(waitUntil(timeout: 10) { (self.api.connectionRequests(token: main.token)?["sent"] as? [[String: Any]])?.isEmpty == true })
+    }
+
+    func testFailedAcceptKeepsNamedRequestAndOtherRequestsAvailableForRetry() throws {
+        guard api.raceProxyState() != nil else { throw XCTSkip("Requires the isolated loopback fault proxy.") }
+        let suffix = String(UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(8)).lowercased()
+        let phones = Array(LocalTrustAPI.reservedPhonePool().shuffled().prefix(3))
+        let main = try makeTestAccount(displayName: "Requests\(suffix)", deviceID: "requests-\(suffix)", handle: "rq\(suffix)", phone: "+1\(phones[0])")
+        let first = try makeTestAccount(displayName: "First\(suffix)", deviceID: "first-\(suffix)", handle: "rf\(suffix)", phone: "+1\(phones[1])")
+        let second = try makeTestAccount(displayName: "Second\(suffix)", deviceID: "second-\(suffix)", handle: "rs\(suffix)", phone: "+1\(phones[2])")
+        defer { [second, first, main].forEach { api.deleteAccount(token: $0.token) } }
+        XCTAssertEqual(api.createConnectionRequest(recipientID: main.personID, token: first.token), 200)
+        XCTAssertEqual(api.createConnectionRequest(recipientID: main.personID, token: second.token), 200)
+        let app = launchDevelopmentApp(deviceID: "requests-\(suffix)", displayName: "Requests\(suffix)",
+                                       arguments: ["-trust.appLanguage", "en"])
+        defer { app.terminate() }
+        app.buttons["tab-sharing"].tap()
+        let acceptFirst = app.buttons["accept-connection-request-rf\(suffix)"]
+        let acceptSecond = app.buttons["accept-connection-request-rs\(suffix)"]
+        XCTAssertTrue(acceptFirst.waitForExistence(timeout: 12))
+        XCTAssertTrue(acceptSecond.exists)
+        XCTAssertEqual(api.request("POST", "/__test/arm-request-action-failure", body: [:]).status, 200)
+        acceptFirst.tap()
+        XCTAssertTrue(element("connection-request-error-rf\(suffix)", in: app).waitForExistence(timeout: 10))
+        XCTAssertTrue(acceptFirst.exists, "Keep the named failed request available so the person can retry it.")
+        XCTAssertTrue(acceptSecond.exists, "A failure on one request must not hide another person's request.")
+        XCTAssertTrue(waitUntil(timeout: 8) { acceptFirst.isEnabled })
+        XCTAssertEqual((api.connectionRequests(token: main.token)?["incoming"] as? [[String: Any]])?.count, 2)
+        attachScreenshot(of: app, named: "Requests - Failed Accept retains both named requests")
+        let retryFirst = app.buttons["retry-connection-request-rf\(suffix)"]
+        XCTAssertTrue(retryFirst.waitForExistence(timeout: 5))
+        XCTAssertTrue(retryFirst.isHittable)
+        XCTAssertGreaterThanOrEqual(retryFirst.frame.width, 44)
+        retryFirst.tap()
+        XCTAssertTrue(waitUntil(timeout: 12) { self.api.member(personID: first.personID, token: main.token) != nil })
+        XCTAssertTrue(waitUntil(timeout: 8) { !self.element("connection-request-error-rf\(suffix)", in: app).exists })
+        XCTAssertEqual(inboundPresentation(personID: first.personID, token: main.token), "off")
+        XCTAssertEqual(outboundPresentation(personID: first.personID, token: main.token), "off")
+        let declineSecond = app.buttons["decline-connection-request-rs\(suffix)"]
+        XCTAssertTrue(declineSecond.waitForExistence(timeout: 8))
+        XCTAssertEqual(api.request("POST", "/__test/arm-request-refresh-failure", body: [:]).status, 200)
+        declineSecond.tap()
+        XCTAssertTrue(waitForProxyState(timeout: 8) { ($0["request_list_failure_count"] as? Int ?? 0) > 0 })
+        XCTAssertTrue(waitUntil(timeout: 8) { !declineSecond.exists },
+                      "A confirmed Decline must not remain actionable when the following list refresh fails.")
+        XCTAssertTrue(waitUntil(timeout: 10) { (self.api.connectionRequests(token: main.token)?["incoming"] as? [[String: Any]])?.isEmpty == true })
+        XCTAssertNil(api.member(personID: second.personID, token: main.token))
+    }
+
+    func testPauseShowsMultiDayEndAndExplicitResumeRestoresOnlyThatPerson() throws {
+        let fixture = try makeConnectedFixture(prefix: "pause-story")
+        defer { api.deleteAccount(token: fixture.peer.token); api.deleteAccount(token: fixture.main.token) }
+        _ = try setResting("sealed", personID: fixture.peer.personID, owner: fixture.main)
+        let app = launchDevelopmentApp(deviceID: fixture.mainDeviceID, displayName: fixture.mainName,
+                                       arguments: ["-trust.appLanguage", "en"])
+        defer { app.terminate() }
+        XCTAssertTrue(app.buttons["tab-sharing"].waitForExistence(timeout: 15))
+        app.buttons["tab-sharing"].tap()
+        let name = fixture.peerName.lowercased()
+        let actions = app.buttons["sharing-actions-\(name)"]
+        XCTAssertTrue(actions.waitForExistence(timeout: 10))
+        actions.tap()
+        let pause = app.buttons["pause-sharing-\(name)"]
+        XCTAssertTrue(pause.waitForExistence(timeout: 5))
+        pause.tap()
+        let threeDays = app.buttons["pause-duration-259200"]
+        XCTAssertTrue(threeDays.waitForExistence(timeout: 8))
+        XCTAssertTrue(threeDays.isHittable)
+        attachScreenshot(of: app, named: "Pause - Named person and restoration explanation")
+        threeDays.tap()
+        let summary = app.staticTexts["sharing-summary-\(name)"]
+        XCTAssertTrue(waitUntil(timeout: 12) { summary.exists && self.outboundPresentation(personID: fixture.peer.personID, token: fixture.main.token) == "paused" })
+        XCTAssertTrue(summary.label.contains("Sealed"))
+        XCTAssertGreaterThan(summary.label.filter(\.isLetter).count, "Paused until Back to Sealed".filter(\.isLetter).count,
+                             "A multi-day pause must include a day/date, not only the clock time.")
+        XCTAssertEqual(inboundPresentation(personID: fixture.main.personID, token: fixture.peer.token), "paused")
+        attachScreenshot(of: app, named: "Pause - Three day end date and time")
+        actions.tap()
+        let resume = app.buttons["resume-sharing-\(name)"]
+        XCTAssertTrue(resume.waitForExistence(timeout: 5), "Resuming should be explicit rather than inferred from the mode rail.")
+        XCTAssertTrue(resume.label.contains("Sealed"))
+        attachScreenshot(of: app, named: "Pause - Explicit Resume Sealed action")
+        resume.tap()
+        XCTAssertTrue(waitUntil(timeout: 12) { self.outboundPresentation(personID: fixture.peer.personID, token: fixture.main.token) == "untilTheyLook" })
+        XCTAssertTrue(waitUntil(timeout: 8) { app.buttons["sharing-mode-sealed-\(name)"].isSelected && !summary.exists })
+        XCTAssertEqual(outboundPresentation(personID: fixture.main.personID, token: fixture.peer.token), "off",
+                       "Resuming my share must not turn on the other person's share.")
+        let locationLater = app.buttons["always-explainer-later"]
+        if locationLater.waitForExistence(timeout: 2) {
+            locationLater.tap()
+            XCTAssertTrue(waitUntil(timeout: 8) { !locationLater.exists })
+        }
+        XCTAssertTrue(waitUntil(timeout: 8) { actions.isHittable })
+        actions.tap()
+        let details = app.buttons["presence-grant-details-\(name)"]
+        XCTAssertTrue(details.waitForExistence(timeout: 5))
+        details.tap()
+        XCTAssertTrue(app.alerts.firstMatch.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.alerts.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Home-arrival alert")).firstMatch.exists,
+                      "The full status, alert and suppression disclosure must be readable outside a truncated menu row.")
+        attachScreenshot(of: app, named: "Sharing - Full Home and Away disclosure")
+        app.alerts.buttons.matching(identifier: "presence-grant-details-close").firstMatch.tap()
+        XCTAssertEqual(api.member(personID: fixture.peer.personID, token: fixture.main.token)?["outboundPresenceGranted"] as? Bool, false,
+                       "Reading the explanation must not turn on status sharing.")
+    }
+
+    func testProfilePictureIsStagedAndDiscoveryStaysExplicitAcrossRelaunch() throws {
+        let fixture = try makeConnectedFixture(prefix: "profile-story")
+        defer { api.deleteAccount(token: fixture.peer.token); api.deleteAccount(token: fixture.main.token) }
+        func ownProfile() -> [String: Any] { api.circle(token: fixture.main.token)?["you"] as? [String: Any] ?? [:] }
+        XCTAssertEqual(ownProfile()["discoveryEnabled"] as? Bool, false)
+        let app = launchDevelopmentApp(deviceID: fixture.mainDeviceID, displayName: fixture.mainName,
+                                       arguments: ["-trust.appLanguage", "en"])
+        defer { app.terminate() }
+        XCTAssertTrue(app.buttons["tab-you"].waitForExistence(timeout: 15))
+        app.buttons["tab-you"].tap()
+        XCTAssertEqual(app.buttons["copy-own-handle"].value as? String, "@\(fixture.mainHandle)")
+        let edit = app.buttons["edit-profile-picture"]
+        XCTAssertTrue(edit.waitForExistence(timeout: 8))
+        edit.tap()
+        XCTAssertTrue(app.buttons["avatar-photo-options"].waitForExistence(timeout: 8))
+        app.buttons["Fox icon"].tap()
+        XCTAssertTrue(app.buttons["avatar-save"].isEnabled)
+        XCTAssertNil(ownProfile()["avatar"] as? [String: Any], "Choosing a picture must not save it before Save.")
+        app.buttons["Cancel"].tap()
+        XCTAssertTrue(edit.waitForExistence(timeout: 8))
+        XCTAssertNil(ownProfile()["avatar"] as? [String: Any])
+        edit.tap()
+        XCTAssertTrue(app.buttons["Fox icon"].waitForExistence(timeout: 8))
+        app.buttons["Fox icon"].tap()
+        app.buttons["avatar-save"].tap()
+        XCTAssertTrue(waitUntil(timeout: 10) { (ownProfile()["avatar"] as? [String: Any])?["presetId"] as? String == "fox" })
+        XCTAssertEqual(ownProfile()["discoveryEnabled"] as? Bool, false,
+                       "Saving a picture must never opt the person into discovery.")
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(app.buttons["tab-you"].waitForExistence(timeout: 15))
+        app.buttons["tab-you"].tap()
+        XCTAssertEqual(app.buttons["copy-own-handle"].value as? String, "@\(fixture.mainHandle)")
+        let discovery = app.switches["phone-discovery-toggle"]
+        XCTAssertTrue(discovery.waitForExistence(timeout: 8))
+        XCTAssertFalse(isSwitchOn(discovery))
+        discovery.tap()
+        XCTAssertTrue(waitUntil(timeout: 10) { ownProfile()["discoveryEnabled"] as? Bool == true })
+        XCTAssertTrue(waitUntil(timeout: 5) { discovery.isEnabled })
+        discovery.tap()
+        XCTAssertTrue(waitUntil(timeout: 10) { ownProfile()["discoveryEnabled"] as? Bool == false })
+        XCTAssertEqual(inboundPresentation(personID: fixture.peer.personID, token: fixture.main.token), "off")
+        XCTAssertEqual(outboundPresentation(personID: fixture.peer.personID, token: fixture.main.token), "off")
+        attachScreenshot(of: app, named: "Profile - Saved picture with explicit discovery off and sharing off")
+        edit.tap()
+        XCTAssertTrue(app.buttons["avatar-photo-options"].waitForExistence(timeout: 8))
+        app.buttons["avatar-photo-options"].tap()
+        XCTAssertTrue(app.buttons["avatar-remove"].waitForExistence(timeout: 5))
+        app.buttons["avatar-remove"].tap()
+        XCTAssertNotNil(ownProfile()["avatar"] as? [String: Any], "Removal is staged until Save too.")
+        app.buttons["avatar-save"].tap()
+        XCTAssertTrue(waitUntil(timeout: 10) { ownProfile()["avatar"] as? [String: Any] == nil })
+        XCTAssertEqual(ownProfile()["discoveryEnabled"] as? Bool, false)
+    }
+
     private func makeConnectedFixture(prefix: String) throws -> ConnectedTestFixture {
         let suffix = UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
         let mainName = "RaceMain\(suffix.prefix(6))"
@@ -2087,21 +2501,29 @@ final class TrustRealAPIFeatureTests: XCTestCase {
     }
 
     private func setHomeInUI(_ app: XCUIApplication) {
-        XCTAssertTrue(app.buttons["tab-you"].waitForExistence(timeout: 15))
-        app.buttons["tab-you"].tap()
-        let myLocation = app.buttons["my-location"]
-        XCTAssertTrue(myLocation.waitForExistence(timeout: 10), app.debugDescription)
-        myLocation.tap()
         let setHome = app.buttons["home-set-button"]
+        let permissionStatus = app.staticTexts["location-permission-status"]
+        if !setHome.exists && !permissionStatus.exists {
+            let youTab = app.buttons["tab-you"]
+            XCTAssertTrue(youTab.waitForExistence(timeout: 15))
+            if !youTab.isSelected { youTab.tap() }
+            let myLocation = app.buttons["my-location"]
+            XCTAssertTrue(myLocation.waitForExistence(timeout: 10), app.debugDescription)
+            myLocation.tap()
+        }
         XCTAssertTrue(setHome.waitForExistence(timeout: 10), app.debugDescription)
         if !setHome.isHittable { app.swipeUp() }
         setHome.tap()
-        let permission = app.alerts.firstMatch
-        if permission.waitForExistence(timeout: 2) {
-            let whileUsing = permission.buttons.matching(NSPredicate(format: "label CONTAINS[c] %@", "While Using")).firstMatch
-            let allowOnce = permission.buttons.matching(NSPredicate(format: "label CONTAINS[c] %@", "Allow Once")).firstMatch
-            if whileUsing.exists { whileUsing.tap() }
-            else if allowOnce.exists { allowOnce.tap() }
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        let permissionButtons = [app.alerts.buttons, springboard.alerts.buttons]
+        let whileUsing = permissionButtons.map {
+            $0.matching(NSPredicate(format: "label CONTAINS[c] %@", "While Using")).firstMatch
+        }
+        // Native location permission may be exposed by Springboard rather than
+        // the target app. Observe both instead of timing out behind its alert.
+        if waitUntil(timeout: 5, condition: { whileUsing.contains(where: \.exists) }),
+           let action = whileUsing.first(where: \.exists) {
+            action.tap()
         }
         let status = app.staticTexts["home-place-status"]
         XCTAssertTrue(waitUntil(timeout: 30) { status.exists && status.label.localizedCaseInsensitiveContains("set") }, app.debugDescription)
@@ -2270,20 +2692,24 @@ final class TrustRealAPIFeatureTests: XCTestCase {
 
     private func allowBackgroundLocationIfPrompted(in app: XCUIApplication) {
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
-        let explainerAction = app.buttons.matching(
-            NSPredicate(format: "label CONTAINS[c] %@", "Allow background location")
-        ).firstMatch
-        guard explainerAction.waitForExistence(timeout: 2) else { return }
-        explainerAction.tap()
+        let locationSheetWasOpen = app.staticTexts["location-permission-status"].exists
+        let primaryActions = [
+            app.buttons["always-explainer-allow"],
+            app.buttons["home-permission-action"],
+            app.buttons["location-permission-action"]
+        ]
+        guard waitUntil(timeout: 3, condition: {
+            primaryActions.contains { $0.exists && $0.isHittable }
+        }), let primaryAction = primaryActions.first(where: { $0.exists && $0.isHittable }) else { return }
 
-        let appWhileUsing = app.alerts.buttons.matching(
-            NSPredicate(format: "label CONTAINS[c] %@", "While Using")
-        ).firstMatch
-        let systemWhileUsing = springboard.alerts.buttons.matching(
-            NSPredicate(format: "label CONTAINS[c] %@", "While Using")
-        ).firstMatch
-        XCTAssertTrue(waitUntil(timeout: 8) { appWhileUsing.exists || systemWhileUsing.exists }, "Trust should request foreground location before upgrading to Always.\n\(app.debugDescription)\n\(springboard.debugDescription)")
-        (appWhileUsing.exists ? appWhileUsing : systemWhileUsing).tap()
+        // Use only the controls owned by the location flow. You also contains a
+        // separate Notifications “Open iOS Settings” button.
+        if primaryAction.label.localizedCaseInsensitiveContains("Settings") {
+            primaryAction.tap()
+            selectAlwaysLocationInSystemSettings(app: app, preserveLocationSheet: locationSheetWasOpen)
+            return
+        }
+        primaryAction.tap()
 
         let appAlways = app.alerts.buttons.matching(
             NSPredicate(format: "label CONTAINS[c] %@", "Always")
@@ -2291,8 +2717,201 @@ final class TrustRealAPIFeatureTests: XCTestCase {
         let systemAlways = springboard.alerts.buttons.matching(
             NSPredicate(format: "label CONTAINS[c] %@", "Always")
         ).firstMatch
+        let positiveWhileUsingPredicate = NSPredicate(
+            format: "label CONTAINS[c] %@ AND NOT label BEGINSWITH[c] %@",
+            "While Using", "Keep"
+        )
+        let appWhileUsing = app.alerts.buttons.matching(positiveWhileUsingPredicate).firstMatch
+        let systemWhileUsing = springboard.alerts.buttons.matching(positiveWhileUsingPredicate).firstMatch
+        // Some iOS authorization sheets offer an existing Always upgrade next
+        // to "Keep Only While Using". Prefer the requested stronger choice
+        // before considering a foreground-only step.
+        let nativeChoiceAppeared = waitUntil(timeout: 8) {
+            appAlways.exists || systemAlways.exists || appWhileUsing.exists || systemWhileUsing.exists
+        }
+        if !nativeChoiceAppeared {
+            // After a person previously chose Keep Only While Using, iOS may
+            // not present another permission sheet. The same identified
+            // location control changes to the Settings recovery action.
+            let settingsAction = waitForLocationSettingsAction(in: app, timeout: 5)
+            XCTAssertNotNil(settingsAction,
+                             "Without a native authorization choice, Trust should offer its location-scoped Settings recovery action.\n\(app.debugDescription)\n\(springboard.debugDescription)")
+            settingsAction?.tap()
+            selectAlwaysLocationInSystemSettings(app: app, preserveLocationSheet: locationSheetWasOpen)
+            return
+        }
+        if appAlways.exists || systemAlways.exists {
+            (appAlways.exists ? appAlways : systemAlways).tap()
+            return
+        }
+
+        XCTAssertTrue(waitUntil(timeout: 8) { appWhileUsing.exists || systemWhileUsing.exists },
+                      "The foreground location prompt should offer an affirmative While Using choice.\n\(app.debugDescription)\n\(springboard.debugDescription)")
+        (appWhileUsing.exists ? appWhileUsing : systemWhileUsing).tap()
         XCTAssertTrue(waitUntil(timeout: 12) { appAlways.exists || systemAlways.exists }, "Accepting foreground access should lead to the requested Always location choice.\n\(app.debugDescription)\n\(springboard.debugDescription)")
         (appAlways.exists ? appAlways : systemAlways).tap()
+    }
+
+    private func waitForLocationSettingsAction(in app: XCUIApplication, timeout: TimeInterval) -> XCUIElement? {
+        let locationActions = [
+            app.buttons["always-explainer-allow"],
+            app.buttons["home-permission-action"],
+            app.buttons["location-permission-action"]
+        ]
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if let action = locationActions.first(where: {
+                $0.exists && $0.isHittable && $0.label.localizedCaseInsensitiveContains("Settings")
+            }) {
+                return action
+            }
+            Thread.sleep(forTimeInterval: 0.25)
+        }
+        return locationActions.first(where: {
+            $0.exists && $0.isHittable && $0.label.localizedCaseInsensitiveContains("Settings")
+        })
+    }
+
+    private func selectAlwaysLocationInSystemSettings(app: XCUIApplication, preserveLocationSheet: Bool) {
+        let tabIdentifiers = ["tab-circle", "tab-sharing", "tab-log", "tab-you"]
+        let originalTabIdentifier = tabIdentifiers.first { identifier in
+            let tab = app.buttons[identifier]
+            return tab.exists && tab.isSelected
+        }
+        let settings = XCUIApplication(bundleIdentifier: "com.apple.Preferences")
+        XCTAssertTrue(waitUntil(timeout: 12) { settings.state == .runningForeground },
+                      "Open Settings should present the native Trust settings page.\n\(settings.debugDescription)")
+
+        let locationRow = settings.descendants(matching: .any).matching(
+            NSPredicate(format: "label CONTAINS[c] %@", "Location")
+        ).firstMatch
+        if waitUntil(timeout: 4) { locationRow.exists && locationRow.isHittable } {
+            locationRow.tap()
+        } else {
+            openTrustLocationServicesPermission(in: settings)
+        }
+
+        let alwaysOption = settings.descendants(matching: .any).matching(
+            NSPredicate(format: "label ==[c] %@", "Always")
+        ).firstMatch
+        XCTAssertTrue(waitUntil(timeout: 10) { alwaysOption.exists && alwaysOption.isHittable },
+                      "Native Location settings should offer the Always authorization choice.\n\(settings.debugDescription)")
+        alwaysOption.tap()
+
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        let confirmAlways = springboard.alerts.buttons.matching(
+            NSPredicate(format: "label CONTAINS[c] %@", "Always")
+        ).firstMatch
+        if waitUntil(timeout: 3) { confirmAlways.exists && confirmAlways.isHittable } {
+            confirmAlways.tap()
+        }
+
+        app.activate()
+        let later = app.buttons["always-explainer-later"]
+        if later.waitForExistence(timeout: 2) { later.tap() }
+
+        let youTab = app.buttons["tab-you"]
+        if youTab.exists && !youTab.isSelected { youTab.tap() }
+        let myLocation = app.buttons["my-location"]
+        if !app.staticTexts["location-permission-status"].exists, myLocation.waitForExistence(timeout: 8) {
+            myLocation.tap()
+        }
+        let permission = app.staticTexts["location-permission-status"]
+        XCTAssertTrue(waitUntil(timeout: 15) {
+            permission.exists && permission.label.localizedCaseInsensitiveContains("always")
+        }, "Returning from iOS Settings after choosing Always should update Trust's visible permission status.\n\(app.debugDescription)")
+
+        let done = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] %@", "Done")).firstMatch
+        if done.exists && !preserveLocationSheet { done.tap() }
+        if let originalTabIdentifier, originalTabIdentifier != "tab-you" {
+            let originalTab = app.buttons[originalTabIdentifier]
+            if originalTab.exists && !originalTab.isSelected { originalTab.tap() }
+        }
+    }
+
+    private func openTrustLocationServicesPermission(in settings: XCUIApplication) {
+        // UIApplication.openSettingsURLString can resume an old Apps-search
+        // stack on this simulator runtime. Start at the native Settings root,
+        // then use the public Privacy & Security → Location Services route.
+        settings.terminate()
+        settings.activate()
+        XCTAssertTrue(waitUntil(timeout: 10) { settings.state == .runningForeground },
+                      "Native Settings should return to its root before navigating Location Services.\n\(settings.debugDescription)")
+
+        let privacy = settings.buttons.matching(
+            NSPredicate(format: "label CONTAINS[c] %@", "Privacy & Security")
+        ).firstMatch
+        for _ in 0..<6 where !privacy.exists || !privacy.isHittable {
+            settings.swipeUp()
+        }
+        XCTAssertTrue(waitForStableSettingsRow(privacy, timeout: 10),
+                      "Settings root should expose Privacy & Security.\n\(settings.debugDescription)")
+        guard privacy.exists && privacy.isHittable else { return }
+        privacy.tap()
+
+        let locationServices = settings.buttons.matching(
+            NSPredicate(format: "label CONTAINS[c] %@", "Location Services")
+        ).firstMatch
+        XCTAssertTrue(waitUntil(timeout: 10) { locationServices.exists && locationServices.isHittable },
+                      "Privacy & Security should expose Location Services.\n\(settings.debugDescription)")
+        guard locationServices.exists && locationServices.isHittable else { return }
+        locationServices.tap()
+
+        let trustByIdentifier = settings.buttons["com.collapsetechnologies.trust"]
+        let trustByName = settings.descendants(matching: .any).matching(
+            NSPredicate(format: "label ==[c] %@", "Trust")
+        ).firstMatch
+        for _ in 0..<8 where
+            (!trustByIdentifier.exists || !trustByIdentifier.isHittable)
+                && (!trustByName.exists || !trustByName.isHittable) {
+            settings.swipeUp()
+        }
+        let trustRow = trustByIdentifier.exists ? trustByIdentifier : trustByName
+        XCTAssertTrue(waitForStableSettingsRow(trustRow, timeout: 10),
+                      "Location Services should contain the Trust app row.\n\(settings.debugDescription)")
+        guard trustRow.exists && trustRow.isHittable else { return }
+        trustRow.tap()
+        let alwaysOption = settings.descendants(matching: .any).matching(
+            NSPredicate(format: "label ==[c] %@", "Always")
+        ).firstMatch
+        let trustPageDidOpen = waitUntil(timeout: 8) {
+            !trustByIdentifier.exists && !trustByName.exists && alwaysOption.exists && alwaysOption.isHittable
+        }
+        if !trustPageDidOpen && trustRow.exists && trustRow.isHittable {
+            // If iOS left the same result row in place, allow one idempotent
+            // center tap after checking its geometry again.
+            trustRow.tap()
+        }
+        XCTAssertTrue(waitUntil(timeout: 10) {
+            !trustByIdentifier.exists && !trustByName.exists && alwaysOption.exists && alwaysOption.isHittable
+        }, "Selecting Trust in Location Services should open its app-specific authorization choices.\n\(settings.debugDescription)")
+    }
+
+    private func waitForStableSettingsRow(_ row: XCUIElement, timeout: TimeInterval) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        var priorFrame: CGRect?
+        var stableSamples = 0
+        while Date() < deadline {
+            if row.exists && row.isHittable {
+                let frame = row.frame
+                if let priorFrame,
+                   abs(priorFrame.minX - frame.minX) < 1,
+                   abs(priorFrame.minY - frame.minY) < 1,
+                   abs(priorFrame.width - frame.width) < 1,
+                   abs(priorFrame.height - frame.height) < 1 {
+                    stableSamples += 1
+                    if stableSamples >= 2 { return true }
+                } else {
+                    stableSamples = 0
+                }
+                priorFrame = frame
+            } else {
+                priorFrame = nil
+                stableSamples = 0
+            }
+            Thread.sleep(forTimeInterval: 0.2)
+        }
+        return stableSamples >= 2 && row.exists && row.isHittable
     }
 
     private func scrollUpUntilHittable(_ element: XCUIElement, in app: XCUIApplication, maxSwipes: Int = 6) -> Bool {

@@ -188,6 +188,7 @@
 "done" = "完了";
 "edit_phone" = "編集";
 "edit_profile_picture" = "プロフィール写真を編集";
+"enable_alerts" = "通知を有効にする";
 "enter_a_code" = "コードを入力";
 "enter_handle" = "続けるにはハンドルを入力してください。";
 "enter_phone" = "電話番号を入力してください。";
@@ -311,7 +312,15 @@
 "not_sharing" = "共有していません";
 "not_sharing_with_you" = "あなたに共有していません";
 "notification" = "通知";
+"notifications_allowed" = "許可済み";
+"notifications_body" = "TrustはLookと共有中の帰宅について通知をリクエストすることがあります。通知の配信は保証されません。アクティビティにはLookとViewが記録されます。";
+"notifications_check_settings" = "設定を確認";
+"notifications_heading" = "通知";
+"notifications_not_enabled" = "未設定";
 "notifications_off" = "設定で通知がオフです。Lookは引き続きログに表示されます。";
+"notifications_off_in_settings" = "設定でオフ";
+"notifications_quietly_allowed" = "静かに配信";
+"notifications_requesting" = "アクセスをリクエスト中…";
 "now" = "今";
 "off" = "オフ";
 "offline" = "オフライン";
@@ -375,6 +384,7 @@
 "presence" = "ステータス";
 "presence_away" = "外出中";
 "presence_away_copy" = "自宅にいないとき「外出」と表示されます。";
+"presence_grant_details" = "自宅／外出について";
 "presence_grant_explanation" = "共有するのはステータスのみで、位置情報ではありません。共有中は自宅到着の通知も許可します。オフ、一時停止、非表示では通知されません。";
 "presence_grant_label" = "%@に自宅か外出中かを知らせる";
 "presence_grant_updated" = "自宅／外出ステータスの共有設定を更新しました。";
@@ -409,6 +419,7 @@
 "request_sent" = "リクエストを送信しました";
 "resend_code" = "コードを再送信";
 "restore_purchases" = "購入を復元";
+"resume_paused_mode" = "%@に戻す";
 "retry" = "再試行";
 "review_requests" = "リクエストを確認";
 "row_available" = "%@ · Available";

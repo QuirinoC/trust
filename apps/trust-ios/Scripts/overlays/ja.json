@@ -262,6 +262,7 @@
   "manage_sharing": "共有を管理",
   "presence": "ステータス",
   "presence_grant_label": "%@に自宅か外出中かを知らせる",
+  "presence_grant_details": "自宅／外出について",
   "presence_grant_explanation": "共有するのはステータスのみで、位置情報ではありません。共有中は自宅到着の通知も許可します。オフ、一時停止、非表示では通知されません。",
   "presence_grant_updated": "自宅／外出ステータスの共有設定を更新しました。",
   "presence_note": "自宅／外出／非表示は、位置情報のSealed／Availableとは別の設定です。",
@@ -282,6 +283,15 @@
   "see_plus": "Plusを見る",
   "you_have_plus": "Plusを利用中です。",
   "settings": "設定",
+  "notifications_heading": "通知",
+  "notifications_body": "TrustはLookと共有中の帰宅について通知をリクエストすることがあります。通知の配信は保証されません。アクティビティにはLookとViewが記録されます。",
+  "notifications_not_enabled": "未設定",
+  "notifications_off_in_settings": "設定でオフ",
+  "notifications_allowed": "許可済み",
+  "notifications_quietly_allowed": "静かに配信",
+  "notifications_check_settings": "設定を確認",
+  "notifications_requesting": "アクセスをリクエスト中…",
+  "enable_alerts": "通知を有効にする",
   "look_notifications": "Look通知",
   "look_notifications_body": "SealedでのLookは通知をリクエストします。Viewはログに記録されます。",
   "allow_notifications": "通知を許可",
@@ -533,5 +543,6 @@
   "phone_request_pending": "しばらくお待ちください…",
   "phone_send_countdown": "%@後にコードを送信",
   "phone_resend_countdown": "%@後に再送信",
-  "phone_retry_explanation": "%@（現地時間）に別のコードをリクエストできます。番号の編集は引き続き可能です。"
+  "phone_retry_explanation": "%@（現地時間）に別のコードをリクエストできます。番号の編集は引き続き可能です。",
+  "resume_paused_mode": "%@に戻す"
 }

@@ -188,6 +188,7 @@
 "done" = "Erledigt";
 "edit_phone" = "Bearbeiten";
 "edit_profile_picture" = "Profilbild bearbeiten";
+"enable_alerts" = "Hinweise aktivieren";
 "enter_a_code" = "Geben Sie einen Code ein";
 "enter_handle" = "Geben Sie einen Handle ein, um fortzufahren.";
 "enter_phone" = "Geben Sie eine Telefonnummer ein.";
@@ -311,7 +312,15 @@
 "not_sharing" = "Nicht teilen";
 "not_sharing_with_you" = "Nicht mit Ihnen teilen";
 "notification" = "Benachrichtigung";
+"notifications_allowed" = "Erlaubt";
+"notifications_body" = "Trust kann Hinweise für Looks und geteilte Ankünfte zu Hause anfordern. Die Zustellung ist nicht garantiert. In der Aktivität werden Looks und Views aufgezeichnet.";
+"notifications_check_settings" = "Einstellungen prüfen";
+"notifications_heading" = "Benachrichtigungen";
+"notifications_not_enabled" = "Nicht aktiviert";
 "notifications_off" = "Benachrichtigungen sind in den Einstellungen deaktiviert. Sieht immer noch im Protokoll aus.";
+"notifications_off_in_settings" = "In den Einstellungen deaktiviert";
+"notifications_quietly_allowed" = "Leise erlaubt";
+"notifications_requesting" = "Zugriff wird angefragt…";
 "now" = "Jetzt";
 "off" = "Aus";
 "offline" = "Offline";
@@ -375,6 +384,7 @@
 "presence" = "Gegenwart";
 "presence_away" = "Weg";
 "presence_away_copy" = "Wird als „Abwesend“ angezeigt, wenn Sie nicht zu Hause sind.";
+"presence_grant_details" = "Über Zuhause und Unterwegs";
 "presence_grant_explanation" = "Status, kein Standort. Bei aktiver Freigabe ist auch ein Hinweis bei Ankunft zu Hause möglich. Aus, Pause und Versteckt unterdrücken ihn.";
 "presence_grant_label" = "Lass %@ wissen, wenn ich zu Hause oder unterwegs bin";
 "presence_grant_updated" = "Einstellung für Zuhause/Abwesend aktualisiert.";
@@ -409,6 +419,7 @@
 "request_sent" = "Anfrage gesendet";
 "resend_code" = "Code erneut senden";
 "restore_purchases" = "Einkäufe wiederherstellen";
+"resume_paused_mode" = "Zu %@ zurückkehren";
 "retry" = "Wiederholen";
 "review_requests" = "Anfragen ansehen";
 "row_available" = "%@ · Verfügbar";

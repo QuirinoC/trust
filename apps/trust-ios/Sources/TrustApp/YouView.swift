@@ -1,10 +1,12 @@
 import SwiftUI
 import TrustCore
+import UserNotifications
 
 /// You — profile, membership, personal location settings, and account.
 struct YouView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.trustPalette) private var palette
+    @Environment(\.scenePhase) private var scenePhase
     @AppStorage(TrustAppearance.storageKey) private var appearance = TrustAppearance.system.rawValue
     @AppStorage(TrustAppLanguage.storageKey) private var appLanguage = TrustAppLanguage.system.rawValue
     @State private var showingDeleteAccount = false
@@ -33,6 +35,9 @@ struct YouView: View {
 
                     TrustSectionHeading(TrustCopy.preferences)
                         .padding(.bottom, 4)
+                    NotificationsSettingsSection(notifier: model.receipts)
+                        .environmentObject(model)
+                        .padding(.bottom, 18)
                     appearanceRow
                         .padding(.bottom, 18)
                     languageRow
@@ -53,9 +58,19 @@ struct YouView: View {
                 .padding(.bottom, 28)
                 .trustReadableWidth()
             }
+            .accessibilityIdentifier("you-scroll")
+            .clipped()
             legalLinks
         }
         .background(palette.paper.ignoresSafeArea())
+        .onChange(of: model.selectedTab) { _, tab in
+            if tab == .you { model.refreshNotificationStatus() }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active, model.selectedTab == .you {
+                model.refreshNotificationStatus()
+            }
+        }
         .confirmationDialog(TrustCopy.deleteAccountConfirm, isPresented: $showingDeleteAccount, titleVisibility: .visible) {
             Button(TrustCopy.deleteAccount, role: .destructive) {
                 Task { await model.deleteAccount() }
@@ -73,6 +88,7 @@ struct YouView: View {
                 .presentationDetents([.large])
         }
         .task {
+            if model.selectedTab == .you { model.refreshNotificationStatus() }
             guard !model.isDemoMode else { return }
             if let signed = await model.store.refreshEntitlement() {
                 await model.syncCircleEntitlement(signedTransactionInfo: signed)
@@ -85,16 +101,30 @@ struct YouView: View {
             Rectangle()
                 .fill(palette.line)
                 .frame(height: 1)
-            HStack(spacing: 8) {
-                Link(TrustCopy.privacy, destination: AppConfiguration.privacyURL)
-                    .frame(minHeight: 44)
-                Text("·")
-                Link(TrustCopy.terms, destination: AppConfiguration.termsURL)
-                    .frame(minHeight: 44)
-                Text("·")
-                Link(TrustCopy.support, destination: AppConfiguration.supportURL)
-                    .frame(minHeight: 44)
-                    .accessibilityIdentifier("support-link")
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) {
+                    Link(TrustCopy.privacy, destination: AppConfiguration.privacyURL)
+                        .frame(minHeight: 44)
+                        .fixedSize(horizontal: true, vertical: false)
+                    Text("·")
+                    Link(TrustCopy.terms, destination: AppConfiguration.termsURL)
+                        .frame(minHeight: 44)
+                        .fixedSize(horizontal: true, vertical: false)
+                    Text("·")
+                    Link(TrustCopy.support, destination: AppConfiguration.supportURL)
+                        .frame(minHeight: 44)
+                        .fixedSize(horizontal: true, vertical: false)
+                        .accessibilityIdentifier("support-link")
+                }
+                VStack(spacing: 0) {
+                    Link(TrustCopy.privacy, destination: AppConfiguration.privacyURL)
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                    Link(TrustCopy.terms, destination: AppConfiguration.termsURL)
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                    Link(TrustCopy.support, destination: AppConfiguration.supportURL)
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                        .accessibilityIdentifier("support-link")
+                }
             }
             .font(TrustTheme.ui(12))
             .foregroundStyle(palette.muted)
@@ -337,6 +367,7 @@ struct YouView: View {
                     .fixedSize(horizontal: false, vertical: true)
                 Button(TrustCopy.openIOSSettings) { model.openSystemSettings() }
                     .buttonStyle(TrustOutlineButtonStyle(compact: true))
+                    .accessibilityIdentifier("location-permission-action")
             } else if !model.location.hasAlways {
                 Text(model.location.isPrecise ? TrustCopy.keptWhileUsing : TrustCopy.locationReducedAccuracy)
                     .trustFont(12)
@@ -347,6 +378,7 @@ struct YouView: View {
                     else { model.requestAlwaysLocation() }
                 }
                 .buttonStyle(TrustOutlineButtonStyle(compact: true))
+                .accessibilityIdentifier("location-permission-action")
             }
         }
     }
@@ -378,8 +410,12 @@ struct YouView: View {
                     .trustFont(12)
                     .foregroundStyle(palette.muted)
                     .fixedSize(horizontal: false, vertical: true)
-                Button(TrustCopy.allowAlways) { model.requestAlwaysLocation() }
+                Button(model.location.needsSystemSettings ? TrustCopy.openIOSSettings : TrustCopy.allowAlways) {
+                    if model.location.needsSystemSettings { model.openSystemSettings() }
+                    else { model.requestAlwaysLocation() }
+                }
                     .buttonStyle(TrustOutlineButtonStyle(compact: true))
+                    .accessibilityIdentifier("home-permission-action")
             }
             HStack(spacing: 12) {
                 Button(TrustCopy.setHomeHere) { model.setHomeFromCurrentLocation() }
@@ -435,6 +471,71 @@ struct YouView: View {
             RoundedRectangle(cornerRadius: TrustTheme.radius, style: .continuous)
                 .stroke(palette.line, lineWidth: 1)
         )
+    }
+}
+
+private struct NotificationsSettingsSection: View {
+    @EnvironmentObject private var model: AppModel
+    @Environment(\.trustPalette) private var palette
+    @ObservedObject var notifier: LookReceiptNotifier
+
+    private var statusLabel: String {
+        switch notifier.authorization {
+        case .notDetermined: return TrustCopy.notificationsNotEnabled
+        case .denied: return TrustCopy.notificationsOffInSettings
+        case .authorized: return TrustCopy.notificationsAllowed
+        case .provisional: return TrustCopy.notificationsQuietlyAllowed
+        @unknown default: return TrustCopy.notificationsCheckSettings
+        }
+    }
+
+    private var needsPermissionPrompt: Bool {
+        notifier.authorization == .notDetermined
+    }
+
+    var body: some View {
+        TrustCard(fill: palette.surface) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 10) {
+                    Image(systemName: "bell.badge")
+                        .font(.system(size: 19))
+                        .foregroundStyle(palette.accent)
+                        .frame(width: 28)
+                        .accessibilityHidden(true)
+                    Text(TrustCopy.notificationsHeading)
+                        .trustFont(16, weight: .semibold)
+                        .foregroundStyle(palette.ink)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Text(TrustCopy.notificationsBody)
+                    .trustFont(13)
+                    .foregroundStyle(palette.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text(statusLabel)
+                    .trustFont(13, weight: .semibold)
+                    .foregroundStyle(palette.ink)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("notifications-permission-status")
+
+                Button {
+                    if needsPermissionPrompt {
+                        Task { await model.requestNotifications() }
+                    } else {
+                        model.openSystemSettings()
+                    }
+                } label: {
+                    Text(model.isRequestingNotifications ? TrustCopy.notificationsRequesting :
+                            (needsPermissionPrompt ? TrustCopy.enableAlerts : TrustCopy.openIOSSettings))
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(TrustOutlineButtonStyle(compact: true))
+                .disabled(model.isRequestingNotifications || (needsPermissionPrompt && model.isDemoMode))
+                .accessibilityIdentifier(needsPermissionPrompt ? "enable-notifications" : "open-notification-settings")
+            }
+        }
     }
 }
 

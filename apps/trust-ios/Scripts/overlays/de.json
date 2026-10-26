@@ -220,6 +220,7 @@
   "manage_sharing": "Teilen verwalten",
   "presence": "Gegenwart",
   "presence_grant_label": "Lass %@ wissen, wenn ich zu Hause oder unterwegs bin",
+  "presence_grant_details": "Über Zuhause und Unterwegs",
   "presence_grant_explanation": "Status, kein Standort. Bei aktiver Freigabe ist auch ein Hinweis bei Ankunft zu Hause möglich. Aus, Pause und Versteckt unterdrücken ihn.",
   "presence_grant_updated": "Einstellung für Zuhause/Abwesend aktualisiert.",
   "presence_note": "Zuhause / Abwesend / Versteckt – unabhängig davon, ob der Standort versiegelt oder verfügbar ist.",
@@ -240,6 +241,15 @@
   "see_plus": "Siehe Plus",
   "you_have_plus": "Du hast Plus.",
   "settings": "Einstellungen",
+  "notifications_heading": "Benachrichtigungen",
+  "notifications_body": "Trust kann Hinweise für Looks und geteilte Ankünfte zu Hause anfordern. Die Zustellung ist nicht garantiert. In der Aktivität werden Looks und Views aufgezeichnet.",
+  "notifications_not_enabled": "Nicht aktiviert",
+  "notifications_off_in_settings": "In den Einstellungen deaktiviert",
+  "notifications_allowed": "Erlaubt",
+  "notifications_quietly_allowed": "Leise erlaubt",
+  "notifications_check_settings": "Einstellungen prüfen",
+  "notifications_requesting": "Zugriff wird angefragt…",
+  "enable_alerts": "Hinweise aktivieren",
   "look_notifications": "Schauen Sie sich Benachrichtigungen an",
   "look_notifications_body": "Sealed Looks fordern eine Benachrichtigung an. Aufrufe werden protokolliert.",
   "allow_notifications": "Benachrichtigungen zulassen",
@@ -533,5 +543,6 @@
   "phone_request_pending": "Bitte warten…",
   "phone_send_countdown": "Code senden in %@",
   "phone_resend_countdown": "Erneut senden in %@",
-  "phone_retry_explanation": "Du kannst ab %@ (Ortszeit) einen neuen Code anfordern. Du kannst die Nummer weiterhin ändern."
+  "phone_retry_explanation": "Du kannst ab %@ (Ortszeit) einen neuen Code anfordern. Du kannst die Nummer weiterhin ändern.",
+  "resume_paused_mode": "Zu %@ zurückkehren"
 }

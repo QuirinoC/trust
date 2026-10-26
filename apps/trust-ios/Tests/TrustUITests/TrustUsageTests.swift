@@ -50,7 +50,7 @@ final class TrustUsageTests: XCTestCase {
                 }
                 XCTAssertEqual(viewportResult, .completed,
                                "The entire pin must remain above the People panel at \(detent).")
-                XCTAssertGreaterThanOrEqual(handle.frame.height, 44)
+                XCTAssertGreaterThanOrEqual(handle.frame.height, 44 - 1e-6)
                 let capture = XCTAttachment(screenshot: app.screenshot())
                 capture.name = "People viewport - \(detent) - \(dark ? "dark" : "light") - \(textSize)"
                 capture.lifetime = .keepAlways
@@ -223,6 +223,97 @@ final class TrustUsageTests: XCTestCase {
         remove.tap()
         tapConfirmationAction("remove-person-confirm", in: app)
         XCTAssertFalse(app.descendants(matching: .any)["sharing-mode-group-maya"].waitForExistence(timeout: 2))
+    }
+
+    func testPauseChoicesAndCancelRemainReachableAtAccessibilityText() {
+        for (dark, language) in [(false, "en"), (true, "de")] {
+            let app = launchDemo(dark: dark, contentSize: "UICTContentSizeCategoryAccessibilityXXXL", language: language)
+            defer { app.terminate() }
+            XCTAssertTrue(app.buttons["tab-sharing"].waitForExistence(timeout: 15))
+            app.buttons["tab-sharing"].tap()
+            let actions = app.buttons["sharing-actions-maya"]
+            XCTAssertTrue(actions.waitForExistence(timeout: 8))
+            let sharingScroll = app.scrollViews["sharing-scroll"]
+            for _ in 0..<8 where !actions.isHittable {
+                sharingScroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.7))
+                    .press(forDuration: 0.1, thenDragTo: sharingScroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.45)))
+            }
+            if !actions.isHittable {
+                add(XCTAttachment(screenshot: app.screenshot()))
+                add(XCTAttachment(string: app.debugDescription))
+            }
+            XCTAssertTrue(actions.isHittable)
+            actions.tap()
+            let pause = app.buttons["pause-sharing-maya"]
+            XCTAssertTrue(pause.waitForExistence(timeout: 5))
+            pause.tap()
+            let pauseScroll = app.scrollViews["pause-sharing-scroll"]
+            let firstDuration = app.buttons["pause-duration-3600"]
+            let sheetAppeared = XCTNSPredicateExpectation(
+                predicate: NSPredicate { _, _ in pauseScroll.exists && firstDuration.exists },
+                object: nil
+            )
+            guard XCTWaiter.wait(for: [sheetAppeared], timeout: 6) == .completed else {
+                let screenshot = XCTAttachment(screenshot: app.screenshot())
+                screenshot.name = "Pause sheet did not open - \(language) - \(dark ? "dark" : "light")"
+                screenshot.lifetime = .keepAlways
+                add(screenshot)
+                let hierarchy = XCTAttachment(string: app.debugDescription)
+                hierarchy.name = "Pause sheet missing accessibility hierarchy"
+                hierarchy.lifetime = .keepAlways
+                add(hierarchy)
+                let geometry = XCTAttachment(string: "first duration=\(firstDuration.frame); pause scroll=\(pauseScroll.frame); app window=\(app.windows.firstMatch.frame)")
+                geometry.name = "Pause sheet opening target and viewport geometry"
+                geometry.lifetime = .keepAlways
+                add(geometry)
+                XCTFail("Tapping the native Pause action should open its duration sheet before any scrolling.\n\(app.debugDescription)")
+                app.terminate()
+                continue
+            }
+            let initialPauseViewport = pauseScroll.frame.intersection(app.windows.firstMatch.frame)
+            let initialCapture = XCTAttachment(screenshot: app.screenshot())
+            initialCapture.name = "Pause first open - \(language) - \(dark ? "dark" : "light") - accessibility text"
+            initialCapture.lifetime = .keepAlways
+            add(initialCapture)
+            XCTAssertTrue(isFullyVisible(firstDuration, within: initialPauseViewport),
+                          "The first Pause duration should be fully visible on the initial sheet without scrolling.")
+            XCTAssertGreaterThanOrEqual(firstDuration.frame.height, 44 - 1e-6,
+                                        "The first Pause duration should retain a 44-point target on first open.")
+
+            let durations = [3600, 28800, 86400, 172800, 259200]
+            var durationVisibilityFailed = false
+            for duration in durations {
+                let choice = app.buttons["pause-duration-\(duration)"]
+                if !scrollPauseSheet(to: choice, in: app) {
+                    XCTFail("Every pause duration should be fully visible inside the Pause sheet at maximum text size.\n\(app.debugDescription)")
+                    durationVisibilityFailed = true
+                    break
+                }
+                XCTAssertGreaterThanOrEqual(choice.frame.height, 44)
+            }
+            if durationVisibilityFailed {
+                app.terminate()
+                continue
+            }
+            let capture = XCTAttachment(screenshot: app.screenshot())
+            capture.name = "Pause - Accessibility text - \(language) - \(dark ? "dark" : "light")"
+            capture.lifetime = .keepAlways
+            add(capture)
+            let cancel = app.buttons["pause-sharing-cancel"]
+            guard scrollPauseSheet(to: cancel, in: app) else {
+                XCTFail("Cancel should remain fully visible inside the Pause sheet after the duration list.\n\(app.debugDescription)")
+                app.terminate()
+                continue
+            }
+            let cancelCapture = XCTAttachment(screenshot: app.screenshot())
+            cancelCapture.name = "Pause - Cancel reachable - \(language) - \(dark ? "dark" : "light")"
+            cancelCapture.lifetime = .keepAlways
+            add(cancelCapture)
+            cancel.tap()
+            XCTAssertTrue(actions.waitForExistence(timeout: 5))
+            XCTAssertTrue(app.buttons["sharing-mode-sealed-maya"].isSelected,
+                          "Inspecting or cancelling Pause must not change sharing.")
+        }
     }
 
     func testSharingCompactRowGeometryAtStandardTextAcrossShippedLocales() {
@@ -521,6 +612,40 @@ final class TrustUsageTests: XCTestCase {
         XCTAssertTrue(app.buttons["avatar-save"].isEnabled)
         app.buttons["avatar-save"].tap()
         XCTAssertTrue(app.descendants(matching: .any)["support-link"].waitForExistence(timeout: 5))
+    }
+
+    func testNotificationPreferencesRemainReachableWithoutPrompting() {
+        for (dark, language, accessibility) in [(false, "en", false), (true, "de", true)] {
+            let app = launchDemo(dark: dark, route: "you",
+                                 contentSize: accessibility ? "UICTContentSizeCategoryAccessibilityXXXL" : nil,
+                                 language: language)
+            XCTAssertTrue(app.buttons["tab-you"].waitForExistence(timeout: 20))
+            let status = app.staticTexts["notifications-permission-status"]
+            XCTAssertTrue(status.waitForExistence(timeout: 5))
+            XCTAssertTrue(scrollYouContent(to: status, direction: .down, in: app))
+            let viewport = app.scrollViews["you-scroll"].frame
+            XCTAssertTrue(isFullyVisible(status, within: viewport), "The complete notification status should be inside the You scroll viewport.")
+            let enable = app.buttons["enable-notifications"]
+            let settings = app.buttons["open-notification-settings"]
+            let action = enable.exists ? enable : settings
+            XCTAssertTrue(scrollYouContent(to: action, direction: .down, in: app))
+            XCTAssertTrue(isFullyVisible(action, within: viewport), "The full notification action should be visible, not clipped by the scroll viewport.")
+            XCTAssertGreaterThanOrEqual(action.frame.width, 43.99)
+            XCTAssertGreaterThanOrEqual(action.frame.height, 43.99)
+            XCTAssertFalse(app.alerts.firstMatch.exists, "Opening You must not request notification permission.")
+            XCTAssertFalse(XCUIApplication(bundleIdentifier: "com.apple.springboard").alerts.firstMatch.exists)
+            if enable.exists {
+                XCTAssertFalse(enable.isEnabled, "The offline demo must not request native notification permission.")
+            }
+            let support = app.descendants(matching: .any)["support-link"].firstMatch
+            XCTAssertTrue(support.waitForExistence(timeout: 5))
+            XCTAssertTrue(isFullyVisible(support, within: app.windows.firstMatch.frame), "The legal footer should be fully visible at the bottom of the screen.")
+            let capture = XCTAttachment(screenshot: app.screenshot())
+            capture.name = "You notifications - \(language) - \(dark ? "dark" : "light") - \(accessibility ? "maximum text" : "standard text")"
+            capture.lifetime = .keepAlways
+            add(capture)
+            app.terminate()
+        }
     }
 
     func testAppearancePreferencePersistsAcrossRelaunch() {
@@ -874,7 +999,7 @@ final class TrustUsageTests: XCTestCase {
         return settled
     }
 
-    private func launchDemo(dark: Bool? = nil, route: String? = nil, forceEnglish: Bool = true, contentSize: String? = nil) -> XCUIApplication {
+    private func launchDemo(dark: Bool? = nil, route: String? = nil, forceEnglish: Bool = true, contentSize: String? = nil, language: String? = nil) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchEnvironment["TRUST_DEMO"] = "1"
         app.launchEnvironment["TRUST_UI_TEST"] = "1"
@@ -883,7 +1008,8 @@ final class TrustUsageTests: XCTestCase {
         if let contentSize { app.launchArguments += ["-UIPreferredContentSizeCategoryName", contentSize] }
         // Demo tests assert English copy. The argument-domain override makes each launch
         // independent of the persistent language preference left by other simulator runs.
-        if forceEnglish { app.launchArguments += ["-trust.appLanguage", "en"] }
+        if let language { app.launchArguments += ["-trust.appLanguage", language] }
+        else if forceEnglish { app.launchArguments += ["-trust.appLanguage", "en"] }
         app.launch()
         return app
     }
@@ -950,23 +1076,116 @@ final class TrustUsageTests: XCTestCase {
             "The confirmation dialog should dismiss before the next sharing action.")
     }
 
-    /// Scrolls the You tab a few times and confirms the requested control is ready for input.
-    /// Starting at the control's known side of the page also handles XCUI frames that are
-    /// temporarily invalid while the control is outside the ScrollView viewport.
-    private func scrollYouContent(to element: XCUIElement, direction: ScrollDirection, in app: XCUIApplication) -> Bool {
-        let scrollView = app.scrollViews.firstMatch
-        guard scrollView.waitForExistence(timeout: 5) else { return false }
-        for _ in 0..<6 {
-            if element.isHittable { return true }
-            switch direction {
-            case .up: scrollView.swipeDown()
-            case .down: scrollView.swipeUp()
+    /// Scrolls only inside the Pause duration sheet and requires full-frame visibility.
+    /// Native scroll-view swipes keep gestures inside the presented Pause sheet.
+    private func scrollPauseSheet(to element: XCUIElement, in app: XCUIApplication) -> Bool {
+        let scrollView = app.scrollViews["pause-sharing-scroll"]
+        guard scrollView.waitForExistence(timeout: 2) else {
+            attachPauseScrollFailure(element, in: app, scrollFrame: nil, viewport: nil)
+            return false
+        }
+        let appWindow = app.windows.firstMatch.frame
+        var lastScrollFrame = scrollView.frame
+        var lastViewport = lastScrollFrame.intersection(appWindow)
+
+        for _ in 0..<12 {
+            lastScrollFrame = scrollView.frame
+            lastViewport = lastScrollFrame.intersection(appWindow)
+            guard !lastViewport.isNull && lastViewport.width > 0 && lastViewport.height > 0 else {
+                attachPauseScrollFailure(element, in: app, scrollFrame: lastScrollFrame, viewport: lastViewport)
+                return false
+            }
+            if isFullyVisible(element, within: lastViewport) { return true }
+            let frame = element.frame
+            let hasUsableFrame = !frame.isNull && !frame.isInfinite && frame.width > 0 && frame.height > 0
+            let targetY = hasUsableFrame ? frame.midY : .nan
+            let dragDirection: ScrollDirection
+            if targetY.isFinite && frame.maxY > lastViewport.maxY - 8 {
+                dragDirection = .down
+            } else if targetY.isFinite && frame.minY < lastViewport.minY + 8 {
+                dragDirection = .up
+            } else if targetY.isFinite {
+                dragDirection = targetY > lastViewport.midY ? .down : .up
+            } else {
+                dragDirection = .down
+            }
+            switch dragDirection {
+            case .down: scrollView.swipeUp(velocity: .slow)
+            case .up: scrollView.swipeDown(velocity: .slow)
             }
         }
-        return element.isHittable
+        lastScrollFrame = scrollView.frame
+        lastViewport = lastScrollFrame.intersection(appWindow)
+        guard !lastViewport.isNull && isFullyVisible(element, within: lastViewport) else {
+            attachPauseScrollFailure(element, in: app, scrollFrame: lastScrollFrame, viewport: lastViewport)
+            return false
+        }
+        return true
     }
 
-    private enum ScrollDirection {
+    private func attachPauseScrollFailure(_ element: XCUIElement, in app: XCUIApplication,
+                                         scrollFrame: CGRect?, viewport: CGRect?) {
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Pause target clipped - \(element.identifier)"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        let geometry = XCTAttachment(string: "target=\(element.frame); scroll=\(String(describing: scrollFrame)); visible viewport=\(String(describing: viewport)); app window=\(app.windows.firstMatch.frame)")
+        geometry.name = "Pause target and current visible viewport geometry"
+        geometry.lifetime = .keepAlways
+        add(geometry)
+        let hierarchy = XCTAttachment(string: app.debugDescription)
+        hierarchy.name = "Pause target clipped accessibility hierarchy"
+        hierarchy.lifetime = .keepAlways
+        add(hierarchy)
+    }
+
+    /// Uses short viewport-relative drags and re-evaluates the target after every move.
+    /// Large swipes can jump past a control when accessibility text expands the page.
+    private func scrollYouContent(to element: XCUIElement, direction: ScrollDirection, in app: XCUIApplication) -> Bool {
+        let scrollView = app.scrollViews["you-scroll"]
+        guard scrollView.waitForExistence(timeout: 5) else { return false }
+        let viewport = scrollView.frame
+        guard viewport.width > 0, viewport.height > 0 else { return false }
+
+        for _ in 0..<18 {
+            if isFullyVisible(element, within: viewport) { return true }
+            let frame = element.frame
+            let hasUsableFrame = !frame.isNull && !frame.isInfinite && frame.width > 0 && frame.height > 0
+            let targetY = hasUsableFrame ? frame.midY : .nan
+            let dragDirection: ScrollDirection
+            if targetY.isFinite && frame.maxY > viewport.maxY - 8 {
+                dragDirection = .down
+            } else if targetY.isFinite && frame.minY < viewport.minY + 8 {
+                dragDirection = .up
+            } else if targetY.isFinite {
+                // Move a partially clipped control toward the viewport center.
+                dragDirection = targetY > viewport.midY ? .down : .up
+            } else {
+                dragDirection = direction
+            }
+
+            let startY: CGFloat = dragDirection == .down ? 0.82 : 0.18
+            let endY: CGFloat = dragDirection == .down ? 0.62 : 0.38
+            let start = scrollView.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: startY))
+            let end = scrollView.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: endY))
+            start.press(forDuration: 0.05, thenDragTo: end)
+        }
+        return isFullyVisible(element, within: viewport)
+    }
+
+    private func isFullyVisible(_ element: XCUIElement, within viewport: CGRect) -> Bool {
+        let frame = element.frame
+        guard !frame.isNull, !frame.isInfinite, frame.width > 0, frame.height > 0,
+              viewport.width > 0, viewport.height > 0 else { return false }
+        let tolerance: CGFloat = 2
+        return element.isHittable
+            && frame.minX >= viewport.minX - tolerance
+            && frame.maxX <= viewport.maxX + tolerance
+            && frame.minY >= viewport.minY - tolerance
+            && frame.maxY <= viewport.maxY + tolerance
+    }
+
+    private enum ScrollDirection: Equatable {
         case up
         case down
     }

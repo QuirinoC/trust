@@ -144,10 +144,9 @@ struct MainShellView: View {
     private func routePendingPushDestination() {
         guard let destination = model.consumePendingPushDestination() else { return }
         let tab: MainTab = destination == .activity ? .log : .circle
-        if model.selectedTab == tab {
-            Task { await model.refresh() }
-        } else {
-            model.selectedTab = tab
+        model.selectedTab = tab
+        Task {
+            await model.refresh()
         }
     }
 

@@ -227,6 +227,7 @@
   "presence_home": "Em casa",
   "presence_home_copy": "Em casa ou Fora. Não é uma localização.",
   "presence_grant_label": "Avisar %@ quando eu estiver em casa ou fora",
+  "presence_grant_details": "Sobre Em casa ou Fora",
   "presence_grant_explanation": "É apenas o status, não a localização. Com o compartilhamento ativo, isso também permite um alerta de chegada em casa. Desativado, Pausa e Oculto impedem a exibição.",
   "presence_grant_updated": "Preferência de compartilhamento de status atualizada.",
   "presence_note": "Casa / Fora / Oculto — é independente de a localização estar Lacrada ou Disponível.",
@@ -274,6 +275,15 @@
   "server_unavailable_host": "O servidor do Trust está indisponível (%d) em %@.",
   "set_home_here": "Usar localização atual como Casa",
   "settings": "Ajustes",
+  "notifications_heading": "Notificações",
+  "notifications_body": "O Trust pode solicitar alertas para Olhares e chegadas em casa compartilhadas. A entrega não é garantida. A Atividade registra Olhares e Visualizações.",
+  "notifications_not_enabled": "Não ativadas",
+  "notifications_off_in_settings": "Desativadas nos Ajustes",
+  "notifications_allowed": "Permitidas",
+  "notifications_quietly_allowed": "Permitidas silenciosamente",
+  "notifications_check_settings": "Verificar nos Ajustes",
+  "notifications_requesting": "Solicitando acesso…",
+  "enable_alerts": "Ativar alertas",
   "share_invite_link": "Compartilhar link do convite",
   "shared_with_you": "Compartilha com você",
   "sharing": "Compartilhamento",
@@ -533,5 +543,6 @@
   "phone_request_pending": "Aguarde…",
   "phone_send_countdown": "Enviar código em %@",
   "phone_resend_countdown": "Reenviar em %@",
-  "phone_retry_explanation": "Você poderá pedir outro código às %@ (horário local). Ainda pode editar o número."
+  "phone_retry_explanation": "Você poderá pedir outro código às %@ (horário local). Ainda pode editar o número.",
+  "resume_paused_mode": "Retomar como %@"
 }

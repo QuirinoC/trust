@@ -41,6 +41,12 @@ enum AppPhase: Equatable {
     case home
 }
 
+enum ConnectionRequestAction: Equatable {
+    case accept
+    case decline
+    case cancel
+}
+
 enum MainTab: String, CaseIterable, Identifiable {
     case circle
     case sharing
@@ -124,6 +130,7 @@ final class AppModel: ObservableObject {
     @Published private(set) var ageUnavailableStopAllState: AgeUnavailableStopAllState = .idle
     @Published private(set) var isRefreshing = false
     @Published private(set) var isSettingHome = false
+    @Published private(set) var isRequestingNotifications = false
     @Published var toast: TrustToast?
 
     /// Look confirm sheet subject (Sealed rows only).
@@ -267,6 +274,7 @@ final class AppModel: ObservableObject {
     @Published private(set) var isLookingUpConnection = false
     @Published private(set) var isSendingConnectionRequest = false
     @Published private(set) var connectionLookupNotice: String?
+    @Published private(set) var connectionLookupCanRetry = false
     @Published private(set) var connectionLookupHint: String?
     @Published private(set) var connectionLookupIsNoMatch = false
     @Published private(set) var connectionLookupCanInvite = false
@@ -277,6 +285,10 @@ final class AppModel: ObservableObject {
     private var connectionRequestsRefreshTask: Task<Void, Never>?
     private var connectionRequestsRefreshQueued = false
     @Published private(set) var actingOnConnectionRequestIDs: Set<UUID> = []
+    @Published private(set) var connectionRequestActionErrors: [UUID: String] = [:]
+    @Published private(set) var connectionRequestRetryActions: [UUID: ConnectionRequestAction] = [:]
+    private var connectionRequestsMutationGeneration: UInt64 = 0
+    private var confirmedSentRequestRecipientIDs: Set<UUID> = []
     @Published private(set) var inviteShareText: String?
     @Published private(set) var isPreparingConnectionInvite = false
     @Published private(set) var isUpdatingDiscovery = false
@@ -287,6 +299,7 @@ final class AppModel: ObservableObject {
     private var connectionLookupGeneration: UInt64 = 0
     private var connectionLookupDebounceTask: Task<Void, Never>?
     private var connectionLookupTask: Task<Void, Never>?
+    private var activeConnectionLookupQuery: PersonLookupQuery?
     private let homePresenceMutationQueue = TrustAsyncSerialExecutor()
     private var pendingHomePresenceMutationID: UUID?
     private var latestHomePresenceMutationID: UUID?
@@ -328,6 +341,7 @@ final class AppModel: ObservableObject {
         let preservePendingInvite = auth.sessionToken == nil
         ageUnavailableStopAllState = .idle
         accountGeneration &+= 1
+        isRequestingNotifications = false
         cancelPendingPhoneSend()
         authenticatedPerson = nil
         phoneRetryAccountID = nil
@@ -392,6 +406,11 @@ final class AppModel: ObservableObject {
         let pendingInviteCode = preservingPendingInvite ? linkedInviteCode : nil
         let pendingInviteDraft = preservingPendingInvite ? inviteCodeDraft : ""
         connectionLookupGeneration &+= 1
+        connectionLookupDebounceTask?.cancel()
+        connectionLookupTask?.cancel()
+        connectionLookupDebounceTask = nil
+        connectionLookupTask = nil
+        activeConnectionLookupQuery = nil
         inviteNotice = nil
         inviteCodeDraft = ""
         linkedInviteCode = nil
@@ -403,6 +422,7 @@ final class AppModel: ObservableObject {
         isLookingUpConnection = false
         isSendingConnectionRequest = false
         connectionLookupNotice = nil
+        connectionLookupCanRetry = false
         connectionLookupHint = nil
         connectionLookupIsNoMatch = false
         connectionLookupCanInvite = false
@@ -411,6 +431,10 @@ final class AppModel: ObservableObject {
         isUpdatingDiscovery = false
         connectionRequiresPhoneVerification = false
         connectionRequests = ConnectionRequestsPayload(incoming: [], sent: [])
+        connectionRequestActionErrors = [:]
+        connectionRequestRetryActions = [:]
+        connectionRequestsMutationGeneration = 0
+        confirmedSentRequestRecipientIDs = []
         isLoadingConnectionRequests = false
         connectionRequestsNotice = nil
         connectionRequestsRefreshQueued = false
@@ -748,10 +772,6 @@ final class AppModel: ObservableObject {
         }
         receipts.refreshStatus()
         UIDevice.current.isBatteryMonitoringEnabled = true
-        if phase == .home, !circle.isEmpty, !isUITestLaunch, ProcessInfo.processInfo.environment["TRUST_SCREENSHOT"] == nil {
-            await receipts.requestPermission()
-            guard canContinueAgeAuthorizedFlow(generation: authorizationGeneration) else { return }
-        }
         applyScreenshotLaunch()
     }
 
@@ -1916,6 +1936,20 @@ final class AppModel: ObservableObject {
         historyConnectionIDs[personID] = nil
     }
 
+    private func recordHistoryLoadFailure(
+        personID: UUID,
+        scope: TrustRelationshipScope,
+        requestID: UUID,
+        operation: TrustAccountOperation
+    ) {
+        guard isCurrentAccount(operation: operation),
+              historyRequestIDs[personID] == requestID,
+              historyRequestConnectionIDs[personID] == scope.connectionID else { return }
+        clearHistoryCache(for: personID)
+        historyConnectionIDs[personID] = scope.connectionID
+        historyErrors.insert(personID)
+    }
+
     private func refreshVisibleHistoryIfStale() {
         guard case let .person(personID)? = circlePath.last,
               member(personID)?.isAvailable == true,
@@ -2005,9 +2039,20 @@ final class AppModel: ObservableObject {
                     // Re-read relationship consent before retaining or displaying the
                     // delayed response. A peer can Stop or remove this relationship
                     // while the Look request is in flight.
+                    let refreshSequenceBeforeReconcile = circleRefreshSequence
                     await refresh()
                     guard isCurrentAccount(operation: operation),
                           pendingLookRequests[subject.id]?.validity.accepts(requestID) == true else { return }
+                    guard lastSuccessfulCircleRefreshSequence > refreshSequenceBeforeReconcile else {
+                        pendingLookRequests[subject.id]?.validity.invalidate()
+                        pendingLookRequests[subject.id] = nil
+                        openedSnapshots[subject.id] = nil
+                        openedSnapshotConnectionIDs[subject.id] = nil
+                        if lookSubject?.id == subject.id { lookSubject = nil }
+                        isLooking = false
+                        showToast(TrustCopy.locationUnavailable)
+                        return
+                    }
                     guard scope?.permitsLookSnapshot(member(subject.id)) == true else {
                         pendingLookRequests[subject.id]?.validity.invalidate()
                         pendingLookRequests[subject.id] = nil
@@ -2127,8 +2172,16 @@ final class AppModel: ObservableObject {
             guard isCurrentAccount(operation: operation) else { return }
             let points = try await client.history(personID: personID, authorizedToken: operation.token)
             guard isCurrentAccount(operation: operation),
-                  historyRequestIDs[personID] == requestID,
-                  scope.permitsHistory(member(personID)) else { return }
+                  historyRequestIDs[personID] == requestID else { return }
+            let refreshSequenceBeforeReconcile = circleRefreshSequence
+            await refresh()
+            guard isCurrentAccount(operation: operation),
+                  historyRequestIDs[personID] == requestID else { return }
+            guard lastSuccessfulCircleRefreshSequence > refreshSequenceBeforeReconcile else {
+                recordHistoryLoadFailure(personID: personID, scope: scope, requestID: requestID, operation: operation)
+                return
+            }
+            guard scope.permitsHistory(member(personID)) else { return }
             historyByPerson[personID] = points.map {
                 LocationVisit(label: TrustCopy.location, at: $0.timestamp, point: $0)
             }
@@ -2136,14 +2189,7 @@ final class AppModel: ObservableObject {
             historyLoadedIDs.insert(personID)
             historyFetchedAt[personID] = Date()
         } catch {
-            guard isCurrentAccount(operation: operation),
-                  historyRequestIDs[personID] == requestID,
-                  scope.permitsHistory(member(personID)) else { return }
-            historyErrors.insert(personID)
-            historyByPerson[personID] = nil
-            historyLoadedIDs.remove(personID)
-            historyFetchedAt[personID] = nil
-            historyConnectionIDs[personID] = scope.connectionID
+            recordHistoryLoadFailure(personID: personID, scope: scope, requestID: requestID, operation: operation)
         }
     }
 
@@ -2354,7 +2400,7 @@ final class AppModel: ObservableObject {
     func pauseSharing(personID: UUID, duration: PauseDuration) {
         guard requireOnline() else { return }
         let until = duration.endDate(from: Date())
-        let clock = until.formatted(date: .omitted, time: .shortened)
+        let clock = TrustCopy.pauseEndDateTime(until)
         let restoresTo = restoreMode(for: personID)
         let modeName = restoresTo == .always ? TrustCopy.always : TrustCopy.sealed
         let operation = isDemoMode ? nil : currentAccountOperation()
@@ -2705,12 +2751,27 @@ final class AppModel: ObservableObject {
 
     func submitConnectionLookup() {
         let value = connectionHandleDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !value.isEmpty, PersonLookupQuery.parse(value) == nil else { return }
-        if value.first?.isNumber == true || value.first == "+" {
-            connectionLookupHint = TrustCopy.phoneLookupCountryCodeHint
-        } else {
-            connectionLookupNotice = TrustCopy.handleInvalid
+        guard !value.isEmpty else { return }
+        guard let query = PersonLookupQuery.parse(value) else {
+            if value.first?.isNumber == true || value.first == "+" {
+                connectionLookupHint = TrustCopy.phoneLookupCountryCodeHint
+            } else {
+                connectionLookupNotice = TrustCopy.handleInvalid
+            }
+            connectionLookupCanRetry = false
+            return
         }
+        if isLookingUpConnection, activeConnectionLookupQuery == query { return }
+        connectionLookupDebounceTask?.cancel()
+        connectionLookupDebounceTask = nil
+        connectionLookupCanRetry = false
+        let generation = connectionLookupGeneration
+        Task { await performConnectionLookup(query, generation: generation) }
+    }
+
+    func retryConnectionLookup() {
+        guard connectionLookupCanRetry else { return }
+        submitConnectionLookup()
     }
 
     private func ifPhoneQuery(_ query: PersonLookupQuery) -> Bool {
@@ -2724,8 +2785,10 @@ final class AppModel: ObservableObject {
         connectionLookupTask?.cancel()
         connectionLookupDebounceTask = nil
         connectionLookupTask = nil
+        activeConnectionLookupQuery = nil
         connectionLookup = nil
         connectionLookupNotice = nil
+        connectionLookupCanRetry = false
         connectionLookupHint = nil
         connectionLookupIsNoMatch = false
         connectionLookupCanInvite = false
@@ -2746,14 +2809,17 @@ final class AppModel: ObservableObject {
         guard let sessionToken = auth.sessionToken else { return }
         let currentAccountGeneration = accountGeneration
         isLookingUpConnection = true
+        activeConnectionLookupQuery = query
         connectionLookup = nil
         connectionLookupNotice = nil
+        connectionLookupCanRetry = false
         connectionLookupIsNoMatch = false
         connectionLookupTask = Task {
             defer {
                 if generation == connectionLookupGeneration,
                    isCurrentAccount(generation: currentAccountGeneration, token: sessionToken) {
                     isLookingUpConnection = false
+                    activeConnectionLookupQuery = nil
                 }
             }
             do {
@@ -2762,7 +2828,12 @@ final class AppModel: ObservableObject {
                 let result = try await client.lookupPerson(query)
                 guard generation == connectionLookupGeneration,
                       isCurrentAccount(generation: currentAccountGeneration, token: sessionToken) else { return }
-                connectionLookup = result
+                var currentResult = result
+                if currentResult.relationship == "none",
+                   confirmedSentRequestRecipientIDs.contains(currentResult.accountId) {
+                    currentResult.relationship = "sent"
+                }
+                connectionLookup = currentResult
             } catch {
                 guard generation == connectionLookupGeneration,
                       isCurrentAccount(generation: currentAccountGeneration, token: sessionToken) else { return }
@@ -2782,6 +2853,7 @@ final class AppModel: ObservableObject {
                     return
                 }
                 connectionLookupNotice = plainMessage(for: error)
+                connectionLookupCanRetry = true
             }
         }
     }
@@ -2811,6 +2883,7 @@ final class AppModel: ObservableObject {
             guard phase == .home, auth.isAuthenticated, !isDemoMode,
                   let sessionToken = auth.sessionToken else { break }
             let currentAccountGeneration = accountGeneration
+            let requestMutationGeneration = connectionRequestsMutationGeneration
             client.token = sessionToken
             do {
                 let requests = try await client.connectionRequests()
@@ -2818,7 +2891,12 @@ final class AppModel: ObservableObject {
                     if !connectionRequestsRefreshQueued { break }
                     continue
                 }
+                guard requestMutationGeneration == connectionRequestsMutationGeneration else {
+                    connectionRequestsRefreshQueued = true
+                    continue
+                }
                 connectionRequests = requests
+                reconcileConfirmedSentRequests(with: requests)
                 connectionRequestsNotice = nil
             } catch TrustClientError.unauthorized {
                 guard isCurrentAccount(generation: currentAccountGeneration, token: sessionToken) else {
@@ -2841,6 +2919,17 @@ final class AppModel: ObservableObject {
         }
         isLoadingConnectionRequests = false
         connectionRequestsRefreshTask = nil
+    }
+
+    private func reconcileConfirmedSentRequests(with requests: ConnectionRequestsPayload) {
+        let sentRecipientIDs = Set(requests.sent.map(\.otherParty.accountId))
+        let reconciledIDs = confirmedSentRequestRecipientIDs.subtracting(sentRecipientIDs)
+        confirmedSentRequestRecipientIDs.subtract(reconciledIDs)
+        guard var result = connectionLookup,
+              reconciledIDs.contains(result.accountId),
+              result.relationship == "sent" else { return }
+        result.relationship = member(result.accountId) == nil ? "none" : "connected"
+        connectionLookup = result
     }
 
     func sendConnectionRequest() {
@@ -2867,6 +2956,14 @@ final class AppModel: ObservableObject {
                 client.token = sessionToken
                 _ = try await client.createConnectionRequest(recipientID: result.accountId)
                 guard isCurrentAccount(generation: currentAccountGeneration, token: sessionToken) else { return }
+                confirmedSentRequestRecipientIDs.insert(result.accountId)
+                connectionRequestsMutationGeneration &+= 1
+                if lookupGeneration == connectionLookupGeneration {
+                    connectionLookup?.relationship = "sent"
+                    connectionLookupNotice = nil
+                    connectionLookupCanRetry = false
+                }
+                showToast(TrustCopy.requestSent)
                 await refreshConnectionRequests()
                 guard lookupGeneration == connectionLookupGeneration,
                       isCurrentAccount(generation: currentAccountGeneration, token: sessionToken) else { return }
@@ -2894,6 +2991,7 @@ final class AppModel: ObservableObject {
 
     func acceptConnectionRequest(id: UUID) {
         guard actingOnConnectionRequestIDs.insert(id).inserted else { return }
+        clearConnectionRequestActionError(id)
         guard let sessionToken = auth.sessionToken else {
             actingOnConnectionRequestIDs.remove(id)
             return
@@ -2910,6 +3008,8 @@ final class AppModel: ObservableObject {
                 client.token = sessionToken
                 try await client.acceptConnectionRequest(id: id)
                 guard isCurrentAccount(generation: currentAccountGeneration, token: sessionToken) else { return }
+                applyConfirmedConnectionRequestMutation(id: id)
+                clearConnectionRequestActionError(id)
                 recordConfirmedCircleMutation()
                 await refresh()
                 guard isCurrentAccount(generation: currentAccountGeneration, token: sessionToken) else { return }
@@ -2921,10 +3021,9 @@ final class AppModel: ObservableObject {
                     connectionRequiresPhoneVerification = true
                     return
                 }
+                recordConnectionRequestActionFailure(id: id, action: .accept, error: error)
                 if showingAddPersonSheet {
                     connectionLookupNotice = plainMessage(for: error)
-                } else {
-                    connectionRequestsNotice = plainMessage(for: error)
                 }
             }
         }
@@ -2941,17 +3040,23 @@ final class AppModel: ObservableObject {
             let result = try await client.lookupPerson(.handle(normalized))
             guard lookupGeneration == connectionLookupGeneration,
                   isCurrentAccount(generation: accountGeneration, token: token) else { return }
-            connectionLookup = result
-            if result.relationship == "sent" { showToast(TrustCopy.requestSent) }
+            var currentResult = result
+            if currentResult.relationship == "none",
+               confirmedSentRequestRecipientIDs.contains(currentResult.accountId) {
+                currentResult.relationship = "sent"
+            }
+            connectionLookup = currentResult
         } catch {
             guard lookupGeneration == connectionLookupGeneration,
                   isCurrentAccount(generation: accountGeneration, token: token) else { return }
             connectionLookupNotice = plainMessage(for: error)
+            connectionLookupCanRetry = true
         }
     }
 
     func declineConnectionRequest(_ request: ConnectionRequestDTO) {
         guard actingOnConnectionRequestIDs.insert(request.id).inserted else { return }
+        clearConnectionRequestActionError(request.id)
         guard let sessionToken = auth.sessionToken else {
             actingOnConnectionRequestIDs.remove(request.id)
             return
@@ -2968,11 +3073,13 @@ final class AppModel: ObservableObject {
                 client.token = sessionToken
                 try await client.declineConnectionRequest(id: request.id)
                 guard isCurrentAccount(generation: currentAccountGeneration, token: sessionToken) else { return }
+                applyConfirmedConnectionRequestMutation(id: request.id)
+                clearConnectionRequestActionError(request.id)
                 await refreshConnectionRequests()
                 guard isCurrentAccount(generation: currentAccountGeneration, token: sessionToken) else { return }
             } catch {
                 guard isCurrentAccount(generation: currentAccountGeneration, token: sessionToken) else { return }
-                connectionRequestsNotice = plainMessage(for: error)
+                recordConnectionRequestActionFailure(id: request.id, action: .decline, error: error)
             }
         }
     }
@@ -2997,6 +3104,7 @@ final class AppModel: ObservableObject {
 
     func cancelConnectionRequest(_ request: ConnectionRequestDTO) {
         guard actingOnConnectionRequestIDs.insert(request.id).inserted else { return }
+        clearConnectionRequestActionError(request.id)
         guard let sessionToken = auth.sessionToken else {
             actingOnConnectionRequestIDs.remove(request.id)
             return
@@ -3013,13 +3121,54 @@ final class AppModel: ObservableObject {
                 client.token = sessionToken
                 try await client.cancelConnectionRequest(id: request.id)
                 guard isCurrentAccount(generation: currentAccountGeneration, token: sessionToken) else { return }
+                applyConfirmedConnectionRequestMutation(id: request.id)
+                clearConnectionRequestActionError(request.id)
                 await refreshConnectionRequests()
                 guard isCurrentAccount(generation: currentAccountGeneration, token: sessionToken) else { return }
             } catch {
                 guard isCurrentAccount(generation: currentAccountGeneration, token: sessionToken) else { return }
-                connectionRequestsNotice = plainMessage(for: error)
+                recordConnectionRequestActionFailure(id: request.id, action: .cancel, error: error)
             }
         }
+    }
+
+    func retryConnectionRequestAction(id: UUID) {
+        guard let action = connectionRequestRetryActions[id],
+              let request = (connectionRequests.incoming + connectionRequests.sent).first(where: { $0.id == id }) else { return }
+        switch action {
+        case .accept: acceptConnectionRequest(id: id)
+        case .decline: declineConnectionRequest(request)
+        case .cancel: cancelConnectionRequest(request)
+        }
+    }
+
+    private func clearConnectionRequestActionError(_ id: UUID) {
+        connectionRequestActionErrors[id] = nil
+        connectionRequestRetryActions[id] = nil
+    }
+
+    private func applyConfirmedConnectionRequestMutation(id: UUID) {
+        connectionRequestsMutationGeneration &+= 1
+        var requests = connectionRequests
+        if let sentRequest = requests.sent.first(where: { $0.id == id }) {
+            let recipientID = sentRequest.otherParty.accountId
+            confirmedSentRequestRecipientIDs.remove(recipientID)
+            if var result = connectionLookup,
+               result.accountId == recipientID,
+               result.relationship == "sent" {
+                result.relationship = member(recipientID) == nil ? "none" : "connected"
+                connectionLookup = result
+            }
+        }
+        requests.incoming.removeAll { $0.id == id }
+        requests.sent.removeAll { $0.id == id }
+        connectionRequests = requests
+        clearConnectionRequestActionError(id)
+    }
+
+    private func recordConnectionRequestActionFailure(id: UUID, action: ConnectionRequestAction, error: Error) {
+        connectionRequestActionErrors[id] = plainMessage(for: error)
+        connectionRequestRetryActions[id] = action
     }
 
     func addPersonByPhone() {
@@ -3194,7 +3343,6 @@ final class AppModel: ObservableObject {
                 guard isCurrentAccount(generation: currentAccountGeneration, token: sessionToken) else { return }
                 showToast(TrustCopy.joined)
                 selectedTab = .sharing
-                await receipts.requestPermission()
             } catch {
                 guard isCurrentAccount(generation: currentAccountGeneration, token: sessionToken) else { return }
                 if (error as? TrustClientError)?.apiCode == "verification_required" {
@@ -3574,8 +3722,34 @@ final class AppModel: ObservableObject {
     }
 
     func requestNotifications() async {
-        guard canAccessAccountData else { return }
+        guard !isRequestingNotifications,
+              phase == .home,
+              !isDemoMode,
+              auth.isAuthenticated,
+              let operation = currentAccountOperation() else { return }
+        isRequestingNotifications = true
+        defer {
+            if isCurrentAccount(operation: operation) {
+                isRequestingNotifications = false
+            }
+        }
         await receipts.requestPermission()
+        guard isCurrentAccount(operation: operation) else { return }
+    }
+
+    /// Refreshes notification authorization and registers with APNs only when
+    /// permission is already allowed. It never presents the system prompt.
+    func refreshNotificationStatus() {
+        guard phase == .home,
+              !isDemoMode,
+              auth.isAuthenticated,
+              let operation = currentAccountOperation() else {
+            receipts.refreshStatus()
+            return
+        }
+        guard isCurrentAccount(operation: operation) else { return }
+        client.token = operation.token
+        receipts.refreshAuthorizationAndRegisterIfAllowed(client: client)
     }
 
     // MARK: View log export

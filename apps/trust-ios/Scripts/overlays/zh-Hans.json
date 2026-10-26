@@ -262,6 +262,7 @@
   "manage_sharing": "管理共享",
   "presence": "在场",
   "presence_grant_label": "让我在家或外出时通知 %@",
+  "presence_grant_details": "关于在家或外出状态",
   "presence_grant_explanation": "仅共享状态，不共享位置。开启共享时，也允许发送到家提醒。关闭、暂停和隐藏状态下不会显示。",
   "presence_grant_updated": "已更新在家/外出状态共享设置。",
   "presence_note": "家/离开/隐藏 — 与位置是否密封或可用分开。",
@@ -282,6 +283,15 @@
   "see_plus": "见加",
   "you_have_plus": "你有Plus。",
   "settings": "设置",
+  "notifications_heading": "通知",
+  "notifications_body": "Trust可能会为Look和已共享的到家状态请求提醒。提醒送达不作保证。活动记录Look和View。",
+  "notifications_not_enabled": "尚未启用",
+  "notifications_off_in_settings": "已在设置中关闭",
+  "notifications_allowed": "已允许",
+  "notifications_quietly_allowed": "已静默允许",
+  "notifications_check_settings": "检查设置",
+  "notifications_requesting": "正在请求权限…",
+  "enable_alerts": "启用提醒",
   "look_notifications": "查看通知",
   "look_notifications_body": "密封外观请求通知。记录视图。",
   "allow_notifications": "允许通知",
@@ -533,5 +543,6 @@
   "phone_request_pending": "请稍候…",
   "phone_send_countdown": "%@后发送验证码",
   "phone_resend_countdown": "%@后重新发送",
-  "phone_retry_explanation": "你可以在%@（当地时间）请求新验证码。你仍可编辑号码。"
+  "phone_retry_explanation": "你可以在%@（当地时间）请求新验证码。你仍可编辑号码。",
+  "resume_paused_mode": "恢复为%@"
 }

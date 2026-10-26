@@ -220,6 +220,7 @@
   "manage_sharing": "Gérer le partage",
   "presence": "Présence",
   "presence_grant_label": "Prévenez %@ quand je suis chez moi ou absent",
+  "presence_grant_details": "À propos du statut Domicile ou Absent",
   "presence_grant_explanation": "Statut uniquement, pas la localisation. Si le partage est actif, cela autorise aussi une alerte d’arrivée à domicile. Désactivé, Pause et Masqué le bloquent.",
   "presence_grant_updated": "Préférence de partage du statut mise à jour.",
   "presence_note": "Domicile / Absent / Caché – distinct du fait que l'emplacement soit scellé ou disponible.",
@@ -240,6 +241,15 @@
   "see_plus": "Voir plus",
   "you_have_plus": "Vous avez Plus.",
   "settings": "Paramètres",
+  "notifications_heading": "Notifications",
+  "notifications_body": "Trust peut demander des alertes pour les Looks et les arrivées à domicile partagées. Leur livraison n’est pas garantie. Activité enregistre les Looks et les vues.",
+  "notifications_not_enabled": "Non activées",
+  "notifications_off_in_settings": "Désactivées dans Réglages",
+  "notifications_allowed": "Autorisées",
+  "notifications_quietly_allowed": "Autorisées discrètement",
+  "notifications_check_settings": "Vérifier dans Réglages",
+  "notifications_requesting": "Demande d’accès…",
+  "enable_alerts": "Activer les alertes",
   "look_notifications": "Regarder les notifications",
   "look_notifications_body": "Sealed Looks demande une notification. Les vues sont enregistrées.",
   "allow_notifications": "Autoriser les notifications",
@@ -533,5 +543,6 @@
   "phone_request_pending": "Veuillez patienter…",
   "phone_send_countdown": "Envoyer le code dans %@",
   "phone_resend_countdown": "Renvoyer dans %@",
-  "phone_retry_explanation": "Vous pourrez demander un autre code à %@ (heure locale). Vous pouvez toujours modifier le numéro."
+  "phone_retry_explanation": "Vous pourrez demander un autre code à %@ (heure locale). Vous pouvez toujours modifier le numéro.",
+  "resume_paused_mode": "Reprendre en mode %@"
 }

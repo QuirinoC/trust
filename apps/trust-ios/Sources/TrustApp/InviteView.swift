@@ -136,11 +136,22 @@ struct AddPersonSheet: View {
                     }
 
                     if let notice = model.connectionLookupNotice {
-                        Text(notice)
-                            .trustFont(13)
-                            .foregroundStyle(palette.danger)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .accessibilityIdentifier("connection-lookup-notice")
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(notice)
+                                .trustFont(13)
+                                .foregroundStyle(palette.danger)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .accessibilityIdentifier("connection-lookup-notice")
+                            if model.connectionLookupCanRetry {
+                                Button { model.retryConnectionLookup() } label: {
+                                    Text(TrustCopy.retry)
+                                        .frame(minWidth: 44, minHeight: 44, alignment: .leading)
+                                        .contentShape(Rectangle())
+                                }
+                                    .buttonStyle(TrustTextButtonStyle(color: palette.accent))
+                                    .accessibilityIdentifier("retry-connection-lookup")
+                            }
+                        }
                     }
 
                     if model.connectionRequiresPhoneVerification {
@@ -424,44 +435,49 @@ struct ConnectionRequestsSection: View {
                         .trustFont(13)
                         .foregroundStyle(palette.danger)
                         .fixedSize(horizontal: false, vertical: true)
-                    Button(TrustCopy.retry) { Task { await model.refreshConnectionRequests() } }
+                    Button { Task { await model.refreshConnectionRequests() } } label: {
+                        Text(TrustCopy.retry)
+                            .frame(minWidth: 44, minHeight: 44, alignment: .leading)
+                            .contentShape(Rectangle())
+                    }
                         .buttonStyle(TrustTextButtonStyle(color: palette.accent))
                         .accessibilityIdentifier("retry-connection-requests")
                 }
                 .padding(.vertical, 10)
                 .accessibilityIdentifier("connection-requests-error")
-            } else {
-                if !model.connectionRequests.incoming.isEmpty {
-                    Text(TrustCopy.incomingRequests)
-                        .trustFont(12, weight: .semibold)
-                        .foregroundStyle(palette.muted)
-                        .padding(.top, 10)
-                        .padding(.bottom, 2)
-                    ForEach(model.connectionRequests.incoming) { request in
-                        requestRow(request, incoming: true)
-                        TrustRowDivider()
-                    }
-                }
+            }
 
-                if !model.connectionRequests.sent.isEmpty {
-                    Text(TrustCopy.sentRequests)
-                        .trustFont(12, weight: .semibold)
-                        .foregroundStyle(palette.muted)
-                        .padding(.top, 10)
-                        .padding(.bottom, 2)
-                    ForEach(model.connectionRequests.sent) { request in
-                        requestRow(request, incoming: false)
-                        TrustRowDivider()
-                    }
+            if !model.connectionRequests.incoming.isEmpty {
+                Text(TrustCopy.incomingRequests)
+                    .trustFont(12, weight: .semibold)
+                    .foregroundStyle(palette.muted)
+                    .padding(.top, 10)
+                    .padding(.bottom, 2)
+                ForEach(model.connectionRequests.incoming) { request in
+                    requestRow(request, incoming: true)
+                    TrustRowDivider()
                 }
+            }
 
-                if model.connectionRequests.incoming.isEmpty && model.connectionRequests.sent.isEmpty && !model.isLoadingConnectionRequests {
-                    Text(TrustCopy.noConnectionRequests)
-                        .trustFont(13)
-                        .foregroundStyle(palette.muted)
-                        .frame(minHeight: 42, alignment: .leading)
-                        .accessibilityIdentifier("no-connection-requests")
+            if !model.connectionRequests.sent.isEmpty {
+                Text(TrustCopy.sentRequests)
+                    .trustFont(12, weight: .semibold)
+                    .foregroundStyle(palette.muted)
+                    .padding(.top, 10)
+                    .padding(.bottom, 2)
+                ForEach(model.connectionRequests.sent) { request in
+                    requestRow(request, incoming: false)
+                    TrustRowDivider()
                 }
+            }
+
+            if model.connectionRequests.incoming.isEmpty && model.connectionRequests.sent.isEmpty
+                && !model.isLoadingConnectionRequests && model.connectionRequestsNotice == nil {
+                Text(TrustCopy.noConnectionRequests)
+                    .trustFont(13)
+                    .foregroundStyle(palette.muted)
+                    .frame(minHeight: 42, alignment: .leading)
+                    .accessibilityIdentifier("no-connection-requests")
             }
 
             if model.connectionRequiresPhoneVerification {
@@ -516,6 +532,23 @@ struct ConnectionRequestsSection: View {
                         .buttonStyle(TrustTextButtonStyle(color: palette.muted))
                         .disabled(model.actingOnConnectionRequestIDs.contains(request.id))
                         .accessibilityIdentifier("cancel-connection-request-\(request.otherParty.handle)")
+                }
+            }
+
+            if let error = model.connectionRequestActionErrors[request.id] {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(error)
+                        .trustFont(12)
+                        .foregroundStyle(palette.danger)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("connection-request-error-\(request.otherParty.handle)")
+                    Button { model.retryConnectionRequestAction(id: request.id) } label: {
+                        Text(TrustCopy.retry)
+                            .frame(minWidth: 44, minHeight: 44, alignment: .leading)
+                            .contentShape(Rectangle())
+                    }
+                        .buttonStyle(TrustTextButtonStyle(color: palette.accent))
+                        .accessibilityIdentifier("retry-connection-request-\(request.otherParty.handle)")
                 }
             }
         }
