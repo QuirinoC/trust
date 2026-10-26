@@ -211,7 +211,21 @@ final class RealPushAPNSE2ETests: XCTestCase {
         }
         XCTAssertTrue(waitUntil(timeout: 10) { allowNotifications.exists && allowNotifications.isHittable },
                       "The native Trust Notifications page should expose Allow Notifications.\n\(settings.debugDescription)")
-        if !isSwitchOn(allowNotifications) { allowNotifications.tap() }
+        if !isSwitchOn(allowNotifications) {
+            allowNotifications.tap()
+            if !waitUntil(timeout: 2, condition: { isSwitchOn(allowNotifications) }) {
+                attachScreenshot("Allow Notifications native switch tap did not change value", from: settings)
+                attachText("Allow Notifications switch diagnostics", settings.debugDescription)
+                let frame = allowNotifications.frame
+                let window = settings.windows.firstMatch.frame
+                let thumbPoint = CGPoint(x: frame.maxX - 16, y: frame.midY)
+                if frame.width > 0, frame.height > 0, window.contains(thumbPoint) {
+                    settings.coordinate(withNormalizedOffset: .zero)
+                        .withOffset(CGVector(dx: thumbPoint.x - window.minX, dy: thumbPoint.y - window.minY))
+                        .tap()
+                }
+            }
+        }
         XCTAssertTrue(waitUntil(timeout: 10) { isSwitchOn(allowNotifications) },
                       "Allow Notifications must be on in system Settings.\n\(settings.debugDescription)")
         attachScreenshot("Allow Notifications enabled in iOS Settings", from: settings)
@@ -417,7 +431,7 @@ final class RealPushAPNSE2ETests: XCTestCase {
                       "Trust must be stable and visible before opening its settings.")
         row.tap()
         let notificationsRow = settings.descendants(matching: .any).matching(
-            NSPredicate(format: "label ==[c] %@", "Notifications")
+            NSPredicate(format: "label BEGINSWITH[c] %@", "Notifications")
         ).firstMatch
         var reachedNotificationsEntry = waitUntil(timeout: 8, condition: {
             notificationsRow.exists && notificationsRow.isHittable
@@ -453,7 +467,7 @@ final class RealPushAPNSE2ETests: XCTestCase {
 
     private func openNotificationsRow(inTrustSettings settings: XCUIApplication) {
         let notificationsRow = settings.descendants(matching: .any).matching(
-            NSPredicate(format: "label ==[c] %@", "Notifications")
+            NSPredicate(format: "label BEGINSWITH[c] %@", "Notifications")
         ).firstMatch
         guard waitUntil(timeout: 12, condition: {
             notificationsRow.exists && notificationsRow.isHittable

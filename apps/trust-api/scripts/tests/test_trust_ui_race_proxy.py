@@ -188,6 +188,43 @@ class ProxyHTTPTests(unittest.TestCase):
         self.control("/reset")
         self.assertEqual(self.state()["sandbox_push_registration_ack_count"], 0)
 
+    def test_pair_location_stages_are_boolean_metadata_and_reset_cleanly(self) -> None:
+        pair_id = "A1B2C3D4"
+        stages = ("first-home-ready", "first-away-held", "second-home-ready", "complete")
+        for stage in stages:
+            response = self.control("/pair-location", {"pairId": pair_id, "stage": stage})
+            self.assertEqual(response, {"updated": True, "pairId": pair_id.lower(), "stage": stage})
+        state = self.state()
+        self.assertEqual(state["pair_location_stages"], {pair_id.lower(): {stage: True for stage in stages}})
+        serialized = json.dumps(state)
+        self.assertNotIn("latitude", serialized)
+        self.assertNotIn("longitude", serialized)
+        self.assertEqual(set(state["pair_location_stages"][pair_id.lower()]), set(stages))
+        self.assertTrue(all(type(value) is bool for value in state["pair_location_stages"][pair_id.lower()].values()))
+
+        self.control("/reset")
+        self.assertEqual(self.state()["pair_location_stages"], {})
+
+    def test_pair_location_rejects_bad_pair_ids_stages_and_extra_fields(self) -> None:
+        invalid_bodies = (
+            {"pairId": "not-eight-hex", "stage": "first-home-ready"},
+            {"pairId": "1234abcd", "stage": "coordinates"},
+            {"pairId": "1234abcd", "stage": "complete", "latitude": 47.6},
+        )
+        for body in invalid_bodies:
+            status, payload = self.request("POST", "/__test/pair-location", body=body)
+            self.assertEqual(status, 400)
+            self.assertEqual(json.loads(payload)["updated"], False)
+        self.assertEqual(self.state()["pair_location_stages"], {})
+
+    def test_pair_location_state_snapshot_isolated_from_nested_mutation(self) -> None:
+        pair_id = "1234abcd"
+        self.control("/pair-location", {"pairId": pair_id, "stage": "first-home-ready"})
+        snapshot = proxy.Handler.state_copy(object.__new__(proxy.Handler))
+        snapshot["pair_location_stages"][pair_id]["first-home-ready"] = False
+        json.dumps(snapshot)
+        self.assertTrue(self.state()["pair_location_stages"][pair_id]["first-home-ready"])
+
     def test_offline_account_selector_blocks_only_target_then_reconnect_and_reset_clear_it(self) -> None:
         account_id = str(uuid.uuid4())
         target = encode_jwt_sub(account_id)

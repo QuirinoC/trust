@@ -758,10 +758,13 @@ final class TrustRealAPIFeatureTests: XCTestCase {
                 self.yourHomeState(token: session.token) == "home"
                     && self.visibleHomePresence(personID: session.personID, token: aliceSession.token) == "home"
             }, "Setting Home should publish Home to a connected person who has granted Home/Away visibility.")
+            postPairLocationStage("first-home-ready", pairID: pairID)
             XCTAssertTrue(waitUntil(timeout: 60) {
                 self.yourHomeState(token: session.token) == "away"
                     && self.visibleHomePresence(personID: session.personID, token: aliceSession.token) == "away"
             }, "As the moving simulator leaves the saved Home radius, both accounts should observe Away.")
+            XCTAssertTrue(waitForPairLocationStage("first-away-held", pairID: pairID, timeout: 30),
+                          "The paired controller should hold the first Away route until Bob acknowledges it. State: \(String(describing: api.request("GET", "/__test/state").json))")
 
             // Re-setting Home is an update-in-place action. It keeps the logical
             // place ID on the server but stores the new current coordinate locally.
@@ -773,6 +776,7 @@ final class TrustRealAPIFeatureTests: XCTestCase {
                 self.yourHomeState(token: session.token) == "home"
                     && self.visibleHomePresence(personID: session.personID, token: aliceSession.token) == "home"
             }, "Saving Home at the new current location should publish Home again to the connected account; allow for the location request's 20-second last-known-fix fallback.")
+            postPairLocationStage("second-home-ready", pairID: pairID)
             let updatedHomeResponse = api.yourHomePlace(token: session.token)
             XCTAssertEqual(updatedHomeResponse.label, "Home")
             XCTAssertEqual(updatedHomeResponse.placeID, originalHomePlaceID, "Updating the saved coordinate should keep the same logical Home place ID.")
@@ -782,6 +786,8 @@ final class TrustRealAPIFeatureTests: XCTestCase {
                 self.yourHomeState(token: session.token) == "away"
                     && self.visibleHomePresence(personID: session.personID, token: aliceSession.token) == "away"
             }, "The updated Home location should continue to drive Away when the moving simulator leaves its new radius.")
+            XCTAssertTrue(waitForPairLocationStage("complete", pairID: pairID, timeout: 30),
+                          "The paired controller should complete and release the second Away route before Home is cleared. State: \(String(describing: api.request("GET", "/__test/state").json))")
 
             let clearHome = app.buttons["home-clear-button"]
             XCTAssertTrue(clearHome.waitForExistence(timeout: 10), app.debugDescription)
@@ -2543,6 +2549,30 @@ final class TrustRealAPIFeatureTests: XCTestCase {
         waitUntil(timeout: timeout) {
             guard let state = self.api.raceProxyState() else { return false }
             return condition(state)
+        }
+    }
+
+    private func postPairLocationStage(_ stage: String, pairID: String) {
+        let response = api.request(
+            "POST",
+            "/__test/pair-location",
+            body: ["pairId": pairID, "stage": stage]
+        )
+        XCTAssertEqual(response.status, 200, "The paired location controller must accept stage \(stage). Response: \(String(describing: response.json))")
+        let json = response.json as? [String: Any]
+        XCTAssertEqual(json?["updated"] as? Bool, true)
+        XCTAssertEqual(json?["pairId"] as? String, pairID)
+        XCTAssertEqual(json?["stage"] as? String, stage)
+    }
+
+    private func waitForPairLocationStage(_ stage: String, pairID: String, timeout: TimeInterval) -> Bool {
+        waitUntil(timeout: timeout) {
+            let response = self.api.request("GET", "/__test/state")
+            guard response.status == 200,
+                  let state = response.json as? [String: Any],
+                  let stagesByPair = state["pair_location_stages"] as? [String: Any],
+                  let stages = stagesByPair[pairID] as? [String: Any] else { return false }
+            return stages[stage] as? Bool == true
         }
     }
 

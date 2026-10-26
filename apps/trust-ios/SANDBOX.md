@@ -1,90 +1,86 @@
 # Trust test and sandbox boundaries
 
-Trust has several test paths that use the word “sandbox” for different systems. The evidence from one path does not prove the others.
+Trust has several test paths that use the word “sandbox.” Evidence from one path does not prove another.
 
-## Local UI and API test fixtures
+## Local UI and API fixtures
 
-The `Trust` and `Trust.LocalE2E` Xcode schemes attach [`Resources/Trust.storekit`](Resources/Trust.storekit) to the Run action. That is Xcode’s local StoreKit test environment: StoreKit uses the products and transaction behavior in the file without contacting the App Store. It is useful for checking purchase UI and local transaction handling, but it is not an Apple Sandbox purchase or an App Store signed transaction. [Apple: StoreKit Testing in Xcode](https://developer.apple.com/documentation/xcode/setting-up-storekit-testing-in-xcode)
+The `Trust` and `Trust.LocalE2E` schemes use [`Resources/Trust.storekit`](Resources/Trust.storekit) for Xcode’s local StoreKit test configuration. That file exercises local purchase UI and transaction handling without contacting the App Store; it is not an Apple Sandbox transaction or an App Store signed transaction. [Apple: StoreKit Testing in Xcode](https://developer.apple.com/documentation/xcode/setting-up-storekit-testing-in-xcode)
 
-The release E2E runner starts the API with the Development environment and loopback-only API/proxy endpoints. Its default in-memory mode is disposable. Its optional PostgreSQL mode creates a fresh named database for each API session. These fixtures validate app/API behavior against this local service; they do not validate a production backend.
+The release E2E runner starts a Development API and a loopback-only proxy. It uses Memory by default or creates a new disposable PostgreSQL database per API session when explicitly configured. These modes validate app/API behavior against local services, not a production backend. See [the local E2E guide](../../docs/LOCAL-TWO-ACCOUNT-E2E.md) for runner usage and current results.
 
-Several UI tests opt into the app’s DEBUG age-assurance fixture with `TRUST_AGE_TEST_MODE`. The runner can separately opt into `StoreKit__AllowReviewUnlock` for the Development API. That synthetic review-unlock behavior is fixture evidence only; it does not perform a StoreKit purchase, Apple age assurance, or App Store transaction verification. The runner writes this distinction to each case’s `evidence-mode.txt` when the fixture is enabled.
+Several UI tests use the app’s DEBUG age-assurance fixture. The runner can also enable a Development-only synthetic review entitlement fixture with `--allow-review-fixture`. Both are labeled in the run evidence; neither performs Apple age assurance or an App Store transaction.
 
-The local API OTP capability bypasses SMS delivery for tests. It does not show that a real phone received a text. Twilio’s test credentials can exercise supported API request validation and simulate SMS API responses without connecting to real phone numbers; they do not deliver messages and do not trigger message status callbacks. [Twilio: Test credentials](https://www.twilio.com/docs/iam/test-credentials)
+Local Development OTP and reserved fictional numbers bypass carrier delivery. Twilio test credentials can exercise supported API validation and simulate responses, but they do not send messages to real numbers or trigger message status callbacks. [Twilio: Test credentials](https://www.twilio.com/docs/iam/test-credentials)
 
 ## Apple In-App Purchase Sandbox
 
-Apple’s App Store Sandbox uses configured App Store Connect products and Sandbox Apple Accounts. Transactions are simulated by Apple and do not incur charges. TestFlight also uses Apple’s Sandbox environment for in-app purchases. These paths exercise real StoreKit-to-App-Store test infrastructure and Apple-signed transaction data, unlike Xcode’s local `.storekit` file. [Apple: Testing In-App Purchases with Sandbox](https://developer.apple.com/documentation/storekit/testing-in-app-purchases-with-sandbox) · [Apple: Testing at all stages](https://developer.apple.com/documentation/storekit/testing-at-all-stages-of-development-with-xcode-and-the-sandbox)
+Apple’s App Store Sandbox uses App Store Connect products and Sandbox Apple Accounts. Transactions are simulated by Apple and do not incur charges. TestFlight also uses Apple’s Sandbox environment for in-app purchases. These paths use Apple’s transaction infrastructure, unlike Xcode’s local `.storekit` file. [Apple: Testing In-App Purchases with Sandbox](https://developer.apple.com/documentation/storekit/testing-in-app-purchases-with-sandbox) · [Apple: Testing at all stages](https://developer.apple.com/documentation/storekit/testing-at-all-stages-of-development-with-xcode-and-the-sandbox)
 
-The `Trust-Sandbox` scheme is configured without a local StoreKit configuration, so its purchase requests use the App Store path. The scheme is intended for a physical device and a developer-configured API URL. Keep credentials and real hostnames out of source control.
+Build 49 is available through TestFlight. That availability alone is not evidence of a completed Sandbox purchase or restore. The `Trust-Sandbox` scheme has no local StoreKit configuration and is intended for an explicitly configured physical-device/API test. Keep credentials and real hostnames out of source control.
 
 ## Push notification evidence
 
-Injected notifications and APNs notifications are different tests. A notification supplied through Simulator tooling or a test fixture can check app presentation and tap routing, but it does not show that the API registered a device token, authenticated to APNs, or delivered a remote notification.
+Injected notifications can test app presentation and tap routing; they do not establish device-token registration or delivery through APNs. A successful APNs provider response also cannot guarantee that a person sees an alert. [Apple: APS Environment entitlement](https://developer.apple.com/documentation/bundleresources/entitlements/aps-environment) · [Apple: Sending notification requests to APNs](https://developer.apple.com/documentation/usernotifications/sending-notification-requests-to-apns)
 
-The APNs development environment is Apple’s sandbox APNs endpoint. A development-signed app uses the `aps-environment` entitlement value `development`; prerelease distribution builds such as TestFlight use `production`. Apple also documents APNs delivery as best-effort, so a successful provider response does not guarantee that a person sees an alert. [Apple: APS Environment entitlement](https://developer.apple.com/documentation/bundleresources/entitlements/aps-environment) · [Apple: Sending notification requests to APNs](https://developer.apple.com/documentation/usernotifications/sending-notification-requests-to-apns)
+The simulator APNs suite has two genuine development-environment cases: foreground/background Look delivery and denied-permission Settings recovery. The release 49 recovery case passed **1/1, 0 skipped, 0 failed** on 26 October 2026. It used the native Settings route, verified the actual Allow Notifications switch value, waited for API registration acknowledgement, then checked the real APNs alert and matching Activity receipt. A native accessibility tap missed the switch thumb on this simulator; one bounded tap at its visible thumb completed the normal OS setting change. No permission-grant API or `simctl push` was used.
 
-Some supported iOS Simulator and host configurations can register with the APNs development environment, while virtualized macOS hosts may fail to produce a token. Validate the actual host and runtime used by a push test. A genuine APNs test needs a registered token, a development entitlement, API provider credentials, and a successful notification route through APNs to the app. [Apple Developer Forums: Simulator APNs registration on a virtualized Mac](https://developer.apple.com/forums/thread/796868)
+The separate foreground/background delivery case passed **1/1, 0 skipped, 0 failed**. Two fictional viewers generated distinct Look event IDs; the simulator received the corresponding foreground and background APNs alerts, and tapping each opened the matching Activity receipt. Current result bundles are recorded in [the local E2E guide](../../docs/LOCAL-TWO-ACCOUNT-E2E.md).
 
-### Genuine APNs simulator lane
+### Running the genuine APNs simulator lane
 
-The Trust.RealServices scheme builds a separate UI-test target for genuine APNs checks. Build its Debug simulator products with an entitlement plist outside the checkout. The example below copies the repository plist and changes only aps-environment in the temporary copy:
+The `Trust.RealServices` scheme builds a separate UI-test target. The runner consumes an existing signed Debug simulator build, verifies its signature and embedded `aps-environment=development` entitlement/application identifier, then copies the products without re-signing them. Use a valid development signing setup on the host; ad-hoc signed app products are rejected.
+
+Create a temporary entitlement plist outside the checkout, changing only the APNs environment in a copy of the source entitlements, then build the dedicated scheme:
 
 ```sh
 cd apps/trust-ios
-mkdir -p /tmp/trust-real-apns
-python3 - <<'PY'
+export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
+PREBUILT_DIR="$(mktemp -d /tmp/trust-real-apns-build.XXXXXX)"
+python3 - "$PREBUILT_DIR/simulator-development.entitlements" <<'PY'
 import plistlib
+import sys
 from pathlib import Path
 
-source = Path("Trust.entitlements")
-temporary = Path("/tmp/trust-real-apns/simulator-development.entitlements")
-entitlements = plistlib.loads(source.read_bytes())
+entitlements = plistlib.loads(Path("Trust.entitlements").read_bytes())
 entitlements["aps-environment"] = "development"
-temporary.write_bytes(plistlib.dumps(entitlements, fmt=plistlib.FMT_XML))
+Path(sys.argv[1]).write_bytes(plistlib.dumps(entitlements, fmt=plistlib.FMT_XML))
 PY
 
-DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild build-for-testing \
+xcodebuild build-for-testing \
   -project Trust.xcodeproj \
   -scheme Trust.RealServices \
   -destination 'generic/platform=iOS Simulator' \
-  -derivedDataPath /tmp/trust-real-apns/DerivedData \
-  CODE_SIGNING_ALLOWED=YES \
-  CODE_SIGN_IDENTITY=- \
-  CODE_SIGN_ENTITLEMENTS=/tmp/trust-real-apns/simulator-development.entitlements
+  -derivedDataPath "$PREBUILT_DIR/DerivedData" \
+  CODE_SIGN_ENTITLEMENTS="$PREBUILT_DIR/simulator-development.entitlements" \
+  CODE_SIGNING_ALLOWED=YES
 ```
 
-Select a fresh, booted iOS Simulator and pass its UDID to the runner. A fresh simulator matters because the test explicitly enables alerts and requires the system permission to be undecided at the start. Use an isolated local PostgreSQL instance with a role allowed to create and drop databases. For the native loopback database used on this host:
+Choose a fresh, booted simulator for each case that needs an undecided notification permission. Set `TRUST_E2E_POSTGRES_CONNECTION` to an isolated local PostgreSQL server on a loopback address; the role must be allowed to create and drop databases. The runner uses `--postgres-direct` to create and drop only its own generated database.
 
 ```sh
-PRODUCTS=/tmp/trust-real-apns/DerivedData/Build/Products
-XCTESTRUN="$(find "$PRODUCTS" -maxdepth 1 -name '*.xctestrun' -print -quit)"
+PRODUCTS="$PREBUILT_DIR/DerivedData/Build/Products"
+XCTESTRUN="$(find "$PRODUCTS" -maxdepth 1 -type f -name '*.xctestrun' -print -quit)"
 python3 Scripts/run_real_push_e2e.py \
   --products "$PRODUCTS" \
   --xctestrun "$XCTESTRUN" \
   --device '<fresh-booted-simulator-UDID>' \
-  --postgres-connection 'Host=127.0.0.1;Port=5434;Database=postgres;Username=trust;Password=trust' \
-  --postgres-direct \
-  --output /tmp/trust-real-apns-result
+  --postgres-connection "$TRUST_E2E_POSTGRES_CONNECTION" \
+  --postgres-direct
 ```
 
-The runner requires the pre-signed Debug-iphonesimulator/Trust.app, verifies its code signature and its embedded development APNs entitlement/application identifier, then copies the app without re-signing it. It reads the five APNs provider settings from the configured Render service in memory and passes them only to the local API process; they are excluded from the proxy and Xcode test environment and are not written to logs or the xctestrun file. The runner uses a new generated PostgreSQL database, a local Development API, fictional +1-555-555-01xx accounts, and Development OTP with Twilio cleared. The test explicitly enables alerts, obtains an acknowledged sandbox device registration, sends two Looks from distinct fictional viewers, observes separate real APNs foreground/background notifications, taps each notification, and verifies each receipt appears in Activity. It does not use simctl push.
+The default case is `testRealSandboxAPNsForegroundAndBackgroundLookRoute`. To run Settings recovery, pass `--case testRealSandboxAPNsNotificationSettingsRecovery` and use a fresh simulator. The runner reads the five APNs provider settings from the connected Render service into memory and passes them only to the local API process. They are excluded from the proxy and Xcode test environment and are not written into logs or the `.xctestrun`. The API uses Development OTP with Twilio cleared, fictional accounts, and the loopback proxy at `127.0.0.1:5089` forwarding to the Development API at `127.0.0.1:5090`.
 
-The --postgres-direct option uses native psql against a loopback Postgres server and drops only the database name generated by the runner. The port, role, and password above describe this host's isolated Postgres setup; use a separately isolated local database with equivalent permissions on other hosts. Never point the runner at a shared or production database.
+The runner fails closed if those service ports are occupied. Its output directory is unique under `/tmp` by default; `--output <new-or-empty-directory>` can select another evidence location. Do not reuse or delete another run’s products as the input: set `PREBUILT_DIR` to the folder containing the exact build’s `Build/Products` and `.xctestrun`.
 
-This lane verifies one simulator/runtime, the local Development API, and APNs development delivery to the test simulator. It does not prove Apple Sign In, carrier SMS delivery, Apple In-App Purchase or restore, production APNs, TestFlight push, physical-device behavior, or production release readiness. A passed notification route is not a delivery guarantee.
-
-TestFlight push uses the production APNs environment even though TestFlight in-app purchases use Apple’s Sandbox. Therefore a successful development APNs test does not establish TestFlight push delivery. Physical-device/TestFlight acceptance remains a separate release check.
+These results establish development APNs delivery to the tested simulator/runtime only. TestFlight uses the production APNs environment even though its in-app purchases use Apple’s Sandbox. The simulator tests do not prove TestFlight or production push delivery, Apple Sign In, carrier SMS, Apple IAP purchase/restore, physical-device behavior, or release readiness. Push delivery remains best-effort.
 
 ## Evidence labels
-
-When reporting a test result, name the path that actually ran:
 
 - **Local StoreKit fixture:** Xcode `.storekit` configuration.
 - **Development API fixture:** local API/proxy with synthetic OTP, age, or review-unlock controls.
 - **Apple IAP Sandbox:** App Store Connect products and a Sandbox Apple Account, including a TestFlight purchase.
-- **Injected notification:** local payload or app test fixture, without APNs delivery.
+- **Injected notification:** local payload or app fixture without APNs delivery.
 - **Development APNs:** provider request to APNs sandbox with a development-signed app token.
 - **TestFlight push:** production APNs environment with the TestFlight app and its registered token.
 
-Do not label one of these paths as proof of another.
+Report only the path that actually ran; do not treat one as evidence for another.

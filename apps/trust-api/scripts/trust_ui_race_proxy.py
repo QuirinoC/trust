@@ -8,6 +8,7 @@ never logs request bodies, authorization headers, phone numbers, or coordinates.
 
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import base64
+import copy
 import hashlib
 import json
 import re
@@ -73,6 +74,13 @@ STATE = {
     "request_list_failure_count": 0,
     "stale_lookup_after_send": False,
     "stale_next_lookup": False,
+    "pair_location_stages": {},
+}
+PAIR_LOCATION_STAGES = {
+    "first-home-ready",
+    "first-away-held",
+    "second-home-ready",
+    "complete",
 }
 RELEASE_HELD = threading.Event()
 
@@ -113,6 +121,29 @@ class Handler(BaseHTTPRequestHandler):
                 STATE["held_resource"] = None
                 RELEASE_HELD.set()
             self.respond_json(200, {"reset": True})
+            return
+        if self.path == "/__test/pair-location":
+            try:
+                value = json.loads(control_body)
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                self.respond_json(400, {"updated": False, "error": "invalid-json"})
+                return
+            if not isinstance(value, dict) or set(value) != {"pairId", "stage"}:
+                self.respond_json(400, {"updated": False, "error": "invalid-control-body"})
+                return
+            pair_id = value.get("pairId")
+            stage = value.get("stage")
+            if not isinstance(pair_id, str) or not re.fullmatch(r"[a-fA-F0-9]{8}", pair_id):
+                self.respond_json(400, {"updated": False, "error": "invalid-pair-id"})
+                return
+            if not isinstance(stage, str) or stage not in PAIR_LOCATION_STAGES:
+                self.respond_json(400, {"updated": False, "error": "invalid-stage"})
+                return
+            pair_id = pair_id.lower()
+            with LOCK:
+                stages = STATE["pair_location_stages"].setdefault(pair_id, {})
+                stages[stage] = True
+            self.respond_json(200, {"updated": True, "pairId": pair_id, "stage": stage})
             return
         if self.path in ("/__test/arm-lookup-failure", "/__test/arm-lookup-failure-after-send", "/__test/arm-request-action-failure", "/__test/arm-stale-lookup"):
             with LOCK:
@@ -570,7 +601,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def state_copy(self):
         with LOCK:
-            return dict(STATE)
+            return copy.deepcopy(STATE)
 
     def offline_request_matches(self):
         authorization = self.headers.get("Authorization", "")
