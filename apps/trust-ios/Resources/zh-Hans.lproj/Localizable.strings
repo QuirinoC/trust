@@ -1,5 +1,7 @@
 "accept_invitation" = "接受邀请";
 "accept_request" = "接受请求";
+"accessibility_collapsed" = "已折叠";
+"accessibility_expanded" = "已展开";
 "account" = "账户";
 "add" = "添加";
 "add_person_explanation" = "先建立连接。共享会保持关闭，直到你主动选择开启。";

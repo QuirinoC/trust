@@ -1,5 +1,7 @@
 "accept_invitation" = "招待を承諾";
 "accept_request" = "リクエストを承認";
+"accessibility_collapsed" = "折りたたみ";
+"accessibility_expanded" = "展開";
 "account" = "アカウント";
 "add" = "追加";
 "add_person_explanation" = "先につながります。共有は選ぶまでオフのままです。";

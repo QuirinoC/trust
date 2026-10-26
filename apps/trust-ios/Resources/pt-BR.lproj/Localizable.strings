@@ -1,5 +1,7 @@
 "accept_invitation" = "Aceitar convite";
 "accept_request" = "Aceitar solicitação";
+"accessibility_collapsed" = "Recolhido";
+"accessibility_expanded" = "Expandido";
 "account" = "Conta";
 "add" = "Adicionar";
 "add_person_explanation" = "Conecte-se primeiro. O compartilhamento fica desativado até você escolher.";

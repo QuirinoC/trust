@@ -63,11 +63,16 @@ struct AddPersonSheet: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.trustPalette) private var palette
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @FocusState private var handleFocused: Bool
+    @State private var addScrollViewportHeight: CGFloat = 0
+    private let addFieldScrollAnchor = "add-person-field-scroll-anchor"
 
     var body: some View {
         NavigationStack {
-            ScrollView {
+            VStack(spacing: 0) {
+                ScrollViewReader { scrollProxy in
+                    ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(TrustCopy.findYourPerson)
@@ -81,59 +86,71 @@ struct AddPersonSheet: View {
                             .accessibilityIdentifier("add-person-explanation")
                     }
 
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack(spacing: 9) {
-                            Image(systemName: "magnifyingglass")
-                                .font(.system(size: 18, weight: .medium))
-                                .foregroundStyle(palette.accent)
-                                .accessibilityHidden(true)
-                            TextField(TrustCopy.addPersonLookupPlaceholder, text: Binding(
-                                get: { model.connectionHandleDraft },
-                                set: { model.setConnectionHandleDraft($0) }
-                            ))
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                            .keyboardType(.default)
-                            .submitLabel(.done)
-                            .onSubmit {
-                                model.submitConnectionLookup()
-                                handleFocused = false
-                            }
-                            .focused($handleFocused)
-                            .accessibilityIdentifier("connection-handle")
-                            if model.isLookingUpConnection {
-                                ProgressView()
-                                    .tint(palette.accent)
+                    VStack(alignment: .leading, spacing: 0) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack(spacing: 9) {
+                                Image(systemName: "magnifyingglass")
+                                    .font(.system(size: 18, weight: .medium))
+                                    .foregroundStyle(palette.accent)
                                     .accessibilityHidden(true)
-                            }
-                            if !model.connectionHandleDraft.isEmpty {
-                                Button {
-                                    model.setConnectionHandleDraft("")
-                                    handleFocused = true
-                                } label: {
-                                    Image(systemName: "xmark.circle.fill")
-                                        .foregroundStyle(palette.muted)
-                                        .frame(width: 44, height: 44)
-                                        .contentShape(Rectangle())
+                                TextField(TrustCopy.addPersonLookupPlaceholder, text: Binding(
+                                    get: { model.connectionHandleDraft },
+                                    set: { model.setConnectionHandleDraft($0) }
+                                ))
+                                .textInputAutocapitalization(.never)
+                                .autocorrectionDisabled()
+                                .keyboardType(.default)
+                                .submitLabel(.done)
+                                .onSubmit {
+                                    model.submitConnectionLookup()
+                                    handleFocused = false
                                 }
-                                .buttonStyle(.plain)
-                                .accessibilityLabel(TrustCopy.clearField)
-                                .accessibilityIdentifier("clear-connection-lookup")
+                                .focused($handleFocused)
+                                .accessibilityIdentifier("connection-handle")
+                                if model.isLookingUpConnection {
+                                    ProgressView()
+                                        .tint(palette.accent)
+                                        .accessibilityHidden(true)
+                                }
+                                if !model.connectionHandleDraft.isEmpty {
+                                    Button {
+                                        model.setConnectionHandleDraft("")
+                                        handleFocused = true
+                                        scrollFocusedFieldToBottom(using: scrollProxy)
+                                    } label: {
+                                        Image(systemName: "xmark.circle.fill")
+                                            .foregroundStyle(palette.muted)
+                                            .frame(width: 44, height: 44)
+                                            .contentShape(Rectangle())
+                                    }
+                                    .buttonStyle(.plain)
+                                    .accessibilityLabel(TrustCopy.clearField)
+                                    .accessibilityIdentifier("clear-connection-lookup")
+                                }
+                            }
+                            .padding(.horizontal, 18)
+                            .frame(height: 56)
+                            .background(palette.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(palette.line, lineWidth: 1))
+                            .accessibilityElement(children: .contain)
+                            .accessibilityIdentifier("connection-lookup-field")
+                            if let hint = model.connectionLookupHint {
+                                Text(hint)
+                                    .trustFont(13)
+                                    .foregroundStyle(palette.muted)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .padding(.horizontal, 4)
+                                    .accessibilityIdentifier("connection-lookup-hint")
                             }
                         }
-                        .padding(.horizontal, 18)
-                        .frame(height: 56)
-                        .background(palette.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(palette.line, lineWidth: 1))
-                        if let hint = model.connectionLookupHint {
-                            Text(hint)
-                                .trustFont(13)
-                                .foregroundStyle(palette.muted)
-                                .fixedSize(horizontal: false, vertical: true)
-                                .padding(.horizontal, 4)
-                                .accessibilityIdentifier("connection-lookup-hint")
-                        }
+                        Color.clear
+                            // The measured scroll-to-bottom inset settles about 4pt short of
+                            // the anchor on Duo, so reserve extra space to preserve the
+                            // required 8pt visible clearance below the bordered field.
+                            .frame(height: dynamicTypeSize.isAccessibilitySize ? 16 : 8)
+                            .accessibilityHidden(true)
                     }
+                    .id(addFieldScrollAnchor)
 
                     if let notice = model.connectionLookupNotice {
                         VStack(alignment: .leading, spacing: 6) {
@@ -202,23 +219,42 @@ struct AddPersonSheet: View {
                 .frame(maxWidth: TrustTheme.readableWidth, alignment: .leading)
                 .frame(maxWidth: .infinity, alignment: .center)
                 .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: model.connectionLookup?.relationship)
+                    }
+                    .accessibilityIdentifier("add-person-scroll")
+                    .background(palette.paper)
+                    .clipShape(Rectangle())
+                    .onGeometryChange(for: CGFloat.self) { proxy in
+                        proxy.size.height
+                    } action: { height in
+                        let previousHeight = addScrollViewportHeight
+                        addScrollViewportHeight = height
+                        if dynamicTypeSize.isAccessibilitySize,
+                           handleFocused,
+                           previousHeight > 0,
+                           height < previousHeight - 1 {
+                            scrollFocusedFieldToBottom(using: scrollProxy)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+                if dynamicTypeSize.isAccessibilitySize {
+                    HStack {
+                        Spacer(minLength: 0)
+                        cancelButton
+                    }
+                    .padding(.horizontal, TrustTheme.gutter)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 52)
+                    .background(palette.paper)
+                }
             }
             .background(palette.paper.ignoresSafeArea())
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button { model.showingAddPersonSheet = false } label: {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(palette.ink)
-                            .frame(width: 36, height: 36)
-                            .background(palette.surface, in: Circle())
-                            .frame(width: 44, height: 44)
-                            .contentShape(Rectangle())
+                if !dynamicTypeSize.isAccessibilitySize {
+                    ToolbarItem(placement: .cancellationAction) {
+                        cancelButton
                     }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel(TrustCopy.cancel)
-                        .accessibilityIdentifier("cancel-add-person")
                 }
             }
         }
@@ -240,6 +276,32 @@ struct AddPersonSheet: View {
                 }
             }
         }
+    }
+
+    private func scrollFocusedFieldToBottom(using proxy: ScrollViewProxy) {
+        guard dynamicTypeSize.isAccessibilitySize else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
+            guard handleFocused else { return }
+            proxy.scrollTo(addFieldScrollAnchor, anchor: .bottom)
+        }
+    }
+
+    private var cancelButton: some View {
+        Button {
+            handleFocused = false
+            model.showingAddPersonSheet = false
+        } label: {
+            Image(systemName: "xmark")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(palette.ink)
+                .frame(width: 36, height: 36)
+                .background(palette.surface, in: Circle())
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(TrustCopy.cancel)
+        .accessibilityIdentifier("cancel-add-person")
     }
 
     @ViewBuilder

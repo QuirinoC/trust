@@ -1,5 +1,7 @@
 "accept_invitation" = "Einladung annehmen";
 "accept_request" = "Anfrage annehmen";
+"accessibility_collapsed" = "Eingeklappt";
+"accessibility_expanded" = "Erweitert";
 "account" = "Konto";
 "add" = "Hinzufügen";
 "add_person_explanation" = "Verbinde dich zuerst. Teilen bleibt aus, bis du es auswählst.";

@@ -20,7 +20,9 @@ struct MapScreen: View {
 
     var body: some View {
         GeometryReader { geometry in
-            let isWide = geometry.size.width >= 760
+            let width = geometry.size.width
+            let isWide = width >= 650
+            let panelWidth = min(390, max(330, width * 0.36))
             Group {
                 if pins.isEmpty {
                     TrustEmptyState(
@@ -32,7 +34,7 @@ struct MapScreen: View {
                         model.circlePath = []
                     }
                 } else if isWide {
-                    regularContent
+                    regularContent(panelWidth: panelWidth)
                 } else {
                     compactContent(availableHeight: geometry.size.height)
                 }
@@ -67,13 +69,13 @@ struct MapScreen: View {
 
     /// iPad regular width: full-bleed map + trailing person panel. Compact (iPhone and
     /// Split View / Stage Manager narrow) stays stacked.
-    private var regularContent: some View {
+    private func regularContent(panelWidth: CGFloat) -> some View {
         HStack(spacing: 0) {
             mapCanvas
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-            palette.line.frame(width: 1)
+                .overlay(alignment: .trailing) { palette.line.frame(width: 1) }
             ScrollView { personPanel(isWide: true) }
-                .frame(width: 360)
+                .frame(width: panelWidth)
                 .background(palette.paper)
         }
     }

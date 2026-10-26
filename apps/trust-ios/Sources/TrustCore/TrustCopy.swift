@@ -102,6 +102,8 @@ public enum TrustCopy {
     public static func avatarIconAccessibility(_ name: String) -> String { format("avatar_icon_accessibility", defaultValue: "%@ icon", name) }
     public static var sharingPresenceExplanation: String { value("sharing_presence_explanation", defaultValue: "Home or Away appears only for people you chose Sealed or Always for. Off, Pause, and Hidden keep your status out of their view.") }
     public static func moreSharingActions(_ name: String) -> String { format("more_sharing_actions", defaultValue: "More sharing actions for %@", name) }
+    public static var accessibilityExpanded: String { value("accessibility_expanded", defaultValue: "Expanded") }
+    public static var accessibilityCollapsed: String { value("accessibility_collapsed", defaultValue: "Collapsed") }
     public static func presenceGrantLabel(_ name: String) -> String { format("presence_grant_label", defaultValue: "Let %@ know when I’m Home or Away", name) }
     public static var presenceGrantDetails: String { value("presence_grant_details", defaultValue: "About Home or Away") }
     public static var presenceGrantExplanation: String { value("presence_grant_explanation", defaultValue: "Status only, not location. With sharing on, this also allows a Home-arrival alert. Off, Pause, and Hidden suppress it.") }

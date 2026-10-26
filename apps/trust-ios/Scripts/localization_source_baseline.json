@@ -1,6 +1,8 @@
 {
   "accept_invitation": "Accept invitation",
   "accept_request": "Accept request",
+  "accessibility_collapsed": "Collapsed",
+  "accessibility_expanded": "Expanded",
   "account": "Account",
   "add": "Add",
   "add_person_explanation": "Connect first. Sharing stays off until you choose.",

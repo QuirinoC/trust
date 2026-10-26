@@ -66,6 +66,8 @@
   "circle_map": "Mapa de pessoas",
   "clear_home": "Remover Casa",
   "close": "Fechar",
+  "accessibility_expanded": "Expandido",
+  "accessibility_collapsed": "Recolhido",
   "code_placeholder": "ABC123",
   "code_placeholder_short": "123456",
   "code_sent": "Código enviado. Digite-o abaixo para verificar seu número.",

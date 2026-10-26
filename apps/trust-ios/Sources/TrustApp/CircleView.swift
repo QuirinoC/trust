@@ -33,11 +33,16 @@ struct CircleView: View {
         GeometryReader { geo in
             let width = geo.size.width
             let fullHeight = max(geo.size.height, 1)
-            let isWide = width >= 760
+            // At 650pt the existing 330pt minimum People panel leaves a 320pt map.
+            // This lets the unfolded Duo use the side-by-side layout at its actual
+            // available width while preserving the same NavigationStack and routes.
+            let isWide = width >= 650
             let panelWidth = min(390, max(330, width * 0.36))
+            let mapRouteIsWide = isWide && model.circlePath.last == .map
+            let showsPeopleLeadingMap = isWide && !mapRouteIsWide
 
             ZStack(alignment: .topLeading) {
-                if isWide {
+                if showsPeopleLeadingMap {
                     wideMap
                         .frame(width: width - panelWidth, height: fullHeight)
                         .overlay(alignment: .trailing) { palette.line.frame(width: 1) }
@@ -52,13 +57,15 @@ struct CircleView: View {
                         }
                     }
                     .toolbar(.hidden, for: .navigationBar)
-                    .navigationDestination(for: CircleRoute.self, destination: routeDestination)
+                    .navigationDestination(for: CircleRoute.self) { route in
+                        routeDestination(route, isWide: isWide)
+                    }
                 }
-                .frame(width: isWide ? panelWidth : width, height: fullHeight)
+                .frame(width: showsPeopleLeadingMap ? panelWidth : width, height: fullHeight)
                 .frame(
                     maxWidth: .infinity,
                     maxHeight: .infinity,
-                    alignment: isWide ? .trailing : .leading
+                    alignment: showsPeopleLeadingMap ? .trailing : .leading
                 )
             }
             .frame(width: width, height: fullHeight)
@@ -120,12 +127,12 @@ struct CircleView: View {
     }
 
     @ViewBuilder
-    private func routeDestination(_ route: CircleRoute) -> some View {
+    private func routeDestination(_ route: CircleRoute, isWide: Bool) -> some View {
         switch route {
         case .person(let id):
             PersonScreen(personID: id)
         case .view(let id):
-            ViewScreen(personID: id)
+            ViewScreen(personID: id, leadingMapPins: isWide ? model.homeMapPins : [])
         case .map:
             MapScreen()
         }
@@ -608,8 +615,7 @@ struct CirclePersonRow: View {
                         Text(statusText(at: context.date))
                             .trustFont(13)
                             .foregroundStyle(palette.muted)
-                            .lineLimit(multiline ? 2 : 1)
-                            .fixedSize(horizontal: false, vertical: multiline)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                     Spacer(minLength: 8)
                 }

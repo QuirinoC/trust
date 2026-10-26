@@ -1,5 +1,7 @@
 "accept_invitation" = "Accepter l’invitation";
 "accept_request" = "Accepter la demande";
+"accessibility_collapsed" = "Réduit";
+"accessibility_expanded" = "Développé";
 "account" = "Compte";
 "add" = "Ajouter";
 "add_person_explanation" = "Connectez-vous d’abord. Le partage reste désactivé jusqu’à votre choix.";
