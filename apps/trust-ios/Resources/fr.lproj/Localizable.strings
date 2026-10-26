@@ -335,9 +335,10 @@
 "open_settings" = "Ouvrir les paramètres";
 "optional_avatar_intro" = "Facultatif · choisissez un animal ou une photo";
 "pause" = "Pause";
-"pause_returns" = "Leur accès s'interrompt, puis revient à %@ après l'heure que vous choisissez.";
+"pause_accessibility_title" = "Suspendre le partage avec %@";
+"pause_returns" = "Le partage est suspendu, puis reprend avec %@.";
 "pause_sharing" = "Pause";
-"pause_title" = "Suspendre le partage avec %@";
+"pause_title" = "Pause avec %@";
 "pause_until" = "En pause jusqu'à %@. Retour à %@.";
 "people" = "Personnes";
 "people_count_accessibility" = "%d personnes";

@@ -474,6 +474,7 @@ struct PauseSharingSheet: View {
                     .font(TrustTheme.display(28))
                     .tracking(-0.6)
                     .foregroundStyle(palette.ink)
+                    .accessibilityLabel(TrustCopy.pauseAccessibilityTitle(name: model.member(personID)?.firstName ?? TrustCopy.them))
                     .accessibilityAddTraits(.isHeader)
                 Text(TrustCopy.pauseReturns(mode: returnsTo))
                     .font(TrustTheme.ui(15))

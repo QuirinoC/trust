@@ -335,9 +335,10 @@
 "open_settings" = "打开设置";
 "optional_avatar_intro" = "可选 · 选择动物图标或照片";
 "pause" = "暂停";
-"pause_returns" = "他们的访问会暂停，然后在您选择的时间后返回到 %@。";
+"pause_accessibility_title" = "暂停与 %@ 共享";
+"pause_returns" = "共享会暂停，然后恢复为 %@。";
 "pause_sharing" = "暂停";
-"pause_title" = "暂停与 %@ 共享";
+"pause_title" = "暂停 %@";
 "pause_until" = "暂停直到 %@。回到%@。";
 "people" = "人们";
 "people_count_accessibility" = "%d 人";

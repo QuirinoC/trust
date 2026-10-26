@@ -2451,6 +2451,7 @@ final class TrustRealAPIFeatureTests: XCTestCase {
     private func configureLocalAgeFixture(for app: XCUIApplication) {
         app.launchEnvironment["TRUST_AGE_TEST_MODE"] = "1"
         app.launchEnvironment["TRUST_AGE_TEST_RESET_STATE"] = "1"
+        app.launchEnvironment["TRUST_AGE_TEST_ADULT"] = "0"
     }
 
     /// Use the app's existing DEBUG-only self-attestation fixture so these API tests

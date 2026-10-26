@@ -3721,6 +3721,11 @@ final class AppModel: ObservableObject {
         UIApplication.shared.open(url)
     }
 
+    func openNotificationSettings() {
+        guard let url = URL(string: UIApplication.openNotificationSettingsURLString) else { return }
+        UIApplication.shared.open(url)
+    }
+
     func requestNotifications() async {
         guard !isRequestingNotifications,
               phase == .home,

@@ -335,9 +335,10 @@
 "open_settings" = "設定を開く";
 "optional_avatar_intro" = "任意 · 動物アイコンまたは写真を選択";
 "pause" = "一時停止";
-"pause_returns" = "相手のアクセスを一時停止し、選択した時間の後に%@に戻します。";
+"pause_accessibility_title" = "%@さんとの共有を一時停止";
+"pause_returns" = "共有を一時停止し、その後 %@ で再開します。";
 "pause_sharing" = "一時停止";
-"pause_title" = "%@さんとの共有を一時停止";
+"pause_title" = "%@を一時停止";
 "pause_until" = "%@まで一時停止。%@に戻ります。";
 "people" = "つながり";
 "people_count_accessibility" = "%d人";

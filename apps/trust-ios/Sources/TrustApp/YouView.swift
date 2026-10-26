@@ -485,6 +485,7 @@ private struct NotificationsSettingsSection: View {
         case .denied: return TrustCopy.notificationsOffInSettings
         case .authorized: return TrustCopy.notificationsAllowed
         case .provisional: return TrustCopy.notificationsQuietlyAllowed
+        case .ephemeral: return TrustCopy.notificationsQuietlyAllowed
         @unknown default: return TrustCopy.notificationsCheckSettings
         }
     }
@@ -523,7 +524,7 @@ private struct NotificationsSettingsSection: View {
                     if needsPermissionPrompt {
                         Task { await model.requestNotifications() }
                     } else {
-                        model.openSystemSettings()
+                        model.openNotificationSettings()
                     }
                 } label: {
                     Text(model.isRequestingNotifications ? TrustCopy.notificationsRequesting :

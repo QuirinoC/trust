@@ -201,18 +201,16 @@ final class RealPushAPNSE2ETests: XCTestCase {
         let settings = XCUIApplication(bundleIdentifier: "com.apple.Preferences")
         XCTAssertTrue(waitUntil(timeout: 12) { settings.state == .runningForeground },
                       "Open Settings should show the native app Settings page.\n\(settings.debugDescription)")
-        settings.terminate()
-        settings.activate()
-        XCTAssertTrue(waitUntil(timeout: 10) {
-            settings.navigationBars["Settings"].exists
-        }, "Settings should return to its root before navigating to Notifications.\n\(settings.debugDescription)")
-        openSystemNotificationsSettings(in: settings)
-
         let allowNotifications = settings.switches.matching(
             NSPredicate(format: "label ==[c] %@", "Allow Notifications")
         ).firstMatch
+        if !waitUntil(timeout: 10) { allowNotifications.exists && allowNotifications.isHittable } {
+            attachScreenshot("Direct Notifications Settings route did not show its switch", from: settings)
+            attachText("Direct Notifications Settings route hierarchy", settings.debugDescription)
+            openTrustNotificationsSettingsFromApps(in: settings)
+        }
         XCTAssertTrue(waitUntil(timeout: 10) { allowNotifications.exists && allowNotifications.isHittable },
-                      "The native Notifications page should expose Allow Notifications.\n\(settings.debugDescription)")
+                      "The native Trust Notifications page should expose Allow Notifications.\n\(settings.debugDescription)")
         if !isSwitchOn(allowNotifications) { allowNotifications.tap() }
         XCTAssertTrue(waitUntil(timeout: 10) { isSwitchOn(allowNotifications) },
                       "Allow Notifications must be on in system Settings.\n\(settings.debugDescription)")
@@ -252,6 +250,13 @@ final class RealPushAPNSE2ETests: XCTestCase {
 
     private func attachScreenshot(_ name: String, from application: XCUIApplication) {
         let attachment = XCTAttachment(screenshot: application.screenshot())
+        attachment.name = name
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
+    private func attachText(_ name: String, _ text: String) {
+        let attachment = XCTAttachment(string: text)
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
@@ -310,59 +315,160 @@ final class RealPushAPNSE2ETests: XCTestCase {
         }, "Trust should reflect the denied notification permission.\n\(app.debugDescription)")
     }
 
-    private func openSystemNotificationsSettings(in settings: XCUIApplication) {
-        let notificationsCategory = settings.buttons["com.apple.settings.notifications"]
-        let notificationsLabel = settings.buttons.matching(
-            NSPredicate(format: "label ==[c] %@", "Notifications")
+    private func openTrustNotificationsSettingsFromApps(in settings: XCUIApplication) {
+        let trustNotifications = settings.switches.matching(
+            NSPredicate(format: "label ==[c] %@", "Allow Notifications")
         ).firstMatch
-        let settingsList = settings.collectionViews.firstMatch
-        XCTAssertTrue(settingsList.waitForExistence(timeout: 5),
-                      "Settings root should expose its scrollable category list.\n\(settings.debugDescription)")
+        if trustNotifications.exists && trustNotifications.isHittable { return }
 
-        // A previous test can leave Settings at the bottom of its root list.
-        // Return toward the top first, then scan down while checking the row
-        // after every native scroll gesture.
-        for _ in 0..<8 {
-            settingsList.swipeDown(velocity: .slow)
+        // The app-specific notification URL can resume Settings at any prior
+        // page. Normalize only through visible native navigation controls.
+        let settingsRoot = settings.navigationBars["Settings"]
+        let appsPage = settings.navigationBars["Apps"]
+        let trustPage = settings.navigationBars["Trust"]
+        let trustBundleRow = settings.descendants(matching: .any)["com.collapsetechnologies.trust"]
+        let appsSearchField = settings.searchFields.matching(
+            NSPredicate(format: "label CONTAINS[c] %@", "Apps")
+        ).firstMatch
+        func isAppsSearchState() -> Bool {
+            trustBundleRow.exists || appsSearchField.exists
         }
-        var foundNotifications = notificationsCategory.exists && notificationsCategory.isHittable
-            || notificationsLabel.exists && notificationsLabel.isHittable
-        for _ in 0..<10 where !foundNotifications {
-            settingsList.swipeUp(velocity: .slow)
-            foundNotifications = notificationsCategory.exists && notificationsCategory.isHittable
-                || notificationsLabel.exists && notificationsLabel.isHittable
+        for _ in 0..<6 where !settingsRoot.exists && !appsPage.exists && !trustPage.exists && !isAppsSearchState() {
+            let back = settings.navigationBars.buttons.firstMatch
+            guard back.exists && back.isHittable else { break }
+            back.tap()
+            _ = waitUntil(timeout: 3, condition: {
+                settingsRoot.exists || appsPage.exists || trustPage.exists || isAppsSearchState()
+            })
         }
-        let notificationsAction = notificationsCategory.exists && notificationsCategory.isHittable
-            ? notificationsCategory : notificationsLabel
-        XCTAssertTrue(notificationsAction.exists && notificationsAction.isHittable,
-                      "Settings should expose the Notifications category.\n\(settings.debugDescription)")
-        notificationsAction.tap()
 
-        let trustBundleRow = settings.buttons["com.collapsetechnologies.trust"]
-        let trustNameRow = settings.buttons["Trust"]
+        if trustPage.exists {
+            openNotificationsRow(inTrustSettings: settings)
+            return
+        }
+
+        // The root may not be visible if Settings resumed the Apps page.
+        // Skip the Apps button in that case; otherwise scroll the root list
+        // until its native Apps row is visible.
+        let appsID = settings.buttons["com.apple.settings.apps"]
+        let appsLabel = settings.buttons["Apps"]
+        if !appsPage.exists && !isAppsSearchState() {
+            let list = settings.collectionViews.firstMatch
+            for _ in 0..<12 {
+                if (appsID.exists && appsID.isHittable) || (appsLabel.exists && appsLabel.isHittable) { break }
+                if list.exists { list.swipeUp(velocity: .slow) }
+            }
+            let appsAction = appsID.exists && appsID.isHittable ? appsID : appsLabel
+            guard appsAction.exists && appsAction.isHittable else {
+                attachScreenshot("Settings fallback could not find Apps", from: settings)
+                attachText("Settings fallback Apps hierarchy", settings.debugDescription)
+                XCTFail("Settings fallback should expose Apps from the current Settings page.\n\(settings.debugDescription)")
+                return
+            }
+            appsAction.tap()
+        }
+
+        guard waitUntil(timeout: 10, condition: { appsPage.exists || isAppsSearchState() }) else {
+            attachScreenshot("Settings did not navigate to Apps", from: settings)
+            attachText("Settings Apps transition hierarchy", settings.debugDescription)
+            XCTFail("Native Settings should open the Apps page.\n\(settings.debugDescription)")
+            return
+        }
+        let trustNameRow = settings.descendants(matching: .any).matching(
+            NSPredicate(format: "label ==[c] %@", "Trust")
+        ).firstMatch
+        let searchField = settings.searchFields.firstMatch
+        guard searchField.waitForExistence(timeout: 8) else {
+            attachScreenshot("Settings Apps search field missing", from: settings)
+            attachText("Settings Apps search field hierarchy", settings.debugDescription)
+            XCTFail("Settings Apps should provide search to locate Trust.\n\(settings.debugDescription)")
+            return
+        }
+        if !(searchField.value as? String ?? "").localizedCaseInsensitiveContains("trust") {
+            searchField.tap()
+            if let current = searchField.value as? String, !current.isEmpty {
+                searchField.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count))
+            }
+            searchField.typeText("Trust")
+        }
+        let searchButton = settings.keyboards.buttons.matching(
+            NSPredicate(format: "label ==[c] %@ OR label ==[c] %@", "Search", "Go")
+        ).firstMatch
+        if searchButton.exists && searchButton.isHittable { searchButton.tap() }
+
         func trustRow() -> XCUIElement? {
             if trustBundleRow.exists && trustBundleRow.isHittable { return trustBundleRow }
             if trustNameRow.exists && trustNameRow.isHittable { return trustNameRow }
-            if trustBundleRow.exists { return trustBundleRow }
-            if trustNameRow.exists { return trustNameRow }
             return nil
         }
-        XCTAssertTrue(waitUntil(timeout: 12) { trustRow()?.isHittable == true },
-                      "The system Notifications list should contain Trust after it registered for alerts.\n\(settings.debugDescription)")
+        guard waitUntil(timeout: 15, condition: { trustRow()?.isHittable == true }) else {
+            attachScreenshot("Settings Apps search did not find Trust", from: settings)
+            attachText("Settings Apps search diagnostics", "Search query: Trust\n\(settings.debugDescription)")
+            XCTFail("Settings Apps search should return the Trust app row.\n\(settings.debugDescription)")
+            return
+        }
         guard let row = trustRow() else {
-            XCTFail("The system Notifications list did not expose Trust.")
+            attachScreenshot("Settings Apps fallback could not find Trust", from: settings)
+            attachText("Settings Apps fallback hierarchy", settings.debugDescription)
+            XCTFail("Settings Apps did not expose Trust.")
             return
         }
         XCTAssertTrue(waitForStableHitTarget(row, timeout: 5),
-                      "Trust must be stable and visible before opening its notification settings.")
+                      "Trust must be stable and visible before opening its settings.")
         row.tap()
+        let notificationsRow = settings.descendants(matching: .any).matching(
+            NSPredicate(format: "label ==[c] %@", "Notifications")
+        ).firstMatch
+        var reachedNotificationsEntry = waitUntil(timeout: 8, condition: {
+            notificationsRow.exists && notificationsRow.isHittable
+        })
+        if !reachedNotificationsEntry && row.exists && row.isHittable {
+            attachScreenshot("Trust result remained visible after native row tap", from: settings)
+            attachText("Trust result tap recovery hierarchy", settings.debugDescription)
+            let frame = row.frame
+            let window = settings.windows.firstMatch.frame
+            let center = CGPoint(x: frame.midX, y: frame.midY)
+            if frame.width > 0, frame.height > 0, window.contains(center) {
+                settings.coordinate(withNormalizedOffset: .zero)
+                    .withOffset(CGVector(dx: center.x - window.minX, dy: center.y - window.minY))
+                    .tap()
+                reachedNotificationsEntry = waitUntil(timeout: 8, condition: {
+                    notificationsRow.exists && notificationsRow.isHittable
+                })
+            }
+        }
+        guard reachedNotificationsEntry else {
+            attachScreenshot("Settings did not open Trust app details", from: settings)
+            attachText("Settings Trust app transition hierarchy", settings.debugDescription)
+            XCTFail("Selecting the Trust result should expose its Notifications setting.\n\(settings.debugDescription)")
+            return
+        }
+        notificationsRow.tap()
         let allowSwitch = settings.switches.matching(
             NSPredicate(format: "label ==[c] %@", "Allow Notifications")
         ).firstMatch
-        XCTAssertTrue(waitUntil(timeout: 12) {
-            settings.navigationBars["Trust"].exists
-                && allowSwitch.exists && allowSwitch.isHittable
-        }, "Trust's native notification settings should expose Allow Notifications.\n\(settings.debugDescription)")
+        XCTAssertTrue(waitUntil(timeout: 12, condition: { allowSwitch.exists && allowSwitch.isHittable }),
+                      "Trust's native Notifications settings should expose Allow Notifications.\n\(settings.debugDescription)")
+    }
+
+    private func openNotificationsRow(inTrustSettings settings: XCUIApplication) {
+        let notificationsRow = settings.descendants(matching: .any).matching(
+            NSPredicate(format: "label ==[c] %@", "Notifications")
+        ).firstMatch
+        guard waitUntil(timeout: 12, condition: {
+            notificationsRow.exists && notificationsRow.isHittable
+        }) else {
+            attachScreenshot("Trust app Settings did not expose Notifications", from: settings)
+            attachText("Trust app Settings hierarchy", settings.debugDescription)
+            XCTFail("Trust's native app settings should expose Notifications.\n\(settings.debugDescription)")
+            return
+        }
+        notificationsRow.tap()
+        let allowSwitch = settings.switches.matching(
+            NSPredicate(format: "label ==[c] %@", "Allow Notifications")
+        ).firstMatch
+        XCTAssertTrue(waitUntil(timeout: 12) { allowSwitch.exists && allowSwitch.isHittable },
+                      "Trust's native Notifications settings should expose Allow Notifications.\n\(settings.debugDescription)")
     }
 
     private func isSwitchOn(_ element: XCUIElement) -> Bool {

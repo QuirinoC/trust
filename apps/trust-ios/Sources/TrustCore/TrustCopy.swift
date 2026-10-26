@@ -522,10 +522,13 @@ public enum TrustCopy {
     public static var pause: String { value("pause", defaultValue: "Pause") }
     public static var pauseSharing: String { value("pause_sharing", defaultValue: "Pause") }
     public static func pauseTitle(name: String) -> String {
-        format("pause_title", defaultValue: "Pause sharing with %@", name)
+        format("pause_title", defaultValue: "Pause %@", name)
+    }
+    public static func pauseAccessibilityTitle(name: String) -> String {
+        format("pause_accessibility_title", defaultValue: "Pause sharing with %@", name)
     }
     public static func pauseReturns(mode: String) -> String {
-        format("pause_returns", defaultValue: "Their access pauses, then returns to %@ after the time you choose.", mode)
+        format("pause_returns", defaultValue: "Sharing pauses, then returns to %@.", mode)
     }
     public static func pauseUntil(time: String, mode: String) -> String {
         format("pause_until", defaultValue: "Paused until %@. Back to %@.", time, mode)

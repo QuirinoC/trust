@@ -226,7 +226,15 @@ final class TrustUsageTests: XCTestCase {
     }
 
     func testPauseChoicesAndCancelRemainReachableAtAccessibilityText() {
-        for (dark, language) in [(false, "en"), (true, "de")] {
+        let variants: [(dark: Bool, language: String)] = [
+            (false, "en"),
+            (true, "de"),
+            (false, "fr"),
+            (true, "ja"),
+            (false, "zh-Hans"),
+            (true, "pt-BR")
+        ]
+        for (dark, language) in variants {
             let app = launchDemo(dark: dark, contentSize: "UICTContentSizeCategoryAccessibilityXXXL", language: language)
             defer { app.terminate() }
             XCTAssertTrue(app.buttons["tab-sharing"].waitForExistence(timeout: 15))
@@ -246,26 +254,30 @@ final class TrustUsageTests: XCTestCase {
             actions.tap()
             let pause = app.buttons["pause-sharing-maya"]
             XCTAssertTrue(pause.waitForExistence(timeout: 5))
+            guard waitForStableMenuAction(pause, in: app, timeout: 8) else {
+                attachPauseMenuOpenFailure("Pause menu item did not become stable", pause: pause, in: app)
+                XCTFail("Pause must be a stable, hittable menu action before activation.\n\(app.debugDescription)")
+                app.terminate()
+                continue
+            }
             pause.tap()
             let pauseScroll = app.scrollViews["pause-sharing-scroll"]
             let firstDuration = app.buttons["pause-duration-3600"]
-            let sheetAppeared = XCTNSPredicateExpectation(
-                predicate: NSPredicate { _, _ in pauseScroll.exists && firstDuration.exists },
-                object: nil
-            )
-            guard XCTWaiter.wait(for: [sheetAppeared], timeout: 6) == .completed else {
-                let screenshot = XCTAttachment(screenshot: app.screenshot())
-                screenshot.name = "Pause sheet did not open - \(language) - \(dark ? "dark" : "light")"
-                screenshot.lifetime = .keepAlways
-                add(screenshot)
-                let hierarchy = XCTAttachment(string: app.debugDescription)
-                hierarchy.name = "Pause sheet missing accessibility hierarchy"
-                hierarchy.lifetime = .keepAlways
-                add(hierarchy)
-                let geometry = XCTAttachment(string: "first duration=\(firstDuration.frame); pause scroll=\(pauseScroll.frame); app window=\(app.windows.firstMatch.frame)")
-                geometry.name = "Pause sheet opening target and viewport geometry"
-                geometry.lifetime = .keepAlways
-                add(geometry)
+            var sheetOpened = waitForPauseSheet(pauseScroll, firstDuration: firstDuration, timeout: 6)
+            if !sheetOpened && pause.exists && pause.isHittable {
+                attachPauseMenuOpenFailure("Native Pause tap left its menu item visible; trying one center tap", pause: pause, in: app)
+                let frame = pause.frame
+                let appFrame = app.frame
+                let center = CGPoint(x: frame.midX, y: frame.midY)
+                if frame.width > 0, frame.height > 0, appFrame.contains(center) {
+                    app.coordinate(withNormalizedOffset: .zero)
+                        .withOffset(CGVector(dx: center.x - appFrame.minX, dy: center.y - appFrame.minY))
+                        .tap()
+                    sheetOpened = waitForPauseSheet(pauseScroll, firstDuration: firstDuration, timeout: 5)
+                }
+            }
+            guard sheetOpened else {
+                attachPauseMenuOpenFailure("Pause sheet did not open after the bounded tap recovery", pause: pause, in: app)
                 XCTFail("Tapping the native Pause action should open its duration sheet before any scrolling.\n\(app.debugDescription)")
                 app.terminate()
                 continue
@@ -1256,5 +1268,67 @@ final class TrustUsageTests: XCTestCase {
         app.coordinate(withNormalizedOffset: .zero)
             .withOffset(CGVector(dx: frame.midX - screen.minX, dy: frame.midY - screen.minY))
             .tap()
+    }
+
+    private func waitForStableMenuAction(_ option: XCUIElement, in app: XCUIApplication,
+                                         timeout: TimeInterval) -> Bool {
+        let deadline = ProcessInfo.processInfo.systemUptime + timeout
+        var previousFrame: CGRect?
+        var stableSince: TimeInterval?
+        while ProcessInfo.processInfo.systemUptime < deadline {
+            guard let snapshot = try? option.snapshot(), snapshot.isEnabled,
+                  option.isHittable, snapshot.frame.width > 0, snapshot.frame.height > 0 else {
+                previousFrame = nil
+                stableSince = nil
+                RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+                continue
+            }
+            let frame = snapshot.frame
+            let center = CGPoint(x: frame.midX, y: frame.midY)
+            guard center.x.isFinite, center.y.isFinite, app.frame.contains(center) else {
+                previousFrame = nil
+                stableSince = nil
+                RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+                continue
+            }
+            let now = ProcessInfo.processInfo.systemUptime
+            if previousFrame != frame {
+                previousFrame = frame
+                stableSince = now
+            }
+            if let stableSince, now - stableSince >= 0.35 { return true }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        }
+        return false
+    }
+
+    private func waitForPauseSheet(_ scrollView: XCUIElement, firstDuration: XCUIElement,
+                                   timeout: TimeInterval) -> Bool {
+        let deadline = ProcessInfo.processInfo.systemUptime + timeout
+        while ProcessInfo.processInfo.systemUptime < deadline {
+            if scrollView.exists && firstDuration.exists { return true }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        }
+        return scrollView.exists && firstDuration.exists
+    }
+
+    private func attachPauseMenuOpenFailure(_ title: String, pause: XCUIElement, in app: XCUIApplication) {
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = title
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        let pauseFrame = pause.exists ? NSCoder.string(for: pause.frame) : "<menu item absent>"
+        let scroll = app.scrollViews["pause-sharing-scroll"]
+        let scrollFrame = scroll.exists ? NSCoder.string(for: scroll.frame) : "<sheet absent>"
+        let duration = app.buttons["pause-duration-3600"]
+        let durationFrame = duration.exists ? NSCoder.string(for: duration.frame) : "<duration absent>"
+        let geometry = XCTAttachment(string: "pause menu frame=\(pauseFrame); sheet scroll frame=\(scrollFrame); first duration frame=\(durationFrame); app window=\(NSCoder.string(for: app.windows.firstMatch.frame))")
+        geometry.name = "Pause menu activation geometry"
+        geometry.lifetime = .keepAlways
+        add(geometry)
+        let hierarchy = XCTAttachment(string: app.debugDescription)
+        hierarchy.name = "Pause menu activation hierarchy"
+        hierarchy.lifetime = .keepAlways
+        add(hierarchy)
     }
 }

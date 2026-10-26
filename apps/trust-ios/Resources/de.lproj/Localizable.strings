@@ -335,9 +335,10 @@
 "open_settings" = "Öffnen Sie Einstellungen";
 "optional_avatar_intro" = "Optional · Wähle ein Tier oder ein Foto";
 "pause" = "Pause";
-"pause_returns" = "Ihr Zugriff pausiert und kehrt nach der von Ihnen gewählten Zeit zu %@ zurück.";
+"pause_accessibility_title" = "Freigabe mit %@ pausieren";
+"pause_returns" = "Das Teilen pausiert und wird dann mit %@ fortgesetzt.";
 "pause_sharing" = "Pause";
-"pause_title" = "Unterbrechen Sie die Freigabe mit %@";
+"pause_title" = "Pause für %@";
 "pause_until" = "Pausiert bis %@. Zurück zu %@.";
 "people" = "Menschen";
 "people_count_accessibility" = "%d Personen";
