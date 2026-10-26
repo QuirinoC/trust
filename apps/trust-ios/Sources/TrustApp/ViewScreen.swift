@@ -143,7 +143,7 @@ struct ViewScreen: View {
                 .padding(.bottom, 18)
 
                 Button {
-                    model.circlePath = [.map]
+                    model.openMap(focusing: personID)
                 } label: {
                     Label(TrustCopy.circleMap, systemImage: "map")
                 }

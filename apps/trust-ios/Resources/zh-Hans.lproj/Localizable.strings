@@ -297,6 +297,7 @@
 "map" = "地图";
 "map_accessibility" = "地图。当有人总是分享时实时固定。";
 "map_empty_body" = "实时图钉会在有人分享时显示。";
+"map_focus_unavailable" = "此地图无法显示此人的位置。";
 "map_legend" = "总是";
 "map_sealed_hint" = "实时图钉会在有人分享时显示。";
 "messages_unavailable" = "此处无法使用“信息”App。已复制邀请链接。";

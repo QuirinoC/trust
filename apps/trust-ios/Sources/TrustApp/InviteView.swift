@@ -244,7 +244,9 @@ struct AddPersonSheet: View {
                     }
                     .padding(.horizontal, TrustTheme.gutter)
                     .frame(maxWidth: .infinity)
-                    .frame(height: 52)
+                    // Keep at least 8pt between the focused lookup field and
+                    // the 44pt Close target after Duo resizes the keyboard viewport.
+                    .frame(height: 60)
                     .background(palette.paper)
                 }
             }

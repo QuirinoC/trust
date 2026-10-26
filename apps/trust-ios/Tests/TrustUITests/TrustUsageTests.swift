@@ -363,6 +363,167 @@ final class TrustUsageTests: XCTestCase {
         app.terminate()
     }
 
+    /// Opt-in Duo keyboard handoff for the focused Add-person lookup. A host
+    /// orchestrator watches the ready files, folds/unfolds the device, and
+    /// creates the matching continue files after each display settles.
+    func testOptInDuoFoldPreservesFocusedAddPersonInput() throws {
+        guard let directory = ProcessInfo.processInfo.environment["TRUST_DUO_ADD_DIR"],
+              !directory.isEmpty else {
+            throw XCTSkip("Requires TRUST_DUO_ADD_DIR and a host fold-state orchestrator.")
+        }
+
+        let fileManager = FileManager.default
+        try fileManager.createDirectory(atPath: directory, withIntermediateDirectories: true)
+        for name in ["inner.ready", "outer.continue", "outer.ready", "inner.continue"] {
+            try? fileManager.removeItem(atPath: URL(fileURLWithPath: directory).appendingPathComponent(name).path)
+        }
+
+        let accessibilityText = ProcessInfo.processInfo.environment["TRUST_DUO_ADD_ACCESSIBILITY"] == "1"
+        let layoutLabel = accessibilityText ? "accessibility-xxxl" : "normal"
+        let contentSize = accessibilityText ? "UICTContentSizeCategoryAccessibilityXXXL" : nil
+
+        func mark(_ name: String, app: XCUIApplication) throws {
+            let field = app.textFields["connection-handle"]
+            let close = app.buttons["cancel-add-person"]
+            let keyboard = app.keyboards.firstMatch
+            let snapshot = "\(name) size=\(layoutLabel)\napp=\(app.frame)\nfield=\(field.exists ? String(describing: field.frame) : "<absent>")\n"
+                + "close=\(close.exists ? String(describing: close.frame) : "<absent>")\n"
+                + "keyboard=\(keyboard.exists ? String(describing: keyboard.frame) : "<absent>")\n"
+                + "value=\(field.value ?? "<nil>")\n"
+            try snapshot.write(to: URL(fileURLWithPath: directory).appendingPathComponent(name),
+                               atomically: true, encoding: .utf8)
+            FileHandle.standardOutput.write(Data("DUO_ADD \(name) size=\(layoutLabel)\n".utf8))
+        }
+
+        func waitFor(_ name: String, app: XCUIApplication,
+                     file: StaticString = #filePath, line: UInt = #line) -> Bool {
+            let url = URL(fileURLWithPath: directory).appendingPathComponent(name)
+            let deadline = Date().addingTimeInterval(75)
+            while Date() < deadline {
+                if fileManager.fileExists(atPath: url.path) { return true }
+                RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+            }
+            XCTFail("Timed out waiting for Duo Add-person handoff '\(name)'.", file: file, line: line)
+            XCTContext.runActivity(named: "Duo Add-person handoff timeout: \(name)") { activity in
+                activity.add(XCTAttachment(screenshot: app.screenshot()))
+                activity.add(XCTAttachment(string: app.debugDescription))
+            }
+            return false
+        }
+
+        let app = launchDemo(contentSize: contentSize)
+        let sharingTab = app.buttons["tab-sharing"]
+        guard sharingTab.waitForExistence(timeout: 20) else {
+            XCTFail("The demo should expose the Sharing tab before opening Add person.")
+            app.terminate()
+            return
+        }
+        sharingTab.tap()
+        let add = app.buttons["add-someone-button"]
+        guard add.waitForExistence(timeout: 8) else {
+            XCTFail("Sharing should expose Add someone after selecting its tab.")
+            app.terminate()
+            return
+        }
+        if !add.isHittable {
+            let scroll = app.scrollViews["sharing-scroll"]
+            if scroll.exists { scroll.swipeUp() }
+        }
+        guard add.isHittable else {
+            XCTFail("Add someone must be reachable before opening its form.")
+            app.terminate()
+            return
+        }
+        add.tap()
+        let field = app.textFields["connection-handle"]
+        XCTAssertTrue(field.waitForExistence(timeout: 8))
+        field.tap()
+        field.typeText("duofold")
+
+        let close = app.buttons["cancel-add-person"]
+        let borderedField = app.descendants(matching: .any)["connection-lookup-field"]
+        let keyboard = app.keyboards.firstMatch
+        let addScroll = app.scrollViews["add-person-scroll"]
+        let window = app.windows.firstMatch
+        func assertFocusedInput(_ state: String, requiresKeyboard: Bool = true,
+                                file: StaticString = #filePath, line: UInt = #line) -> Bool {
+            let ready = waitForCondition(timeout: 20, condition: {
+                let keyboardVisible = keyboard.exists && keyboard.frame.height > 0
+                let keyboardUnobscured = !keyboard.exists
+                    || (!borderedField.frame.intersects(keyboard.frame)
+                        && !close.frame.intersects(keyboard.frame))
+                return field.exists && close.exists && borderedField.exists
+                    && (!requiresKeyboard || keyboardVisible)
+                    && (field.value as? String) == "duofold"
+                    && field.isHittable && close.isHittable
+                    && frameIsFullyVisible(borderedField.frame, within: addScroll.frame)
+                    && frameIsFullyVisible(close.frame, within: window.frame)
+                    && (borderedField.frame.maxY <= close.frame.minY - 8
+                        || close.frame.maxY <= borderedField.frame.minY - 8)
+                    && !borderedField.frame.intersects(close.frame)
+                    && keyboardUnobscured
+            })
+            let keyboardVisible = keyboard.exists && keyboard.frame.height > 0
+            if !ready {
+                XCTContext.runActivity(named: "Duo Add-person geometry failure - \(state) - \(layoutLabel)") { activity in
+                    activity.add(XCTAttachment(screenshot: app.screenshot()))
+                    activity.add(XCTAttachment(string: app.debugDescription))
+                    let keyboardFrame = keyboard.exists ? String(describing: keyboard.frame) : "<dismissed>"
+                    activity.add(XCTAttachment(string: "app=\(app.frame); field=\(borderedField.frame); close=\(close.frame); keyboard=\(keyboardFrame); scroll=\(addScroll.frame)"))
+                }
+            }
+            XCTAssertTrue(ready, "The Add field and Close must remain visible, separated by 8pt, and unobscured on the \(state) display.", file: file, line: line)
+            XCTAssertEqual(field.value as? String, "duofold", "Folding must preserve unsent lookup text.", file: file, line: line)
+            let capture = XCTAttachment(screenshot: app.screenshot())
+            capture.name = "Duo Add-person focused lookup - \(state) - \(layoutLabel)"
+            capture.lifetime = .keepAlways
+            self.add(capture)
+            return keyboardVisible
+        }
+
+        _ = assertFocusedInput("inner")
+        let innerWidth = app.frame.width
+        XCTAssertGreaterThan(innerWidth, 0, "The inner display width must be measurable (\(layoutLabel)).")
+        try mark("inner.ready", app: app)
+        guard waitFor("outer.continue", app: app) else { return }
+        let outerWidth = app.frame.width
+        XCTAssertLessThan(outerWidth, innerWidth - 100,
+                          "The outer display should be materially narrower than inner (\(layoutLabel)).")
+        let keyboardOnOuter = assertFocusedInput("outer", requiresKeyboard: false)
+        if !keyboardOnOuter {
+            FileHandle.standardOutput.write(Data("DUO_ADD keyboard dismissed on outer display (\(layoutLabel)); typed value remained duofold\n".utf8))
+            field.tap()
+            XCTAssertTrue(waitForCondition(timeout: 8, condition: { keyboard.exists && keyboard.frame.height > 0 }),
+                          "Tapping the preserved Add field should reopen the keyboard after folding.")
+            _ = assertFocusedInput("outer after keyboard reopened")
+        }
+        field.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.5)).tap()
+        XCTAssertEqual(field.value as? String, "duofold",
+                       "Moving the insertion point to the trailing edge must leave the folded draft intact.")
+        field.typeText("x")
+        XCTAssertEqual(field.value as? String, "duofoldx", "The lookup field must still accept typing after folding.")
+        field.typeText(XCUIKeyboardKey.delete.rawValue)
+        XCTAssertEqual(field.value as? String, "duofold", "Editing after folding must preserve the original unsent value.")
+        try mark("outer.ready", app: app)
+        guard waitFor("inner.continue", app: app) else { return }
+        XCTAssertGreaterThan(app.frame.width, outerWidth + 100,
+                             "Reopening should materially restore the inner display width (\(layoutLabel)).")
+        let keyboardOnReopenedInner = assertFocusedInput("inner after reopening", requiresKeyboard: false)
+        if !keyboardOnReopenedInner {
+            FileHandle.standardOutput.write(Data("DUO_ADD keyboard dismissed on reopened inner display (\(layoutLabel)); typed value remained duofold\n".utf8))
+            field.tap()
+            XCTAssertTrue(waitForCondition(timeout: 8, condition: { keyboard.exists && keyboard.frame.height > 0 }),
+                          "Tapping the preserved Add field should reopen the keyboard after unfolding.")
+            _ = assertFocusedInput("inner after keyboard reopened")
+        }
+        field.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.5)).tap()
+        XCTAssertEqual(field.value as? String, "duofold",
+                       "Moving the insertion point to the trailing edge must leave the reopened draft intact.")
+        field.typeText("y")
+        XCTAssertEqual(field.value as? String, "duofoldy", "The lookup field must remain interactive after reopening.")
+        app.terminate()
+    }
+
     func testLookRecordsOneSnapshotAndSealedPersonHasNoHistory() {
         let app = launchDemo()
         XCTAssertTrue(app.buttons["tab-circle"].waitForExistence(timeout: 20))
@@ -933,6 +1094,98 @@ final class TrustUsageTests: XCTestCase {
         screenshot.name = "Map selection - Maya snapshot beside Leo live pin"
         screenshot.lifetime = .keepAlways
         add(screenshot)
+
+        // In this Plus fixture, Maya is inserted before Leo. Open Leo's View
+        // and return to Map from there to prove the second eligible pin is the
+        // initial selection, rather than merely selectable after map entry.
+        app.buttons["circle-back"].tap()
+        let leoView = app.buttons["person-peek-leo"]
+        XCTAssertTrue(leoView.waitForExistence(timeout: 8))
+        leoView.tap()
+        XCTAssertTrue(app.staticTexts["view-location-freshness"].waitForExistence(timeout: 8))
+        let leoOpenMap = app.buttons["view-open-map"]
+        XCTAssertTrue(leoOpenMap.waitForExistence(timeout: 8))
+        leoOpenMap.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["map-screen-canvas"].waitForExistence(timeout: 8))
+        let initiallySelectedName = app.staticTexts["map-selected-person-name"]
+        XCTAssertTrue(initiallySelectedName.waitForExistence(timeout: 8))
+        XCTAssertTrue(waitForSteadyMapDetail(name: initiallySelectedName,
+                                             time: app.staticTexts["map-selected-location-time"],
+                                             expectedName: "Leo Park",
+                                             expectedContext: "Always"),
+                      "Opening Map from Leo's View must focus Leo even though Maya is the first eligible fixture pin.")
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Show Leo")).firstMatch.isSelected)
+        app.buttons["tab-sharing"].tap()
+        app.buttons["tab-circle"].tap()
+        XCTAssertTrue(waitForSteadyMapDetail(name: initiallySelectedName,
+                                             time: app.staticTexts["map-selected-location-time"],
+                                             expectedName: "Leo Park",
+                                             expectedContext: "Always"),
+                      "Returning to Map after a tab switch must preserve the selected person.")
+    }
+
+    func testViewMapDoesNotCreatePinForFreeLiveOnlyPerson() {
+        // The ordinary demo is Free: Maya's confirmed Look is an eligible
+        // snapshot pin, while Leo's live Always pin is Plus-gated.
+        let app = launchDemo()
+        let maya = app.buttons["person-row-maya"]
+        XCTAssertTrue(maya.waitForExistence(timeout: 20))
+        maya.tap()
+        app.buttons["person-profile-peek"].tap()
+        XCTAssertTrue(app.buttons["confirm-look-notify"].waitForExistence(timeout: 8))
+        app.buttons["confirm-look-notify"].tap()
+        XCTAssertTrue(app.staticTexts["view-location-freshness"].waitForExistence(timeout: 8))
+        app.buttons["circle-back"].tap()
+
+        XCTAssertTrue(app.buttons["person-peek-leo"].waitForExistence(timeout: 20))
+        app.buttons["person-peek-leo"].tap()
+        XCTAssertTrue(app.staticTexts["view-location-freshness"].waitForExistence(timeout: 8))
+        let openMap = app.buttons["view-open-map"]
+        XCTAssertTrue(openMap.waitForExistence(timeout: 8))
+        openMap.tap()
+
+        XCTAssertTrue(app.descendants(matching: .any)["map-screen-canvas"].waitForExistence(timeout: 8),
+                      "The eligible Maya snapshot should keep the generic map available.")
+        let showMaya = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Show Maya")).firstMatch
+        let showLeo = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Show Leo")).firstMatch
+        XCTAssertTrue(showMaya.waitForExistence(timeout: 8), "Maya's confirmed snapshot should remain on the map.")
+        XCTAssertFalse(showLeo.exists, "Opening Leo's Free live-only View must not add a Plus-gated pin.")
+        XCTAssertFalse(app.staticTexts["map-selected-person-name"].exists)
+        XCTAssertTrue(app.staticTexts["map-focus-unavailable"].waitForExistence(timeout: 5),
+                      "Map should explain why Leo is not selected.")
+        XCTAssertTrue(showMaya.isHittable,
+                      "With one eligible pin, the panel must still provide an explicit way to select it.")
+        XCTAssertFalse(app.buttons["map-view-selected-person"].exists,
+                       "Map must not imply that the other eligible person's pin belongs to Leo.")
+        showMaya.tap()
+        XCTAssertTrue(app.staticTexts["map-selected-person-name"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.staticTexts["map-selected-person-name"].label, "Maya Chen")
+        XCTAssertTrue(app.buttons["map-view-selected-person"].exists)
+        XCTAssertFalse(app.staticTexts["map-focus-unavailable"].exists,
+                       "Selecting an eligible pin should dismiss the unavailable-person explanation.")
+        app.buttons["tab-sharing"].tap()
+        app.buttons["tab-circle"].tap()
+        XCTAssertEqual(app.staticTexts["map-selected-person-name"].label, "Maya Chen",
+                       "Choosing the only eligible pin must persist as Map focus across tab return.")
+    }
+
+    func testViewMapExplainsFocusedPersonWhenNoEligiblePinsExist() {
+        let app = launchDemo()
+        XCTAssertTrue(app.buttons["person-peek-leo"].waitForExistence(timeout: 20))
+        app.buttons["person-peek-leo"].tap()
+        XCTAssertTrue(app.staticTexts["view-location-freshness"].waitForExistence(timeout: 8))
+        app.buttons["view-open-map"].tap()
+
+        XCTAssertTrue(app.staticTexts["No locations yet"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.staticTexts["This person's location is unavailable on this map."].waitForExistence(timeout: 5),
+                      "The empty Map state should explain that Leo has no eligible pin.")
+        XCTAssertFalse(app.descendants(matching: .any)["map-screen-canvas"].exists)
+        let back = app.buttons["map-back-to-people"]
+        XCTAssertTrue(back.isHittable,
+                      "The focused-person empty state should retain the People navigation action.")
+        back.tap()
+        XCTAssertTrue(app.buttons["person-row-maya"].waitForExistence(timeout: 5),
+                      "The Map back action should return to People.")
     }
 
     func testSharingGermanExtraExtraLargeRowBoundary() {

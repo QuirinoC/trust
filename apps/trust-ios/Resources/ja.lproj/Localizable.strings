@@ -297,6 +297,7 @@
 "map" = "地図";
 "map_accessibility" = "地図。相手がAlwaysで共有している場合、ライブピンが表示されます。";
 "map_empty_body" = "相手がAlwaysで共有している場合、ライブピンが表示されます。";
+"map_focus_unavailable" = "この人の位置情報はこの地図では利用できません。";
 "map_legend" = "Always";
 "map_sealed_hint" = "相手がAlwaysで共有している場合、ライブピンが表示されます。";
 "messages_unavailable" = "ここではメッセージを利用できません。招待リンクをコピーしました。";

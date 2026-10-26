@@ -298,6 +298,7 @@
   "map": "Map",
   "map_accessibility": "Map. Live pins when someone shares Always.",
   "map_empty_body": "Live pins show when someone shares Always.",
+  "map_focus_unavailable": "This person's location is unavailable on this map.",
   "map_legend": "Always",
   "map_sealed_hint": "Live pins show when someone shares Always.",
   "messages_unavailable": "Messages isn’t available here. The invite link was copied.",

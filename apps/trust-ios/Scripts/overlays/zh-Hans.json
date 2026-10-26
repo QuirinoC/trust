@@ -146,6 +146,7 @@
   "no_location_body": "这通常需要一些时间。",
   "no_locations_yet": "还没有地点",
   "map_empty_body": "实时图钉会在有人分享时显示。",
+  "map_focus_unavailable": "此地图无法显示此人的位置。",
   "back_to_circle": "回到人物",
   "on_map": "地图上的 %d · 未显示 %d",
   "map_legend": "总是",

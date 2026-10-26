@@ -432,6 +432,12 @@ public enum TrustCopy {
             defaultValue: "Live pins show when someone shares Always."
         )
     }
+    public static var mapFocusUnavailable: String {
+        value(
+            "map_focus_unavailable",
+            defaultValue: "This person's location is unavailable on this map."
+        )
+    }
     public static var backToCircle: String { value("back_to_circle", defaultValue: "Back to People") }
     public static func onMap(count: Int, sealed: Int) -> String {
         format("on_map", defaultValue: "%d on map · %d not shown", count, sealed)

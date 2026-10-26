@@ -102,6 +102,7 @@
   "no_location_body": "Dies dauert normalerweise einen Moment.",
   "no_locations_yet": "Noch keine Standorte",
   "map_empty_body": "Live-Pins werden angezeigt, wenn jemand „Immer“ teilt.",
+  "map_focus_unavailable": "Der Standort dieser Person ist auf dieser Karte nicht verfügbar.",
   "back_to_circle": "Zurück zu Menschen",
   "on_map": "%d auf der Karte · %d nicht angezeigt",
   "map_legend": "Stets",

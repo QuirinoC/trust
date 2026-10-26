@@ -146,6 +146,7 @@
   "no_location_body": "通常、少し時間がかかります。",
   "no_locations_yet": "位置情報はまだありません",
   "map_empty_body": "相手がAlwaysで共有している場合、ライブピンが表示されます。",
+  "map_focus_unavailable": "この人の位置情報はこの地図では利用できません。",
   "back_to_circle": "Peopleに戻る",
   "on_map": "地図上に%d人 · 非表示%d人",
   "map_legend": "Always",

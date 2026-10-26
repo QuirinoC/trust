@@ -1667,8 +1667,8 @@ final class TrustRealAPIFeatureTests: XCTestCase {
         }
 
         app.buttons["sharing-actions-\(peer)"].tap()
-        let pause = app.buttons["pause-sharing-\(peer)"]
-        XCTAssertTrue(pause.waitForExistence(timeout: 5))
+        guard let pause = nativeMenuAction(identifier: "pause-sharing-\(peer)", label: "Pause", in: app) else { return }
+        XCTAssertTrue(pause.isHittable, "The native Pause menu action should be hittable.")
         pause.tap()
         let oneHour = app.buttons["pause-duration-3600"]
         XCTAssertTrue(oneHour.waitForExistence(timeout: 5))
@@ -2239,8 +2239,8 @@ final class TrustRealAPIFeatureTests: XCTestCase {
         let actions = app.buttons["sharing-actions-\(name)"]
         XCTAssertTrue(actions.waitForExistence(timeout: 10))
         actions.tap()
-        let pause = app.buttons["pause-sharing-\(name)"]
-        XCTAssertTrue(pause.waitForExistence(timeout: 5))
+        guard let pause = nativeMenuAction(identifier: "pause-sharing-\(name)", label: "Pause", in: app) else { return }
+        XCTAssertTrue(pause.isHittable, "The native Pause menu action should be hittable.")
         pause.tap()
         let threeDays = app.buttons["pause-duration-259200"]
         XCTAssertTrue(threeDays.waitForExistence(timeout: 8))
@@ -2255,8 +2255,8 @@ final class TrustRealAPIFeatureTests: XCTestCase {
         XCTAssertEqual(inboundPresentation(personID: fixture.main.personID, token: fixture.peer.token), "paused")
         attachScreenshot(of: app, named: "Pause - Three day end date and time")
         actions.tap()
-        let resume = app.buttons["resume-sharing-\(name)"]
-        XCTAssertTrue(resume.waitForExistence(timeout: 5), "Resuming should be explicit rather than inferred from the mode rail.")
+        guard let resume = nativeMenuAction(identifier: "resume-sharing-\(name)", label: "Resume Sealed", in: app) else { return }
+        XCTAssertTrue(resume.isHittable, "Resuming should be explicit rather than inferred from the mode rail.")
         XCTAssertTrue(resume.label.contains("Sealed"))
         attachScreenshot(of: app, named: "Pause - Explicit Resume Sealed action")
         resume.tap()
@@ -2271,8 +2271,9 @@ final class TrustRealAPIFeatureTests: XCTestCase {
         }
         XCTAssertTrue(waitUntil(timeout: 8) { actions.isHittable })
         actions.tap()
-        let details = app.buttons["presence-grant-details-\(name)"]
-        XCTAssertTrue(details.waitForExistence(timeout: 5))
+        guard let details = nativeMenuAction(identifier: "presence-grant-details-\(name)",
+                                             label: "About Home or Away", in: app) else { return }
+        XCTAssertTrue(details.isHittable)
         details.tap()
         XCTAssertTrue(app.alerts.firstMatch.waitForExistence(timeout: 5))
         XCTAssertTrue(app.alerts.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Home-arrival alert")).firstMatch.exists,
@@ -2578,6 +2579,28 @@ final class TrustRealAPIFeatureTests: XCTestCase {
 
     private func element(_ identifier: String, in app: XCUIApplication) -> XCUIElement {
         app.descendants(matching: .any)[identifier]
+    }
+
+    /// Native iOS menus may omit a SwiftUI action's accessibility identifier
+    /// while still exposing its exact visible title as a button label.
+    private func nativeMenuAction(identifier: String, label: String, in app: XCUIApplication,
+                                  file: StaticString = #filePath, line: UInt = #line) -> XCUIElement? {
+        let identified = app.buttons[identifier]
+        if identified.waitForExistence(timeout: 1) { return identified }
+
+        let visibleLabel = app.buttons.matching(NSPredicate(format: "label == %@", label)).firstMatch
+        if visibleLabel.waitForExistence(timeout: 4) { return visibleLabel }
+
+        let buttonSummary = app.buttons.allElementsBoundByIndex.map { button in
+            "label=\(button.label) identifier=\(button.identifier) hittable=\(button.isHittable)"
+        }.joined(separator: "\n")
+        XCTContext.runActivity(named: "Native menu action missing: \(label)") { activity in
+            activity.add(XCTAttachment(screenshot: app.screenshot()))
+            activity.add(XCTAttachment(string: app.debugDescription))
+            activity.add(XCTAttachment(string: buttonSummary))
+        }
+        XCTFail("Expected native menu action with identifier '\(identifier)' or exact label '\(label)'.", file: file, line: line)
+        return nil
     }
 
     private func requireAgeAssuranceFaultProxy() throws {

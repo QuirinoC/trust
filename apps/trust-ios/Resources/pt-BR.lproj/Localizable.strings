@@ -297,6 +297,7 @@
 "map" = "Mapa";
 "map_accessibility" = "Mapa. Pins ao vivo quando alguém compartilha no modo Sempre.";
 "map_empty_body" = "Os pins ao vivo aparecem quando alguém compartilha no modo Sempre.";
+"map_focus_unavailable" = "A localização desta pessoa não está disponível neste mapa.";
 "map_legend" = "Sempre";
 "map_sealed_hint" = "Os pins ao vivo aparecem quando alguém compartilha no modo Sempre.";
 "messages_unavailable" = "O Mensagens não está disponível aqui. O link do convite foi copiado.";

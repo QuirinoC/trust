@@ -124,6 +124,12 @@ final class AppModel: ObservableObject {
     }
     @Published var pendingPushDestination: TrustPushDestination?
     @Published var circlePath: [CircleRoute] = []
+    enum MapFocus: Equatable {
+        case automatic
+        case person(UUID)
+    }
+    @Published private(set) var mapFocus: MapFocus = .automatic
+    @Published private(set) var mapSelectedPersonID: UUID?
     @Published var snapshot: CircleSnapshot?
     @Published private(set) var isOffline = false
     @Published private(set) var privacyHoldSubmission = TrustAccountPrivacyHoldState()
@@ -349,6 +355,7 @@ final class AppModel: ObservableObject {
         lastRefreshAttemptAt = nil
         setAccountDataScope(nil)
         if accountChanged {
+            resetMapFocus()
             client.clearCache()
             snapshot = nil
             openedSnapshots = [:]
@@ -616,6 +623,7 @@ final class AppModel: ObservableObject {
             // Keep the simulator's age fixture: this test resets the account, not
             // the separate age-assurance state machine.
             auth.signOut()
+            resetMapFocus()
             client.token = nil
             client.clearCache()
             snapshot = nil
@@ -626,6 +634,7 @@ final class AppModel: ObservableObject {
             // this explicit debug fixture's prior Trust session before the durable
             // privacy-hold restoration check can intercept the test screen.
             auth.signOut()
+            resetMapFocus()
             client.token = nil
         }
         if env["TRUST_AGE_TEST_MODE"] == "1", env["TRUST_AGE_TEST_AUTHENTICATED"] == "1" {
@@ -934,6 +943,7 @@ final class AppModel: ObservableObject {
     /// Stop location, ingest, snapshots and cached account data synchronously before
     /// starting network I/O. The retained bearer token is used only to submit this hold.
     private func clearAccountDataForLocalPrivacyHold() {
+        resetMapFocus()
         ageUnavailableStopAllState = .idle
         accountGeneration &+= 1
         client.clearCache()
@@ -1579,6 +1589,7 @@ final class AppModel: ObservableObject {
     }
 
     private func clearAccountSession(preservingPrivacyHoldDeletionSession: Bool = false) {
+        resetMapFocus()
         let pushRemovalToken = client.token ?? auth.sessionToken
         authenticatedPerson = nil
         phoneRetryAccountID = nil
@@ -2211,9 +2222,20 @@ final class AppModel: ObservableObject {
             .sorted { $0.at > $1.at }
     }
 
-    func openMap() {
+    func openMap(focusing personID: UUID? = nil) {
+        mapFocus = personID.map(MapFocus.person) ?? .automatic
         selectedTab = .circle
         circlePath = [.map]
+    }
+
+    func selectMapPerson(_ personID: UUID) {
+        mapSelectedPersonID = personID
+        mapFocus = .person(personID)
+    }
+
+    private func resetMapFocus() {
+        mapSelectedPersonID = nil
+        mapFocus = .automatic
     }
 
     func closeSnapshot(for personID: UUID) {

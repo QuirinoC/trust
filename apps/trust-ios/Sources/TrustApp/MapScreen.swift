@@ -14,8 +14,19 @@ struct MapScreen: View {
 
     private var pins: [AppModel.MapPin] { model.homeMapPins }
     private var sealedCount: Int { max(0, model.circle.count - pins.count) }
+    private var focusedPersonUnavailable: Bool {
+        switch model.mapFocus {
+        case .person(let id): !pins.contains(where: { $0.id == id })
+        case .automatic: false
+        }
+    }
     private var selected: AppModel.MapPin? {
-        pins.first { $0.id == selectedID } ?? pins.first
+        switch model.mapFocus {
+        case .automatic:
+            return pins.first { $0.id == selectedID } ?? pins.first
+        case .person(let id):
+            return pins.first { $0.id == id }
+        }
     }
 
     var body: some View {
@@ -28,7 +39,7 @@ struct MapScreen: View {
                     TrustEmptyState(
                         glyph: "lock",
                         title: TrustCopy.noLocationsYet,
-                        message: TrustCopy.mapEmptyBody,
+                        message: focusedPersonUnavailable ? TrustCopy.mapFocusUnavailable : TrustCopy.mapEmptyBody,
                         actionTitle: TrustCopy.backToCircle
                     ) {
                         model.circlePath = []
@@ -62,9 +73,36 @@ struct MapScreen: View {
         }
         .onAppear {
             model.prepareMapLocation()
+            switch model.mapFocus {
+            case .person(let requestedID):
+                if pins.contains(where: { $0.id == requestedID }) {
+                    selectedID = requestedID
+                } else {
+                    // Keep other authorized pins visible without implying one
+                    // belongs to the person whose location was requested. Retain
+                    // the UUID so focus can recover if an eligible pin returns.
+                    selectedID = nil
+                }
+            case .automatic:
+                if let remembered = model.mapSelectedPersonID,
+                   pins.contains(where: { $0.id == remembered }) {
+                    selectedID = remembered
+                } else {
+                    selectedID = nil
+                }
+            }
             fitAll()
         }
-        .onChange(of: pins.map(\.id)) { _, _ in fitAll() }
+        .onChange(of: selectedID) { _, newValue in
+            guard let newValue, pins.contains(where: { $0.id == newValue }) else { return }
+            model.selectMapPerson(newValue)
+        }
+        .onChange(of: pins.map(\.id)) { _, ids in
+            if case .person(let focusedID) = model.mapFocus {
+                selectedID = ids.contains(focusedID) ? focusedID : nil
+            }
+            fitAll()
+        }
     }
 
     /// iPad regular width: full-bleed map + trailing person panel. Compact (iPhone and
@@ -149,11 +187,21 @@ struct MapScreen: View {
                 .padding(.vertical, 10)
             }
 
+            if focusedPersonUnavailable {
+                Text(TrustCopy.mapFocusUnavailable)
+                    .trustFont(12)
+                    .foregroundStyle(palette.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("map-focus-unavailable")
+                    .padding(.horizontal, TrustTheme.gutter)
+                    .padding(.bottom, 10)
+            }
+
             if let selected, let member = model.member(selected.id) {
                 personCard(selected, member)
             }
 
-            if pins.count > 1 {
+            if pins.count > 1 || (pins.count == 1 && focusedPersonUnavailable) {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
                         ForEach(pins) { pin in
@@ -235,6 +283,7 @@ struct MapScreen: View {
 
     private func selectPerson(_ id: UUID) {
         guard selected?.id != id else { return }
+        model.selectMapPerson(id)
         if reduceMotion {
             selectedID = id
         } else {

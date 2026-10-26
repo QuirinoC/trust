@@ -102,6 +102,7 @@
   "no_location_body": "Cela prend généralement un moment.",
   "no_locations_yet": "Aucun emplacement pour l'instant",
   "map_empty_body": "Les épingles en direct s'affichent lorsque quelqu'un partage Toujours.",
+  "map_focus_unavailable": "La position de cette personne n'est pas disponible sur cette carte.",
   "back_to_circle": "Retour aux personnes",
   "on_map": "%d sur la carte · %d non représenté",
   "map_legend": "Toujours",

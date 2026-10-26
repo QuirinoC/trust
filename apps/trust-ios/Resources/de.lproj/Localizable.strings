@@ -297,6 +297,7 @@
 "map" = "Karte";
 "map_accessibility" = "Karte. Live-Pins, wenn jemand Always teilt.";
 "map_empty_body" = "Live-Pins werden angezeigt, wenn jemand „Immer“ teilt.";
+"map_focus_unavailable" = "Der Standort dieser Person ist auf dieser Karte nicht verfügbar.";
 "map_legend" = "Stets";
 "map_sealed_hint" = "Live-Pins werden angezeigt, wenn jemand „Immer“ teilt.";
 "messages_unavailable" = "Nachrichten ist hier nicht verfügbar. Der Einladungslink wurde kopiert.";
