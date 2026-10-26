@@ -2816,7 +2816,7 @@ final class TrustRealAPIFeatureTests: XCTestCase {
         let locationRow = settings.descendants(matching: .any).matching(
             NSPredicate(format: "label CONTAINS[c] %@", "Location")
         ).firstMatch
-        if waitUntil(timeout: 4) { locationRow.exists && locationRow.isHittable } {
+        if waitUntil(timeout: 4, condition: { locationRow.exists && locationRow.isHittable }) {
             locationRow.tap()
         } else {
             openTrustLocationServicesPermission(in: settings)
@@ -2833,7 +2833,7 @@ final class TrustRealAPIFeatureTests: XCTestCase {
         let confirmAlways = springboard.alerts.buttons.matching(
             NSPredicate(format: "label CONTAINS[c] %@", "Always")
         ).firstMatch
-        if waitUntil(timeout: 3) { confirmAlways.exists && confirmAlways.isHittable } {
+        if waitUntil(timeout: 3, condition: { confirmAlways.exists && confirmAlways.isHittable }) {
             confirmAlways.tap()
         }
 

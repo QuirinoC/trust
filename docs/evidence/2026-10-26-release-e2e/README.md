@@ -2,6 +2,8 @@
 
 This is a finite snapshot of the local checks reported for the Trust release work as of 26 October 2026. Build 49 commit `2561ba8` is archived, Apple-validated, and uploaded for TestFlight. This is not a release approval and does not mean every external integration passed. Full simulator logs and `.xcresult` bundles remain on the test Mac under `/tmp/trust-e2e-20261025/`.
 
+The later cloud-run failures and the focused test-only correction are recorded in [CI-FOLLOWUP.md](CI-FOLLOWUP.md). Inspect the current PR head for rerun results.
+
 ## Results recorded
 
 | Area | Result | Scope and interpretation |

@@ -161,10 +161,28 @@ final class TrustUsageTests: XCTestCase {
         XCTAssertTrue(app.buttons["tab-sharing"].waitForExistence(timeout: 20))
         app.buttons["tab-sharing"].tap()
 
-        app.buttons["sharing-actions-maya"].tap()
+        let actions = app.buttons["sharing-actions-maya"]
+        XCTAssertTrue(actions.waitForExistence(timeout: 8))
+        let sharingScroll = app.scrollViews["sharing-scroll"]
+        XCTAssertTrue(sharingScroll.waitForExistence(timeout: 5))
+        for _ in 0..<6 where !isFullyVisible(actions, within: sharingScroll.frame.intersection(app.windows.firstMatch.frame)) {
+            sharingScroll.swipeUp(velocity: .slow)
+        }
+        let sharingViewport = sharingScroll.frame.intersection(app.windows.firstMatch.frame)
         let pause = app.buttons["pause-sharing-maya"]
+        guard activateMenuTrigger(actions, expecting: pause, in: app, within: sharingViewport) else {
+            XCTFail("Opening Maya's native Sharing actions should expose Pause.\n\(app.debugDescription)")
+            app.terminate()
+            return
+        }
         XCTAssertTrue(pause.waitForExistence(timeout: 5))
-        tapVisibleMenuOption(pause, in: app)
+        guard activateMenuOption(pause, in: app, within: app.windows.firstMatch.frame, postcondition: {
+            app.buttons["pause-duration-3600"].exists
+        }) else {
+            XCTFail("Selecting Pause should open its duration sheet.\n\(app.debugDescription)")
+            app.terminate()
+            return
+        }
         let pauseMenuDismissed = XCTNSPredicateExpectation(
             predicate: NSPredicate(format: "exists == false"),
             object: pause)
@@ -217,10 +235,25 @@ final class TrustUsageTests: XCTestCase {
         )
         XCTAssertEqual(XCTWaiter.wait(for: [offSelected], timeout: 5), .completed)
 
-        app.buttons["sharing-actions-maya"].tap()
         let remove = app.buttons["remove-person-action-maya"]
+        guard activateMenuTrigger(
+            actions,
+            expecting: remove,
+            in: app,
+            within: app.scrollViews["sharing-scroll"].frame.intersection(app.windows.firstMatch.frame)
+        ) else {
+            XCTFail("Opening Maya's native Sharing actions should expose Remove.\n\(app.debugDescription)")
+            app.terminate()
+            return
+        }
         XCTAssertTrue(remove.waitForExistence(timeout: 5))
-        remove.tap()
+        guard activateMenuOption(remove, in: app, within: app.windows.firstMatch.frame, postcondition: {
+            app.buttons["remove-person-confirm"].exists
+        }) else {
+            XCTFail("Selecting Remove should open its confirmation dialog.\n\(app.debugDescription)")
+            app.terminate()
+            return
+        }
         tapConfirmationAction("remove-person-confirm", in: app)
         XCTAssertFalse(app.descendants(matching: .any)["sharing-mode-group-maya"].waitForExistence(timeout: 2))
     }
@@ -242,42 +275,38 @@ final class TrustUsageTests: XCTestCase {
             let actions = app.buttons["sharing-actions-maya"]
             XCTAssertTrue(actions.waitForExistence(timeout: 8))
             let sharingScroll = app.scrollViews["sharing-scroll"]
-            for _ in 0..<8 where !actions.isHittable {
+            XCTAssertTrue(sharingScroll.waitForExistence(timeout: 5))
+            for _ in 0..<8 where !isFullyVisible(
+                actions,
+                within: sharingScroll.frame.intersection(app.windows.firstMatch.frame)
+            ) {
                 sharingScroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.7))
                     .press(forDuration: 0.1, thenDragTo: sharingScroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.45)))
             }
-            if !actions.isHittable {
+            let actionsViewport = sharingScroll.frame.intersection(app.windows.firstMatch.frame)
+            if !isFullyVisible(actions, within: actionsViewport) {
                 add(XCTAttachment(screenshot: app.screenshot()))
                 add(XCTAttachment(string: app.debugDescription))
             }
-            XCTAssertTrue(actions.isHittable)
-            actions.tap()
+            XCTAssertTrue(isFullyVisible(actions, within: actionsViewport),
+                          "The actions trigger should be fully visible before opening its native menu.")
             let pause = app.buttons["pause-sharing-maya"]
-            XCTAssertTrue(pause.waitForExistence(timeout: 5))
-            guard waitForStableMenuAction(pause, in: app, timeout: 8) else {
-                attachPauseMenuOpenFailure("Pause menu item did not become stable", pause: pause, in: app)
-                XCTFail("Pause must be a stable, hittable menu action before activation.\n\(app.debugDescription)")
+            guard activateMenuTrigger(
+                actions,
+                expecting: pause,
+                in: app,
+                within: actionsViewport
+            ) else {
+                attachMenuActivationFailure("Sharing actions did not open the Pause menu item", element: actions, in: app)
+                XCTFail("Opening Maya's Sharing actions should expose Pause.\n\(app.debugDescription)")
                 app.terminate()
                 continue
             }
-            pause.tap()
             let pauseScroll = app.scrollViews["pause-sharing-scroll"]
             let firstDuration = app.buttons["pause-duration-3600"]
-            var sheetOpened = waitForPauseSheet(pauseScroll, firstDuration: firstDuration, timeout: 6)
-            if !sheetOpened && pause.exists && pause.isHittable {
-                attachPauseMenuOpenFailure("Native Pause tap left its menu item visible; trying one center tap", pause: pause, in: app)
-                let frame = pause.frame
-                let appFrame = app.frame
-                let center = CGPoint(x: frame.midX, y: frame.midY)
-                if frame.width > 0, frame.height > 0, appFrame.contains(center) {
-                    app.coordinate(withNormalizedOffset: .zero)
-                        .withOffset(CGVector(dx: center.x - appFrame.minX, dy: center.y - appFrame.minY))
-                        .tap()
-                    sheetOpened = waitForPauseSheet(pauseScroll, firstDuration: firstDuration, timeout: 5)
-                }
-            }
-            guard sheetOpened else {
-                attachPauseMenuOpenFailure("Pause sheet did not open after the bounded tap recovery", pause: pause, in: app)
+            guard activateMenuOption(pause, in: app, within: app.windows.firstMatch.frame, postcondition: {
+                pauseScroll.exists && firstDuration.exists
+            }) else {
                 XCTFail("Tapping the native Pause action should open its duration sheet before any scrolling.\n\(app.debugDescription)")
                 app.terminate()
                 continue
@@ -670,10 +699,14 @@ final class TrustUsageTests: XCTestCase {
             let picker = app.descendants(matching: .any)["appearance-preference"]
             XCTAssertTrue(picker.waitForExistence(timeout: 5), "The appearance picker should be available in You.")
             XCTAssertTrue(scrollYouContent(to: picker, direction: .down, in: app), "The appearance picker should be hittable after scrolling down in You.")
-            picker.tap()
             let choice = app.buttons[option]
+            let viewport = app.scrollViews["you-scroll"].frame.intersection(app.windows.firstMatch.frame)
+            XCTAssertTrue(activateMenuTrigger(picker, expecting: choice, in: app, within: viewport),
+                          "Opening the appearance picker should expose \(option).\n\(app.debugDescription)")
             XCTAssertTrue(choice.waitForExistence(timeout: 5), "The picker should offer the \(option) appearance.")
-            tapVisibleMenuOption(choice, in: app)
+            XCTAssertTrue(activateMenuOption(choice, in: app, within: app.windows.firstMatch.frame, postcondition: {
+                (app.descendants(matching: .any)["appearance-preference"].value as? String) == option
+            }), "Choosing \(option) should update the appearance picker value.\n\(app.debugDescription)")
 
             // The collapsed native Picker can keep the selected option's label hittable, so
             // verify the value itself rather than infer menu dismissal from that label.
@@ -708,8 +741,13 @@ final class TrustUsageTests: XCTestCase {
         let picker = app.descendants(matching: .any)["appearance-preference"]
         XCTAssertTrue(scrollYouContent(to: picker, direction: .down, in: app))
         XCTAssertTrue(picker.isHittable)
-        picker.tap()
-        tapVisibleMenuOption(app.buttons["System"], in: app)
+        let systemChoice = app.buttons["System"]
+        let viewport = app.scrollViews["you-scroll"].frame.intersection(app.windows.firstMatch.frame)
+        XCTAssertTrue(activateMenuTrigger(picker, expecting: systemChoice, in: app, within: viewport),
+                      "Opening the appearance picker should expose System.\n\(app.debugDescription)")
+        XCTAssertTrue(activateMenuOption(systemChoice, in: app, within: app.windows.firstMatch.frame, postcondition: {
+            (app.descendants(matching: .any)["appearance-preference"].value as? String) == "System"
+        }), "Choosing System should update the appearance picker value.\n\(app.debugDescription)")
         let resetPicker = app.descendants(matching: .any)["appearance-preference"]
         let systemSelected = XCTNSPredicateExpectation(
             predicate: NSPredicate(format: "value == %@", "System"),
@@ -909,7 +947,7 @@ final class TrustUsageTests: XCTestCase {
         in viewport: XCUIElement,
         app: XCUIApplication,
         stableFor: TimeInterval = 0.35,
-        timeout: TimeInterval = 8
+        timeout: TimeInterval = 30
     ) -> [CGRect]? {
         let start = ProcessInfo.processInfo.systemUptime
         let deadline = start + timeout
@@ -930,8 +968,8 @@ final class TrustUsageTests: XCTestCase {
                     && frame.minX >= viewportFrame.minX - 1 && frame.maxX <= viewportFrame.maxX + 1
                     && frame.minY >= viewportFrame.minY - 1 && frame.maxY <= viewportFrame.maxY + 1
             }
-            let visible = elements.allSatisfy(\.exists)
-                && elements.dropFirst().allSatisfy(\.isHittable)
+            let firstExists = elements.first?.exists ?? false
+            let visible = firstExists && elements.dropFirst().allSatisfy(\.isHittable)
                 && geometryValid
             if visible, let previous, previous == frames {
                 if stableSince == nil { stableSince = now }
@@ -1270,27 +1308,78 @@ final class TrustUsageTests: XCTestCase {
             .tap()
     }
 
-    private func waitForStableMenuAction(_ option: XCUIElement, in app: XCUIApplication,
-                                         timeout: TimeInterval) -> Bool {
+    private func activateMenuTrigger(_ trigger: XCUIElement, expecting menuItem: XCUIElement,
+                                     in app: XCUIApplication, within viewport: CGRect,
+                                     timeout: TimeInterval = 25) -> Bool {
+        guard waitForStableMenuAction(trigger, within: viewport, timeout: timeout) else {
+            attachMenuActivationFailure("Menu trigger did not settle before activation", element: trigger, in: app)
+            return false
+        }
+        trigger.tap()
+        if waitForCondition(timeout: 8, condition: { menuItem.exists && menuItem.isHittable }) { return true }
+
+        guard trigger.exists, trigger.isHittable, frameIsFullyVisible(trigger.frame, within: viewport) else {
+            attachMenuActivationFailure("Menu trigger did not open its expected item", element: trigger, in: app)
+            return false
+        }
+        attachMenuActivationFailure("Native menu-trigger tap did not open the menu; trying one element-centered tap", element: trigger, in: app)
+        trigger.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        return waitForCondition(timeout: 10, condition: { menuItem.exists && menuItem.isHittable })
+    }
+
+    private func activateMenuOption(_ option: XCUIElement, in app: XCUIApplication,
+                                    within viewport: CGRect, timeout: TimeInterval = 25,
+                                    postcondition: () -> Bool) -> Bool {
+        guard waitForStableMenuAction(option, within: viewport, timeout: timeout) else {
+            attachMenuActivationFailure("Menu option did not settle before selection", element: option, in: app)
+            return false
+        }
+        option.tap()
+        if waitForCondition(timeout: 4, condition: postcondition) { return true }
+
+        guard option.exists, option.isHittable, frameIsFullyVisible(option.frame, within: viewport) else {
+            attachMenuActivationFailure("Menu option activation did not satisfy its expected state", element: option, in: app)
+            return false
+        }
+        attachMenuActivationFailure("Native menu-option tap did not change state; trying one element-centered tap", element: option, in: app)
+        option.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        let completed = waitForCondition(timeout: 8, condition: postcondition)
+        if !completed {
+            attachMenuActivationFailure("Menu option remained unchanged after bounded activation", element: option, in: app)
+        }
+        return completed
+    }
+
+    private func waitForCondition(timeout: TimeInterval, condition: () -> Bool) -> Bool {
+        let deadline = ProcessInfo.processInfo.systemUptime + timeout
+        while ProcessInfo.processInfo.systemUptime < deadline {
+            if condition() { return true }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        }
+        return condition()
+    }
+
+    private func frameIsFullyVisible(_ frame: CGRect, within viewport: CGRect) -> Bool {
+        !frame.isNull && !frame.isInfinite && frame.width > 0 && frame.height > 0
+            && viewport.width > 0 && viewport.height > 0
+            && frame.minX >= viewport.minX - 1 && frame.maxX <= viewport.maxX + 1
+            && frame.minY >= viewport.minY - 1 && frame.maxY <= viewport.maxY + 1
+    }
+
+    private func waitForStableMenuAction(_ option: XCUIElement,
+                                         within viewport: CGRect, timeout: TimeInterval) -> Bool {
         let deadline = ProcessInfo.processInfo.systemUptime + timeout
         var previousFrame: CGRect?
         var stableSince: TimeInterval?
         while ProcessInfo.processInfo.systemUptime < deadline {
             guard let snapshot = try? option.snapshot(), snapshot.isEnabled,
-                  option.isHittable, snapshot.frame.width > 0, snapshot.frame.height > 0 else {
+                  option.isHittable, frameIsFullyVisible(snapshot.frame, within: viewport) else {
                 previousFrame = nil
                 stableSince = nil
                 RunLoop.current.run(until: Date().addingTimeInterval(0.1))
                 continue
             }
             let frame = snapshot.frame
-            let center = CGPoint(x: frame.midX, y: frame.midY)
-            guard center.x.isFinite, center.y.isFinite, app.frame.contains(center) else {
-                previousFrame = nil
-                stableSince = nil
-                RunLoop.current.run(until: Date().addingTimeInterval(0.1))
-                continue
-            }
             let now = ProcessInfo.processInfo.systemUptime
             if previousFrame != frame {
                 previousFrame = frame
@@ -1312,22 +1401,22 @@ final class TrustUsageTests: XCTestCase {
         return scrollView.exists && firstDuration.exists
     }
 
-    private func attachPauseMenuOpenFailure(_ title: String, pause: XCUIElement, in app: XCUIApplication) {
+    private func attachMenuActivationFailure(_ title: String, element: XCUIElement, in app: XCUIApplication) {
         let screenshot = XCTAttachment(screenshot: app.screenshot())
         screenshot.name = title
         screenshot.lifetime = .keepAlways
         add(screenshot)
-        let pauseFrame = pause.exists ? NSCoder.string(for: pause.frame) : "<menu item absent>"
+        let elementFrame = element.exists ? NSCoder.string(for: element.frame) : "<element absent>"
         let scroll = app.scrollViews["pause-sharing-scroll"]
         let scrollFrame = scroll.exists ? NSCoder.string(for: scroll.frame) : "<sheet absent>"
         let duration = app.buttons["pause-duration-3600"]
         let durationFrame = duration.exists ? NSCoder.string(for: duration.frame) : "<duration absent>"
-        let geometry = XCTAttachment(string: "pause menu frame=\(pauseFrame); sheet scroll frame=\(scrollFrame); first duration frame=\(durationFrame); app window=\(NSCoder.string(for: app.windows.firstMatch.frame))")
-        geometry.name = "Pause menu activation geometry"
+        let geometry = XCTAttachment(string: "activated element frame=\(elementFrame); sheet scroll frame=\(scrollFrame); first duration frame=\(durationFrame); app window=\(NSCoder.string(for: app.windows.firstMatch.frame))")
+        geometry.name = "Menu activation geometry"
         geometry.lifetime = .keepAlways
         add(geometry)
         let hierarchy = XCTAttachment(string: app.debugDescription)
-        hierarchy.name = "Pause menu activation hierarchy"
+        hierarchy.name = "Menu activation hierarchy"
         hierarchy.lifetime = .keepAlways
         add(hierarchy)
     }
