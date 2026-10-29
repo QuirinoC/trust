@@ -70,6 +70,8 @@
 "api_handle_in_use" = "そのハンドルは使われています。";
 "api_handle_not_found" = "そのハンドルのTrustアカウントが見つかりません。";
 "api_invalid_apple_token" = "Appleはこのサインインを確認できませんでした。もう一度お試しください。";
+"api_invalid_avatar_image" = "この写真を保存できませんでした。別の写真を選んでください。";
+"api_invalid_avatar_preset" = "このプロフィール画像は利用できません。別の画像を選んでください。";
 "api_invalid_bundle" = "そのプッシュトピックはこのアプリのものではありません。";
 "api_invalid_code" = "その招待コードは一致しません。";
 "api_invalid_device" = "プッシュトークンとインストールIDが必要です。";
@@ -120,12 +122,19 @@
 "avatar" = "動物";
 "avatar_bear" = "クマ";
 "avatar_british_shorthair" = "ブリティッシュショートヘア";
+"avatar_camera_access_unavailable" = "カメラにアクセスできません。";
+"avatar_camera_unavailable_message" = "このデバイスではカメラを利用できません。";
 "avatar_cat" = "ネコ";
 "avatar_dog" = "イヌ";
 "avatar_fox" = "キツネ";
 "avatar_icon_accessibility" = "%@ アイコン";
+"avatar_initials_value" = "イニシャル";
 "avatar_otter" = "カワウソ";
 "avatar_owl" = "フクロウ";
+"avatar_photo_open_error" = "この写真を開けませんでした。別の写真を選んでください。";
+"avatar_photo_prepare_error" = "この写真を準備できませんでした。別の写真を選んでください。";
+"avatar_photo_value" = "写真";
+"avatar_preparing_photo" = "写真を準備しています…";
 "avatar_rabbit" = "ウサギ";
 "avatar_ragdoll" = "ラグドール";
 "avatar_siamese" = "シャムネコ";
@@ -468,6 +477,7 @@
 "sharing_requests_accessibility" = "%@、受信リクエスト%d件";
 "sharing_stopped" = "%@さんとの位置情報共有を停止しました。";
 "sharing_sub" = "相手ごとに、あなたについて見られる内容を設定します。";
+"sharing_tab_title" = "共有";
 "show_on_map" = "%@さんを地図に表示";
 "sign_in_expired" = "サインインの期限が切れました。もう一度サインインしてください。";
 "sign_in_in_progress" = "別のサインインが進行中です。";

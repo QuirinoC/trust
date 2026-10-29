@@ -1687,14 +1687,26 @@ final class AppModel: ObservableObject {
             publishDemoSnapshot()
             return
         }
-        let avatar = try await client.setAvatarPreset(presetID)
+        guard let operation = currentAccountOperation() else { throw CancellationError() }
+        let avatar = try await client.setAvatarPreset(
+            presetID,
+            operation: operation,
+            currentOperation: { [weak self] in self?.currentAccountOperation() }
+        )
+        guard isCurrentAccount(operation: operation) else { throw CancellationError() }
         updateLocalAvatar(avatar)
         await refresh()
     }
 
     func saveAvatarPhoto(_ jpeg: Data) async throws {
         guard !isDemoMode else { throw TrustClientError.server("Profile pictures are unavailable in demo mode.") }
-        let avatar = try await client.setAvatarPhoto(jpeg)
+        guard let operation = currentAccountOperation() else { throw CancellationError() }
+        let avatar = try await client.setAvatarPhoto(
+            jpeg,
+            operation: operation,
+            currentOperation: { [weak self] in self?.currentAccountOperation() }
+        )
+        guard isCurrentAccount(operation: operation) else { throw CancellationError() }
         updateLocalAvatar(avatar)
         await refresh()
     }
@@ -1705,7 +1717,12 @@ final class AppModel: ObservableObject {
             publishDemoSnapshot()
             return
         }
-        try await client.removeAvatar()
+        guard let operation = currentAccountOperation() else { throw CancellationError() }
+        try await client.removeAvatar(
+            operation: operation,
+            currentOperation: { [weak self] in self?.currentAccountOperation() }
+        )
+        guard isCurrentAccount(operation: operation) else { throw CancellationError() }
         updateLocalAvatar(nil)
         await refresh()
     }

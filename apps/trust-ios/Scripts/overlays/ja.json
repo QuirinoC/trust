@@ -548,5 +548,15 @@
   "phone_send_countdown": "%@後にコードを送信",
   "phone_resend_countdown": "%@後に再送信",
   "phone_retry_explanation": "%@（現地時間）に別のコードをリクエストできます。番号の編集は引き続き可能です。",
-  "resume_paused_mode": "%@に戻す"
+  "resume_paused_mode": "%@に戻す",
+  "avatar_preparing_photo": "写真を準備しています…",
+  "avatar_photo_open_error": "この写真を開けませんでした。別の写真を選んでください。",
+  "avatar_photo_prepare_error": "この写真を準備できませんでした。別の写真を選んでください。",
+  "avatar_camera_unavailable_message": "このデバイスではカメラを利用できません。",
+  "avatar_camera_access_unavailable": "カメラにアクセスできません。",
+  "avatar_photo_value": "写真",
+  "avatar_initials_value": "イニシャル",
+  "api_invalid_avatar_preset": "このプロフィール画像は利用できません。別の画像を選んでください。",
+  "api_invalid_avatar_image": "この写真を保存できませんでした。別の写真を選んでください。",
+  "sharing_tab_title": "共有"
 }

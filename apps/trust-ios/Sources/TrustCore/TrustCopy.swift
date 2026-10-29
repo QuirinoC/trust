@@ -30,6 +30,7 @@ public enum TrustCopy {
     /// Legacy key alias used by older call sites / localization tables.
     public static var circle: String { people }
     public static var sharing: String { value("sharing", defaultValue: "Sharing") }
+    public static var sharingTabTitle: String { value("sharing_tab_title", defaultValue: "Sharing") }
     public static var log: String { value("log", defaultValue: "Activity") }
     public static var you: String { value("you", defaultValue: "You") }
     public static var map: String { value("map", defaultValue: "Map") }
@@ -100,6 +101,13 @@ public enum TrustCopy {
     public static var removePicture: String { value("remove_picture", defaultValue: "Remove picture") }
     public static var photoOptions: String { value("photo_options", defaultValue: "Photo options") }
     public static func avatarIconAccessibility(_ name: String) -> String { format("avatar_icon_accessibility", defaultValue: "%@ icon", name) }
+    public static var avatarPreparingPhoto: String { value("avatar_preparing_photo", defaultValue: "Preparing photo…") }
+    public static var avatarPhotoOpenError: String { value("avatar_photo_open_error", defaultValue: "That photo could not be opened. Choose another one.") }
+    public static var avatarPhotoPrepareError: String { value("avatar_photo_prepare_error", defaultValue: "This photo could not be prepared. Choose another one.") }
+    public static var avatarCameraUnavailableMessage: String { value("avatar_camera_unavailable_message", defaultValue: "A camera is not available on this device.") }
+    public static var avatarCameraAccessUnavailable: String { value("avatar_camera_access_unavailable", defaultValue: "Camera access is unavailable.") }
+    public static var avatarPhotoValue: String { value("avatar_photo_value", defaultValue: "Photo") }
+    public static var avatarInitialsValue: String { value("avatar_initials_value", defaultValue: "Initials") }
     public static var sharingPresenceExplanation: String { value("sharing_presence_explanation", defaultValue: "Home or Away appears only for people you chose Sealed or Always for. Off, Pause, and Hidden keep your status out of their view.") }
     public static func moreSharingActions(_ name: String) -> String { format("more_sharing_actions", defaultValue: "More sharing actions for %@", name) }
     public static var accessibilityExpanded: String { value("accessibility_expanded", defaultValue: "Expanded") }
@@ -1038,6 +1046,10 @@ public enum TrustCopy {
     /// Known API error codes → plain copy. Unknown codes pass the server message through.
     public static func apiError(code: String?, fallback: String?) -> String {
         switch code {
+        case "invalid_avatar_preset":
+            return value("api_invalid_avatar_preset", defaultValue: "That profile picture isn’t available. Choose another one.")
+        case "invalid_avatar_image":
+            return value("api_invalid_avatar_image", defaultValue: "That photo couldn’t be saved. Choose another one.")
         case "confirmation_required":
             return value("api_confirmation_required", defaultValue: "Look needs a confirm first.")
         case "not_connected":

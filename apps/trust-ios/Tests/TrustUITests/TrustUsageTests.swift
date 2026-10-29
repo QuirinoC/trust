@@ -1381,6 +1381,126 @@ final class TrustUsageTests: XCTestCase {
         }
     }
 
+    func testYouActivityAndAvatarPickerReachabilityAcrossLocalizationAndTextSizes() {
+        let variants: [(dark: Bool, language: String, contentSize: String?)] = [
+            (false, "en", nil),
+            (true, "de", "UICTContentSizeCategoryAccessibilityXXXL")
+        ]
+        let languageFilter = ProcessInfo.processInfo.environment["TRUST_POLISH_LANGUAGE"]
+        guard languageFilter == nil || languageFilter == "en" || languageFilter == "de" else {
+            XCTFail("TRUST_POLISH_LANGUAGE must be en or de.")
+            return
+        }
+
+        for variant in variants where languageFilter == nil || languageFilter == variant.language {
+            let app = launchDemo(dark: variant.dark, route: "you", contentSize: variant.contentSize,
+                                 language: variant.language)
+            XCTAssertTrue(app.buttons["tab-you"].waitForExistence(timeout: 20))
+
+            let appearance = app.descendants(matching: .any)["appearance-preference"]
+            XCTAssertTrue(scrollYouContent(to: appearance, direction: .down, in: app),
+                          "Preferences must remain reachable on You.")
+            XCTAssertTrue(isFullyVisible(appearance, within: app.scrollViews["you-scroll"].frame),
+                          "Appearance must fit inside the clipped You viewport.")
+            let support = app.descendants(matching: .any)["support-link"].firstMatch
+            XCTAssertTrue(support.waitForExistence(timeout: 5))
+            XCTAssertTrue(isFullyVisible(support, within: app.windows.firstMatch.frame),
+                          "The legal footer must remain visible while preferences scroll.")
+            let appearanceCapture = XCTAttachment(screenshot: app.screenshot())
+            appearanceCapture.name = "You appearance and legal footer - \(variant.language) - \(variant.dark ? "dark" : "light")"
+            appearanceCapture.lifetime = .keepAlways
+            add(appearanceCapture)
+
+            let language = app.descendants(matching: .any)["language-preference"]
+            XCTAssertTrue(scrollYouContent(to: language, direction: .down, in: app),
+                          "Language must remain reachable inside You preferences.")
+            let youViewport = app.scrollViews["you-scroll"].frame
+            XCTAssertTrue(isFullyVisible(language, within: youViewport),
+                          "The full Language control should be inside the clipped You viewport.")
+            XCTAssertFalse((language.value as? String ?? "").isEmpty,
+                           "The selected language value should remain readable.")
+            XCTAssertTrue(isFullyVisible(support, within: app.windows.firstMatch.frame),
+                          "The legal footer should remain visible while Language is in view.")
+            waitForPolishCapture(stage: "you-\(variant.language)")
+            let languageCapture = XCTAttachment(screenshot: app.screenshot())
+            languageCapture.name = "You language value and legal footer - \(variant.language) - \(variant.dark ? "dark" : "light")"
+            languageCapture.lifetime = .keepAlways
+            add(languageCapture)
+
+            app.buttons["tab-log"].tap()
+            let activity = app.descendants(matching: .any).matching(
+                NSPredicate(format: "identifier BEGINSWITH %@", "activity-event-")
+            ).firstMatch
+            XCTAssertTrue(activity.waitForExistence(timeout: 8), "Activity should show recorded fixture events.")
+            waitForPolishCapture(stage: "activity-\(variant.language)")
+            let activityCapture = XCTAttachment(screenshot: app.screenshot())
+            activityCapture.name = "Activity - \(variant.language) - \(variant.dark ? "dark" : "light")"
+            activityCapture.lifetime = .keepAlways
+            add(activityCapture)
+
+            app.buttons["tab-you"].tap()
+            let editPicture = app.buttons["edit-profile-picture"]
+            XCTAssertTrue(scrollYouContent(to: editPicture, direction: .up, in: app))
+            editPicture.tap()
+            let save = app.buttons["avatar-save"]
+            XCTAssertTrue(save.waitForExistence(timeout: 5))
+            let preview = app.buttons["avatar-photo-options"]
+            XCTAssertTrue(preview.waitForExistence(timeout: 5))
+            let originalValue = preview.value as? String
+            let cancel = app.buttons["avatar-cancel"]
+            XCTAssertTrue(cancel.waitForExistence(timeout: 5))
+            XCTAssertTrue(cancel.isHittable && save.isHittable,
+                          "Cancel and Save must both remain reachable in the picture picker.")
+            let pickerScroll = app.scrollViews["avatar-picker-scroll"]
+            XCTAssertTrue(pickerScroll.waitForExistence(timeout: 5), "The picture picker should expose its vertical scroll viewport.")
+            waitForPolishCapture(stage: "picker-initial-\(variant.language)")
+            let initialPickerCapture = XCTAttachment(screenshot: app.screenshot())
+            initialPickerCapture.name = "Avatar picker initial viewport - \(variant.language) - \(variant.dark ? "dark" : "light")"
+            initialPickerCapture.lifetime = .keepAlways
+            add(initialPickerCapture)
+
+            let presetLabelMarker = variant.language == "de" ? "Symbol" : "icon"
+            let presetButtons = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", presetLabelMarker))
+            let presets = presetButtons.allElementsBoundByIndex
+            let original = presets.first(where: { $0.isSelected })
+            var staged = presetButtons.allElementsBoundByIndex.first(where: { !$0.isSelected && $0.isHittable })
+            for _ in 0..<18 where staged == nil {
+                pickerScroll.swipeUp(velocity: .slow)
+                staged = presetButtons.allElementsBoundByIndex.first(where: { !$0.isSelected && $0.isHittable })
+            }
+            XCTAssertNotNil(staged, "Scroll the picture picker until an alternate preset is reachable.")
+            let originalLabel = original?.label
+            if let staged {
+                XCTAssertFalse(staged.frame.intersects(cancel.frame) || staged.frame.intersects(save.frame),
+                               "The preset action target must not overlap the persistent Cancel and Save controls.")
+            }
+            staged?.tap()
+            XCTAssertTrue(save.isEnabled, "Staging a different preset should enable Save.")
+            waitForPolishCapture(stage: "picker-staged-\(variant.language)")
+            let pickerCapture = XCTAttachment(screenshot: app.screenshot())
+            pickerCapture.name = "Avatar picker actions - \(variant.language) - \(variant.dark ? "dark" : "light")"
+            pickerCapture.lifetime = .keepAlways
+            add(pickerCapture)
+            cancel.tap()
+
+            XCTAssertTrue(scrollYouContent(to: editPicture, direction: .up, in: app))
+            editPicture.tap()
+            XCTAssertTrue(save.waitForExistence(timeout: 5))
+            let restoredPreview = app.buttons["avatar-photo-options"]
+            XCTAssertTrue(restoredPreview.waitForExistence(timeout: 5))
+            XCTAssertEqual(restoredPreview.value as? String, originalValue,
+                           "Cancel must discard the staged preset and preserve the original picture.")
+            XCTAssertFalse(save.isEnabled, "Reopening after Cancel should have no staged changes.")
+            if let originalLabel {
+                let restored = app.buttons.matching(NSPredicate(format: "label == %@", originalLabel)).firstMatch
+                XCTAssertTrue(restored.waitForExistence(timeout: 5) && restored.isSelected,
+                              "Cancel should restore the originally selected preset.")
+            }
+            app.buttons["avatar-cancel"].tap()
+            app.terminate()
+        }
+    }
+
     func testAppearancePreferencePersistsAcrossRelaunch() {
         // Start directly on You so this persistence test does not race the demo's
         // first-launch toast and initial tab transition.
@@ -2251,6 +2371,35 @@ final class TrustUsageTests: XCTestCase {
             RunLoop.current.run(until: Date().addingTimeInterval(0.1))
         }
         return condition()
+    }
+
+    /// Optional host handshake for capturing the active display on Duo. Without the
+    /// environment variable, this remains a no-op and ordinary UI runs are unchanged.
+    private func waitForPolishCapture(stage: String) {
+        guard let directory = ProcessInfo.processInfo.environment["TRUST_POLISH_CAPTURE_DIR"],
+              !directory.isEmpty else { return }
+        let fileManager = FileManager.default
+        do {
+            try fileManager.createDirectory(atPath: directory, withIntermediateDirectories: true)
+        } catch {
+            XCTFail("Could not create TRUST_POLISH_CAPTURE_DIR: \(error)")
+            return
+        }
+        let root = URL(fileURLWithPath: directory, isDirectory: true)
+        let ready = root.appendingPathComponent("\(stage).ready")
+        let proceed = root.appendingPathComponent("\(stage).continue")
+        try? fileManager.removeItem(at: ready)
+        try? fileManager.removeItem(at: proceed)
+        do {
+            try Data().write(to: ready, options: .atomic)
+        } catch {
+            XCTFail("Could not create polish capture ready file for \(stage): \(error)")
+            return
+        }
+        let continued = waitForCondition(timeout: 60) { fileManager.fileExists(atPath: proceed.path) }
+        try? fileManager.removeItem(at: ready)
+        try? fileManager.removeItem(at: proceed)
+        XCTAssertTrue(continued, "Timed out waiting for the host capture at stage \(stage).")
     }
 
     private func frameIsFullyVisible(_ frame: CGRect, within viewport: CGRect) -> Bool {

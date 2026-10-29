@@ -391,6 +391,7 @@ final class TrustClient {
         let version: UUID
     }
     private var avatarImages: [AvatarCacheKey: UIImage] = [:]
+    private var avatarImageCacheGeneration: UInt64 = 0
 
     func prepare() async {
         let preferred = AppConfiguration.apiBaseURL
@@ -547,6 +548,7 @@ final class TrustClient {
     func clearCache() {
         CircleCache.clear()
         avatarImages.removeAll()
+        avatarImageCacheGeneration &+= 1
         snapshot = nil
     }
 
@@ -558,41 +560,68 @@ final class TrustClient {
         CircleCache.removeMember(accountID: accountID, personID: personID, connectionID: connectionID)
     }
 
-    func setAvatarPreset(_ presetID: String) async throws -> AvatarDescriptor {
+    func setAvatarPreset(
+        _ presetID: String,
+        operation: TrustAccountOperation,
+        currentOperation: @MainActor () -> TrustAccountOperation?
+    ) async throws -> AvatarDescriptor {
+        guard currentOperation() == operation, token == operation.token else { throw CancellationError() }
         struct Body: Encodable { var presetId: String }
-        var request = try makeRequest(path: "/api/v1/me/avatar/preset", method: "PUT", authorized: true)
+        var request = try makeRequest(path: "/api/v1/me/avatar/preset", method: "PUT", authorized: true, tokenOverride: operation.token)
         request.httpBody = try encoder.encode(Body(presetId: presetID))
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        return try await send(request)
+        let avatar: AvatarDescriptor = try await send(request)
+        guard currentOperation() == operation, token == operation.token else { throw CancellationError() }
+        return avatar
     }
 
-    func setAvatarPhoto(_ jpeg: Data) async throws -> AvatarDescriptor {
-        var request = try makeRequest(path: "/api/v1/me/avatar/photo", method: "PUT", authorized: true)
+    func setAvatarPhoto(
+        _ jpeg: Data,
+        operation: TrustAccountOperation,
+        currentOperation: @MainActor () -> TrustAccountOperation?
+    ) async throws -> AvatarDescriptor {
+        guard currentOperation() == operation, token == operation.token,
+              let accountID = snapshot?.you.id,
+              TrustSessionIdentity.accountID(from: operation.token) == accountID else { throw CancellationError() }
+        var request = try makeRequest(path: "/api/v1/me/avatar/photo", method: "PUT", authorized: true, tokenOverride: operation.token)
         request.httpBody = jpeg
         request.setValue("image/jpeg", forHTTPHeaderField: "Content-Type")
         let avatar: AvatarDescriptor = try await send(request)
+        guard currentOperation() == operation, token == operation.token,
+              snapshot?.you.id == accountID else { throw CancellationError() }
         if let version = avatar.photoVersion,
-           let accountID = snapshot?.you.id,
            let image = UIImage(data: jpeg) {
             avatarImages[AvatarCacheKey(accountID: accountID, personID: accountID, version: version)] = image
         }
         return avatar
     }
 
-    func removeAvatar() async throws {
-        try await deleteEmpty(path: "/api/v1/me/avatar")
+    func removeAvatar(
+        operation: TrustAccountOperation,
+        currentOperation: @MainActor () -> TrustAccountOperation?
+    ) async throws {
+        guard currentOperation() == operation, token == operation.token else { throw CancellationError() }
+        try await deleteEmpty(path: "/api/v1/me/avatar", authorizedToken: operation.token)
+        guard currentOperation() == operation, token == operation.token else { throw CancellationError() }
     }
 
     /// Photo bytes stay in memory only. The version in the descriptor is immutable, so
     /// changing a photo naturally gets a fresh cache entry.
     func avatarImage(personID: UUID, descriptor: AvatarDescriptor?) async throws -> UIImage? {
         guard let version = descriptor?.photoVersion else { return nil }
-        let key = AvatarCacheKey(accountID: snapshot?.you.id ?? personID, personID: personID, version: version)
+        guard let requestToken = token, !requestToken.isEmpty else { throw TrustClientError.unauthorized }
+        let accountID = snapshot?.you.id ?? personID
+        let cacheGeneration = avatarImageCacheGeneration
+        let key = AvatarCacheKey(accountID: accountID, personID: personID, version: version)
         if let image = avatarImages[key] { return image }
         let path = "/api/v1/people/\(personID.uuidString)/avatar/\(version.uuidString)"
-        var request = try makeRequest(path: path, method: "GET", authorized: true)
+        var request = try makeRequest(path: path, method: "GET", authorized: true, tokenOverride: requestToken)
         request.setValue("image/jpeg", forHTTPHeaderField: "Accept")
         let data = try await sendRaw(request)
+        guard !Task.isCancelled,
+              avatarImageCacheGeneration == cacheGeneration,
+              token == requestToken,
+              (snapshot?.you.id ?? personID) == accountID else { throw CancellationError() }
         guard let image = UIImage(data: data) else { throw TrustClientError.decoding }
         avatarImages[key] = image
         return image

@@ -70,6 +70,8 @@
 "api_handle_in_use" = "该句柄已被占用。";
 "api_handle_not_found" = "找不到使用此账号名的 Trust 账户。";
 "api_invalid_apple_token" = "Apple 无法验证此登录。再试一次。";
+"api_invalid_avatar_image" = "无法保存这张照片。请选择其他照片。";
+"api_invalid_avatar_preset" = "此个人资料图片不可用。请选择其他图片。";
 "api_invalid_bundle" = "那个推送主题不是这个应用程序。";
 "api_invalid_code" = "该邀请码不匹配或已过期。";
 "api_invalid_device" = "需要推送令牌和安装 ID。";
@@ -120,12 +122,19 @@
 "avatar" = "动物图标";
 "avatar_bear" = "熊";
 "avatar_british_shorthair" = "英国短毛猫";
+"avatar_camera_access_unavailable" = "相机访问不可用。";
+"avatar_camera_unavailable_message" = "此设备没有可用的相机。";
 "avatar_cat" = "猫";
 "avatar_dog" = "狗";
 "avatar_fox" = "狐狸";
 "avatar_icon_accessibility" = "%@ 图标";
+"avatar_initials_value" = "姓名首字母";
 "avatar_otter" = "水獭";
 "avatar_owl" = "猫头鹰";
+"avatar_photo_open_error" = "无法打开这张照片。请选择其他照片。";
+"avatar_photo_prepare_error" = "无法准备这张照片。请选择其他照片。";
+"avatar_photo_value" = "照片";
+"avatar_preparing_photo" = "正在准备照片…";
 "avatar_rabbit" = "兔子";
 "avatar_ragdoll" = "布偶猫";
 "avatar_siamese" = "暹罗猫";
@@ -468,6 +477,7 @@
 "sharing_requests_accessibility" = "%@，收到 %d 个请求";
 "sharing_stopped" = "与 %@ 的位置共享已停止。";
 "sharing_sub" = "每个人都能看到你的什么。";
+"sharing_tab_title" = "分享";
 "show_on_map" = "在地图上显示 %@";
 "sign_in_expired" = "登录已过期。再次登录。";
 "sign_in_in_progress" = "登录已在进行中。";

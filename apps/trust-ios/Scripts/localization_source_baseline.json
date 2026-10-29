@@ -548,5 +548,15 @@
   "your_handle": "Your handle",
   "your_phone": "Your phone",
   "your_profile": "Your profile",
-  "your_status": "Your status"
+  "your_status": "Your status",
+  "avatar_preparing_photo": "Preparing photo…",
+  "avatar_photo_open_error": "That photo could not be opened. Choose another one.",
+  "avatar_photo_prepare_error": "This photo could not be prepared. Choose another one.",
+  "avatar_camera_unavailable_message": "A camera is not available on this device.",
+  "avatar_camera_access_unavailable": "Camera access is unavailable.",
+  "avatar_photo_value": "Photo",
+  "avatar_initials_value": "Initials",
+  "api_invalid_avatar_preset": "That profile picture isn’t available. Choose another one.",
+  "api_invalid_avatar_image": "That photo couldn’t be saved. Choose another one.",
+  "sharing_tab_title": "Sharing"
 }

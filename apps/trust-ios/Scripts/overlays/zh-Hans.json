@@ -548,5 +548,15 @@
   "phone_send_countdown": "%@后发送验证码",
   "phone_resend_countdown": "%@后重新发送",
   "phone_retry_explanation": "你可以在%@（当地时间）请求新验证码。你仍可编辑号码。",
-  "resume_paused_mode": "恢复为%@"
+  "resume_paused_mode": "恢复为%@",
+  "avatar_preparing_photo": "正在准备照片…",
+  "avatar_photo_open_error": "无法打开这张照片。请选择其他照片。",
+  "avatar_photo_prepare_error": "无法准备这张照片。请选择其他照片。",
+  "avatar_camera_unavailable_message": "此设备没有可用的相机。",
+  "avatar_camera_access_unavailable": "相机访问不可用。",
+  "avatar_photo_value": "照片",
+  "avatar_initials_value": "姓名首字母",
+  "api_invalid_avatar_preset": "此个人资料图片不可用。请选择其他图片。",
+  "api_invalid_avatar_image": "无法保存这张照片。请选择其他照片。",
+  "sharing_tab_title": "分享"
 }

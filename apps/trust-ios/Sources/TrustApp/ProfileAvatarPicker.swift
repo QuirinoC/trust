@@ -82,7 +82,7 @@ struct ProfileAvatarPicker: View {
 
                     VStack(alignment: .leading, spacing: 10) {
                         if isLoadingPhoto {
-                            ProgressView("Preparing photo…")
+                            ProgressView(TrustCopy.avatarPreparingPhoto)
                                 .trustFont(12)
                                 .tint(palette.accent)
                         }
@@ -105,13 +105,18 @@ struct ProfileAvatarPicker: View {
                 .padding(TrustTheme.gutter)
                 .trustReadableWidth()
             }
+            .accessibilityIdentifier("avatar-picker-scroll")
+            .clipped()
             .background(palette.paper.ignoresSafeArea())
             .navigationTitle(onboarding ? TrustCopy.addPicture : TrustCopy.profilePicture)
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(palette.paper, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(TrustCopy.cancel) { dismiss() }
                         .disabled(isSaving)
+                        .accessibilityIdentifier("avatar-cancel")
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(TrustCopy.save) { Task { await save() } }
@@ -216,15 +221,15 @@ struct ProfileAvatarPicker: View {
     }
 
     private var avatarAccessibilityValue: String {
-        if photoData != nil { return "Photo" }
+        if photoData != nil { return TrustCopy.avatarPhotoValue }
         if let selectedPreset, !removeSelected {
-            return "\(ProfileAvatarArtwork.title(for: selectedPreset)) icon"
+            return TrustCopy.avatarIconAccessibility(ProfileAvatarArtwork.title(for: selectedPreset))
         }
-        if removeSelected { return "Initials" }
+        if removeSelected { return TrustCopy.avatarInitialsValue }
         if let preset = model.you.avatar?.knownPresetID {
-            return "\(ProfileAvatarArtwork.title(for: preset)) icon"
+            return TrustCopy.avatarIconAccessibility(ProfileAvatarArtwork.title(for: preset))
         }
-        return model.you.avatar == nil ? "Initials" : "Photo"
+        return model.you.avatar == nil ? TrustCopy.avatarInitialsValue : TrustCopy.avatarPhotoValue
     }
 
     @ViewBuilder
@@ -282,7 +287,7 @@ struct ProfileAvatarPicker: View {
         do {
             guard let data = try await item.loadTransferable(type: Data.self), let image = UIImage(data: data) else {
                 guard isCurrentPhotoLoad(generation, item: item) else { return }
-                errorMessage = "That photo could not be opened. Choose another one."
+                errorMessage = TrustCopy.avatarPhotoOpenError
                 photoItem = nil
                 return
             }
@@ -292,14 +297,14 @@ struct ProfileAvatarPicker: View {
             return
         } catch {
             guard isCurrentPhotoLoad(generation, item: item) else { return }
-            errorMessage = "That photo could not be opened. Choose another one."
+            errorMessage = TrustCopy.avatarPhotoOpenError
             photoItem = nil
         }
     }
 
     private func stage(_ image: UIImage) {
         guard let data = AvatarPhotoEncoder.jpeg(image) else {
-            errorMessage = "This photo could not be prepared. Choose another one."
+            errorMessage = TrustCopy.avatarPhotoPrepareError
             return
         }
         invalidatePhotoLoad()
@@ -335,6 +340,14 @@ struct ProfileAvatarPicker: View {
                 try await model.saveAvatar(presetID: selectedPreset)
             }
             dismiss()
+        } catch let error as TrustClientError {
+            if let code = error.apiCode, code == "invalid_avatar_preset" || code == "invalid_avatar_image" {
+                errorMessage = TrustCopy.apiError(code: code, fallback: nil)
+            } else {
+                errorMessage = error.localizedDescription
+            }
+        } catch is CancellationError {
+            return
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -345,7 +358,7 @@ struct ProfileAvatarPicker: View {
         invalidatePhotoLoad()
         photoItem = nil
         guard UIImagePickerController.isSourceTypeAvailable(.camera) else {
-            errorMessage = "A camera is not available on this device."
+            errorMessage = TrustCopy.avatarCameraUnavailableMessage
             showingCameraAlert = true
             return
         }
@@ -357,16 +370,16 @@ struct ProfileAvatarPicker: View {
                 Task { @MainActor in
                     if granted { cameraPresented = true }
                     else {
-                        errorMessage = "Allow camera access in Settings to take a picture."
+                        errorMessage = TrustCopy.cameraSettingsGuide
                         showingCameraAlert = true
                     }
                 }
             }
         case .denied, .restricted:
-            errorMessage = "Allow camera access in Settings to take a picture."
+            errorMessage = TrustCopy.cameraSettingsGuide
             showingCameraAlert = true
         @unknown default:
-            errorMessage = "Camera access is unavailable."
+            errorMessage = TrustCopy.avatarCameraAccessUnavailable
             showingCameraAlert = true
         }
     }

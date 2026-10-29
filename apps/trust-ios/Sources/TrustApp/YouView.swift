@@ -6,6 +6,7 @@ import UserNotifications
 struct YouView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.trustPalette) private var palette
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage(TrustAppearance.storageKey) private var appearance = TrustAppearance.system.rawValue
     @AppStorage(TrustAppLanguage.storageKey) private var appLanguage = TrustAppLanguage.system.rawValue
@@ -140,19 +141,29 @@ struct YouView: View {
     // MARK: Profile and personal settings
 
     private var appearanceRow: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 12) {
-                appearanceLabel
-                Spacer(minLength: 8)
-                appearancePicker
-            }
-            VStack(alignment: .leading, spacing: 4) {
-                appearanceLabel
-                appearancePicker
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 4) {
+                    appearanceLabel
+                    appearancePicker
+                }
+                .fixedSize(horizontal: false, vertical: true)
+            } else {
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 12) {
+                        appearanceLabel
+                        Spacer(minLength: 8)
+                        appearancePicker
+                    }
+                    VStack(alignment: .leading, spacing: 4) {
+                        appearanceLabel
+                        appearancePicker
+                    }
+                }
             }
         }
         .padding(.horizontal, 14)
-        .frame(minHeight: 52)
+        .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: TrustTheme.controlRadius, style: .continuous).fill(palette.surface))
     }
 
@@ -183,19 +194,29 @@ struct YouView: View {
     }
 
     private var languageRow: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 12) {
-                languageLabel
-                Spacer(minLength: 8)
-                languagePicker
-            }
-            VStack(alignment: .leading, spacing: 4) {
-                languageLabel
-                languagePicker
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 4) {
+                    languageLabel
+                    languagePicker
+                }
+                .fixedSize(horizontal: false, vertical: true)
+            } else {
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 12) {
+                        languageLabel
+                        Spacer(minLength: 8)
+                        languagePicker
+                    }
+                    VStack(alignment: .leading, spacing: 4) {
+                        languageLabel
+                        languagePicker
+                    }
+                }
             }
         }
         .padding(.horizontal, 14)
-        .frame(minHeight: 52)
+        .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: TrustTheme.controlRadius, style: .continuous).fill(palette.surface))
     }
 

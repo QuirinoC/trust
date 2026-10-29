@@ -70,6 +70,8 @@
 "api_handle_in_use" = "Esse identificador está em uso.";
 "api_handle_not_found" = "Nenhuma conta Trust foi encontrada para esse identificador.";
 "api_invalid_apple_token" = "A Apple não conseguiu verificar este início de sessão. Tente novamente.";
+"api_invalid_avatar_image" = "Não foi possível salvar essa foto. Escolha outra.";
+"api_invalid_avatar_preset" = "Essa foto de perfil não está disponível. Escolha outra.";
 "api_invalid_bundle" = "Esse tópico de push não pertence a este app.";
 "api_invalid_code" = "Esse código de convite não corresponde ou expirou.";
 "api_invalid_device" = "São necessários um token de push e um identificador de instalação.";
@@ -120,12 +122,19 @@
 "avatar" = "Animal";
 "avatar_bear" = "Urso";
 "avatar_british_shorthair" = "Gato British Shorthair";
+"avatar_camera_access_unavailable" = "O acesso à câmera está indisponível.";
+"avatar_camera_unavailable_message" = "Este dispositivo não tem uma câmera disponível.";
 "avatar_cat" = "Gato";
 "avatar_dog" = "Cachorro";
 "avatar_fox" = "Raposa";
 "avatar_icon_accessibility" = "Ícone de %@";
+"avatar_initials_value" = "Iniciais";
 "avatar_otter" = "Lontra";
 "avatar_owl" = "Coruja";
+"avatar_photo_open_error" = "Não foi possível abrir essa foto. Escolha outra.";
+"avatar_photo_prepare_error" = "Não foi possível preparar essa foto. Escolha outra.";
+"avatar_photo_value" = "Foto";
+"avatar_preparing_photo" = "Preparando foto…";
 "avatar_rabbit" = "Coelho";
 "avatar_ragdoll" = "Gato Ragdoll";
 "avatar_siamese" = "Gato Siamês";
@@ -468,6 +477,7 @@
 "sharing_requests_accessibility" = "%@, %d solicitações recebidas";
 "sharing_stopped" = "O compartilhamento de localização com %@ foi encerrado.";
 "sharing_sub" = "O que cada pessoa pode ver sobre você.";
+"sharing_tab_title" = "Compartilhar";
 "show_on_map" = "Mostrar %@ no mapa";
 "sign_in_expired" = "A sessão expirou. Entre novamente.";
 "sign_in_in_progress" = "Já há um início de sessão em andamento.";

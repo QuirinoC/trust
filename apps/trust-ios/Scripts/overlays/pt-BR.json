@@ -548,5 +548,15 @@
   "phone_send_countdown": "Enviar código em %@",
   "phone_resend_countdown": "Reenviar em %@",
   "phone_retry_explanation": "Você poderá pedir outro código às %@ (horário local). Ainda pode editar o número.",
-  "resume_paused_mode": "Retomar como %@"
+  "resume_paused_mode": "Retomar como %@",
+  "avatar_preparing_photo": "Preparando foto…",
+  "avatar_photo_open_error": "Não foi possível abrir essa foto. Escolha outra.",
+  "avatar_photo_prepare_error": "Não foi possível preparar essa foto. Escolha outra.",
+  "avatar_camera_unavailable_message": "Este dispositivo não tem uma câmera disponível.",
+  "avatar_camera_access_unavailable": "O acesso à câmera está indisponível.",
+  "avatar_photo_value": "Foto",
+  "avatar_initials_value": "Iniciais",
+  "api_invalid_avatar_preset": "Essa foto de perfil não está disponível. Escolha outra.",
+  "api_invalid_avatar_image": "Não foi possível salvar essa foto. Escolha outra.",
+  "sharing_tab_title": "Compartilhar"
 }
