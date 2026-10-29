@@ -1,0 +1,78 @@
+# Reference blueprint for the existing collapse-tech / Trust Staging environment.
+# Render environment resource: evm-dbhmr30n74is73efnku0.
+# Do not use this file to sync or modify the production blueprint or resources.
+projects:
+  - name: collapse-tech
+    environments:
+      - name: Trust Staging
+        networking:
+          isolation: enabled
+        services:
+          - type: web
+            name: trust-api-staging
+            runtime: docker
+            dockerfilePath: ./apps/trust-api/Dockerfile
+            dockerContext: ./apps/trust-api
+            plan: starter
+            region: oregon
+            branch: codex/trust-release-1-0
+            autoDeploy: false
+            healthCheckPath: /health/ready
+            envVars:
+              - key: ASPNETCORE_ENVIRONMENT
+                value: Staging
+              - key: FORWARDEDHEADERS__TRUSTPLATFORMPROXY
+                value: "true"
+              - key: Trust__Store
+                value: postgres
+              - key: Trust__SeedReviewCircle
+                value: "false"
+              - key: Auth__AllowDevelopmentSignIn
+                value: "false"
+              - key: Auth__Issuer
+                value: trust-staging
+              - key: Auth__Audience
+                value: com.collapsetechnologies.trust.staging
+              - key: Auth__SigningKey
+                generateValue: true
+              - key: ConnectionStrings__Postgres
+                fromDatabase:
+                  name: trust-postgres-staging
+                  property: connectionString
+              - key: StoreKit__Enabled
+                value: "true"
+              - key: StoreKit__AllowReviewUnlock
+                value: "false"
+              - key: StoreKit__BundleId
+                value: com.collapsetechnologies.trust.staging
+              - key: StoreKit__MonthlyProductId
+                value: com.collapsetechnologies.trust.staging.circle.monthly
+              - key: StoreKit__AnnualProductId
+                value: com.collapsetechnologies.trust.staging.circle.annual
+              - key: StoreKit__AllowedEnvironments__0
+                value: Sandbox
+              - key: Apple__BundleId
+                value: com.collapsetechnologies.trust.staging
+              - key: PhoneVerification__StagingTestNumbers__0
+                value: "+12025550101"
+              - key: PhoneVerification__StagingTestNumbers__1
+                value: "+12025550102"
+              - key: Apns__Enabled
+                value: "true"
+              - key: Apns__TeamId
+                value: "3S529795M9"
+              - key: Apns__BundleId
+                value: com.collapsetechnologies.trust.staging
+              - key: Apns__KeyId
+                sync: false
+              - key: Apns__PrivateKey
+                sync: false
+        databases:
+          - name: trust-postgres-staging
+            plan: basic-256mb
+            region: oregon
+            postgresMajorVersion: "16"
+            diskSizeGB: 15
+            databaseName: trust_staging
+            user: trust_staging
+            ipAllowList: []

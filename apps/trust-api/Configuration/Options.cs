@@ -57,6 +57,27 @@ public static class AuthOptionsGuard
     }
 }
 
+public sealed class PhoneVerificationOptions
+{
+    public const string SectionName = "PhoneVerification";
+    public string[] StagingTestNumbers { get; set; } = [];
+    public static readonly string[] ApprovedStagingTestNumbers = ["+12025550101", "+12025550102"];
+}
+
+public static class PhoneVerificationOptionsGuard
+{
+    public static void EnsureSafe(PhoneVerificationOptions options, string environment)
+    {
+        var configured = options.StagingTestNumbers ?? [];
+        if (configured.Length == 0) return;
+        if (!string.Equals(environment, "Staging", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("PhoneVerification:StagingTestNumbers may only be configured in the Staging environment.");
+        if (!configured.Order(StringComparer.Ordinal).SequenceEqual(
+                PhoneVerificationOptions.ApprovedStagingTestNumbers.Order(StringComparer.Ordinal), StringComparer.Ordinal))
+            throw new InvalidOperationException("PhoneVerification:StagingTestNumbers must contain exactly the approved staging test numbers.");
+    }
+}
+
 public sealed class AppleOptions
 {
     public const string SectionName = "Apple";

@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		00585D58BD36F3EFA822DA36 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 63242874F15C117B93D74C2D /* InfoPlist.strings */; };
+		02D061F3EB0697F1197F546A /* TrustClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C0D44DBC8538A89711936F4 /* TrustClient.swift */; };
 		06C22804C292C872FF35523A /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = BF4B0475D551D63F000821DA /* Localizable.strings */; };
 		0A2BDB08D8BE78D54C86926F /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 482B3013C3B6C0C8532F5DE6 /* LoginView.swift */; };
 		0A872DF45F12B026110B1128 /* TrustCore in Frameworks */ = {isa = PBXBuildFile; productRef = 26D261D4D2888B2D50331783 /* TrustCore */; };
@@ -19,34 +20,50 @@
 		187663D82E2A11219A0F304B /* AuthSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FD7594384721372A16D9E19 /* AuthSession.swift */; };
 		193D0475C68E66AF65A7DFD7 /* TrustCoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D10CA18C94885D409ED3D7B7 /* TrustCoreTests.swift */; };
 		19BE34C70451CFF5A92EE689 /* CircleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D99492A6161FC4D64E0C386 /* CircleView.swift */; };
+		1A823F0D9D29C2BDC9FCBE6C /* LocationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47B487800F3DADB918917BA8 /* LocationCoordinator.swift */; };
 		1D5998C920DF9A63255FA22A /* LookConfirmSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = D82E8777B7F80A59F2D53EFE /* LookConfirmSheet.swift */; };
+		1D6858ABFAC472EDEE6A7B86 /* PhoneView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09A50789FA9420E08F581CBC /* PhoneView.swift */; };
 		20624BD70DED7D4BF2F8F2C3 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 5BDC5D2F3934AD105418EDE7 /* InfoPlist.strings */; };
 		2094D814F9A29D960ECE9EF2 /* HandleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F1E3DD239C74673D1C841A9 /* HandleView.swift */; };
 		2281C76EBA0BF930EB2E9E14 /* PhoneView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09A50789FA9420E08F581CBC /* PhoneView.swift */; };
 		246152EF83A0646E77282322 /* LocationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47B487800F3DADB918917BA8 /* LocationCoordinator.swift */; };
+		267789FF20B8D5E1170FB10B /* PermissionKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9A0293AEE98FCEA8FA92356D /* PermissionKit.framework */; settings = {ATTRIBUTES = (Weak, ); }; };
+		2A3AEB12A7E60C44D1B9A3A2 /* LookReceiptNotifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = F84BA6FBFFF34D5A92798BF4 /* LookReceiptNotifier.swift */; };
 		2B59C363D0E89485B2FA6536 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 4C8229953A6861B1EAF998E1 /* Localizable.strings */; };
 		2F3CB1F1EFAF7273473E217E /* ProfileAvatarPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = A144B075570E3EC71B3A9E9E /* ProfileAvatarPicker.swift */; };
 		32D9A6ABCEC1A4215D80BC3E /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = CC2380F09F1CF772604EADCB /* Localizable.strings */; };
+		33EB9367B6F0B4A496B10697 /* IBMPlexMono-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 1A43013E81099AA3717EC066 /* IBMPlexMono-Medium.ttf */; };
 		3536D6E6D2CDA1C1A64A66D5 /* TrustPhoneSetupTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46FEA85CB113D010FB90A0EF /* TrustPhoneSetupTests.swift */; };
 		354041B2EFE230A68D8027BE /* MapScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE3BE1E107A89A8B8D4FDBD2 /* MapScreen.swift */; };
 		36CD510268DA16335A9EAD0A /* TrustKeychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 706E76871CAC53B051985DCC /* TrustKeychain.swift */; };
 		373F339637D3D5870BB2CA6C /* LookConfirmSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = D82E8777B7F80A59F2D53EFE /* LookConfirmSheet.swift */; };
+		3A754F27B7F6ED860E4629DC /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = BF4B0475D551D63F000821DA /* Localizable.strings */; };
 		3C26CE6415D9270C449CCEB9 /* TrustTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5980035418744C890C9440B9 /* TrustTheme.swift */; };
 		412ADFE9A9631597D4063BE9 /* _PermissionKit_SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9616640E4E521FA6F45A24DE /* _PermissionKit_SwiftUI.framework */; settings = {ATTRIBUTES = (Weak, ); }; };
 		427A81CC58EC6AE2E97AA9E5 /* SpaceGrotesk-Variable.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 6BCC3CAB70FB747A74A2A255 /* SpaceGrotesk-Variable.ttf */; };
 		42D582439AE244465775A887 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DD39690718850F57B59DFBA /* RootView.swift */; };
 		4393758321BEDD27F92398FA /* HomePlaceStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6AEC0BF1A6640B58DEED252 /* HomePlaceStore.swift */; };
+		450FA307662AA44B0B634381 /* TrustKeychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 706E76871CAC53B051985DCC /* TrustKeychain.swift */; };
+		45EC5C7C8D79144D752CD0A7 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DD39690718850F57B59DFBA /* RootView.swift */; };
+		460793C90FBC79F198E01410 /* TrustCore in Frameworks */ = {isa = PBXBuildFile; productRef = 1A675321E1D5CCF4407E28A9 /* TrustCore */; };
 		462B3BC1214901472FF28E08 /* Syne-Variable.ttf in Resources */ = {isa = PBXBuildFile; fileRef = CDAFEB434DDE7B2096119E2F /* Syne-Variable.ttf */; };
 		4739F0C7171B14DA02E1E454 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = D08EA0C8184116A2084F89DF /* InfoPlist.strings */; };
 		475BAE7872E77E7A785D709A /* SharingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93DD05E4CE1F61BF819BD58D /* SharingView.swift */; };
+		4763A640E03EB07B51E1F626 /* ProfileAvatarPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = A144B075570E3EC71B3A9E9E /* ProfileAvatarPicker.swift */; };
+		4897B21DDD553C24D56716DA /* HandleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F1E3DD239C74673D1C841A9 /* HandleView.swift */; };
 		49510C5034BE08BB9B662B51 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 4C8229953A6861B1EAF998E1 /* Localizable.strings */; };
+		4ACD58F2A12DD09313D2B5A5 /* AppConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE3763646FBA2DF7BEE36D79 /* AppConfiguration.swift */; };
 		4CCCCC2A037ACB0296AA3895 /* MapScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE3BE1E107A89A8B8D4FDBD2 /* MapScreen.swift */; };
 		4D7E4979F75F43BD52F9FA7A /* TrustKeychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 706E76871CAC53B051985DCC /* TrustKeychain.swift */; };
 		589BFF4023D7D97E102AC521 /* PhoneView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09A50789FA9420E08F581CBC /* PhoneView.swift */; };
 		591032D036F1CFD94E6CA3F4 /* Syne-Variable.ttf in Resources */ = {isa = PBXBuildFile; fileRef = CDAFEB434DDE7B2096119E2F /* Syne-Variable.ttf */; };
+		59983BB9309B95B0CA9EF455 /* CircleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D99492A6161FC4D64E0C386 /* CircleView.swift */; };
 		5AB3AA0A940E3CCA67C9E4A1 /* HandleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F1E3DD239C74673D1C841A9 /* HandleView.swift */; };
 		5ED0A8636725D0867AAB4F2C /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 66B76ABCAC45B392F6A35D09 /* PrivacyInfo.xcprivacy */; };
 		5F79DFCB903C5F40ED84A31F /* TrustClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C0D44DBC8538A89711936F4 /* TrustClient.swift */; };
+		627353ECF82DC2417ECAE25C /* AgeAssuranceCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35620E6EF77E541AD03BCD66 /* AgeAssuranceCoordinator.swift */; };
+		64814159FDA81159802267D1 /* LookConfirmSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = D82E8777B7F80A59F2D53EFE /* LookConfirmSheet.swift */; };
+		6569A55D0BFD1E0588AAC5AE /* LocationIngestStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EC0AFA3E5CFC1D9047DE372 /* LocationIngestStore.swift */; };
 		67217F4E367E03AC88AFF7D7 /* MapKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0D907524021AC2732B10CC12 /* MapKit.framework */; };
 		681EDD0BAF595CBD804C6090 /* MapKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0D907524021AC2732B10CC12 /* MapKit.framework */; };
 		6A5FBBCB79681D56E3B98DFE /* TrustTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5980035418744C890C9440B9 /* TrustTheme.swift */; };
@@ -55,7 +72,11 @@
 		6B6B1D78FCA327FF3C9D1B06 /* MainShellView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74231FF47EE26FCD87F0BE18 /* MainShellView.swift */; };
 		6FAF34A737DD063468C2A97B /* DeclaredAgeRange.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7526B1C396A531BB1264D7D4 /* DeclaredAgeRange.framework */; settings = {ATTRIBUTES = (Weak, ); }; };
 		6FC27E68E657E2CE7C543470 /* AuthenticationServices.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B9D76A913BE410AB908D7AB0 /* AuthenticationServices.framework */; };
+		70A02D9F6A117622D5D410D8 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 5BDC5D2F3934AD105418EDE7 /* InfoPlist.strings */; };
+		72F8BC97B79F98DFD7D199C3 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 5508C24A56E81A67A0FC1D03 /* InfoPlist.strings */; };
 		7420B5E2CC729280CA5F7B2A /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B07B3706D2CCD8A7AC80B91D /* Assets.xcassets */; };
+		762825F80E4DC6DBE42B1D53 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = B2063F803335BC6D0150423D /* InfoPlist.strings */; };
+		76D3970CE382836066A5B4F1 /* MapKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0D907524021AC2732B10CC12 /* MapKit.framework */; };
 		7741DAD6C809D8CB47ABE90F /* AuthenticationServices.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B9D76A913BE410AB908D7AB0 /* AuthenticationServices.framework */; };
 		777CDBA1D2E5481FBCBE5DE1 /* _PermissionKit_SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9616640E4E521FA6F45A24DE /* _PermissionKit_SwiftUI.framework */; settings = {ATTRIBUTES = (Weak, ); }; };
 		782D4136776A2EC066ADCDC6 /* LocationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47B487800F3DADB918917BA8 /* LocationCoordinator.swift */; };
@@ -64,6 +85,8 @@
 		7CB75B07FEA94DC19C75750C /* SharingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93DD05E4CE1F61BF819BD58D /* SharingView.swift */; };
 		80F014BD58164432FB0BE10B /* TrustAgeGateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22D943C757DCC8579D80D2C5 /* TrustAgeGateTests.swift */; };
 		8429423DCAF6058479671748 /* TrustUsageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5A777201D5537C1D7D029F3 /* TrustUsageTests.swift */; };
+		84BE9D98514962D89C64E092 /* AuthSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FD7594384721372A16D9E19 /* AuthSession.swift */; };
+		855024AB0182D6E2E7C23A81 /* TrustTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5980035418744C890C9440B9 /* TrustTheme.swift */; };
 		8621177DE5918B97A7A632E5 /* DeclaredAgeRange.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7526B1C396A531BB1264D7D4 /* DeclaredAgeRange.framework */; settings = {ATTRIBUTES = (Weak, ); }; };
 		863B5887EB707AD2B4A82126 /* YouView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A8356A446C938EFA37466BE /* YouView.swift */; };
 		86AF23F721D59EF2A6C0BCCB /* IBMPlexMono-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 1A43013E81099AA3717EC066 /* IBMPlexMono-Medium.ttf */; };
@@ -71,24 +94,30 @@
 		8ABAC708AFCFF13717C9F880 /* TrustRealAPIFeatureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0929D5A5788EE4C0AB1DF23 /* TrustRealAPIFeatureTests.swift */; };
 		8CB775A757CC7C8EF6DE0A2E /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B07B3706D2CCD8A7AC80B91D /* Assets.xcassets */; };
 		8D923C0A5271D91381623F02 /* StoreManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A764AB895F51BD53D38551D7 /* StoreManager.swift */; };
+		8E0A4923A05E7B254EC35FD3 /* _PermissionKit_SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9616640E4E521FA6F45A24DE /* _PermissionKit_SwiftUI.framework */; settings = {ATTRIBUTES = (Weak, ); }; };
 		8EBFAA09C67AE6703DF64EE5 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DD39690718850F57B59DFBA /* RootView.swift */; };
 		923A84716E8CC7679543E31D /* PermissionKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9A0293AEE98FCEA8FA92356D /* PermissionKit.framework */; settings = {ATTRIBUTES = (Weak, ); }; };
+		9397BF8E6BD901AF17EDAE19 /* Syne-Variable.ttf in Resources */ = {isa = PBXBuildFile; fileRef = CDAFEB434DDE7B2096119E2F /* Syne-Variable.ttf */; };
 		97E605EA1CADA01C0A8D1B94 /* IBMPlexMono-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 1A43013E81099AA3717EC066 /* IBMPlexMono-Medium.ttf */; };
 		998C3D952BFB8E194461E822 /* PlusPaywall.swift in Sources */ = {isa = PBXBuildFile; fileRef = 536A9B0B5FFE1F350CE3E140 /* PlusPaywall.swift */; };
 		9B21E0BECA136CCADA4150DE /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = D08EA0C8184116A2084F89DF /* InfoPlist.strings */; };
 		9B3BC2CDC57D376500E9B698 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 5BDC5D2F3934AD105418EDE7 /* InfoPlist.strings */; };
 		A0715ABB2E26D8AA0A07EC5E /* AgeAssuranceCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35620E6EF77E541AD03BCD66 /* AgeAssuranceCoordinator.swift */; };
+		A111FFF494D14B903B721328 /* ViewScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDAA41799C1A974BBE1DF210 /* ViewScreen.swift */; };
 		A13CE8F38B1CD3B9DACB8E2E /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED1688A0F63E95BC3BD349AD /* AppModel.swift */; };
+		A191A9C19AC300EB138C7CBA /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = D08EA0C8184116A2084F89DF /* InfoPlist.strings */; };
 		A1E928DF92CDC40F7B07952E /* LookReceiptNotifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = F84BA6FBFFF34D5A92798BF4 /* LookReceiptNotifier.swift */; };
 		A2B2EDD696A928FBEFF041C2 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 6A37121DEAA99065100C6667 /* Localizable.strings */; };
 		A2B4D18C8D2BFC1698AA4307 /* PlusPaywall.swift in Sources */ = {isa = PBXBuildFile; fileRef = 536A9B0B5FFE1F350CE3E140 /* PlusPaywall.swift */; };
 		A3B85FA87D3F11B02F7A4B0C /* TrustCore in Frameworks */ = {isa = PBXBuildFile; productRef = C0333FDFA631E42B914FD748 /* TrustCore */; };
+		A469578F6FDB8AB757E04034 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 63242874F15C117B93D74C2D /* InfoPlist.strings */; };
 		A8BC08E8C79CE43694921C35 /* ViewScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDAA41799C1A974BBE1DF210 /* ViewScreen.swift */; };
 		A94B6401AD264CF3FFD212E6 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 4C699BBDA4EB0CC57ED36887 /* Localizable.strings */; };
 		AB1369C7286F2EAD6C9E6E79 /* TrustCore in Frameworks */ = {isa = PBXBuildFile; productRef = 6F0F2223F70D2E4CB8AABFF1 /* TrustCore */; };
 		AB72B73FF8BA53E9B1936171 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = BF4B0475D551D63F000821DA /* Localizable.strings */; };
 		AEB82731796BB364BA081E6C /* TrustComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8863CE33D489634538BAC18E /* TrustComponents.swift */; };
 		B19D2AB1C4FC8FFE2598C835 /* InviteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD364338836BC73381136435 /* InviteView.swift */; };
+		B1A0E4DF77665EC1DE731BA2 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 6A37121DEAA99065100C6667 /* Localizable.strings */; };
 		B2C01F65BA75F564AF16A791 /* AgeGateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57B898D038C6021727ABDACD /* AgeGateView.swift */; };
 		B54974F68A38E7221D995E39 /* AuthSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FD7594384721372A16D9E19 /* AuthSession.swift */; };
 		B558CE36A3BD455267334253 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 66B76ABCAC45B392F6A35D09 /* PrivacyInfo.xcprivacy */; };
@@ -97,21 +126,42 @@
 		BFBCEE93CC8B3321A0924D53 /* CircleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D99492A6161FC4D64E0C386 /* CircleView.swift */; };
 		C266183870E6F2B71B0911BC /* TrustClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C0D44DBC8538A89711936F4 /* TrustClient.swift */; };
 		C3DEFFEAE8A59482D694BA95 /* TrustComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8863CE33D489634538BAC18E /* TrustComponents.swift */; };
+		C4045D711A3073BD6D1A81E6 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B07B3706D2CCD8A7AC80B91D /* Assets.xcassets */; };
+		C50CCEDD8D632AC698403B24 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 66B76ABCAC45B392F6A35D09 /* PrivacyInfo.xcprivacy */; };
 		C66C2CA89604A2D5F1B526B9 /* AppConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE3763646FBA2DF7BEE36D79 /* AppConfiguration.swift */; };
+		C681973995544E37970D4D06 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 4C8229953A6861B1EAF998E1 /* Localizable.strings */; };
 		C6AFF30070B015B573D250EC /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = B2063F803335BC6D0150423D /* InfoPlist.strings */; };
 		C9DAE176C7A0161EEC13548E /* LookReceiptNotifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = F84BA6FBFFF34D5A92798BF4 /* LookReceiptNotifier.swift */; };
 		CE01EB4E572A9DEEB10D7C54 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED1688A0F63E95BC3BD349AD /* AppModel.swift */; };
+		CF67E84AB9C281F1DFCD3133 /* DeclaredAgeRange.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7526B1C396A531BB1264D7D4 /* DeclaredAgeRange.framework */; settings = {ATTRIBUTES = (Weak, ); }; };
+		D13B71CDDE1F70D13E2346A8 /* AuthenticationServices.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B9D76A913BE410AB908D7AB0 /* AuthenticationServices.framework */; };
 		D2459321066E8DAE7317DAC6 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 6A37121DEAA99065100C6667 /* Localizable.strings */; };
 		D3BF88D7D129945278E04638 /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 482B3013C3B6C0C8532F5DE6 /* LoginView.swift */; };
 		D3C213AB13032F840DEB0B8C /* ProfileAvatarPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = A144B075570E3EC71B3A9E9E /* ProfileAvatarPicker.swift */; };
+		D7A589CDF2CB38B2A2C77D13 /* SpaceGrotesk-Variable.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 6BCC3CAB70FB747A74A2A255 /* SpaceGrotesk-Variable.ttf */; };
 		D84B6840C62B0F8AAA3F4435 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 4C699BBDA4EB0CC57ED36887 /* Localizable.strings */; };
+		D89C9E13F5267A3D8384EF03 /* SharingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93DD05E4CE1F61BF819BD58D /* SharingView.swift */; };
+		D8E8A789E25986A1CD5E359D /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 482B3013C3B6C0C8532F5DE6 /* LoginView.swift */; };
+		D8F5CCC726E45D5063491D25 /* MapScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE3BE1E107A89A8B8D4FDBD2 /* MapScreen.swift */; };
 		DAA3141A7D1F052C736060A3 /* ViewScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDAA41799C1A974BBE1DF210 /* ViewScreen.swift */; };
 		DB9ED407C7588BAB29C8EFAD /* AgeAssuranceCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35620E6EF77E541AD03BCD66 /* AgeAssuranceCoordinator.swift */; };
+		DFFBEE5D0D01B241A4135CEA /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED1688A0F63E95BC3BD349AD /* AppModel.swift */; };
 		E1F12F6A594D0140C2929F41 /* LocationIngestStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EC0AFA3E5CFC1D9047DE372 /* LocationIngestStore.swift */; };
+		E247582832E57FCF03E00E94 /* InviteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD364338836BC73381136435 /* InviteView.swift */; };
+		E24E002D73086B63A3CCF2BA /* TrustApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 913C99EC0D7E0E081DA468B0 /* TrustApp.swift */; };
+		E33BB7F292DE7044850B1E45 /* StoreManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A764AB895F51BD53D38551D7 /* StoreManager.swift */; };
+		E49DDC8353F5FC877D89AF55 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 4C699BBDA4EB0CC57ED36887 /* Localizable.strings */; };
+		E71484E1111F57EE1C72C24D /* HomePlaceStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6AEC0BF1A6640B58DEED252 /* HomePlaceStore.swift */; };
 		EAEEA02218F48B35D5332C3E /* PermissionKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9A0293AEE98FCEA8FA92356D /* PermissionKit.framework */; settings = {ATTRIBUTES = (Weak, ); }; };
+		EB88077E49EE7F81F90A3DEC /* MainShellView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74231FF47EE26FCD87F0BE18 /* MainShellView.swift */; };
+		EC6D643CAA77DE1376090C4F /* YouView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A8356A446C938EFA37466BE /* YouView.swift */; };
 		EDCFA9A1DC37C2B3CE09D820 /* AgeGateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57B898D038C6021727ABDACD /* AgeGateView.swift */; };
 		F073EE1FC303C57F678D770D /* MainShellView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74231FF47EE26FCD87F0BE18 /* MainShellView.swift */; };
+		F07B21D4A300287BFA60C0BF /* AgeGateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57B898D038C6021727ABDACD /* AgeGateView.swift */; };
+		F118D6D3006ED654758C0AE1 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = CC2380F09F1CF772604EADCB /* Localizable.strings */; };
 		F42C31560334B370446854B3 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 5508C24A56E81A67A0FC1D03 /* InfoPlist.strings */; };
+		F5105B339EEB9BC685DD81E9 /* PlusPaywall.swift in Sources */ = {isa = PBXBuildFile; fileRef = 536A9B0B5FFE1F350CE3E140 /* PlusPaywall.swift */; };
+		F9DE39A68220DCC3C563678B /* TrustComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8863CE33D489634538BAC18E /* TrustComponents.swift */; };
 		FA3CFD102051BDDE97FBCCA0 /* RealPushAPNSE2ETests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4302226952571B448B50AAFB /* RealPushAPNSE2ETests.swift */; };
 		FB5A039144351F60575D8744 /* AppConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE3763646FBA2DF7BEE36D79 /* AppConfiguration.swift */; };
 /* End PBXBuildFile section */
@@ -145,6 +195,7 @@
 		35620E6EF77E541AD03BCD66 /* AgeAssuranceCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgeAssuranceCoordinator.swift; sourceTree = "<group>"; };
 		3DD39690718850F57B59DFBA /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		4302226952571B448B50AAFB /* RealPushAPNSE2ETests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RealPushAPNSE2ETests.swift; sourceTree = "<group>"; };
+		43EB52EAEB1B4BD859242000 /* TrustStaging.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = TrustStaging.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		46FEA85CB113D010FB90A0EF /* TrustPhoneSetupTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrustPhoneSetupTests.swift; sourceTree = "<group>"; };
 		47B487800F3DADB918917BA8 /* LocationCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationCoordinator.swift; sourceTree = "<group>"; };
 		482B3013C3B6C0C8532F5DE6 /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
@@ -203,6 +254,19 @@
 			buildActionMask = 2147483647;
 			files = (
 				0A872DF45F12B026110B1128 /* TrustCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		07CED005040F944F0BE760AD /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				460793C90FBC79F198E01410 /* TrustCore in Frameworks */,
+				D13B71CDDE1F70D13E2346A8 /* AuthenticationServices.framework in Frameworks */,
+				76D3970CE382836066A5B4F1 /* MapKit.framework in Frameworks */,
+				CF67E84AB9C281F1DFCD3133 /* DeclaredAgeRange.framework in Frameworks */,
+				267789FF20B8D5E1170FB10B /* PermissionKit.framework in Frameworks */,
+				8E0A4923A05E7B254EC35FD3 /* _PermissionKit_SwiftUI.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -376,6 +440,7 @@
 				B23A5C764E9E313CD90E6EB0 /* TrustCoreTests.xctest */,
 				08790634D294CA76972CD49E /* TrustInternal.app */,
 				893275B32856BF35CACA1FD0 /* TrustServiceUITests.xctest */,
+				43EB52EAEB1B4BD859242000 /* TrustStaging.app */,
 				56F2274E2243FEC94CADC02A /* TrustUITests.xctest */,
 			);
 			name = Products;
@@ -411,6 +476,26 @@
 			);
 			productName = Trust;
 			productReference = E0E16CA26F45FCA3514EB874 /* Trust.app */;
+			productType = "com.apple.product-type.application";
+		};
+		204B694D50E0DDBB3930D6FA /* TrustStaging */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 2938105A0DFC909860F057EC /* Build configuration list for PBXNativeTarget "TrustStaging" */;
+			buildPhases = (
+				55B442A8FCDB8A438F761C11 /* Sources */,
+				B1BF9955CFEF2BD8B12C961C /* Resources */,
+				07CED005040F944F0BE760AD /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = TrustStaging;
+			packageProductDependencies = (
+				1A675321E1D5CCF4407E28A9 /* TrustCore */,
+			);
+			productName = TrustStaging;
+			productReference = 43EB52EAEB1B4BD859242000 /* TrustStaging.app */;
 			productType = "com.apple.product-type.application";
 		};
 		2D4B5594003D1FB49243E697 /* TrustServiceUITests */ = {
@@ -501,6 +586,10 @@
 						DevelopmentTeam = 3S529795M9;
 						ProvisioningStyle = Automatic;
 					};
+					204B694D50E0DDBB3930D6FA = {
+						DevelopmentTeam = 3S529795M9;
+						ProvisioningStyle = Automatic;
+					};
 					2D4B5594003D1FB49243E697 = {
 						DevelopmentTeam = 3S529795M9;
 						ProvisioningStyle = Automatic;
@@ -546,6 +635,7 @@
 				B6D7371633099E2C204153CD /* TrustCoreTests */,
 				470681601E41134BCAD20008 /* TrustInternal */,
 				2D4B5594003D1FB49243E697 /* TrustServiceUITests */,
+				204B694D50E0DDBB3930D6FA /* TrustStaging */,
 				33753F0B8DE2D72C33BB08C5 /* TrustUITests */,
 			);
 		};
@@ -571,6 +661,28 @@
 				B558CE36A3BD455267334253 /* PrivacyInfo.xcprivacy in Resources */,
 				427A81CC58EC6AE2E97AA9E5 /* SpaceGrotesk-Variable.ttf in Resources */,
 				462B3BC1214901472FF28E08 /* Syne-Variable.ttf in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B1BF9955CFEF2BD8B12C961C /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C4045D711A3073BD6D1A81E6 /* Assets.xcassets in Resources */,
+				33EB9367B6F0B4A496B10697 /* IBMPlexMono-Medium.ttf in Resources */,
+				72F8BC97B79F98DFD7D199C3 /* InfoPlist.strings in Resources */,
+				A469578F6FDB8AB757E04034 /* InfoPlist.strings in Resources */,
+				70A02D9F6A117622D5D410D8 /* InfoPlist.strings in Resources */,
+				762825F80E4DC6DBE42B1D53 /* InfoPlist.strings in Resources */,
+				A191A9C19AC300EB138C7CBA /* InfoPlist.strings in Resources */,
+				E49DDC8353F5FC877D89AF55 /* Localizable.strings in Resources */,
+				C681973995544E37970D4D06 /* Localizable.strings in Resources */,
+				F118D6D3006ED654758C0AE1 /* Localizable.strings in Resources */,
+				B1A0E4DF77665EC1DE731BA2 /* Localizable.strings in Resources */,
+				3A754F27B7F6ED860E4629DC /* Localizable.strings in Resources */,
+				C50CCEDD8D632AC698403B24 /* PrivacyInfo.xcprivacy in Resources */,
+				D7A589CDF2CB38B2A2C77D13 /* SpaceGrotesk-Variable.ttf in Resources */,
+				9397BF8E6BD901AF17EDAE19 /* Syne-Variable.ttf in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -689,6 +801,42 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		55B442A8FCDB8A438F761C11 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				627353ECF82DC2417ECAE25C /* AgeAssuranceCoordinator.swift in Sources */,
+				F07B21D4A300287BFA60C0BF /* AgeGateView.swift in Sources */,
+				4ACD58F2A12DD09313D2B5A5 /* AppConfiguration.swift in Sources */,
+				DFFBEE5D0D01B241A4135CEA /* AppModel.swift in Sources */,
+				84BE9D98514962D89C64E092 /* AuthSession.swift in Sources */,
+				59983BB9309B95B0CA9EF455 /* CircleView.swift in Sources */,
+				4897B21DDD553C24D56716DA /* HandleView.swift in Sources */,
+				E71484E1111F57EE1C72C24D /* HomePlaceStore.swift in Sources */,
+				E247582832E57FCF03E00E94 /* InviteView.swift in Sources */,
+				1A823F0D9D29C2BDC9FCBE6C /* LocationCoordinator.swift in Sources */,
+				6569A55D0BFD1E0588AAC5AE /* LocationIngestStore.swift in Sources */,
+				D8E8A789E25986A1CD5E359D /* LoginView.swift in Sources */,
+				64814159FDA81159802267D1 /* LookConfirmSheet.swift in Sources */,
+				2A3AEB12A7E60C44D1B9A3A2 /* LookReceiptNotifier.swift in Sources */,
+				EB88077E49EE7F81F90A3DEC /* MainShellView.swift in Sources */,
+				D8F5CCC726E45D5063491D25 /* MapScreen.swift in Sources */,
+				1D6858ABFAC472EDEE6A7B86 /* PhoneView.swift in Sources */,
+				F5105B339EEB9BC685DD81E9 /* PlusPaywall.swift in Sources */,
+				4763A640E03EB07B51E1F626 /* ProfileAvatarPicker.swift in Sources */,
+				45EC5C7C8D79144D752CD0A7 /* RootView.swift in Sources */,
+				D89C9E13F5267A3D8384EF03 /* SharingView.swift in Sources */,
+				E33BB7F292DE7044850B1E45 /* StoreManager.swift in Sources */,
+				E24E002D73086B63A3CCF2BA /* TrustApp.swift in Sources */,
+				02D061F3EB0697F1197F546A /* TrustClient.swift in Sources */,
+				F9DE39A68220DCC3C563678B /* TrustComponents.swift in Sources */,
+				450FA307662AA44B0B634381 /* TrustKeychain.swift in Sources */,
+				855024AB0182D6E2E7C23A81 /* TrustTheme.swift in Sources */,
+				A111FFF494D14B903B721328 /* ViewScreen.swift in Sources */,
+				EC6D643CAA77DE1376090C4F /* YouView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		9E3C8AAFE1CF0E8E302D8378 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -739,6 +887,32 @@
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Release;
+		};
+		1FDACA52B15F3378764274BD /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = "Trust-Staging.entitlements";
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CURRENT_PROJECT_VERSION = 49;
+				DEVELOPMENT_TEAM = 3S529795M9;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				INFOPLIST_FILE = "Staging-Info.plist";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Trust uses the camera only when you choose Take Photo to set your profile picture.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Trust uses your location while the app is open so you can see yourself on the map and look at people who share with you. Trust does not sell your location.";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.collapsetechnologies.trust.staging;
+				PRODUCT_NAME = "Trust Staging";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) TRUST_STAGING";
+				SWIFT_STRICT_CONCURRENCY = targeted;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
 		};
 		3FD876C620AAEE781D4044A4 /* Debug */ = {
 			isa = XCBuildConfiguration;
@@ -927,6 +1101,32 @@
 			};
 			name = Release;
 		};
+		94E286E8E4EBAE201EE2B857 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = "Trust-Staging.entitlements";
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CURRENT_PROJECT_VERSION = 49;
+				DEVELOPMENT_TEAM = 3S529795M9;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				INFOPLIST_FILE = "Staging-Info.plist";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Trust uses the camera only when you choose Take Photo to set your profile picture.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Trust uses your location while the app is open so you can see yourself on the map and look at people who share with you. Trust does not sell your location.";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.collapsetechnologies.trust.staging;
+				PRODUCT_NAME = "Trust Staging";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) TRUST_STAGING";
+				SWIFT_STRICT_CONCURRENCY = targeted;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 		96F5F1EE25AFAC773CFA0AF8 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -1063,6 +1263,15 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
 		};
+		2938105A0DFC909860F057EC /* Build configuration list for PBXNativeTarget "TrustStaging" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1FDACA52B15F3378764274BD /* Debug */,
+				94E286E8E4EBAE201EE2B857 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
 		36CFA129704795B76E2CDB1A /* Build configuration list for PBXNativeTarget "Trust" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -1118,6 +1327,10 @@
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		1A675321E1D5CCF4407E28A9 /* TrustCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = TrustCore;
+		};
 		26D261D4D2888B2D50331783 /* TrustCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = TrustCore;

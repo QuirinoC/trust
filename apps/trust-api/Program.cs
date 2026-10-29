@@ -145,6 +145,8 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 
 var authOptions = builder.Configuration.GetSection(AuthOptions.SectionName).Get<AuthOptions>() ?? new AuthOptions();
 AuthOptionsGuard.EnsureDevelopmentSignInIsSafe(authOptions, builder.Environment.IsDevelopment());
+var phoneVerificationOptions = builder.Configuration.GetSection(PhoneVerificationOptions.SectionName).Get<PhoneVerificationOptions>() ?? new PhoneVerificationOptions();
+PhoneVerificationOptionsGuard.EnsureSafe(phoneVerificationOptions, builder.Environment.EnvironmentName);
 
 if (builder.Environment.IsDevelopment() && string.IsNullOrWhiteSpace(authOptions.SigningKey))
 {
@@ -152,6 +154,7 @@ if (builder.Environment.IsDevelopment() && string.IsNullOrWhiteSpace(authOptions
 }
 
 builder.Services.AddSingleton(authOptions);
+builder.Services.AddSingleton(phoneVerificationOptions);
 builder.Services.AddSingleton(builder.Configuration.GetSection(AppleOptions.SectionName).Get<AppleOptions>() ?? new AppleOptions());
 builder.Services.AddSingleton(builder.Configuration.GetSection(GoogleOptions.SectionName).Get<GoogleOptions>() ?? new GoogleOptions());
 builder.Services.AddSingleton<SessionIssuer>();

@@ -110,6 +110,96 @@ targets:
       testTargets:
         - TrustCoreTests
         - TrustUITests
+  TrustStaging:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources/TrustApp
+      - path: Resources
+        buildPhase: resources
+        excludes:
+          - Trust.storekit
+          - Fonts/*.txt
+    dependencies:
+      - package: TrustCore
+        product: TrustCore
+      - sdk: AuthenticationServices.framework
+      - sdk: MapKit.framework
+      - sdk: DeclaredAgeRange.framework
+        weak: true
+      - sdk: PermissionKit.framework
+        weak: true
+      - sdk: _PermissionKit_SwiftUI.framework
+        weak: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.collapsetechnologies.trust.staging
+        PRODUCT_NAME: Trust Staging
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        CURRENT_PROJECT_VERSION: 49
+        MARKETING_VERSION: 1.0
+        ENABLE_USER_SCRIPT_SANDBOXING: YES
+        SWIFT_STRICT_CONCURRENCY: targeted
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) TRUST_STAGING"
+        CODE_SIGN_ENTITLEMENTS: Trust-Staging.entitlements
+        DEVELOPMENT_TEAM: 3S529795M9
+        INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: Trust uses your location while the app is open so you can see yourself on the map and look at people who share with you. Trust does not sell your location.
+        INFOPLIST_KEY_NSCameraUsageDescription: Trust uses the camera only when you choose Take Photo to set your profile picture.
+    info:
+      path: Staging-Info.plist
+      properties:
+        CFBundleDisplayName: Trust Staging
+        CFBundleDevelopmentRegion: en
+        # In-app localization supported by the current release.
+        CFBundleLocalizations:
+          - en
+          - zh-Hans
+          - ja
+          - de
+          - fr
+          - pt-BR
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        TRUST_SKIP_PHONE_VERIFICATION: false
+        LSApplicationCategoryType: public.app-category.lifestyle
+        UIApplicationSupportsIndirectInputEvents: true
+        UILaunchScreen:
+          UIColorName: Paper
+        UIAppFonts:
+          - SpaceGrotesk-Variable.ttf
+          - IBMPlexMono-Medium.ttf
+        TRUST_BASE_URL: https://staging-api.jointrust.app
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+          NSExceptionDomains:
+            localhost:
+              NSExceptionAllowsInsecureHTTPLoads: true
+              NSIncludesSubdomains: true
+            "127.0.0.1":
+              NSExceptionAllowsInsecureHTTPLoads: true
+        # iPhone: portrait only. iPad: all orientations (required for Split View / Stage Manager).
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        "UISupportedInterfaceOrientations~ipad":
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UIBackgroundModes:
+          - location
+        ITSAppUsesNonExemptEncryption: false
+        NSLocationWhenInUseUsageDescription: Trust uses your location while the app is open so you can see yourself on the map and look at people who share with you. Trust does not sell your location.
+        NSCameraUsageDescription: Trust uses the camera only when you choose Take Photo to set your profile picture.
+        NSLocationAlwaysAndWhenInUseUsageDescription: Trust uses your location in the background so a Look still works when the app is closed. A confirmed Look is recorded and requests a notification. Trust does not sell your location.
+        NSLocationAlwaysUsageDescription: Trust uses your location in the background so a Look still works when the app is closed. A confirmed Look is recorded and requests a notification. Trust does not sell your location.
+        NSLocationTemporaryUsageDescriptionDictionary:
+          PreciseEscrow: Trust needs precise location so a Look shows the current place. Approximate location is not enough.
+        CFBundleURLTypes:
+          - CFBundleTypeRole: Editor
+            CFBundleURLSchemes:
+              - trust-staging
+    scheme:
+      testTargets:
+        - TrustCoreTests
   # This internal-only TestFlight artifact retains the required phone-verification flow.
   # Always export it with testFlightInternalTestingOnly=true.
   TrustInternal:
@@ -247,6 +337,24 @@ schemes:
       config: Debug
     analyze:
       config: Debug
+    archive:
+      config: Release
+    management:
+      shared: true
+  Trust-Staging:
+    build:
+      targets:
+        TrustStaging: all
+    run:
+      config: Release
+    test:
+      config: Release
+      targets:
+        - TrustCoreTests
+    profile:
+      config: Release
+    analyze:
+      config: Release
     archive:
       config: Release
     management:

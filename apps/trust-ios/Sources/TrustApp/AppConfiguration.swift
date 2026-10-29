@@ -2,13 +2,28 @@ import Foundation
 import UIKit
 
 enum AppConfiguration {
+#if TRUST_STAGING
+    static let monthlyProductID = "com.collapsetechnologies.trust.staging.circle.monthly"
+    static let annualProductID = "com.collapsetechnologies.trust.staging.circle.annual"
+    static let bundleIdentifier = "com.collapsetechnologies.trust.staging"
+    static let apiURL = URL(string: "https://staging-api.jointrust.app")!
+    static let universalLinkHost = "staging.jointrust.app"
+    static let urlScheme = "trust-staging"
+    static let isStaging = true
+#else
     static let monthlyProductID = "com.collapsetechnologies.trust.circle.monthly"
     static let annualProductID = "com.collapsetechnologies.trust.circle.annual"
     static let bundleIdentifier = "com.collapsetechnologies.trust"
+    static let apiURL = URL(string: "https://trust-api-u0ft.onrender.com")!
+    static let universalLinkHost = "jointrust.app"
+    static let urlScheme = "trust"
+    static let isStaging = false
+#endif
     static let monthlyDisplayPrice = "$7.99"
     static let annualDisplayPrice = "$69.99"
     static let manageSubscriptionsURL = URL(string: "https://apps.apple.com/account/subscriptions")!
     static let productionAPIURL = URL(string: "https://trust-api-u0ft.onrender.com")!
+    static let stagingAPIURL = URL(string: "https://staging-api.jointrust.app")!
     static let localAPIURL = URL(string: "http://127.0.0.1:5088")!
     static let legalSiteURL = URL(string: "https://jointrust.app")!
     static let privacyURL = URL(string: "https://jointrust.app/privacy")!
@@ -30,7 +45,11 @@ enum AppConfiguration {
     /// Build setting, scheme env, or Debug/Release default.
     /// Physical Debug builds must not use loopback — that is the phone, not the Mac API.
     static var apiBaseURL: URL {
+#if TRUST_STAGING
+        stagingAPIURL
+#else
         remapLoopbackOnDevice(configuredAPIBaseURL)
+#endif
     }
 
     static var usesProductionAPI: Bool {
@@ -50,7 +69,7 @@ enum AppConfiguration {
     /// is worthless if a down Dev API silently hands the session to production — see
     /// `debugAPICandidates` and `remapLoopbackOnDevice`.
     static var isStrictAPIMode: Bool {
-        ProcessInfo.processInfo.environment["TRUST_STRICT_API"] == "1"
+        isStaging || ProcessInfo.processInfo.environment["TRUST_STRICT_API"] == "1"
     }
 
     /// Ordered hosts `prepare()` probes with `/health/live` to resolve `resolvedBaseURL`.
@@ -102,6 +121,9 @@ enum AppConfiguration {
     }
 
     private static var configuredAPIBaseURL: URL {
+#if TRUST_STAGING
+        return stagingAPIURL
+#else
         if let override = ProcessInfo.processInfo.environment["TRUST_BASE_URL"]?
             .trimmingCharacters(in: .whitespacesAndNewlines),
            !override.isEmpty,
@@ -121,6 +143,7 @@ enum AppConfiguration {
         #else
         return productionAPIURL
         #endif
+#endif
     }
 
     private static func remapLoopbackOnDevice(_ url: URL) -> URL {

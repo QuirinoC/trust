@@ -46,6 +46,15 @@ struct PhoneView: View {
         .onChange(of: model.phoneCodeSent) { _, sent in
             if sent { focused = .code }
         }
+#if TRUST_STAGING
+        .task(id: model.phoneDraft) {
+            let draft = model.phoneDraft
+            while !Task.isCancelled {
+                if await model.autoVerifyStagingTestNumberIfReady(draft) { return }
+                try? await Task.sleep(for: .seconds(1))
+            }
+        }
+#endif
     }
 
     private func phoneEntry(now: Date) -> some View {
@@ -60,6 +69,15 @@ struct PhoneView: View {
                 .foregroundStyle(palette.muted)
                 .padding(.top, 8)
                 .padding(.bottom, 22)
+
+#if TRUST_STAGING
+            Text("Staging automatically verifies only the test numbers +1 202 555 0101 and +1 202 555 0102 after you finish entering one. No SMS is sent to these reserved test numbers.")
+                .trustFont(13)
+                .foregroundStyle(palette.muted)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.bottom, 14)
+                .accessibilityIdentifier("staging-phone-test-notice")
+#endif
 
             TrustCard(padding: 20) {
                 VStack(alignment: .leading, spacing: 18) {

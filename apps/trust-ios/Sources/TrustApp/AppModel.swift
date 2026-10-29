@@ -233,6 +233,9 @@ final class AppModel: ObservableObject {
     @Published private(set) var phoneRetry = TrustPhoneRetryState()
     private var phoneRetryAccountID: String?
     private var authenticatedPerson: Person?
+#if TRUST_STAGING
+    private static let stagingTestPhoneNumbers: Set<String> = ["+12025550101", "+12025550102"]
+#endif
 
     private func loadPhoneRetry() {
         guard let id = TrustSessionIdentity.accountID(from: auth.sessionToken)?.uuidString.lowercased() else { return }
@@ -240,12 +243,31 @@ final class AppModel: ObservableObject {
         phoneRetryAccountID = id
         phoneRetry = UserDefaults.standard.data(forKey: "trust.phoneRetry.\(id)")
             .flatMap { try? JSONDecoder().decode(TrustPhoneRetryState.self, from: $0) } ?? TrustPhoneRetryState()
+#if TRUST_STAGING
+        if let number = phoneRetry.challengeNumber,
+           Self.stagingTestPhoneNumbers.contains(TrustPhoneRetryState.normalized(number)) {
+            challengedPhone = number
+            phoneDraft = number
+            phoneCodeSent = false
+            if phoneRetry.showingCode == true {
+                phoneRetry.showingCode = false
+                savePhoneRetry()
+            }
+            phoneNotice = "No SMS is sent to reserved staging test numbers. Verification will retry automatically when available."
+        } else if phoneRetry.showingCode == true, let number = phoneRetry.challengeNumber,
+                  let expiresAt = phoneRetry.challengeExpiresAt, expiresAt > Date() {
+            challengedPhone = number
+            phoneDraft = number
+            phoneCodeSent = true
+        }
+#else
         if phoneRetry.showingCode == true, let number = phoneRetry.challengeNumber,
            let expiresAt = phoneRetry.challengeExpiresAt, expiresAt > Date() {
             challengedPhone = number
             phoneDraft = number
             phoneCodeSent = true
         }
+#endif
     }
 
     private func clearPrivatePhoneRetry() {
@@ -3288,6 +3310,10 @@ final class AppModel: ObservableObject {
                 guard lookupGeneration == connectionLookupGeneration,
                       isCurrentAccount(generation: currentAccountGeneration, token: sessionToken) else { return }
                 inviteShareText = TrustCopy.inviteMessage(code: invite)
+                    .replacingOccurrences(
+                        of: "https://jointrust.app/i/",
+                        with: "https://\(AppConfiguration.universalLinkHost)/i/"
+                    )
             } catch {
                 guard lookupGeneration == connectionLookupGeneration,
                       isCurrentAccount(generation: currentAccountGeneration, token: sessionToken) else { return }
@@ -3395,11 +3421,11 @@ final class AppModel: ObservableObject {
     func handleIncomingURL(_ url: URL) {
         let candidate: String?
         if url.scheme == "https",
-           url.host == "jointrust.app",
+           url.host == AppConfiguration.universalLinkHost,
            url.pathComponents.count == 3,
            url.pathComponents[1] == "i" {
             candidate = url.pathComponents[2]
-        } else if url.scheme == "trust" {
+        } else if url.scheme == AppConfiguration.urlScheme {
             let parts = url.pathComponents.filter { $0 != "/" }
             if url.host == "invite", parts.count == 1 {
                 candidate = parts.first
@@ -3562,6 +3588,10 @@ final class AppModel: ObservableObject {
             guard isCurrentAccount(operation: operation), canAccessAccountData,
                   hasCurrentAgeAuthorization(generation: ageGeneration) else { return }
             let now = Date()
+#if TRUST_STAGING
+            let normalizedPhone = TrustPhoneRetryState.normalized(sent.normalizedPhone ?? phone)
+            let isStagingTestPhone = Self.stagingTestPhoneNumbers.contains(normalizedPhone)
+#endif
             phoneRetry.apply(phone: sent.normalizedPhone ?? phone, serverTime: sent.serverTime,
                 resendAt: sent.resendRetryAt ?? (sent.serverTime ?? now).addingTimeInterval(Double(sent.resendAfterSeconds)),
                 correctionAt: sent.correctionRetryAt, remaining: sent.immediateNumberAttemptsRemaining, accepted: true, now: now,
@@ -3572,11 +3602,46 @@ final class AppModel: ObservableObject {
             challengedPhone = sent.normalizedPhone ?? phone
             phoneRetry.challengeNumber = challengedPhone
             phoneRetry.challengeExpiresAt = now.addingTimeInterval(sent.expiresAt.timeIntervalSince(sent.serverTime ?? now))
+#if TRUST_STAGING
+            phoneRetry.showingCode = !isStagingTestPhone
+#else
             phoneRetry.showingCode = true
+#endif
             savePhoneRetry()
             phoneCodeDraft = ""
+#if TRUST_STAGING
+            if isStagingTestPhone {
+                phoneCodeSent = false
+                phoneNotice = "No SMS is sent to reserved staging test numbers. Verifying automatically."
+            }
+            if isStagingTestPhone,
+               !isDemoMode,
+               auth.isAuthenticated,
+               auth.account?.provider == .apple,
+               let testCode = sent.developmentCode {
+                let testPhone = challengedPhone
+                phoneCodeSent = false
+                phoneNotice = "Staging test number accepted. Verifying automatically; test numbers only."
+                isSendingPhone = false
+                await verifyPhoneCode(
+                    using: testCode,
+                    expectedPhone: testPhone,
+                    expectedOperation: operation,
+                    expectedAgeGeneration: ageGeneration,
+                    expectedSendGeneration: generation
+                )
+            } else {
+                phoneCodeSent = !isStagingTestPhone
+                if isStagingTestPhone {
+                    phoneNotice = "No SMS is sent to reserved staging test numbers. Verification could not complete automatically; retry when available."
+                } else {
+                    phoneNotice = nil
+                }
+            }
+#else
             phoneCodeSent = true
             phoneNotice = sent.developmentCode.map(TrustCopy.developmentPhoneCode)
+#endif
         } catch {
             guard isCurrentAccount(operation: operation), canAccessAccountData,
                   hasCurrentAgeAuthorization(generation: ageGeneration) else { return }
@@ -3600,6 +3665,22 @@ final class AppModel: ObservableObject {
         }
     }
 
+#if TRUST_STAGING
+    func autoVerifyStagingTestNumberIfReady(_ rawPhone: String) async -> Bool {
+        let normalized = TrustPhoneRetryState.normalized(rawPhone)
+        guard phase == .phone,
+              auth.isAuthenticated,
+              auth.account?.provider == .apple,
+              !isDemoMode,
+              hasCurrentAgeAuthorization(generation: ageAccessState.generation),
+              normalized == TrustPhoneRetryState.normalized(phoneDraft),
+              Self.stagingTestPhoneNumbers.contains(normalized) else { return true }
+        guard phoneRetry.secondsRemaining(for: rawPhone, now: Date()) == 0 else { return false }
+        await sendPhoneCode(action: .sendCode)
+        return true
+    }
+#endif
+
     func editPhoneNumber() {
         cancelPendingPhoneSend()
         phoneCodeSent = false
@@ -3621,15 +3702,40 @@ final class AppModel: ObservableObject {
     }
 
     func verifyPhoneCode() async {
+        await verifyPhoneCode(using: nil)
+    }
+
+    private func verifyPhoneCode(
+        using suppliedCode: String?,
+        expectedPhone: String? = nil,
+        expectedOperation: TrustAccountOperation? = nil,
+        expectedAgeGeneration: UInt64? = nil,
+        expectedSendGeneration: UInt64? = nil
+    ) async {
         phoneNoticeIsConflict = false
+#if TRUST_STAGING
+        let phone = expectedPhone ?? challengedPhone
+        let code = (suppliedCode ?? phoneCodeDraft).trimmingCharacters(in: .whitespacesAndNewlines)
+        if let expectedSendGeneration {
+            guard let expectedOperation, let expectedAgeGeneration,
+                  challengedPhone == phone,
+                  phoneOperationIsCurrent(expectedOperation, ageGeneration: expectedAgeGeneration, generation: expectedSendGeneration) else { return }
+        }
+#else
         let phone = challengedPhone
         let code = phoneCodeDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+#endif
         guard !phone.isEmpty, !code.isEmpty, !isSendingPhone else {
             if code.isEmpty { phoneNotice = TrustCopy.enterPhoneCode }
             return
         }
+#if TRUST_STAGING
+        guard phase == .phone, let operation = expectedOperation ?? currentAccountOperation(), requireOnline() else { return }
+        let ageGeneration = expectedAgeGeneration ?? ageAccessState.generation
+#else
         guard phase == .phone, let operation = currentAccountOperation(), requireOnline() else { return }
         let ageGeneration = ageAccessState.generation
+#endif
         phoneSendGeneration &+= 1
         let generation = phoneSendGeneration
         isSendingPhone = true

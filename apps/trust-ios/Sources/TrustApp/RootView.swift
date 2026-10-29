@@ -24,6 +24,21 @@ struct RootView: View {
                 MainShellView()
             }
         }
+#if TRUST_STAGING
+        .overlay(alignment: .topTrailing) {
+            Text("STAGING")
+                .font(.system(size: 10, weight: .bold, design: .rounded))
+                .tracking(0.8)
+                .foregroundStyle(palette.ink)
+                .padding(.horizontal, 9)
+                .padding(.vertical, 5)
+                .background(palette.surface.opacity(0.94), in: Capsule())
+                .overlay(Capsule().stroke(palette.line, lineWidth: 1))
+                .padding(.top, 7)
+                .padding(.trailing, 12)
+                .accessibilityLabel("Staging build")
+        }
+#endif
         .environment(\.trustPalette, palette)
         .environment(\.locale, (TrustAppLanguage(rawValue: appLanguage) ?? .system).resolvedLocale)
         .tint(palette.accent)

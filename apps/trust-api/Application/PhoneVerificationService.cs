@@ -22,6 +22,7 @@ public sealed class PhoneVerificationService(
     TrustEngine engine,
     ISmsOtpSender sms,
     AuthOptions auth,
+    PhoneVerificationOptions phoneOptions,
     TimeProvider time,
     IHostEnvironment environment,
     ILogger<PhoneVerificationService> logger)
@@ -75,7 +76,9 @@ public sealed class PhoneVerificationService(
             throw TrustException.PhoneUnavailable();
         }
 
-        var bypass = environment.IsDevelopment() && !sms.IsConfigured;
+        var stagingTestNumber = environment.IsStaging()
+            && phoneOptions.StagingTestNumbers.Contains(e164, StringComparer.Ordinal);
+        var bypass = (environment.IsDevelopment() && !sms.IsConfigured) || stagingTestNumber;
         if (!sms.IsConfigured && !bypass) throw TrustException.OtpNotConfigured();
         var now = time.GetUtcNow();
         var code = RandomNumberGenerator.GetInt32(0, 1_000_000).ToString("D6");

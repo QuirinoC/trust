@@ -156,6 +156,71 @@ public sealed class PhoneVerificationTests
     }
 
     [Fact]
+    public async Task StagingAllowlistUsesPhoneChallengeWithoutSmsOrGlobalBudget()
+    {
+        var clock = new MutableTimeProvider { UtcNow = new DateTimeOffset(2026, 10, 1, 12, 0, 0, TimeSpan.Zero) };
+        var store = new MemoryTrustStore();
+        var engine = new TrustEngine(store, clock);
+        var sms = new RecordingSms();
+        var options = StagingPhoneOptions();
+        var phones = NewPhones(store, sms, NullLogger<PhoneVerificationService>.Instance, Environments.Staging, clock, options);
+        var global = new SmsSendBudget(SmsSendBudget.GlobalDayKey(), clock.GetUtcNow(), 40, clock.GetUtcNow());
+        await store.UpsertSmsSendBudgetAsync(global, CancellationToken.None);
+
+        foreach (var phone in PhoneVerificationOptions.ApprovedStagingTestNumbers)
+        {
+            var account = await engine.SignInAsync("apple", $"staging-{phone}", "Sam", CancellationToken.None);
+            var sent = await phones.SendAsync(account.Id, phone, CancellationToken.None);
+            Assert.False(string.IsNullOrWhiteSpace(sent.DevelopmentCode));
+            Assert.Equal(6, sent.DevelopmentCode!.Length);
+            await phones.VerifyAsync(account.Id, phone, sent.DevelopmentCode, CancellationToken.None);
+            Assert.Equal(phone, (await store.FindAccountAsync(account.Id, CancellationToken.None))!.PhoneE164);
+        }
+
+        Assert.Equal(0, sms.Sends);
+        Assert.Equal(global, await store.GetSmsSendBudgetAsync(SmsSendBudget.GlobalDayKey(), CancellationToken.None));
+
+        var second = await engine.SignInAsync("apple", "staging-duplicate-phone", "Alex", CancellationToken.None);
+        var duplicate = await Assert.ThrowsAsync<TrustException>(() =>
+            phones.SendAsync(second.Id, PhoneVerificationOptions.ApprovedStagingTestNumbers[0], CancellationToken.None));
+        Assert.Equal("phone_unavailable", duplicate.Code);
+        Assert.False((await store.FindAccountAsync(second.Id, CancellationToken.None))!.HasVerifiedPhone);
+    }
+
+    [Fact]
+    public async Task StagingNumbersOutsideAllowlistUseRealSmsOrFailWhenUnconfigured()
+    {
+        var store = new MemoryTrustStore();
+        var engine = new TrustEngine(store, TimeProvider.System);
+        var allowed = StagingPhoneOptions();
+        var account = await engine.SignInAsync("apple", "staging-unknown", "Sam", CancellationToken.None);
+        var sender = new RecordingSms();
+        var configured = NewPhones(store, sender, NullLogger<PhoneVerificationService>.Instance, Environments.Staging, options: allowed);
+
+        var sent = await configured.SendAsync(account.Id, "+12025550103", CancellationToken.None);
+        Assert.Null(sent.DevelopmentCode);
+        Assert.Equal(1, sender.Sends);
+        Assert.Equal("+12025550103", sender.LastTo);
+
+        var otherAccount = await engine.SignInAsync("apple", "staging-unknown-no-sms", "Alex", CancellationToken.None);
+        var unconfigured = NewPhones(store, new UnconfiguredSms(), NullLogger<PhoneVerificationService>.Instance, Environments.Staging, options: allowed);
+        var exception = await Assert.ThrowsAsync<TrustException>(() =>
+            unconfigured.SendAsync(otherAccount.Id, "+12025550104", CancellationToken.None));
+        Assert.Equal("otp_not_configured", exception.Code);
+    }
+
+    [Fact]
+    public void ProductionRejectsStagingTestNumberConfiguration()
+    {
+        Assert.Throws<InvalidOperationException>(() =>
+            PhoneVerificationOptionsGuard.EnsureSafe(StagingPhoneOptions(), Environments.Production));
+        Assert.Throws<InvalidOperationException>(() =>
+            PhoneVerificationOptionsGuard.EnsureSafe(StagingPhoneOptions(), Environments.Development));
+        Assert.Throws<InvalidOperationException>(() => PhoneVerificationOptionsGuard.EnsureSafe(
+            new PhoneVerificationOptions { StagingTestNumbers = ["+12025550101", "+12025550199"] }, Environments.Staging));
+    }
+
+    [Fact]
     public async Task ConfiguredSmsDoesNotReturnDevelopmentCode()
     {
         var store = new MemoryTrustStore();
@@ -526,7 +591,8 @@ public sealed class PhoneVerificationTests
         ISmsOtpSender sms,
         ILogger<PhoneVerificationService> logger,
         string environment,
-        TimeProvider? time = null)
+        TimeProvider? time = null,
+        PhoneVerificationOptions? options = null)
     {
         var clock = time ?? TimeProvider.System;
         return new PhoneVerificationService(
@@ -534,10 +600,16 @@ public sealed class PhoneVerificationTests
             new TrustEngine(store, clock),
             sms,
             new AuthOptions { SigningKey = "development-signing-key-32bytes-min!!" },
+            options ?? new PhoneVerificationOptions(),
             clock,
             new TestHostEnvironment { EnvironmentName = environment },
             logger);
     }
+
+    private static PhoneVerificationOptions StagingPhoneOptions() => new()
+    {
+        StagingTestNumbers = [.. PhoneVerificationOptions.ApprovedStagingTestNumbers]
+    };
 
     private sealed class UnconfiguredSms : ISmsOtpSender
     {

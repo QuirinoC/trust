@@ -23,5 +23,29 @@
       // Keep custom and error logs enabled while preventing persisted invocation URLs.
       "invocation_logs": false
     }
+  },
+  "env": {
+    "staging": {
+      "name": "jointrust-web-staging",
+      "workers_dev": false,
+      "preview_urls": false,
+      "routes": [
+        { "pattern": "staging.jointrust.app", "custom_domain": true }
+      ],
+      "vars": {
+        "ENVIRONMENT": "staging",
+        "PUBLIC_HOST": "staging.jointrust.app",
+        "APP_ID": "3S529795M9.com.collapsetechnologies.trust.staging",
+        "APP_SCHEME": "trust-staging",
+        "APP_LABEL": "Trust Staging"
+      },
+      "observability": {
+        "enabled": true,
+        "head_sampling_rate": 1,
+        "logs": {
+          "invocation_logs": false
+        }
+      }
+    }
   }
 }
