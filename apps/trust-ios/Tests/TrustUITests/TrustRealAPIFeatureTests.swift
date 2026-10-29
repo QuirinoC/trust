@@ -861,7 +861,7 @@ final class TrustRealAPIFeatureTests: XCTestCase {
 
         // Cancel must preserve the server hold and the account's delete option.
         delete.tap()
-        let cancel = app.alerts.buttons["age-privacy-hold-delete-cancel"]
+        let cancel = app.alerts.buttons.matching(identifier: "age-privacy-hold-delete-cancel").firstMatch
         XCTAssertTrue(cancel.waitForExistence(timeout: 5))
         cancel.tap()
         XCTAssertTrue(delete.waitForExistence(timeout: 5))
@@ -869,11 +869,11 @@ final class TrustRealAPIFeatureTests: XCTestCase {
 
         // The authorization needed only for account deletion must survive an app
         // restart while the server continues to deny ordinary account access. The
-        // second launch has no UI-test or development-session bypass. The server hold
-        // remains authoritative through the app's session-bound privacy marker.
+        // second launch has no development-session sign-in or auth reset. Keep the
+        // UI-test storage adapter because this ad hoc simulator build has no Keychain
+        // entitlement; the server hold and session-bound marker remain authoritative.
         app.terminate()
         app.launchEnvironment.removeValue(forKey: "TRUST_DEV_SESSION")
-        app.launchEnvironment.removeValue(forKey: "TRUST_UI_TEST")
         app.launch()
         XCTAssertTrue(delete.waitForExistence(timeout: 20), app.debugDescription)
 
