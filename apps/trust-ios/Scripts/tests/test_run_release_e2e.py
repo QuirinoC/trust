@@ -407,6 +407,50 @@ class SimulatorCreationTests(unittest.TestCase):
 
 
 class ResultValidationTests(unittest.TestCase):
+    def standard_result_fixture(self, skipped_names: set[str] | None = None):
+        inventory = runner.source_test_inventory()
+        allowed = set(runner.EXPECTED_STANDARD_SKIP_CASES)
+        skipped_names = allowed if skipped_names is None else skipped_names
+        nodes = []
+        for name, count in inventory.items():
+            for _ in range(count):
+                nodes.append({
+                    "nodeType": "Test Case",
+                    "name": f"TrustUITests/TrustRealAPIFeatureTests/{name}()",
+                    "result": "Skipped" if name in skipped_names else "Passed",
+                })
+        skipped = sum(inventory[name] for name in skipped_names)
+        summary = {
+            "passedTests": len(nodes) - skipped,
+            "failedTests": 0,
+            "skippedTests": skipped,
+            "totalTestCount": len(nodes),
+        }
+        return summary, nodes
+
+    def test_standard_lane_allows_only_explicit_setup_skip_names_and_rechecks_existing_result(self) -> None:
+        expected = set(runner.ALL_REAL_CASES) | {
+            "testOptInDuoFoldTransitionPreservesPeopleNavigation",
+            "testOptInDuoFoldPreservesFocusedAddPersonInput",
+        }
+        self.assertEqual(set(runner.EXPECTED_STANDARD_SKIP_CASES), expected)
+
+        summary, nodes = self.standard_result_fixture()
+        bundle = Path("/tmp/completed-standard.xcresult")
+        with patch.object(runner, "result_summary", return_value=summary), \
+             patch.object(runner, "result_test_cases", return_value=nodes):
+            checked = runner.validate_standard_result(bundle, "/Applications/Xcode.app/Contents/Developer")
+        self.assertEqual(checked, summary)
+
+    def test_standard_lane_rejects_unexpected_skip_even_when_skip_count_matches(self) -> None:
+        expected = set(runner.EXPECTED_STANDARD_SKIP_CASES)
+        unexpected_case = next(name for name in runner.source_test_inventory() if name not in expected)
+        altered_skips = (expected - {next(iter(expected))}) | {unexpected_case}
+        summary, nodes = self.standard_result_fixture(altered_skips)
+
+        with self.assertRaisesRegex(runner.RunnerError, "Unexpected standard-lane skips"):
+            runner.validate_standard_result_data(summary, Path("/tmp/standard.xcresult"), nodes)
+
     def test_zero_skipped_and_failed_cases_are_rejected(self) -> None:
         path = Path("/tmp/not-created.xcresult")
         with self.assertRaises(runner.RunnerError):

@@ -62,6 +62,11 @@ FAULT_CASE_CANDIDATES = (
     "testFailedAcceptKeepsNamedRequestAndOtherRequestsAvailableForRetry",
 )
 ALL_REAL_CASES = tuple(re.findall(r"^\s+func\s+(test[A-Za-z0-9_]+)\s*\(", TEST_SOURCE.read_text(encoding="utf-8"), re.MULTILINE))
+STANDARD_OPT_IN_SETUP_SKIP_CASES = frozenset({
+    "testOptInDuoFoldTransitionPreservesPeopleNavigation",
+    "testOptInDuoFoldPreservesFocusedAddPersonInput",
+})
+EXPECTED_STANDARD_SKIP_CASES = frozenset(ALL_REAL_CASES) | STANDARD_OPT_IN_SETUP_SKIP_CASES
 FAULT_CASES = tuple(FAULT_CASE_CANDIDATES)
 REVIEW_FIXTURE_CASES = {
     PAIR_CASE,
@@ -526,7 +531,7 @@ def summary_count(summary: dict[str, Any], key: str, list_key: str) -> int:
     return len(nested_tests(summary, list_key))
 
 
-def validate_result(summary: dict[str, Any], result_bundle: Path, *, expected_skip_prefix: str | None = None) -> None:
+def validate_result(summary: dict[str, Any], result_bundle: Path, *, allow_skips: bool = False) -> None:
     passed = summary_count(summary, "passedTests", "passedTests")
     failed = summary_count(summary, "failedTests", "failedTests")
     skipped = summary_count(summary, "skippedTests", "skippedTests")
@@ -537,16 +542,50 @@ def validate_result(summary: dict[str, Any], result_bundle: Path, *, expected_sk
         raise RunnerError(f"No tests executed in {result_bundle}")
     if failed:
         raise RunnerError(f"{failed} XCTest failure(s) in {result_bundle}; see its xcresult bundle.")
-    if skipped:
-        skipped_items = nested_tests(summary, "skippedTests")
-        names = [str(item.get("testName") or item.get("name") or item) for item in skipped_items]
-        expected_skip_count = summary.get("expectedSkippedTests")
-        if not names and expected_skip_prefix is None and expected_skip_count is None:
-            raise RunnerError(f"{skipped} skipped test(s) in {result_bundle}; no allowlist applies.")
-        unexpected = [name for name in names if expected_skip_prefix is None or expected_skip_prefix not in name]
-        if unexpected or (not names and isinstance(expected_skip_count, int) and skipped != expected_skip_count):
-            raise RunnerError(f"Unexpected skipped tests in {result_bundle}: {unexpected or skipped}")
+    if skipped and not allow_skips:
+        raise RunnerError(f"{skipped} skipped test(s) in {result_bundle}; no allowlist applies.")
     print(f"  xcresult: {result_bundle} — {passed} passed, {skipped} skipped, {failed} failed", flush=True)
+
+
+def validate_standard_result_data(summary: dict[str, Any], result_bundle: Path,
+                                  actual_nodes: list[dict[str, Any]]) -> None:
+    """Validate a completed standard-lane result against source and exact setup skips."""
+    validate_result(summary, result_bundle, allow_skips=True)
+    expected = source_test_inventory()
+    actual = Counter(test_case_name(node) for node in actual_nodes)
+    passed = summary_count(summary, "passedTests", "passedTests")
+    failed = summary_count(summary, "failedTests", "failedTests")
+    skipped = summary_count(summary, "skippedTests", "skippedTests")
+    total = summary.get("totalTestCount")
+    expected_total = sum(expected.values())
+    if total != expected_total or len(actual_nodes) != expected_total or actual != expected:
+        raise RunnerError(
+            f"Standard lane test inventory mismatch: source={expected_total}, xcresult total={total!r}, "
+            f"xcresult cases={len(actual_nodes)}; missing={list((expected - actual).elements())[:12]}, "
+            f"unexpected={list((actual - expected).elements())[:12]}. See {result_bundle}."
+        )
+    skipped_names = Counter(test_case_name(node) for node in actual_nodes
+                            if str(node.get("result", "")).lower() == "skipped")
+    expected_skips = Counter(EXPECTED_STANDARD_SKIP_CASES)
+    unexpected = list((skipped_names - expected_skips).elements())
+    missing = list((expected_skips - skipped_names).elements())
+    if unexpected or missing:
+        raise RunnerError(
+            f"Unexpected standard-lane skips in {result_bundle}: unexpected={unexpected}, missing={missing}."
+        )
+    if failed or skipped != len(EXPECTED_STANDARD_SKIP_CASES) or passed + skipped != expected_total:
+        raise RunnerError(
+            f"Standard lane expected {expected_total - len(EXPECTED_STANDARD_SKIP_CASES)} passes and "
+            f"{len(EXPECTED_STANDARD_SKIP_CASES)} named setup skips; got {passed} passed, "
+            f"{skipped} skipped, {failed} failed. See {result_bundle}."
+        )
+
+
+def validate_standard_result(result_bundle: Path, developer_dir: str) -> dict[str, Any]:
+    """Revalidate an existing completed standard xcresult without rerunning XCTest."""
+    summary = result_summary(result_bundle, developer_dir)
+    validate_standard_result_data(summary, result_bundle, result_test_cases(result_bundle, developer_dir))
+    return summary
 
 
 def validate_single_case(summary: dict[str, Any], result_bundle: Path, case: str,
@@ -584,10 +623,12 @@ def xcode_test(xctestrun: Path, destination: str, result_bundle: Path, developer
         if not result_bundle.exists():
             raise RunnerError(f"xcodebuild exited {proc.returncode}; no xcresult was produced. Log: {log_path}")
     summary = result_summary(result_bundle, developer_dir)
-    if expected_standard_skips is not None:
-        summary["expectedSkippedTests"] = expected_standard_skips
-    validate_result(summary, result_bundle,
-                     expected_skip_prefix="TrustRealAPIFeatureTests" if expected_standard_skips is not None else None)
+    validate_result(summary, result_bundle, allow_skips=expected_standard_skips is not None)
+    if expected_standard_skips is not None and summary_count(summary, "skippedTests", "skippedTests") != expected_standard_skips:
+        raise RunnerError(
+            f"Standard lane expected {expected_standard_skips} setup skips; got "
+            f"{summary_count(summary, 'skippedTests', 'skippedTests')}. See {result_bundle}."
+        )
     if proc.returncode:
         raise RunnerError(f"xcodebuild exited {proc.returncode}; see {result_bundle} and {log_path}.")
     return summary
@@ -821,32 +862,8 @@ class Harness:
         inject_runner_environment(self.args.xctestrun, xctestrun, {"TRUST_UI_TEST_BASE_URL": ""})
         bundle = self.logs / "standard-ui.xcresult"
         summary = xcode_test(xctestrun, test_dest(udid), bundle, self.developer_dir,
-                             expected_standard_skips=len(ALL_REAL_CASES))
-        expected = source_test_inventory()
-        actual_nodes = result_test_cases(bundle, self.developer_dir)
-        actual = Counter(test_case_name(node) for node in actual_nodes)
-        passed = summary_count(summary, "passedTests", "passedTests")
-        failed = summary_count(summary, "failedTests", "failedTests")
-        skipped = summary_count(summary, "skippedTests", "skippedTests")
-        total = summary.get("totalTestCount")
-        expected_total = sum(expected.values())
-        if total != expected_total or len(actual_nodes) != expected_total or actual != expected:
-            raise RunnerError(
-                f"Standard lane test inventory mismatch: source={expected_total}, xcresult total={total!r}, "
-                f"xcresult cases={len(actual_nodes)}; missing={list((expected - actual).elements())[:12]}, "
-                f"unexpected={list((actual - expected).elements())[:12]}. See {bundle}."
-            )
-        if failed or skipped != len(ALL_REAL_CASES) or passed + skipped != expected_total:
-            raise RunnerError(
-                f"Standard lane expected {expected_total - len(ALL_REAL_CASES)} passes and "
-                f"{len(ALL_REAL_CASES)} opt-in real-API setup skips; got {passed} passed, "
-                f"{skipped} skipped, {failed} failed. See {bundle}."
-            )
-        unexpected_skips = [test_case_name(node) for node in actual_nodes
-                            if str(node.get("result", "")).lower() == "skipped"
-                            and test_case_name(node) not in ALL_REAL_CASES]
-        if unexpected_skips:
-            raise RunnerError(f"Unexpected standard-lane skips: {unexpected_skips}; see {bundle}")
+                             expected_standard_skips=len(EXPECTED_STANDARD_SKIP_CASES))
+        validate_standard_result_data(summary, bundle, result_test_cases(bundle, self.developer_dir))
 
     def run_handoff(self, a: str, b: str) -> None:
         case_dir = self.logs / "same-account-home-handoff"
