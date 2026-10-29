@@ -1,15 +1,15 @@
 # Trust Staging: two-iPhone acceptance
 
-**Execution status: not run.** This guide is a test procedure, not a TestFlight-readiness statement. Wait until the staging build finishes TestFlight processing and is available to both testers before starting. StoreKit product metadata may exist before the app can fetch products or complete a Sandbox purchase; verify those behaviors on-device below.
+**Execution status: not run.** Build 49 is available to the staging internal TestFlight group, so physical acceptance can begin. StoreKit product metadata may exist before the app can fetch products or complete a Sandbox purchase; verify those behaviors and staging APNs delivery on-device below.
 
 Use two adult testers with distinct Apple Accounts and real iPhones. Select two of the three approved testers; these are the only two reserved phone numbers available concurrently for the automatic, no-SMS flow. Do not swap the assigned numbers between accounts during the run. Assign them as follows:
 
 - **A:** `+1 202 555 0101`, handle `trustqatesta`
 - **B:** `+1 202 555 0102`, handle `trustqatestb`
 
-These handles are syntactically valid and not in the app's source-reserved handle list. Confirm availability in the authenticated onboarding flow; do not query unauthenticated API endpoints or substitute unrelated accounts. Confirm both invited Apple Accounts can install the staging TestFlight app. For a baseline TestFlight purchase, the test transaction uses the Sandbox environment automatically; no additional dedicated Sandbox Apple Account is required. Optional advanced Sandbox controls are outside this run. Both testers should use real Apple sign-in and the real age check. Do not enable a global phone-verification skip or any demo, screenshot, age, or other verification bypass; use only the two reserved staging numbers and their compiled staging auto-verification flow.
+If either handle is already taken, choose another unique handle and record it. Use A’s invited Apple Account for both TestFlight and Apple sign-in on A; use B’s different invited Apple Account for both on B. Complete the real age check on each phone. Do not enable global phone-verification skips or use demo or age bypasses; only the two reserved numbers use the approved automatic staging flow.
 
-Before the run, record each phone's model, iOS version, app build, and current location and notification permissions. Verify the app is **Trust Staging**, shows its STAGING badge, and is the staging build on both phones. Confirm the staging product records exist in App Store Connect and that APNs/TestFlight configuration is present; record what you verified without copying credentials. The expected StoreKit products are `com.collapsetechnologies.trust.staging.circle.monthly` and `com.collapsetechnologies.trust.staging.circle.annual`. Do not count product metadata, a local StoreKit configuration, or an API acknowledgment as a successful fetch, purchase, or displayed push.
+Record each phone’s model, iOS version, app build, and location and notification permissions. Confirm both apps say **Trust Staging**, show the STAGING badge, and use the same build. [TestFlight purchases automatically use Apple’s sandbox](https://developer.apple.com/help/app-store-connect/test-a-beta-version/testing-subscriptions-and-in-app-purchases-in-testflight/) and are not charged. No extra dedicated Sandbox Apple Account is needed for these baseline purchase checks. If products do not load, record that step as blocked; do not substitute a local purchase fixture.
 
 For every numbered step, record **Pass**, **Fail**, **Blocked**, or **Not run**. Record observed behavior, not an inferred result. Push delivery is not guaranteed.
 
@@ -79,4 +79,4 @@ Keep evidence minimal. Do not record Apple IDs, passwords, access tokens, verifi
 - Observed result and privacy-safe evidence reference:
 - Retest result or remaining blocker:
 
-This procedure does not test carrier SMS; the two reserved staging numbers deliberately bypass SMS. It does not establish guaranteed notification delivery or production release readiness. Do not describe the build as TestFlight-ready until processing is complete and the required checks have actual recorded outcomes. Existing simulator evidence is documented in [FEATURE-E2E-PLAN.md](FEATURE-E2E-PLAN.md).
+This procedure does not test carrier SMS; the two reserved staging numbers deliberately bypass SMS. It does not establish guaranteed notification delivery or production release readiness. TestFlight availability does not establish physical acceptance; record the actual outcomes of the checks below. Existing simulator evidence is documented in [FEATURE-E2E-PLAN.md](FEATURE-E2E-PLAN.md).
