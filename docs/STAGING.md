@@ -1,6 +1,6 @@
 # Trust staging plan
 
-Staging is a planned, isolated end-to-end environment for two physical iPhones. Its status and outstanding prerequisites are in [operations/staging/STATUS.md](operations/staging/STATUS.md); the [physical-device guide](PHYSICAL-DEVICE-TEST.md) is the acceptance procedure. Staging infrastructure and software delivery are complete, including the live API and web Worker, Apple app and catalog, and build 49 available in internal TestFlight; the status record distinguishes verified resources and checks from work that remains unprovisioned or unverified.
+Staging is a planned, isolated end-to-end environment for two physical iPhones. Its status and outstanding prerequisites are in [operations/staging/STATUS.md](operations/staging/STATUS.md); the [physical-device guide](PHYSICAL-DEVICE-TEST.md) is the acceptance procedure. Staging infrastructure and software delivery are complete, including the live API and web Worker, Apple app and catalog, and build 50 available in internal TestFlight; the status record distinguishes verified resources and checks from work that remains unprovisioned or unverified.
 
 ## Boundaries
 

@@ -1,13 +1,13 @@
 # Trust Staging: two-iPhone acceptance
 
-**Execution status: not run.** Build 49 is available to the staging internal TestFlight group, so physical acceptance can begin. StoreKit product metadata may exist before the app can fetch products or complete a Sandbox purchase; verify those behaviors and staging APNs delivery on-device below.
+**Execution status: not run.** Build 50 is available to the staging internal TestFlight group, so physical acceptance can begin. StoreKit product metadata may exist before the app can fetch products or complete a Sandbox purchase; verify those behaviors and staging APNs delivery on-device below.
 
 Use two adult testers with distinct Apple Accounts and real iPhones. Select two of the three approved testers; these are the only two reserved phone numbers available concurrently for the automatic, no-SMS flow. Do not swap the assigned numbers between accounts during the run. Assign them as follows:
 
 - **A:** `+1 202 555 0101`, handle `trustqatesta`
 - **B:** `+1 202 555 0102`, handle `trustqatestb`
 
-If either handle is already taken, choose another unique handle and record it. Use A’s invited Apple Account for both TestFlight and Apple sign-in on A; use B’s different invited Apple Account for both on B. Age-range and App Store app-verification screens are paused in the next build. Do not enable global phone-verification skips or use demo accounts; only the two reserved numbers use the approved automatic staging flow.
+If either handle is already taken, choose another unique handle and record it. Use A’s invited Apple Account for both TestFlight and Apple sign-in on A; use B’s different invited Apple Account for both on B. Age-range and App Store app-verification screens are paused in build 50. Do not enable global phone-verification skips or use demo accounts; only the two reserved numbers use the approved automatic staging flow.
 
 Record each phone’s model, iOS version, app build, and location and notification permissions. Confirm both apps say **Trust Staging**, show the STAGING badge, and use the same build. [TestFlight purchases automatically use Apple’s sandbox](https://developer.apple.com/help/app-store-connect/test-a-beta-version/testing-subscriptions-and-in-app-purchases-in-testflight/) and are not charged. No extra dedicated Sandbox Apple Account is needed for these baseline purchase checks. If products do not load, record that step as blocked; do not substitute a local purchase fixture.
 
