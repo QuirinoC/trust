@@ -22,6 +22,62 @@ function stagingEnvironment(overrides = {}) {
   };
 }
 
+function requestWithCountry(url, country, headers = {}) {
+  const request = new Request(url, { headers });
+  if (country !== undefined) {
+    Object.defineProperty(request, "cf", { value: { country } });
+  }
+  return request;
+}
+
+test("region endpoint returns only valid Cloudflare country codes without caching", async () => {
+  for (const countryCode of ["US", "GB", "BR"]) {
+    const response = await worker.fetch(
+      requestWithCountry("https://jointrust.app/api/region", countryCode),
+      environment(),
+    );
+
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("content-type"), "application/json; charset=utf-8");
+    assert.equal(response.headers.get("cache-control"), "private, no-store");
+    assert.equal(response.headers.get("vary"), null);
+    assert.deepEqual(await response.json(), { countryCode });
+  }
+});
+
+test("region endpoint returns null for unavailable, unknown, and invalid edge country values", async () => {
+  for (const country of [undefined, null, "XX", "T1", "USA", "1A", 12]) {
+    const response = await worker.fetch(
+      requestWithCountry("https://jointrust.app/api/region", country, { "CF-IPCountry": "US" }),
+      environment(),
+    );
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { countryCode: null });
+  }
+});
+
+test("staging region endpoint is public, noindex, uncached, and isolated to the staging host", async () => {
+  const response = await worker.fetch(
+    requestWithCountry("https://staging.jointrust.app/api/region", "gb"),
+    stagingEnvironment(),
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("x-robots-tag"), "noindex, nofollow");
+  assert.equal(response.headers.get("cache-control"), "private, no-store");
+  assert.equal(response.headers.get("vary"), null);
+  assert.deepEqual(await response.json(), { countryCode: "GB" });
+
+  const crossDomain = await worker.fetch(
+    requestWithCountry("https://jointrust.app/api/region", "US"),
+    stagingEnvironment(),
+  );
+  assert.equal(crossDomain.status, 404);
+  assert.equal(crossDomain.headers.get("x-robots-tag"), "noindex, nofollow");
+  assert.equal(await crossDomain.text(), "Not found");
+});
+
 test("invite landing makes acceptance explicit and links to the app", async () => {
   const response = await worker.fetch(
     new Request("https://jointrust.app/i/ABC234"),

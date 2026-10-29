@@ -164,7 +164,9 @@ final class AuthSession: ObservableObject {
     }
 
     func validateRestoredAppleCredential() async -> Bool {
-        guard account?.provider == .apple, let userID = account?.appleUserID else { return false }
+        guard account?.provider == .apple,
+              let userID = account?.appleUserID,
+              let token = sessionToken else { return false }
         let provider = ASAuthorizationAppleIDProvider()
         do {
             let state: ASAuthorizationAppleIDProvider.CredentialState = try await withCheckedThrowingContinuation { continuation in
@@ -176,6 +178,11 @@ final class AuthSession: ObservableObject {
                     }
                 }
             }
+            // The system callback can arrive after another account has signed in.
+            // Only invalidate the restored session that initiated this check.
+            guard account?.provider == .apple,
+                  account?.appleUserID == userID,
+                  sessionToken == token else { return false }
             switch state {
             case .revoked, .notFound:
                 signOut()

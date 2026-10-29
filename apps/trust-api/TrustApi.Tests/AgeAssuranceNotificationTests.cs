@@ -1,8 +1,6 @@
 using System.Security.Claims;
 using System.Reflection;
 using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.FileProviders;
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using TrustApi.Api.V1;
@@ -20,7 +18,7 @@ namespace TrustApi.Tests;
 public sealed class AgeAssuranceNotificationTests
 {
     [Fact]
-    public async Task AuthenticatedApiRequiresVerifiedAppTransactionLinkBeforeOrdinaryAccess()
+    public async Task ConsentRevocationBlocksPreviouslyLinkedAccountsIndependentlyOfOnboardingGate()
     {
         var accountId = Guid.NewGuid();
         var transaction = new VerifiedStoreKitAppTransaction(
@@ -32,23 +30,13 @@ public sealed class AgeAssuranceNotificationTests
         await accounts.UpsertAccountAsync(
             new Account(accountId, "apple", "api-link-required-test", "Test", false, null, DateTimeOffset.UtcNow),
             CancellationToken.None);
-        var filter = new RevokedAccountEndpointFilter(ageAssurance, accounts, new TestHostEnvironment("Production"));
+        var filter = new RevokedAccountEndpointFilter(ageAssurance);
 
-        Assert.True(await filter.ShouldBlockForMissingLinkAsync(
-            accountId, "GET", "/api/v1/circle", CancellationToken.None));
-        Assert.True(await filter.ShouldBlockForMissingLinkAsync(
-            accountId, "POST", "/api/v1/location", CancellationToken.None));
-        Assert.False(await filter.ShouldBlockForMissingLinkAsync(
-            accountId, "PUT", "/api/v1/age-assurance/app-transaction", CancellationToken.None));
-        Assert.False(await filter.ShouldBlockForMissingLinkAsync(
-            accountId, "DELETE", "/api/v1/account", CancellationToken.None));
-        Assert.False(await filter.ShouldBlockForMissingLinkAsync(
-            accountId, "DELETE", $"/api/v1/push/devices/{Guid.NewGuid()}", CancellationToken.None));
+        Assert.False(await filter.ShouldBlockAsync(accountId, "GET", "/api/v1/circle", CancellationToken.None));
 
         Assert.Equal(AppTransactionLinkResult.Linked, await ageAssurance.TryRegisterAppTransactionLinkAsync(
             accountId, transaction, CancellationToken.None));
-        Assert.False(await filter.ShouldBlockForMissingLinkAsync(
-            accountId, "GET", "/api/v1/circle", CancellationToken.None));
+        Assert.False(await filter.ShouldBlockAsync(accountId, "GET", "/api/v1/circle", CancellationToken.None));
 
         await ageAssurance.RecordConsentRevocationAsync(Guid.NewGuid(), transaction, DateTimeOffset.UtcNow, CancellationToken.None);
         Assert.True(await filter.ShouldBlockAsync(accountId, "GET", "/api/v1/circle", CancellationToken.None));
@@ -135,7 +123,7 @@ public sealed class AgeAssuranceNotificationTests
         Assert.Equal(AppTransactionLinkResult.Linked, await ageAssurance.TryRegisterAppTransactionLinkAsync(accountId, transaction, CancellationToken.None));
         await ageAssurance.RecordConsentRevocationAsync(Guid.NewGuid(), transaction, DateTimeOffset.UtcNow, CancellationToken.None);
 
-        var filter = new RevokedAccountEndpointFilter(ageAssurance, accounts, new TestHostEnvironment("Production"));
+        var filter = new RevokedAccountEndpointFilter(ageAssurance);
         Assert.True(await filter.ShouldBlockAsync(accountId, "GET", "/api/v1/circle", CancellationToken.None));
         Assert.False(await filter.ShouldBlockAsync(accountId, "PUT", "/api/v1/age-assurance/app-transaction", CancellationToken.None));
 
@@ -390,11 +378,4 @@ public sealed class AgeAssuranceNotificationTests
         }
     }
 
-    private sealed class TestHostEnvironment(string environmentName) : IHostEnvironment
-    {
-        public string EnvironmentName { get; set; } = environmentName;
-        public string ApplicationName { get; set; } = "TrustApi.Tests";
-        public string ContentRootPath { get; set; } = Directory.GetCurrentDirectory();
-        public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
-    }
 }

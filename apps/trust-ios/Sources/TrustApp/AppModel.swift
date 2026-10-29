@@ -189,12 +189,11 @@ final class AppModel: ObservableObject {
     @Published private(set) var isJoining = false
 
     @Published var isSigningIn = false
+    @Published private(set) var isStarting = false
+    private var startupInProgress = false
     @Published var isDemoMode = false
-    /// This server-side link is required before exposing an authenticated account. It is
-    /// separate from `ageAccessState`: Apple's age decision may succeed while StoreKit
-    /// cannot yet prove the signed app transaction needed for consent-revocation handling.
-    private var isAppTransactionLinked = false
-    @Published private(set) var isAgeAccessAllowed = false {
+    /// Retained for dormant age-assurance UI state; account access does not depend on it.
+    @Published private(set) var isAgeAccessAllowed = true {
         didSet {
             location.setAgeAccessAllowed(isAgeAccessAllowed)
             location.setAppActive(isSceneActive && isAgeAccessAllowed)
@@ -207,12 +206,12 @@ final class AppModel: ObservableObject {
             || ProcessInfo.processInfo.environment["TRUST_DEV_SESSION"] == "1"
 #endif
         return TrustAccountAccessPolicy.canAccessAccountData(
-            ageAssurancePassed: isAgeAccessAllowed && ageAccessState.isAllowed,
             accountAuthenticated: auth.isAuthenticated,
-            appTransactionLinked: isAppTransactionLinked,
+            privacyHeld: auth.isCurrentSessionPrivacyHeld,
             localFixture: localFixture
         )
     }
+    private var appleCredentialValidationTask: Task<Void, Never>?
     @Published private(set) var ageGateBlockedByParent = false
     // PermissionQuestion is iOS 26+, while Trust still supports older deployment targets.
     // Keep this type-erased here and cast only inside the availability-guarded view.
@@ -223,6 +222,9 @@ final class AppModel: ObservableObject {
     @Published private var presenceOverride: HomePresenceKind?
 
     @Published var phoneDraft = ""
+    @Published var phoneCountry = TrustPhoneCountry.unitedStates
+    @Published var phoneLocalDraft = ""
+    @Published var phoneCountryWasChosen = false
     @Published var phoneCodeDraft = ""
     @Published var phoneNotice: String?
     @Published var phoneNoticeIsConflict = false
@@ -241,6 +243,9 @@ final class AppModel: ObservableObject {
         guard let id = TrustSessionIdentity.accountID(from: auth.sessionToken)?.uuidString.lowercased() else { return }
         guard phoneRetryAccountID != id else { return }
         phoneRetryAccountID = id
+        phoneCountry = .unitedStates
+        phoneLocalDraft = ""
+        phoneCountryWasChosen = false
         phoneRetry = UserDefaults.standard.data(forKey: "trust.phoneRetry.\(id)")
             .flatMap { try? JSONDecoder().decode(TrustPhoneRetryState.self, from: $0) } ?? TrustPhoneRetryState()
 #if TRUST_STAGING
@@ -248,6 +253,7 @@ final class AppModel: ObservableObject {
            Self.stagingTestPhoneNumbers.contains(TrustPhoneRetryState.normalized(number)) {
             challengedPhone = number
             phoneDraft = number
+            synchronizePhoneEditorFromDraft()
             phoneCodeSent = false
             if phoneRetry.showingCode == true {
                 phoneRetry.showingCode = false
@@ -258,6 +264,7 @@ final class AppModel: ObservableObject {
                   let expiresAt = phoneRetry.challengeExpiresAt, expiresAt > Date() {
             challengedPhone = number
             phoneDraft = number
+            synchronizePhoneEditorFromDraft()
             phoneCodeSent = true
         }
 #else
@@ -265,9 +272,21 @@ final class AppModel: ObservableObject {
            let expiresAt = phoneRetry.challengeExpiresAt, expiresAt > Date() {
             challengedPhone = number
             phoneDraft = number
+            synchronizePhoneEditorFromDraft()
             phoneCodeSent = true
         }
 #endif
+    }
+
+    func synchronizePhoneEditorFromDraft() {
+        guard !phoneCountryWasChosen, !phoneDraft.isEmpty else { return }
+        let split = TrustPhoneCountry.split(phoneDraft, preferredCountry: phoneCountry)
+        if let country = split.country {
+            phoneCountry = country
+            phoneLocalDraft = split.nationalNumber
+        } else {
+            phoneLocalDraft = phoneDraft
+        }
     }
 
     private func clearPrivatePhoneRetry() {
@@ -360,7 +379,6 @@ final class AppModel: ObservableObject {
 
     private func beginAccountSessionTransition(to token: String) {
         guard auth.sessionToken != token else { return }
-        isAppTransactionLinked = false
         let previousAccountID = TrustSessionIdentity.accountID(from: auth.sessionToken)
         let nextAccountID = TrustSessionIdentity.accountID(from: token)
         let accountChanged = previousAccountID == nil || nextAccountID == nil || previousAccountID != nextAccountID
@@ -576,28 +594,19 @@ final class AppModel: ObservableObject {
     init() {
         let auth = AuthSession()
         self.auth = auth
-        ageAssurance = AgeAssuranceCoordinator()
+        ageAssurance = AgeAssuranceCoordinator(observeAppleAccountChanges: false)
         store = StoreManager()
         location = LocationCoordinator()
         receipts = LookReceiptNotifier()
         LookReceiptNotifier.shared = receipts
         ingestStore = LocationIngestStore()
         client.token = auth.sessionToken
-        #if DEBUG
-        // Demo is opt-in only. When requested, hold on Login until start() seeds the
-        // fixture so Circle never paints empty; otherwise Debug behaves exactly like Release.
-        phase = Self.debugDemoRequested(sessionToken: auth.sessionToken) ? .login : .ageChecking
-        #else
-        phase = .ageChecking
-        #endif
+        phase = .login
         client.onConsentRevoked = { [weak self] in
             self?.handleConsentRevocation()
         }
         client.onPrivacyHoldDetected = { [weak self] in
             self?.handleServerPrivacyHold()
-        }
-        ageAssurance.onAppleAccountChanged = { [weak self] in
-            self?.handleAppleAccountChange()
         }
         receipts.onNotificationTap = { [weak self] destination in
             self?.pendingPushDestination = destination
@@ -636,14 +645,17 @@ final class AppModel: ObservableObject {
     // MARK: Lifecycle
 
     func start() async {
-        beginObservingAgeUpdateResponses()
+        guard !startupInProgress else { return }
+        startupInProgress = true
+        isStarting = true
+        defer {
+            isStarting = false
+            startupInProgress = false
+        }
+        var startupGeneration = accountGeneration
 #if DEBUG
         let env = ProcessInfo.processInfo.environment
         if isUITestLaunch, env["TRUST_UI_TEST_RESET_AUTH"] == "1" {
-            // Paired account tests run repeatedly on shared simulators. Do not let a
-            // previous test identity or its cached circle bypass fresh onboarding.
-            // Keep the simulator's age fixture: this test resets the account, not
-            // the separate age-assurance state machine.
             auth.signOut()
             resetMapFocus()
             client.token = nil
@@ -651,129 +663,37 @@ final class AppModel: ObservableObject {
             snapshot = nil
             setAccountDataScope(nil)
         }
-        if env["TRUST_AGE_TEST_MODE"] == "1", env["TRUST_AGE_TEST_RESET_AUTH"] == "1" {
-            // Age-gate UI fixtures run repeatedly on shared simulators. Clear only
-            // this explicit debug fixture's prior Trust session before the durable
-            // privacy-hold restoration check can intercept the test screen.
-            auth.signOut()
-            resetMapFocus()
-            client.token = nil
-        }
-        if env["TRUST_AGE_TEST_MODE"] == "1", env["TRUST_AGE_TEST_AUTHENTICATED"] == "1" {
-            auth.prepareAgeGateUITestSession(token: env["TRUST_AGE_TEST_SESSION_TOKEN"])
-        }
 #endif
-        if auth.isCurrentSessionPrivacyHeld {
-            client.token = auth.sessionToken
-            isAgeAccessAllowed = false
-            phase = .agePrivacyHeld
-            return
-        }
-#if DEBUG
-        if env["TRUST_AGE_TEST_MODE"] == "1",
-           env["TRUST_AGE_TEST_APP_TRANSACTION_UNAVAILABLE"] == "1",
-           auth.isAuthenticated {
-            ageAccessState.setAllowedOutsideEvaluation(true)
-            isAgeAccessAllowed = true
-            client.token = auth.sessionToken
-            _ = await registerCurrentAppTransactionForConsentRevocation()
-            return
-        }
-        if env["TRUST_AGE_TEST_MODE"] == "1" {
-            if env["TRUST_AGE_TEST_UNAVAILABLE"] == "1" {
-                ageAccessState.setAllowedOutsideEvaluation(false)
-                isAgeAccessAllowed = false
-                phase = .ageCheckUnavailable
-                return
-            }
-            if env["TRUST_AGE_TEST_CONSENT_REVOKED"] == "1" {
-                isAgeAccessAllowed = false
-                phase = .ageConsentRevoked
-                return
-            }
-            if env["TRUST_AGE_TEST_PRIVACY_HELD"] == "1" {
-                ageAccessState.setAllowedOutsideEvaluation(false)
-                isAgeAccessAllowed = false
-                phase = .agePrivacyHeld
-                return
-            }
-            if env["TRUST_AGE_TEST_RESET_STATE"] == "1" {
-                ageAssurance.resetAgeGateForDebugTest()
-            } else if env["TRUST_AGE_TEST_RESET_PREFERENCES_ONLY"] == "1" {
-                // Simulate a reinstall clearing app preferences while the device-only
-                // Keychain age block remains in place.
-                ageAssurance.resetAgeGatePreferencesForDebugTest()
-            }
-            switch ageAssurance.evaluateLocalAttestationForDebugTest() {
-            case .permitted:
-                ageAccessState.setAllowedOutsideEvaluation(true)
-                isAgeAccessAllowed = true
-                await continueAfterAgeGate()
-            case .selfAttestationRequired:
-                isAgeAccessAllowed = false
-                phase = .ageGate
-            case .underMinimumAge:
-                isAgeAccessAllowed = false
-                ageAssurance.resetAccountAttestations()
-                clearAccountSession()
-                phase = .ageBlocked
-            case .ageRangeBelowMinimum:
-                handleAppleAgeRangeRestriction()
-            case .ageRangeSharingDeclined:
-                phase = .ageRangeSharingDeclined
-            case .parentApprovalRequired, .parentApprovalDenied, .unavailable:
-                isAgeAccessAllowed = false
-                phase = .ageCheckUnavailable
-            }
-            return
-        }
-        if isUITestLaunch || env["TRUST_DEV_SESSION"] == "1" || Self.debugDemoRequested(sessionToken: auth.sessionToken) {
-            ageAccessState.setAllowedOutsideEvaluation(true)
-            isAgeAccessAllowed = true
-            await continueAfterAgeGate()
-            return
-        }
-        #endif
-
-        await checkAgeAndContinue()
-    }
-
-    private func continueAfterAgeGate(retryAppTransaction: Bool = false) async {
-        let authorizationGeneration = ageAccessState.generation
-        guard hasCurrentAgeAuthorization(generation: authorizationGeneration) else { return }
+        isAgeAccessAllowed = true
+        ageAccessState.setAllowedOutsideEvaluation(true)
         await client.prepare()
-        guard hasCurrentAgeAuthorization(generation: authorizationGeneration) else { return }
-        #if DEBUG
-        if ProcessInfo.processInfo.environment["TRUST_DEV_SESSION"] == "1" {
+        guard accountGeneration == startupGeneration else { return }
+#if DEBUG
+        if env["TRUST_DEV_SESSION"] == "1" {
             await signInWithLocalAPI()
-            guard hasCurrentAgeAuthorization(generation: authorizationGeneration) else { return }
             await store.loadProducts()
-            guard hasCurrentAgeAuthorization(generation: authorizationGeneration) else { return }
             applyScreenshotLaunch()
             return
         }
         if Self.debugDemoRequested(sessionToken: auth.sessionToken) {
             enterDemo()
             await store.loadProducts()
-            guard hasCurrentAgeAuthorization(generation: authorizationGeneration) else { return }
             applyScreenshotLaunch()
             return
         }
-        #endif
-        if auth.isAuthenticated {
-            isAppTransactionLinked = false
-            isAgeAccessAllowed = false
-            phase = .appTransactionChecking
-        }
-        let restoredCredentialInvalidated = await auth.validateRestoredAppleCredential()
-        guard hasCurrentAgeAuthorization(generation: authorizationGeneration) else { return }
-        if restoredCredentialInvalidated {
+#endif
+        if await auth.validateRestoredAppleCredential() {
+            guard accountGeneration == startupGeneration else { return }
             clearAccountSession()
+            startupGeneration = accountGeneration
         }
+        guard accountGeneration == startupGeneration else { return }
         client.token = auth.sessionToken
+        if auth.isCurrentSessionPrivacyHeld {
+            phase = .agePrivacyHeld
+            return
+        }
         if auth.isAuthenticated {
-            guard await registerCurrentAppTransactionForConsentRevocation(retryRequested: retryAppTransaction) else { return }
-            guard canContinueAgeAuthorizedFlow(generation: authorizationGeneration) else { return }
             if !isDemoMode,
                let accountID = TrustSessionIdentity.accountID(from: auth.sessionToken),
                let cached = client.cachedCircle(forAccountID: accountID) {
@@ -782,28 +702,33 @@ final class AppModel: ObservableObject {
                 phase = Self.phase(for: cached.you)
             }
             await refresh(enterHome: true)
-            guard canContinueAgeAuthorizedFlow(generation: authorizationGeneration) else { return }
+            guard accountGeneration == startupGeneration else { return }
         } else {
-            isAgeAccessAllowed = true
             phase = .login
-            if let warning = client.reachabilityNotice {
-                auth.notice = warning
-            }
         }
+        // Startup routing and restored-credential validation are complete. Store
+        // catalog and entitlement refreshes are optional and must not block sign-in.
+        isStarting = false
         await store.loadProducts()
-        guard canContinueAgeAuthorizedFlow(generation: authorizationGeneration) else { return }
+        guard accountGeneration == startupGeneration else { return }
         receipts.prepare(client: client)
         _ = await store.refreshEntitlement()
-        guard canContinueAgeAuthorizedFlow(generation: authorizationGeneration) else { return }
+        guard accountGeneration == startupGeneration else { return }
         if auth.isAuthenticated {
             await refreshStoreKitToken()
-            guard canContinueAgeAuthorizedFlow(generation: authorizationGeneration) else { return }
+            guard accountGeneration == startupGeneration else { return }
             await syncCircleEntitlement()
-            guard canContinueAgeAuthorizedFlow(generation: authorizationGeneration) else { return }
+            guard accountGeneration == startupGeneration else { return }
         }
         receipts.refreshStatus()
         UIDevice.current.isBatteryMonitoringEnabled = true
         applyScreenshotLaunch()
+    }
+
+    private func continueAfterAgeGate(retryAppTransaction: Bool = false) async {
+        // Kept as a source-compatible bridge for dormant age-assurance UI actions.
+        // Account access no longer depends on an age decision or app transaction.
+        await start()
     }
 
     private func checkAgeAndContinue(forceAppleAgeRange: Bool = false) async {
@@ -845,80 +770,6 @@ final class AppModel: ObservableObject {
             phase = .ageBlocked
         case .unavailable:
             phase = .ageCheckUnavailable
-        }
-    }
-
-    /// Links the authenticated Trust account to Apple's app transaction before loading
-    /// account data. The server needs this link to apply a later RESCIND_CONSENT event.
-    private func registerCurrentAppTransactionForConsentRevocation(retryRequested: Bool = false) async -> Bool {
-        guard auth.isAuthenticated, !isDemoMode else { return true }
-        guard ageAccessState.isAllowed,
-              let token = auth.sessionToken else { return false }
-        let ageAuthorizationGeneration = ageAccessState.generation
-        let operation = TrustAccountOperation(token: token, generation: accountGeneration)
-        let transactionAuthorization = TrustAppTransactionAuthorization(
-            accountOperation: operation,
-            ageAuthorizationGeneration: ageAuthorizationGeneration
-        )
-        isAppTransactionLinked = false
-        isAgeAccessAllowed = false
-        phase = .appTransactionChecking
-        do {
-            try await client.registerCurrentAppTransaction(
-                authorizedToken: operation.token,
-                retryRequested: retryRequested
-            ) { [weak self] in
-                guard let self else { return false }
-                return transactionAuthorization.permitsRegistration(
-                    currentAccountToken: self.auth.sessionToken,
-                    currentAccountGeneration: self.accountGeneration,
-                    ageIsAuthorized: self.ageAccessState.isAllowed,
-                    currentAgeAuthorizationGeneration: self.ageAccessState.generation
-                )
-            }
-            guard operation.matches(token: auth.sessionToken, generation: accountGeneration),
-                  hasCurrentAgeAuthorization(generation: ageAuthorizationGeneration) else { return false }
-            isAppTransactionLinked = true
-            isAgeAccessAllowed = true
-            return true
-        } catch let error as TrustClientError where TrustAgePolicy.isConsentRevocationResponse(apiCode: error.apiCode) {
-            guard operation.matches(token: auth.sessionToken, generation: accountGeneration),
-                  hasCurrentAgeAuthorization(generation: ageAuthorizationGeneration) else { return false }
-            handleConsentRevocation()
-            return false
-        } catch let error as TrustClientError where error.apiCode == "account_privacy_hold" {
-            guard operation.matches(token: auth.sessionToken, generation: accountGeneration),
-                  hasCurrentAgeAuthorization(generation: ageAuthorizationGeneration) else { return false }
-            privacyHoldSubmission.beginSubmission(for: operation)
-            _ = privacyHoldSubmission.acknowledge(
-                operation: operation,
-                currentToken: auth.sessionToken,
-                generation: accountGeneration)
-            handleAcknowledgedPrivacyHold()
-            return false
-        } catch TrustClientError.appTransactionVerificationUnavailable {
-            ageAssuranceLogger.error("Apple app transaction verification was unavailable.")
-            guard operation.matches(token: auth.sessionToken, generation: accountGeneration),
-                  hasCurrentAgeAuthorization(generation: ageAuthorizationGeneration) else { return false }
-            phase = .appTransactionUnavailable
-            return false
-        } catch TrustClientError.appTransactionUnverified {
-            ageAssuranceLogger.error("Apple returned an unverified app transaction.")
-            guard operation.matches(token: auth.sessionToken, generation: accountGeneration),
-                  hasCurrentAgeAuthorization(generation: ageAuthorizationGeneration) else { return false }
-            phase = .appTransactionUnavailable
-            return false
-        } catch is CancellationError {
-            guard operation.matches(token: auth.sessionToken, generation: accountGeneration),
-                  hasCurrentAgeAuthorization(generation: ageAuthorizationGeneration) else { return false }
-            phase = .appTransactionUnavailable
-            return false
-        } catch {
-            ageAssuranceLogger.error("App transaction server registration failed.")
-            guard operation.matches(token: auth.sessionToken, generation: accountGeneration),
-                  hasCurrentAgeAuthorization(generation: ageAuthorizationGeneration) else { return false }
-            phase = .appTransactionUnavailable
-            return false
         }
     }
 
@@ -1090,22 +941,8 @@ final class AppModel: ObservableObject {
     }
 
     func retryAppTransactionRegistration() {
-        guard phase == .appTransactionUnavailable,
-              auth.isAuthenticated,
-              ageAccessState.isAllowed else { return }
-        phase = .appTransactionChecking
-        Task { [weak self] in
-            guard let self else { return }
-#if DEBUG
-            if ProcessInfo.processInfo.environment["TRUST_AGE_TEST_MODE"] == "1",
-               ProcessInfo.processInfo.environment["TRUST_AGE_TEST_APP_TRANSACTION_UNAVAILABLE"] == "1" {
-                self.client.token = self.auth.sessionToken
-                _ = await self.registerCurrentAppTransactionForConsentRevocation()
-                return
-            }
-#endif
-            await self.continueAfterAgeGate(retryAppTransaction: true)
-        }
+        guard auth.isAuthenticated else { return }
+        Task { await start() }
     }
 
     private static func isUnavailableVerificationPhase(_ phase: AppPhase) -> Bool {
@@ -1244,8 +1081,38 @@ final class AppModel: ObservableObject {
     }
 
     func setSceneActive(_ active: Bool) {
+        let wasActive = isSceneActive
         isSceneActive = active
         location.setAppActive(active && isAgeAccessAllowed)
+        if active && !wasActive {
+            validateAppleCredentialOnForeground()
+        }
+    }
+
+    /// Recheck only the restored Apple credential on foreground. This deliberately
+    /// does not invoke age assurance, app transaction registration, or a native prompt.
+    private func validateAppleCredentialOnForeground() {
+#if DEBUG
+        guard !isUITestLaunch else { return }
+#endif
+        guard !startupInProgress,
+              !isSigningIn,
+              appleCredentialValidationTask == nil,
+              auth.isAuthenticated,
+              auth.account?.provider == .apple,
+              let token = auth.sessionToken else { return }
+        let generation = accountGeneration
+        appleCredentialValidationTask = Task { [weak self] in
+            guard let self else { return }
+            let revoked = await self.auth.validateRestoredAppleCredential()
+            self.appleCredentialValidationTask = nil
+            guard revoked,
+                  self.accountGeneration == generation,
+                  self.auth.sessionToken == nil,
+                  self.client.token == token else { return }
+            self.clearAccountSession()
+            self.phase = .login
+        }
     }
 
     private func handleAppleAccountChange(isForeground foregroundHint: Bool? = nil) {
@@ -1381,7 +1248,6 @@ final class AppModel: ObservableObject {
     }
 
     func prepareLogin() async {
-        guard isAgeAccessAllowed else { return }
         await client.prepare()
         if let warning = client.reachabilityNotice {
             auth.notice = warning
@@ -1531,12 +1397,7 @@ final class AppModel: ObservableObject {
     #endif
 
     func signIn(with provider: AuthenticationProvider) async {
-        guard isAgeAccessAllowed else {
-            await checkAgeAndContinue()
-            return
-        }
-        guard !isSigningIn else { return }
-        let ageAuthorizationGeneration = ageAccessState.generation
+        guard !isSigningIn, !isStarting else { return }
         let accountGenerationAtStart = accountGeneration
         isSigningIn = true
         defer { isSigningIn = false }
@@ -1544,24 +1405,15 @@ final class AppModel: ObservableObject {
             switch provider {
             case .apple:
                 let apple = try await auth.signInWithApple()
-                guard canContinueSignIn(
-                    ageAuthorizationGeneration: ageAuthorizationGeneration,
-                    accountGenerationAtStart: accountGenerationAtStart
-                ) else { return }
+                guard canContinueSignIn(accountGenerationAtStart: accountGenerationAtStart) else { return }
                 await client.prepare()
-                guard canContinueSignIn(
-                    ageAuthorizationGeneration: ageAuthorizationGeneration,
-                    accountGenerationAtStart: accountGenerationAtStart
-                ) else { return }
+                guard canContinueSignIn(accountGenerationAtStart: accountGenerationAtStart) else { return }
                 let session = try await client.appleSession(
                     identityToken: apple.identityToken,
                     displayName: apple.displayName,
                     nonce: apple.nonce
                 )
-                guard canContinueSignIn(
-                    ageAuthorizationGeneration: ageAuthorizationGeneration,
-                    accountGenerationAtStart: accountGenerationAtStart
-                ) else {
+                guard canContinueSignIn(accountGenerationAtStart: accountGenerationAtStart) else {
                     client.token = nil
                     client.clearCache()
                     return
@@ -1576,7 +1428,6 @@ final class AppModel: ObservableObject {
                     token: client.token ?? ""
                 )
                 authenticatedPerson = session.you.model
-                guard await registerCurrentAppTransactionForConsentRevocation() else { return }
                 await refresh(enterHome: true, fallbackOnboardingComplete: session.you.model.onboardingComplete)
             case .google:
                 auth.notice = TrustCopy.trustUsesSignInWithApple
@@ -1591,23 +1442,15 @@ final class AppModel: ObservableObject {
         }
     }
 
-    private func canContinueSignIn(
-        ageAuthorizationGeneration: UInt64,
-        accountGenerationAtStart: UInt64
-    ) -> Bool {
-        isAgeAccessAllowed
-            && ageAccessState.isAllowed
-            && ageAccessState.isCurrentEvaluation(ageAuthorizationGeneration)
-            && accountGeneration == accountGenerationAtStart
+    private func canContinueSignIn(accountGenerationAtStart: UInt64) -> Bool {
+        accountGeneration == accountGenerationAtStart
     }
 
     func signOut() {
         clearAccountSession()
-        ageAssurance.resetAccountAttestations()
-        ageUpdateQuestion = nil
-        isAgeAccessAllowed = false
-        ageGateBlockedByParent = false
-        Task { await checkAgeAndContinue() }
+        isAgeAccessAllowed = true
+        phase = .login
+        Task { await start() }
     }
 
     private func clearAccountSession(preservingPrivacyHoldDeletionSession: Bool = false) {
@@ -1617,7 +1460,6 @@ final class AppModel: ObservableObject {
         phoneRetryAccountID = nil
         phoneRetry = TrustPhoneRetryState()
         accountGeneration &+= 1
-        isAppTransactionLinked = false
         ageUnavailableStopAllState = .idle
         ageAssurance.resetAccountAttestations()
         Task { await receipts.unregister(authorizedToken: pushRemovalToken) }
@@ -3765,6 +3607,9 @@ final class AppModel: ObservableObject {
     private func resetPhoneDraft() {
         cancelPendingPhoneSend()
         phoneDraft = ""
+        phoneLocalDraft = ""
+        phoneCountry = .unitedStates
+        phoneCountryWasChosen = false
         challengedPhone = ""
         phoneCodeDraft = ""
         phoneNotice = nil

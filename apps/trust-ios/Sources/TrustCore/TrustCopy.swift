@@ -740,6 +740,11 @@ public enum TrustCopy {
     public static var verificationCode: String { value("verification_code", defaultValue: "Code") }
     public static var verifyCode: String { value("verify_code", defaultValue: "Verify") }
     public static var phoneNumber: String { value("phone_number", defaultValue: "Phone number") }
+    public static var phoneCountryCodeTitle: String { value("phone_country_code_title", defaultValue: "Country code") }
+    public static var phoneCountrySearch: String { value("phone_country_search", defaultValue: "Search country or code") }
+    public static func phoneCountryAccessibilityLabel(_ country: String, callingCode: String) -> String {
+        format("phone_country_accessibility", defaultValue: "Country %@, calling code %@", country, callingCode)
+    }
     public static var phonePlaceholder: String { value("phone_placeholder", defaultValue: "(415) 555-0100") }
     public static var sendCode: String { value("send_code", defaultValue: "Send code") }
     public static var codeSent: String { value("code_sent", defaultValue: "Code sent. Enter it below to verify your number.") }

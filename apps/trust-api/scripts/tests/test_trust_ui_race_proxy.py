@@ -172,6 +172,21 @@ class ProxyHTTPTests(unittest.TestCase):
             time.sleep(0.03)
         self.fail(f"Timed out waiting for proxy state: {last}")
 
+    def test_consent_revocation_is_one_shot_and_only_intercepts_authenticated_circle_get(self) -> None:
+        self.control("/arm-consent-revoked")
+        self.assertEqual(self.request("GET", "/api/v1/circle")[0], 200)
+        self.assertEqual(self.request("POST", "/api/v1/circle", token="fixture")[0], 200)
+        self.assertEqual(self.request("GET", "/api/v1/me/home", token="fixture")[0], 200)
+        self.assertTrue(self.state()["fail_next_consent_revoked"])
+        status, payload = self.request("GET", "/api/v1/circle?fresh=1", token="fixture")
+        self.assertEqual(status, 409)
+        self.assertEqual(json.loads(payload), {"code": "consent_revoked", "message": "Consent has been revoked."})
+        self.assertEqual(self.state()["consent_revoked_count"], 1)
+        self.assertFalse(self.state()["fail_next_consent_revoked"])
+        self.assertEqual(self.request("GET", "/api/v1/circle", token="fixture")[0], 200)
+        self.assertEqual(self.upstream_count("GET", "/api/v1/circle"), 2)
+        self.assertEqual(self.upstream_count("POST", "/api/v1/circle"), 1)
+
     def test_push_ack_counts_require_success_and_never_expose_device_credentials(self) -> None:
         replies = iter([503, 204, 204])
         self.upstream.responder = lambda *_args: (next(replies), {}, b"")

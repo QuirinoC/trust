@@ -21,6 +21,7 @@ using TrustApi.Infrastructure;
 using TrustApi.Infrastructure.AgeAssurance;
 using TrustApi.Infrastructure.Identity;
 using TrustApi.Infrastructure.Notifications;
+using TrustApi.Infrastructure.Phone;
 using TrustApi.Infrastructure.StoreKit;
 
 namespace TrustApi.Tests;
@@ -103,19 +104,12 @@ public sealed class LegacyClientPrivacyControlTests
     }
 
     [Fact]
-    public async Task StopAllOnMissingLinkDoesNotBypassHoldOrRevocationOrEnableWrites()
+    public async Task StopAllRemainsBlockedForHeldAndRevokedAccounts()
     {
         await using var api = await ProductionApi.StartAsync();
-        var (unlinked, peer) = await api.CreateConnectedPairAsync();
-        using var read = api.Authorized(HttpMethod.Get, "/api/v1/circle", unlinked.Id);
-        using var readResponse = await api.Client.SendAsync(read);
-        Assert.Equal("age_assurance_link_required", await ProductionApi.ErrorCodeAsync(readResponse));
-        using var enable = api.Authorized(HttpMethod.Patch, $"/api/v1/people/{peer.Id}/share", unlinked.Id);
-        enable.Content = JsonContent.Create(new { resting = "always", pause = (string?)null });
-        using var enableResponse = await api.Client.SendAsync(enable);
-        Assert.Equal("age_assurance_link_required", await ProductionApi.ErrorCodeAsync(enableResponse));
-        await api.AgeAssurance.PlaceAccountPrivacyHoldAsync(unlinked.Id, DateTimeOffset.UtcNow, CancellationToken.None);
-        using var heldStop = api.Authorized(HttpMethod.Post, "/api/v1/me/sharing/stop-all", unlinked.Id);
+        var (held, _) = await api.CreateConnectedPairAsync();
+        await api.AgeAssurance.PlaceAccountPrivacyHoldAsync(held.Id, DateTimeOffset.UtcNow, CancellationToken.None);
+        using var heldStop = api.Authorized(HttpMethod.Post, "/api/v1/me/sharing/stop-all", held.Id);
         using var heldResponse = await api.Client.SendAsync(heldStop);
         Assert.Equal((HttpStatusCode)423, heldResponse.StatusCode);
 
@@ -217,34 +211,32 @@ public sealed class LegacyClientPrivacyControlTests
     }
 
     [Fact]
-    public async Task UnlinkedAccountStillNeedsLinkForReadsEnablingPauseAndMalformedModes()
+    public async Task AccountWithoutAppTransactionCanReadAndChangeSharing()
     {
         await using var api = await ProductionApi.StartAsync();
         var (alice, bob) = await api.CreateConnectedPairAsync();
-        var connectionId = await api.ConnectionIdAsync(alice.Id, bob.Id);
-        var revision = (await api.Store.GetShareAsync(alice.Id, bob.Id, CancellationToken.None)).Revision;
+        Assert.False(await api.AgeAssurance.HasAppTransactionLinkAsync(alice.Id, CancellationToken.None));
 
         using var read = api.Authorized(HttpMethod.Get, "/api/v1/circle", alice.Id);
         using var readResponse = await api.Client.SendAsync(read);
-        Assert.Equal(HttpStatusCode.Conflict, readResponse.StatusCode);
-        Assert.Equal("age_assurance_link_required", await ProductionApi.ErrorCodeAsync(readResponse));
+        Assert.Equal(HttpStatusCode.OK, readResponse.StatusCode);
 
-        foreach (var body in new object[]
-        {
-            new { connectionId, revision, resting = "sealed", pause = (string?)null },
-            new { connectionId, revision, resting = "always", pause = (string?)null },
-            new { connectionId, revision, resting = (string?)null, pause = "1h" },
-            new { connectionId, revision, resting = "off", pause = "1h" },
-            new { connectionId, revision, resting = "unknown", pause = (string?)null },
-            new { connectionId, revision, resting = (string?)null, pause = "unknown" }
-        })
-        {
-            using var change = api.Authorized(HttpMethod.Patch, $"/api/v1/people/{bob.Id}/share", alice.Id);
-            change.Content = JsonContent.Create(body);
-            using var response = await api.Client.SendAsync(change);
-            Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
-            Assert.Equal("age_assurance_link_required", await ProductionApi.ErrorCodeAsync(response));
-        }
+        var connectionId = await api.ConnectionIdAsync(alice.Id, bob.Id);
+        var revision = (await api.Store.GetShareAsync(alice.Id, bob.Id, CancellationToken.None)).Revision;
+        using var plusShare = api.Authorized(HttpMethod.Patch, $"/api/v1/people/{bob.Id}/share", alice.Id);
+        plusShare.Content = JsonContent.Create(new { connectionId, revision, resting = "always", pause = (string?)null });
+        using var plusResponse = await api.Client.SendAsync(plusShare);
+        Assert.Equal(HttpStatusCode.PaymentRequired, plusResponse.StatusCode);
+        Assert.Equal("pro_required", await ProductionApi.ErrorCodeAsync(plusResponse));
+        Assert.Equal(ShareResting.Off, (await api.Store.GetShareAsync(alice.Id, bob.Id, CancellationToken.None)).Resting);
+
+        var currentRevision = (await api.Store.GetShareAsync(alice.Id, bob.Id, CancellationToken.None)).Revision;
+        using var change = api.Authorized(HttpMethod.Patch, $"/api/v1/people/{bob.Id}/share", alice.Id);
+        change.Content = JsonContent.Create(new { connectionId, revision = currentRevision, resting = "sealed", pause = (string?)null });
+        using var response = await api.Client.SendAsync(change);
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Assert.Equal(ShareResting.UntilTheyLook, (await api.Store.GetShareAsync(alice.Id, bob.Id, CancellationToken.None)).Resting);
+        Assert.False(await api.AgeAssurance.HasAppTransactionLinkAsync(alice.Id, CancellationToken.None));
 
         using var wrongMethod = api.Authorized(HttpMethod.Post, $"/api/v1/people/{bob.Id}/share", alice.Id);
         using var wrongMethodResponse = await api.Client.SendAsync(wrongMethod);
@@ -253,6 +245,36 @@ public sealed class LegacyClientPrivacyControlTests
         using var wrongPath = api.Authorized(HttpMethod.Patch, $"/api/v1/people/{bob.Id}/history", alice.Id);
         using var wrongPathResponse = await api.Client.SendAsync(wrongPath);
         Assert.Equal(HttpStatusCode.NotFound, wrongPathResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task AccountWithoutAppTransactionCanCompletePhoneOnboardingWithExplicitSmsConsent()
+    {
+        await using var api = await ProductionApi.StartAsync();
+        var account = await api.CreateAccountAsync("Unlinked Phone Onboarding");
+        const string phone = "+12025550101";
+        Assert.False(await api.AgeAssurance.HasAppTransactionLinkAsync(account.Id, CancellationToken.None));
+
+        using var send = api.Authorized(HttpMethod.Post, "/api/v1/me/phone/send", account.Id);
+        send.Content = JsonContent.Create(new { phone, consentVersion = 1, consentAction = "send_code" });
+        using var sendResponse = await api.Client.SendAsync(send);
+        Assert.Equal(HttpStatusCode.OK, sendResponse.StatusCode);
+        Assert.False(string.IsNullOrWhiteSpace(api.LastSentCode));
+
+        using var verify = api.Authorized(HttpMethod.Post, "/api/v1/me/phone/verify", account.Id);
+        verify.Content = JsonContent.Create(new { phone, code = api.LastSentCode });
+        using var verifyResponse = await api.Client.SendAsync(verify);
+        Assert.Equal(HttpStatusCode.NoContent, verifyResponse.StatusCode);
+
+        var updated = await api.Store.FindAccountAsync(account.Id, CancellationToken.None);
+        Assert.Equal(phone, updated!.PhoneE164);
+        Assert.NotNull(updated.PhoneVerifiedAt);
+        var consent = Assert.Single(await api.Store.ListPhoneSmsConsentEventsAsync(account.Id, CancellationToken.None));
+        Assert.Equal(PhoneVerificationService.PhoneConsentDisclosureKey, consent.DisclosureKey);
+        Assert.Equal(PhoneVerificationService.PhoneConsentDisclosureVersion, consent.DisclosureVersion);
+        Assert.Equal(PhoneVerificationService.PhoneConsentSource, consent.Source);
+        Assert.Equal("send_code", consent.Action);
+        Assert.False(await api.AgeAssurance.HasAppTransactionLinkAsync(account.Id, CancellationToken.None));
     }
 
     [Fact]
@@ -315,10 +337,12 @@ public sealed class LegacyClientPrivacyControlTests
     private sealed class ProductionApi : IAsyncDisposable
     {
         private readonly WebApplication _app;
+        private readonly RecordingSmsOtpSender _sms;
 
-        private ProductionApi(WebApplication app)
+        private ProductionApi(WebApplication app, RecordingSmsOtpSender sms)
         {
             _app = app;
+            _sms = sms;
             Client = app.GetTestClient();
             Store = app.Services.GetRequiredService<ITrustStore>();
             AgeAssurance = app.Services.GetRequiredService<IAgeAssuranceAccountStore>();
@@ -329,21 +353,27 @@ public sealed class LegacyClientPrivacyControlTests
         public ITrustStore Store { get; }
         public IAgeAssuranceAccountStore AgeAssurance { get; }
         public TrustEngine Engine { get; }
+        public string? LastSentCode => _sms.LastCode;
 
         public static async Task<ProductionApi> StartAsync()
         {
             var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = "Production" });
             builder.WebHost.UseTestServer();
+            var sms = new RecordingSmsOtpSender();
             builder.Services.AddAuthentication(TestBearerHandler.SchemeName)
                 .AddScheme<AuthenticationSchemeOptions, TestBearerHandler>(TestBearerHandler.SchemeName, _ => { });
             builder.Services.AddAuthorization();
             builder.Services.Configure<AuthOptions>(options => options.AllowDevelopmentSignIn = false);
             builder.Services.Configure<StoreKitOptions>(_ => { });
+            builder.Services.AddSingleton(new AuthOptions { SigningKey = "legacy-api-test-signing-key-at-least-32-bytes" });
+            builder.Services.AddSingleton(new PhoneVerificationOptions());
+            builder.Services.AddSingleton<ISmsOtpSender>(sms);
             builder.Services.AddSingleton<ITrustStore, MemoryTrustStore>();
             builder.Services.AddSingleton<IPushDeviceStore, MemoryPushDeviceStore>();
             builder.Services.AddSingleton<IAgeAssuranceAccountStore, MemoryAgeAssuranceAccountStore>();
             builder.Services.AddSingleton(TimeProvider.System);
             builder.Services.AddSingleton<TrustEngine>();
+            builder.Services.AddSingleton<PhoneVerificationService>();
             builder.Services.AddScoped<RevokedAccountEndpointFilter>();
             var app = builder.Build();
             app.UseAuthentication();
@@ -361,13 +391,19 @@ public sealed class LegacyClientPrivacyControlTests
                 TrustEndpoints.RevokeAsync;
             Func<ClaimsPrincipal, TrustEngine, IPushDeviceStore, IAgeAssuranceAccountStore, CancellationToken, Task<IResult>> deleteAccount =
                 TrustEndpoints.DeleteAccountAsync;
+            Func<SendPhoneCodeRequest, ClaimsPrincipal, PhoneVerificationService, CancellationToken, Task<IResult>> sendPhoneCode =
+                TrustEndpoints.SendPhoneCodeAsync;
+            Func<VerifyPhoneCodeRequest, ClaimsPrincipal, PhoneVerificationService, CancellationToken, Task<IResult>> verifyPhoneCode =
+                TrustEndpoints.VerifyPhoneCodeAsync;
             api.MapGet("/circle", getCircle);
             api.MapPost("/me/sharing/stop-all", stopAll);
             api.MapPatch("/people/{personId:guid}/share", setShare);
             api.MapPost("/people/{personId:guid}/revoke", revoke);
+            api.MapPost("/me/phone/send", sendPhoneCode);
+            api.MapPost("/me/phone/verify", verifyPhoneCode);
             api.MapDelete("/account", deleteAccount);
             await app.StartAsync();
-            return new ProductionApi(app);
+            return new ProductionApi(app, sms);
         }
 
         public async Task<(Account Account, Account Peer)> CreateConnectedPairAsync()
@@ -408,6 +444,20 @@ public sealed class LegacyClientPrivacyControlTests
             Client.Dispose();
             await _app.DisposeAsync();
         }
+    }
+
+    private sealed class RecordingSmsOtpSender : ISmsOtpSender
+    {
+        public bool IsConfigured => true;
+        public string? LastCode { get; private set; }
+
+        public Task SendAsync(string e164, string code, CancellationToken cancellationToken)
+        {
+            LastCode = code;
+            return Task.CompletedTask;
+        }
+
+        public Task SendTextAsync(string e164, string body, CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
     private sealed class TestBearerHandler(

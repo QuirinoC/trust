@@ -1,5 +1,18 @@
 # Staging operational status
 
+## Onboarding update — 29 October 2026
+
+At the user’s direction, the next update removes Apple age-range and parent-update prompts and mandatory App Store app-transaction registration from sign-in and restored sessions. The API no longer requires a transaction link before phone verification or other authenticated routes. Genuine Apple credential validation, existing privacy holds and verified consent revocations, explicit sharing consent, phone verification and purchase entitlements remain enforced. No release, review, signing or entitlement flags were changed. New unlinked accounts cannot be associated with Apple app-transaction consent-withdrawal notices; existing blocked account IDs and known revoked transaction hashes remain enforced. This coverage limit must be considered before a normal production release. Historical age-check expectations below refer to build 49 and must not be restored as current behavior.
+
+The phone editor adds a searchable country selector, initially US/+1, with an optional first-party approximate country suggestion and no GPS permission request. Manual choice, explicit international input, and existing drafts take priority. PhoneNumberKit 5.0.13 is pinned for country/number metadata; a metadata-only digit-class compatibility workaround covers its prefix-regex decoding bug, with Brazil and Argentina regression cases.
+
+Verification so far: 220 API tests passed with real local PostgreSQL and no skips; 108 Swift package tests passed; 11 web tests passed; localization validation passed for 563 keys and five shipped locales. The baseline standard simulator run passed 130 tests with 28 exact expected setup skips and zero failures on iPhone 17 Pro / iOS 27.0. Final fresh-sign-in and country-picker checks passed on iPhone SE (3rd generation) / iOS 27.0; the international-number assertion waits for its UI update to settle. Recovery testing caught and fixed a structured-503 regression that omitted cached-data context; the full final recovery run is in progress. Build 50 has a successful local signed archive with the fix; upload, deployment and Apple processing are pending. The original reported 503 has not been reproduced: both live health probes returned 200 and a deliberately invalid Apple signature was correctly rejected with 401. That negative probe is not a positive Apple sign-in test.
+
+This update targets Trust Staging delivery. Production deployment and a compatible normal-app release remain separate; do not ship the normal client without the corresponding API link-gate removal and region endpoint. Existing production services have not been changed for this update.
+
+## Build 49 delivery record
+
+
 **2026-10-29: staging infrastructure and software delivery complete.** The staging API is live and verified, and build 49 is available to the internal TestFlight group. No physical-device result is established by this record. Replace placeholders only with verified identifiers and dated evidence; never add secret values.
 
 Testing accounts: the standard iOS run used repository mock/demo fixtures, with no human Apple sign-in. The separate phone-response test used a second disposable iPhone 17 Pro simulator on iOS 27.0 and an isolated development identity against real local PostgreSQL. API tests used synthetic accounts and rows; live staging smoke checks used invalid or absent authentication to verify rejection. The three real TestFlight accounts have been invited, but real Apple onboarding, purchases and displayed staging pushes have not yet been exercised.

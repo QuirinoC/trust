@@ -7,7 +7,7 @@ Use two adult testers with distinct Apple Accounts and real iPhones. Select two 
 - **A:** `+1 202 555 0101`, handle `trustqatesta`
 - **B:** `+1 202 555 0102`, handle `trustqatestb`
 
-If either handle is already taken, choose another unique handle and record it. Use A’s invited Apple Account for both TestFlight and Apple sign-in on A; use B’s different invited Apple Account for both on B. Complete the real age check on each phone. Do not enable global phone-verification skips or use demo or age bypasses; only the two reserved numbers use the approved automatic staging flow.
+If either handle is already taken, choose another unique handle and record it. Use A’s invited Apple Account for both TestFlight and Apple sign-in on A; use B’s different invited Apple Account for both on B. Age-range and App Store app-verification screens are paused in the next build. Do not enable global phone-verification skips or use demo accounts; only the two reserved numbers use the approved automatic staging flow.
 
 Record each phone’s model, iOS version, app build, and location and notification permissions. Confirm both apps say **Trust Staging**, show the STAGING badge, and use the same build. [TestFlight purchases automatically use Apple’s sandbox](https://developer.apple.com/help/app-store-connect/test-a-beta-version/testing-subscriptions-and-in-app-purchases-in-testflight/) and are not charged. No extra dedicated Sandbox Apple Account is needed for these baseline purchase checks. If products do not load, record that step as blocked; do not substitute a local purchase fixture.
 
@@ -17,9 +17,9 @@ For every numbered step, record **Pass**, **Fail**, **Blocked**, or **Not run**.
 
 1. **Install and distinguish the app.** Install the processed Trust Staging TestFlight build on both phones while keeping the normal Trust app installed. **Expected:** the staging app is labeled Trust Staging, shows the STAGING badge, and coexists with the production app without replacing it.
 
-2. **Complete real sign-in and age checks.** On A and B, sign in with the assigned distinct Apple Accounts and complete the normal age-assurance flow. **Expected:** account setup remains gated if Apple sign-in or age verification is unavailable or declined; no bypass is used.
+2. **Complete real Apple sign-in.** On A and B, sign in with the assigned distinct Apple Accounts. **Expected:** successful Apple authentication leads to handle or phone setup, with no age-range, parent-update approval, or App Store app-verification screen. Cancelled or failed Apple authentication does not open the account.
 
-3. **Finish each profile and phone setup.** Set A to `trustqatesta` and B to `trustqatestb`, leave discovery off, then enter each assigned reserved number and wait for the staging flow. **Expected:** each handle is accepted if available; only these two reserved numbers auto-verify after the normal Apple, age, and handle steps; the phone screen says “No SMS is sent”; no SMS-code entry screen appears. Both accounts enter Trust with sharing Off. Record any blocked age or handle result.
+3. **Finish each profile and phone setup.** Set A to `trustqatesta` and B to `trustqatestb`, leave discovery off, then enter each assigned reserved number and wait for the staging flow. **Expected:** each handle is accepted if available; only these two reserved numbers auto-verify after the normal Apple sign-in and handle steps; the phone screen says “No SMS is sent”; no SMS-code entry screen appears. Both accounts enter Trust with sharing Off. Check that the country selector defaults to +1 when no approximate region is available, supports country/name/code search, and preserves a manual selection or pasted international prefix. Record any sign-in, country-selector, or handle failure.
 
 4. **Check phone discovery while B is opted out.** On A, search for B using B's complete phone number. **Expected:** no eligible phone match or unconnected profile-picture preview appears while B's discovery choice is off.
 

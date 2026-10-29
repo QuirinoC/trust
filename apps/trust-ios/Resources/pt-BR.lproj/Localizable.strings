@@ -367,6 +367,9 @@
 "phone_invite_message_body" = "O Trust prepara uma mensagem com seu link. Ela só é enviada se você tocar em Enviar no Mensagens.";
 "phone_lookup_country_code_hint" = "Digite um número de telefone completo, incluindo o código do país.";
 "phone_number" = "Número de telefone";
+"phone_country_code_title" = "Código do país";
+"phone_country_search" = "Buscar país ou código";
+"phone_country_accessibility" = "País %@, código %@";
 "phone_placeholder" = "(415) 555-0100";
 "phone_request_pending" = "Aguarde…";
 "phone_resend_countdown" = "Reenviar em %@";

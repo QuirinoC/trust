@@ -77,7 +77,7 @@ struct LoginView: View {
                 Task { await model.signIn(with: .apple) }
             } label: {
                 HStack(spacing: 10) {
-                    if model.isSigningIn {
+                    if model.isSigningIn || model.isStarting {
                         ProgressView()
                             .progressViewStyle(.circular)
                             .tint(.white)
@@ -87,26 +87,26 @@ struct LoginView: View {
                             .font(.system(size: 18, weight: .medium))
                             .accessibilityHidden(true)
                     }
-                    Text(model.isSigningIn ? TrustCopy.signingIn : TrustCopy.signInWithApple)
+                    Text(model.isSigningIn || model.isStarting ? TrustCopy.signingIn : TrustCopy.signInWithApple)
                         .trustFont(17, weight: .semibold)
                 }
                 .frame(maxWidth: .infinity, minHeight: 54)
             }
             .buttonStyle(TrustAppleButtonStyle())
-            .disabled(model.isSigningIn)
+            .disabled(model.isSigningIn || model.isStarting)
             .accessibilityLabel(TrustCopy.signInWithApple)
-            .accessibilityValue(model.isSigningIn ? TrustCopy.signingInShort : "")
+            .accessibilityValue(model.isSigningIn || model.isStarting ? TrustCopy.signingInShort : "")
 
             #if DEBUG
             if !model.isScreenshotLaunch {
                 Button {
                     Task { await model.signInWithLocalAPI() }
                 } label: {
-                    Text(model.isSigningIn ? TrustCopy.signingIn : "Local API")
+                    Text(model.isSigningIn || model.isStarting ? TrustCopy.signingIn : "Local API")
                         .frame(maxWidth: .infinity, minHeight: 50)
                 }
                 .buttonStyle(TrustOutlineButtonStyle())
-                .disabled(model.isSigningIn)
+                .disabled(model.isSigningIn || model.isStarting)
                 .accessibilityIdentifier("local-api-sign-in")
                 .accessibilityHint("Signs in to the local API. Not the offline fixture.")
 
@@ -117,7 +117,7 @@ struct LoginView: View {
                         .frame(maxWidth: .infinity, minHeight: 50)
                 }
                 .buttonStyle(TrustOutlineButtonStyle())
-                .disabled(model.isSigningIn)
+                .disabled(model.isSigningIn || model.isStarting)
                 .accessibilityIdentifier("see-the-app")
                 .accessibilityHint(TrustCopy.demoBannerBody)
             }

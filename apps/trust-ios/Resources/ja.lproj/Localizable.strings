@@ -367,6 +367,9 @@
 "phone_invite_message_body" = "Trust が招待リンク付きのメッセージを準備します。「メッセージ」で送信をタップした場合のみ送信されます。";
 "phone_lookup_country_code_hint" = "国番号を含む完全な電話番号を入力してください。";
 "phone_number" = "電話番号";
+"phone_country_code_title" = "国番号";
+"phone_country_search" = "国または国番号を検索";
+"phone_country_accessibility" = "国%@、国番号%@";
 "phone_placeholder" = "(415) 555-0100";
 "phone_request_pending" = "しばらくお待ちください…";
 "phone_resend_countdown" = "%@後に再送信";

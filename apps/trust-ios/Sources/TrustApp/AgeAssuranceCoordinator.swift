@@ -68,7 +68,7 @@ final class AgeAssuranceCoordinator {
     var onAppleAccountChanged: (() -> Void)?
     private var appleAccountChangeObserver: NSObjectProtocol?
 
-    init() {
+    init(observeAppleAccountChanges: Bool = true) {
         pendingUpdateIdentifier = defaults.string(forKey: pendingUpdateIdentifierKey)
         pendingAppRatingCode = defaults.object(forKey: pendingAppRatingCodeKey) as? Int
         let savedReleaseCoverage = defaults.object(forKey: pendingUpdateCoversReleaseKey) as? Bool
@@ -93,6 +93,7 @@ final class AgeAssuranceCoordinator {
                 targetCode: pendingAppRatingCode
             )
         }
+        guard observeAppleAccountChanges else { return }
         appleAccountChangeObserver = NotificationCenter.default.addObserver(
             forName: NSUbiquitousKeyValueStore.didChangeExternallyNotification,
             object: nil,

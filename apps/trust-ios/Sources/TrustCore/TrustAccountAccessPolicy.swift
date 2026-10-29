@@ -1,17 +1,13 @@
 import Foundation
 
-/// Keeps authenticated account features closed until the age decision and the
-/// revocation-registration prerequisite have both succeeded. An unauthenticated
-/// person may still reach sign-in after age requirements permit it.
+/// Keeps account features behind authentication and any server-authoritative privacy hold.
 public enum TrustAccountAccessPolicy {
     public static func canAccessAccountData(
-        ageAssurancePassed: Bool,
         accountAuthenticated: Bool,
-        appTransactionLinked: Bool,
+        privacyHeld: Bool = false,
         localFixture: Bool = false
     ) -> Bool {
-        guard ageAssurancePassed else { return false }
-        guard accountAuthenticated, !localFixture else { return true }
-        return appTransactionLinked
+        guard !privacyHeld else { return false }
+        return accountAuthenticated || localFixture
     }
 }

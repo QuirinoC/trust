@@ -15,6 +15,7 @@ using TrustApi.Contracts.V1;
 using TrustApi.Configuration;
 using TrustApi.Domain;
 using TrustApi.Infrastructure;
+using TrustApi.Infrastructure.AgeAssurance;
 using TrustApi.Infrastructure.Identity;
 
 namespace TrustApi.Tests;
@@ -1474,6 +1475,8 @@ public sealed class TrustApiTests : IClassFixture<TrustApiFactory>
         var payload = await response.Content.ReadFromJsonAsync<SessionWire>(Json);
         Assert.False(string.IsNullOrWhiteSpace(payload?.Token));
         Assert.Equal("Juan", payload!.You.DisplayName);
+        var ageAssurance = factory.Services.GetRequiredService<IAgeAssuranceAccountStore>();
+        Assert.False(await ageAssurance.HasAppTransactionLinkAsync(payload.You.Id, CancellationToken.None));
     }
 
     [Fact]

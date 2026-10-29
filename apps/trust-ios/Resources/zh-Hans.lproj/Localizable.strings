@@ -367,6 +367,9 @@
 "phone_invite_message_body" = "Trust 会准备一条含邀请链接的短信。只有你在“信息”中点按发送后才会发送。";
 "phone_lookup_country_code_hint" = "请输入包含国家/地区代码的完整电话号码。";
 "phone_number" = "电话号码";
+"phone_country_code_title" = "国家/地区代码";
+"phone_country_search" = "搜索国家/地区或代码";
+"phone_country_accessibility" = "国家/地区%@，代码%@";
 "phone_placeholder" = "(415) 555-0100";
 "phone_request_pending" = "请稍候…";
 "phone_resend_countdown" = "%@后重新发送";

@@ -1669,6 +1669,55 @@ final class TrustUsageTests: XCTestCase {
         add(screenshot)
     }
 
+    func testPhoneCountrySearchSelectionAndDismissal() {
+        let app = launchDemo(route: "phone")
+        let picker = app.buttons["phone-country-picker"]
+        let phone = app.textFields["phone-number"]
+        XCTAssertTrue(phone.waitForExistence(timeout: 10))
+        XCTAssertTrue(picker.label.contains("+1"), "The deterministic demo starts with the US calling code.")
+
+        picker.tap()
+        let search = app.searchFields.firstMatch
+        XCTAssertTrue(search.waitForExistence(timeout: 5))
+        search.tap()
+        search.typeText("United Kingdom")
+        let uk = app.buttons["phone-country-gb"]
+        XCTAssertTrue(uk.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["phone-country-us"].exists, "Alphabetic searches must not match every calling code.")
+        uk.tap()
+        XCTAssertTrue(picker.waitForExistence(timeout: 5))
+        XCTAssertTrue(picker.label.contains("+44"))
+
+        phone.tap()
+        phone.typeText("2079460123")
+        XCTAssertEqual(phone.value as? String, "2079460123")
+        XCTAssertTrue(app.buttons["send-phone-code"].isEnabled)
+        let keyboardSend = app.keyboards.buttons["Send"]
+        if keyboardSend.exists { keyboardSend.tap() }
+        XCTAssertTrue(phone.exists, "The keyboard action must not send a verification code.")
+
+        picker.tap()
+        XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5))
+        app.buttons["Done"].tap()
+        XCTAssertTrue(picker.label.contains("+44"), "Dismissing the picker must preserve the selection.")
+        XCTAssertEqual(phone.value as? String, "2079460123")
+    }
+
+    func testPhoneInternationalNumberInfersCountry() {
+        let app = launchDemo(route: "phone")
+        let phone = app.textFields["phone-number"]
+        let picker = app.buttons["phone-country-picker"]
+        XCTAssertTrue(phone.waitForExistence(timeout: 10))
+        phone.tap()
+        phone.typeText("+442079460123")
+        XCTAssertTrue(picker.label.contains("+44"))
+        let normalized = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "2079460123"), object: phone)
+        XCTAssertEqual(XCTWaiter.wait(for: [normalized], timeout: 3), .completed,
+                       "The field should settle to the national number after recognizing its prefix.")
+        XCTAssertTrue(app.buttons["send-phone-code"].isEnabled)
+        XCTAssertTrue(phone.exists, "Entering an international number must not send a code.")
+    }
+
     func testAddPersonControlsRemainReachableWithAccessibilityText() {
         let variants: [(dark: Bool, language: String)] = [
             (false, "en"),

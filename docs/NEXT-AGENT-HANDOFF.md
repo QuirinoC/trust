@@ -1,5 +1,8 @@
 # Trust release pickup
 
+**Current direction — 29 October 2026:** The user paused age-range/parent-update prompts and mandatory App Store app-transaction verification. Current sign-in and restored sessions proceed to normal handle/phone onboarding without these checks. Follow `docs/DESIGN.md` and `docs/operations/staging/STATUS.md`; age-gate instructions and test expectations below are historical and must not be reintroduced. Apple account authentication, existing server privacy holds/consent-revoked account checks, explicit sharing consent, and purchase verification remain effective. New accounts without an AppTransaction link cannot be matched to Apple transaction-consent withdrawal notices; this limitation must be considered before a normal production release. This update is being delivered to Trust Staging, with production services unchanged.
+
+
 Updated 2026-10-26. This file is the concise current action list; detailed evidence and dates are in [STATUS.md](STATUS.md) and [App Store review readiness](../apps/trust-ios/AppStore/REVIEW-READINESS.md). The current visual source is [DESIGN.md](DESIGN.md); normal phone sharing uses one **Name | Off | Sealed | Always** row with a secondary menu.
 
 ## Current source and evidence snapshot — 26 October 2026

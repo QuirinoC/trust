@@ -367,6 +367,9 @@
 "phone_invite_message_body" = "Trust prépare un message avec votre lien. Il est envoyé uniquement si vous touchez Envoyer dans Messages.";
 "phone_lookup_country_code_hint" = "Saisissez un numéro de téléphone complet avec l’indicatif du pays.";
 "phone_number" = "Numéro de téléphone";
+"phone_country_code_title" = "Indicatif du pays";
+"phone_country_search" = "Rechercher un pays ou un indicatif";
+"phone_country_accessibility" = "Pays %@, indicatif %@";
 "phone_placeholder" = "(415) 555-0100";
 "phone_request_pending" = "Veuillez patienter…";
 "phone_resend_countdown" = "Renvoyer dans %@";

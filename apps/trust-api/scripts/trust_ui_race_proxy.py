@@ -32,6 +32,8 @@ STATE = {
     "home_presence_responses": {},
     "fail_circle_after_release": False,
     "fail_next_circle": False,
+    "fail_next_consent_revoked": False,
+    "consent_revoked_count": 0,
     "fail_next_stop_all": False,
     "holding": False,
     "held_resource": None,
@@ -170,6 +172,12 @@ class Handler(BaseHTTPRequestHandler):
                     "app_transaction_failure_count": 0,
                     "app_transaction_success_count": 0,
                 })
+            self.respond_json(200, {"armed": True})
+            return
+        if self.path == "/__test/arm-consent-revoked":
+            with LOCK:
+                STATE["fail_next_consent_revoked"] = True
+                STATE["consent_revoked_count"] = 0
             self.respond_json(200, {"armed": True})
             return
         if self.path == "/__test/arm-offline":
@@ -439,6 +447,17 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 self.send_response(204)
                 self.end_headers()
+            return
+
+        authorization = self.headers.get("Authorization", "")
+        is_authenticated_circle = is_circle and bool(re.fullmatch(r"Bearer\s+\S+", authorization, re.IGNORECASE))
+        with LOCK:
+            consent_revoked = is_authenticated_circle and STATE["fail_next_consent_revoked"]
+            if consent_revoked:
+                STATE["fail_next_consent_revoked"] = False
+                STATE["consent_revoked_count"] += 1
+        if consent_revoked:
+            self.respond_json(409, {"code": "consent_revoked", "message": "Consent has been revoked."})
             return
 
         with LOCK:

@@ -48,8 +48,8 @@ TEST_SOURCE = IOS / "Tests/TrustUITests/TrustRealAPIFeatureTests.swift"
 FAULT_CASE_CANDIDATES = (
     "testLatePhoneResponsesAfterEditPreserveRetryWithoutOpeningCodeOrHome",
     "testManualHomeChoicesReachServerAndRetirePreviousNotice",
-    "testAdultAgeGateAppleExchangeFailureCanRetryThroughTransactionLinkIntoOnboarding",
-    "testAppTransactionRetryKeepsRequestsClosedThenRecoversAcrossRelaunch",
+    "testAppleSignInFailureCanRetryDirectlyToOnboarding",
+    "testConsentRevokedResponseKeepsAccountBlocked",
     "testStopRemainsOffAcrossStaleCircleResponseAndRelaunch",
     "testRemoveStaysAbsentAfterStaleCircleResponseAndRelaunch",
     "testStopAllFailureDoesNotPartiallyStopAndRetryPersistsAfterRelaunch",

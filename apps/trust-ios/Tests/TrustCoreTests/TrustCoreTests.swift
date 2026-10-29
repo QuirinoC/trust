@@ -1273,40 +1273,17 @@ final class TrustAgePolicyTests: XCTestCase {
 }
 
 final class TrustAccountAccessPolicyTests: XCTestCase {
-    func testAgeApprovalAllowsSignInButAuthenticatedFeaturesWaitForAppTransactionLink() {
+    func testAuthenticationAllowsFeaturesButPrivacyHoldBlocksAccess() {
+        XCTAssertFalse(TrustAccountAccessPolicy.canAccessAccountData(accountAuthenticated: false))
+        XCTAssertTrue(TrustAccountAccessPolicy.canAccessAccountData(accountAuthenticated: true))
+        XCTAssertFalse(TrustAccountAccessPolicy.canAccessAccountData(accountAuthenticated: true, privacyHeld: true))
         XCTAssertTrue(TrustAccountAccessPolicy.canAccessAccountData(
-            ageAssurancePassed: true,
             accountAuthenticated: false,
-            appTransactionLinked: false
-        ), "An age-approved person must still be able to reach sign-in.")
-        XCTAssertFalse(TrustAccountAccessPolicy.canAccessAccountData(
-            ageAssurancePassed: true,
-            accountAuthenticated: true,
-            appTransactionLinked: false
-        ), "A failed or pending AppTransaction link must keep account data closed.")
-        XCTAssertTrue(TrustAccountAccessPolicy.canAccessAccountData(
-            ageAssurancePassed: true,
-            accountAuthenticated: true,
-            appTransactionLinked: true
-        ))
-        XCTAssertFalse(TrustAccountAccessPolicy.canAccessAccountData(
-            ageAssurancePassed: false,
-            accountAuthenticated: true,
-            appTransactionLinked: true
-        ), "An AppTransaction link can never override an unresolved age decision.")
-    }
-
-    func testExplicitLocalFixtureCanAccessOnlyAfterAgeFixturePermits() {
-        XCTAssertTrue(TrustAccountAccessPolicy.canAccessAccountData(
-            ageAssurancePassed: true,
-            accountAuthenticated: true,
-            appTransactionLinked: false,
             localFixture: true
         ))
         XCTAssertFalse(TrustAccountAccessPolicy.canAccessAccountData(
-            ageAssurancePassed: false,
-            accountAuthenticated: true,
-            appTransactionLinked: false,
+            accountAuthenticated: false,
+            privacyHeld: true,
             localFixture: true
         ))
     }

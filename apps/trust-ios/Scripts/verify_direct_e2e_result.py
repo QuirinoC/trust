@@ -26,6 +26,7 @@ SERIAL_EXCLUSIONS = {
 }
 DIRECT_PASS_CASES = {
     "testRequiredPhoneCorrectionsCooldownEditRelaunchAndReturningVerifiedAccount",
+    "testAppleSignInFailureCanRetryDirectlyToOnboarding",
     "testPrivacyHeldAccountCanDeleteAfterRelaunch",
     "testSharingTabRefreshShowsPeerAcceptedAfterInitialFetch",
     "testAlwaysSharedLocationHistoryRendersAndClearsAfterStop",
@@ -34,11 +35,9 @@ DIRECT_PASS_CASES = {
     "testProfilePictureIsStagedAndDiscoveryStaysExplicitAcrossRelaunch",
 }
 DIRECT_SKIP_REASONS = {
+    "testConsentRevokedResponseKeepsAccountBlocked": "requires fault proxy to inject a consent-revoked response",
     "testLatePhoneResponsesAfterEditPreserveRetryWithoutOpeningCodeOrHome": "requires fault proxy to hold phone send/verify responses",
     "testManualHomeChoicesReachServerAndRetirePreviousNotice": "requires fault proxy to hold Home presence responses",
-    "testAdultAgeGateAppleExchangeFailureCanRetryThroughTransactionLinkIntoOnboarding": "requires fault proxy Apple transaction failure fixture",
-    "testAppTransactionRetryKeepsRequestsClosedThenRecoversAcrossRelaunch": "requires fault proxy app-transaction failure/retry controls",
-    "testAgeAndPrivacyBlocksSuppressAccountLocationAndPushRequests": "requires fault proxy request counters for proving no account work",
     "testPairedRequestAcceptAndPresenceGrantRole": "requires explicit Alice/Bob runner roles and shared pair ID",
     "testStopRemainsOffAcrossStaleCircleResponseAndRelaunch": "requires fault proxy to hold and fail stale circle reads",
     "testShareModeSelectionWaitsForSuccessAndPreservesPausedStateOnFailure": "requires fault proxy to delay and fail share writes",

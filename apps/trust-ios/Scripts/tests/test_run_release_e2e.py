@@ -491,6 +491,11 @@ class ResultValidationTests(unittest.TestCase):
         self.assertIn("testOfflinePeerRemovalReconcilesAfterRelaunchAndReconnect", runner.ALL_REAL_CASES)
         self.assertIn("testDelayedHistoryFixtureCannotReappearAfterStopRemoveAndReconnect", runner.ALL_REAL_CASES)
 
+    def test_fault_matrix_names_exist_and_include_sign_in_retry(self) -> None:
+        self.assertEqual(set(runner.FAULT_CASES) - set(runner.ALL_REAL_CASES), set())
+        self.assertIn("testAppleSignInFailureCanRetryDirectlyToOnboarding", runner.FAULT_CASES)
+        self.assertEqual(len(runner.FAULT_CASES), len(set(runner.FAULT_CASES)))
+
     def test_direct_api_verifier_requires_exact_source_inventory_and_named_statuses(self) -> None:
         source = verifier.source_case_names()
         excluded = set(verifier.SERIAL_EXCLUSIONS)
@@ -507,7 +512,7 @@ class ResultValidationTests(unittest.TestCase):
         }
         report = verifier.verify(source, summary, {"testNodes": nodes})
         self.assertIn(f"{len(verifier.DIRECT_PASS_CASES)} expected passes", report)
-        self.assertIn("17 named proxy/role skips", report)
+        self.assertIn("15 named proxy/role skips", report)
         self.assertIn("not StoreKit evidence", report)
         for invalid_summary in (
             {**summary, "totalTestCount": 0},
