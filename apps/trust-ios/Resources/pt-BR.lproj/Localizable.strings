@@ -1,5 +1,7 @@
 "accept_invitation" = "Aceitar convite";
 "accept_request" = "Aceitar solicitação";
+"accessibility_collapsed" = "Recolhido";
+"accessibility_expanded" = "Expandido";
 "account" = "Conta";
 "add" = "Adicionar";
 "add_person_explanation" = "Conecte-se primeiro. O compartilhamento fica desativado até você escolher.";
@@ -68,6 +70,8 @@
 "api_handle_in_use" = "Esse identificador está em uso.";
 "api_handle_not_found" = "Nenhuma conta Trust foi encontrada para esse identificador.";
 "api_invalid_apple_token" = "A Apple não conseguiu verificar este início de sessão. Tente novamente.";
+"api_invalid_avatar_image" = "Não foi possível salvar essa foto. Escolha outra.";
+"api_invalid_avatar_preset" = "Essa foto de perfil não está disponível. Escolha outra.";
 "api_invalid_bundle" = "Esse tópico de push não pertence a este app.";
 "api_invalid_code" = "Esse código de convite não corresponde ou expirou.";
 "api_invalid_device" = "São necessários um token de push e um identificador de instalação.";
@@ -118,12 +122,19 @@
 "avatar" = "Animal";
 "avatar_bear" = "Urso";
 "avatar_british_shorthair" = "Gato British Shorthair";
+"avatar_camera_access_unavailable" = "O acesso à câmera está indisponível.";
+"avatar_camera_unavailable_message" = "Este dispositivo não tem uma câmera disponível.";
 "avatar_cat" = "Gato";
 "avatar_dog" = "Cachorro";
 "avatar_fox" = "Raposa";
 "avatar_icon_accessibility" = "Ícone de %@";
+"avatar_initials_value" = "Iniciais";
 "avatar_otter" = "Lontra";
 "avatar_owl" = "Coruja";
+"avatar_photo_open_error" = "Não foi possível abrir essa foto. Escolha outra.";
+"avatar_photo_prepare_error" = "Não foi possível preparar essa foto. Escolha outra.";
+"avatar_photo_value" = "Foto";
+"avatar_preparing_photo" = "Preparando foto…";
 "avatar_rabbit" = "Coelho";
 "avatar_ragdoll" = "Gato Ragdoll";
 "avatar_siamese" = "Gato Siamês";
@@ -188,6 +199,7 @@
 "done" = "Concluído";
 "edit_phone" = "Editar";
 "edit_profile_picture" = "Editar foto do perfil";
+"enable_alerts" = "Ativar alertas";
 "enter_a_code" = "Digite um código";
 "enter_handle" = "Digite um identificador para continuar.";
 "enter_phone" = "Digite um número de telefone.";
@@ -294,6 +306,7 @@
 "map" = "Mapa";
 "map_accessibility" = "Mapa. Pins ao vivo quando alguém compartilha no modo Sempre.";
 "map_empty_body" = "Os pins ao vivo aparecem quando alguém compartilha no modo Sempre.";
+"map_focus_unavailable" = "A localização desta pessoa não está disponível neste mapa.";
 "map_legend" = "Sempre";
 "map_sealed_hint" = "Os pins ao vivo aparecem quando alguém compartilha no modo Sempre.";
 "messages_unavailable" = "O Mensagens não está disponível aqui. O link do convite foi copiado.";
@@ -311,7 +324,15 @@
 "not_sharing" = "Não compartilha";
 "not_sharing_with_you" = "Não compartilha com você";
 "notification" = "Notificação";
+"notifications_allowed" = "Permitidas";
+"notifications_body" = "O Trust pode solicitar alertas para Olhares e chegadas em casa compartilhadas. A entrega não é garantida. A Atividade registra Olhares e Visualizações.";
+"notifications_check_settings" = "Verificar nos Ajustes";
+"notifications_heading" = "Notificações";
+"notifications_not_enabled" = "Não ativadas";
 "notifications_off" = "As notificações estão desativadas nos Ajustes. Olhares continuam aparecendo no registro.";
+"notifications_off_in_settings" = "Desativadas nos Ajustes";
+"notifications_quietly_allowed" = "Permitidas silenciosamente";
+"notifications_requesting" = "Solicitando acesso…";
 "now" = "agora";
 "off" = "Desativado";
 "offline" = "Offline";
@@ -326,9 +347,10 @@
 "open_settings" = "Abrir Ajustes";
 "optional_avatar_intro" = "Opcional · escolha um animal ou uma foto";
 "pause" = "Pausar";
-"pause_returns" = "O acesso dessa pessoa será pausado e depois voltará para %@ após o período escolhido.";
+"pause_accessibility_title" = "Pausar compartilhamento com %@";
+"pause_returns" = "O compartilhamento pausa e depois volta para %@.";
 "pause_sharing" = "Pausar";
-"pause_title" = "Pausar compartilhamento com %@";
+"pause_title" = "Pausar %@";
 "pause_until" = "Pausado até %@. Depois, volta para %@.";
 "people" = "Pessoas";
 "people_count_accessibility" = "%d pessoas";
@@ -345,6 +367,9 @@
 "phone_invite_message_body" = "O Trust prepara uma mensagem com seu link. Ela só é enviada se você tocar em Enviar no Mensagens.";
 "phone_lookup_country_code_hint" = "Digite um número de telefone completo, incluindo o código do país.";
 "phone_number" = "Número de telefone";
+"phone_country_code_title" = "Código do país";
+"phone_country_search" = "Buscar país ou código";
+"phone_country_accessibility" = "País %@, código %@";
 "phone_placeholder" = "(415) 555-0100";
 "phone_request_pending" = "Aguarde…";
 "phone_resend_countdown" = "Reenviar em %@";
@@ -375,6 +400,7 @@
 "presence" = "Presença";
 "presence_away" = "Fora";
 "presence_away_copy" = "Aparece como Fora quando você não está em Casa.";
+"presence_grant_details" = "Sobre Em casa ou Fora";
 "presence_grant_explanation" = "É apenas o status, não a localização. Com o compartilhamento ativo, isso também permite um alerta de chegada em casa. Desativado, Pausa e Oculto impedem a exibição.";
 "presence_grant_label" = "Avisar %@ quando eu estiver em casa ou fora";
 "presence_grant_updated" = "Preferência de compartilhamento de status atualizada.";
@@ -409,6 +435,7 @@
 "request_sent" = "Solicitação enviada";
 "resend_code" = "Reenviar código";
 "restore_purchases" = "Restaurar compras";
+"resume_paused_mode" = "Retomar como %@";
 "retry" = "Tentar novamente";
 "review_requests" = "Ver solicitações";
 "row_available" = "%@ · Disponível";
@@ -453,6 +480,7 @@
 "sharing_requests_accessibility" = "%@, %d solicitações recebidas";
 "sharing_stopped" = "O compartilhamento de localização com %@ foi encerrado.";
 "sharing_sub" = "O que cada pessoa pode ver sobre você.";
+"sharing_tab_title" = "Compartilhar";
 "show_on_map" = "Mostrar %@ no mapa";
 "sign_in_expired" = "A sessão expirou. Entre novamente.";
 "sign_in_in_progress" = "Já há um início de sessão em andamento.";

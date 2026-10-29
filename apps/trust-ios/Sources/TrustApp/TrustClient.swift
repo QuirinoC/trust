@@ -249,6 +249,8 @@ enum TrustClientError: LocalizedError {
     case unreachable
     case timeout
     case serverUnavailable(Int)
+    case appleUnavailable(statusCode: Int, message: String)
+    case structuredUnavailable(statusCode: Int, code: String, message: String)
     /// A known API error code (`pro_required`, `share_off`, …) with plain copy already mapped.
     case api(code: String, message: String)
     case phoneRetry(code: String, message: String, details: APIErrorPayload)
@@ -262,7 +264,7 @@ enum TrustClientError: LocalizedError {
     /// fallback (disk-cached circle) responds to.
     var isConnectivity: Bool {
         switch self {
-        case .unreachable, .timeout, .serverUnavailable: return true
+        case .unreachable, .timeout, .serverUnavailable, .structuredUnavailable: return true
         default: return false
         }
     }
@@ -270,6 +272,8 @@ enum TrustClientError: LocalizedError {
     var apiCode: String? {
         if case .api(let code, _) = self { return code }
         if case .phoneRetry(let code, _, _) = self { return code }
+        if case .structuredUnavailable(_, let code, _) = self { return code }
+        if case .appleUnavailable = self { return "apple_unavailable" }
         return nil
     }
 
@@ -295,6 +299,10 @@ enum TrustClientError: LocalizedError {
             #else
             return TrustCopy.serverUnavailable
             #endif
+        case .appleUnavailable(_, let message):
+            return message
+        case .structuredUnavailable(_, _, let message):
+            return message
         case .api(_, let message), .phoneRetry(_, let message, _):
             return message
         case .server(let message):
@@ -391,6 +399,7 @@ final class TrustClient {
         let version: UUID
     }
     private var avatarImages: [AvatarCacheKey: UIImage] = [:]
+    private var avatarImageCacheGeneration: UInt64 = 0
 
     func prepare() async {
         let preferred = AppConfiguration.apiBaseURL
@@ -444,11 +453,37 @@ final class TrustClient {
             var displayName: String
             var nonce: String?
         }
-        let payload: SessionPayload = try await post(
-            path: "/api/v1/session/apple",
-            body: Body(identityToken: identityToken, displayName: displayName ?? "You", nonce: nonce),
-            authorized: false
-        )
+        let body = Body(identityToken: identityToken, displayName: displayName ?? "You", nonce: nonce)
+        let payload: SessionPayload
+        do {
+            payload = try await post(path: "/api/v1/session/apple", body: body, authorized: false)
+        } catch let error as TrustClientError {
+            let statusCode: Int
+            let apiCode: String?
+            switch error {
+            case .serverUnavailable(let status):
+                statusCode = status
+                apiCode = nil
+            case .appleUnavailable(let status, _):
+                statusCode = status
+                apiCode = "apple_unavailable"
+            case .structuredUnavailable(let status, let code, _):
+                statusCode = status
+                apiCode = code
+            default:
+                throw error
+            }
+            guard TrustAPIErrorPolicy.shouldRetryAppleSession(
+                statusCode: statusCode,
+                apiErrorCode: apiCode
+            ) else {
+                throw error
+            }
+            try await Task.sleep(nanoseconds: TrustAPIErrorPolicy.appleSessionRetryDelayNanoseconds)
+            try Task.checkCancellation()
+            payload = try await post(path: "/api/v1/session/apple", body: body, authorized: false)
+        }
+        try Task.checkCancellation()
         token = payload.token
         return payload
     }
@@ -547,6 +582,7 @@ final class TrustClient {
     func clearCache() {
         CircleCache.clear()
         avatarImages.removeAll()
+        avatarImageCacheGeneration &+= 1
         snapshot = nil
     }
 
@@ -558,41 +594,68 @@ final class TrustClient {
         CircleCache.removeMember(accountID: accountID, personID: personID, connectionID: connectionID)
     }
 
-    func setAvatarPreset(_ presetID: String) async throws -> AvatarDescriptor {
+    func setAvatarPreset(
+        _ presetID: String,
+        operation: TrustAccountOperation,
+        currentOperation: @MainActor () -> TrustAccountOperation?
+    ) async throws -> AvatarDescriptor {
+        guard currentOperation() == operation, token == operation.token else { throw CancellationError() }
         struct Body: Encodable { var presetId: String }
-        var request = try makeRequest(path: "/api/v1/me/avatar/preset", method: "PUT", authorized: true)
+        var request = try makeRequest(path: "/api/v1/me/avatar/preset", method: "PUT", authorized: true, tokenOverride: operation.token)
         request.httpBody = try encoder.encode(Body(presetId: presetID))
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        return try await send(request)
+        let avatar: AvatarDescriptor = try await send(request)
+        guard currentOperation() == operation, token == operation.token else { throw CancellationError() }
+        return avatar
     }
 
-    func setAvatarPhoto(_ jpeg: Data) async throws -> AvatarDescriptor {
-        var request = try makeRequest(path: "/api/v1/me/avatar/photo", method: "PUT", authorized: true)
+    func setAvatarPhoto(
+        _ jpeg: Data,
+        operation: TrustAccountOperation,
+        currentOperation: @MainActor () -> TrustAccountOperation?
+    ) async throws -> AvatarDescriptor {
+        guard currentOperation() == operation, token == operation.token,
+              let accountID = snapshot?.you.id,
+              TrustSessionIdentity.accountID(from: operation.token) == accountID else { throw CancellationError() }
+        var request = try makeRequest(path: "/api/v1/me/avatar/photo", method: "PUT", authorized: true, tokenOverride: operation.token)
         request.httpBody = jpeg
         request.setValue("image/jpeg", forHTTPHeaderField: "Content-Type")
         let avatar: AvatarDescriptor = try await send(request)
+        guard currentOperation() == operation, token == operation.token,
+              snapshot?.you.id == accountID else { throw CancellationError() }
         if let version = avatar.photoVersion,
-           let accountID = snapshot?.you.id,
            let image = UIImage(data: jpeg) {
             avatarImages[AvatarCacheKey(accountID: accountID, personID: accountID, version: version)] = image
         }
         return avatar
     }
 
-    func removeAvatar() async throws {
-        try await deleteEmpty(path: "/api/v1/me/avatar")
+    func removeAvatar(
+        operation: TrustAccountOperation,
+        currentOperation: @MainActor () -> TrustAccountOperation?
+    ) async throws {
+        guard currentOperation() == operation, token == operation.token else { throw CancellationError() }
+        try await deleteEmpty(path: "/api/v1/me/avatar", authorizedToken: operation.token)
+        guard currentOperation() == operation, token == operation.token else { throw CancellationError() }
     }
 
     /// Photo bytes stay in memory only. The version in the descriptor is immutable, so
     /// changing a photo naturally gets a fresh cache entry.
     func avatarImage(personID: UUID, descriptor: AvatarDescriptor?) async throws -> UIImage? {
         guard let version = descriptor?.photoVersion else { return nil }
-        let key = AvatarCacheKey(accountID: snapshot?.you.id ?? personID, personID: personID, version: version)
+        guard let requestToken = token, !requestToken.isEmpty else { throw TrustClientError.unauthorized }
+        let accountID = snapshot?.you.id ?? personID
+        let cacheGeneration = avatarImageCacheGeneration
+        let key = AvatarCacheKey(accountID: accountID, personID: personID, version: version)
         if let image = avatarImages[key] { return image }
         let path = "/api/v1/people/\(personID.uuidString)/avatar/\(version.uuidString)"
-        var request = try makeRequest(path: path, method: "GET", authorized: true)
+        var request = try makeRequest(path: path, method: "GET", authorized: true, tokenOverride: requestToken)
         request.setValue("image/jpeg", forHTTPHeaderField: "Accept")
         let data = try await sendRaw(request)
+        guard !Task.isCancelled,
+              avatarImageCacheGeneration == cacheGeneration,
+              token == requestToken,
+              (snapshot?.you.id ?? personID) == accountID else { throw CancellationError() }
         guard let image = UIImage(data: data) else { throw TrustClientError.decoding }
         avatarImages[key] = image
         return image
@@ -1149,15 +1212,17 @@ final class TrustClient {
         if isCircleRequest {
             Self.networkLogger.info("GET /api/v1/circle received HTTP \(http.statusCode, privacy: .public) elapsedMs=\(Self.elapsedMilliseconds(since: startedAt), privacy: .public)")
         }
-        if [502, 503, 504].contains(http.statusCode),
-           (try? decoder.decode(APIErrorPayload.self, from: data))?.retryAt == nil {
-            throw TrustClientError.serverUnavailable(http.statusCode)
-        }
         if http.statusCode == 401 {
             if let error = try? decoder.decode(APIErrorPayload.self, from: data),
                let code = error.code, code != "unauthorized" {
                 notifyCurrentAccountIfConsentWasRevoked(code: code, request: request)
                 notifyCurrentAccountIfPrivacyHold(code: code, request: request)
+                if code == "apple_unavailable" {
+                    throw TrustClientError.appleUnavailable(
+                        statusCode: http.statusCode,
+                        message: TrustCopy.apiError(code: code, fallback: error.message)
+                    )
+                }
                 throw TrustClientError.api(code: code, message: TrustCopy.apiError(code: code, fallback: error.message))
             }
             throw TrustClientError.unauthorized
@@ -1165,7 +1230,17 @@ final class TrustClient {
         if (200..<300).contains(http.statusCode) {
             return data
         }
-        if let error = try? decoder.decode(APIErrorPayload.self, from: data) {
+        let apiError = try? decoder.decode(APIErrorPayload.self, from: data)
+        let disposition = TrustAPIErrorPolicy.disposition(
+            statusCode: http.statusCode,
+            apiErrorCode: apiError?.code,
+            hasRetryMetadata: apiError?.retryAt != nil || apiError?.retryAfterSeconds != nil
+        )
+        switch disposition {
+        case .structuredPayload:
+            guard let error = apiError else {
+                throw TrustClientError.server(TrustCopy.requestFailedStatus(http.statusCode))
+            }
             notifyCurrentAccountIfConsentWasRevoked(code: error.code, request: request)
             notifyCurrentAccountIfPrivacyHold(code: error.code, request: request)
             let message = TrustCopy.apiError(code: error.code, fallback: error.message)
@@ -1173,11 +1248,31 @@ final class TrustClient {
                 if error.retryAt != nil || error.retryAfterSeconds != nil {
                     throw TrustClientError.phoneRetry(code: code, message: message, details: error)
                 }
+                if code == "apple_unavailable" {
+                    throw TrustClientError.appleUnavailable(statusCode: http.statusCode, message: message)
+                }
                 throw TrustClientError.api(code: code, message: message)
             }
             throw TrustClientError.server(message)
+        case .gatewayUnavailable:
+            throw TrustClientError.serverUnavailable(http.statusCode)
+        case .structuredUnavailable:
+            guard let error = apiError, let code = error.code, !code.isEmpty else {
+                throw TrustClientError.serverUnavailable(http.statusCode)
+            }
+            notifyCurrentAccountIfConsentWasRevoked(code: code, request: request)
+            notifyCurrentAccountIfPrivacyHold(code: code, request: request)
+            throw TrustClientError.structuredUnavailable(
+                statusCode: http.statusCode,
+                code: code,
+                message: TrustCopy.apiError(code: code, fallback: error.message)
+            )
+        case .genericServerError:
+            if let apiError {
+                throw TrustClientError.server(TrustCopy.apiError(code: apiError.code, fallback: apiError.message))
+            }
+            throw TrustClientError.server(TrustCopy.requestFailedStatus(http.statusCode))
         }
-        throw TrustClientError.server(TrustCopy.requestFailedStatus(http.statusCode))
     }
 
     private func notifyCurrentAccountIfConsentWasRevoked(code: String?, request: URLRequest) {

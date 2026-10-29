@@ -7,6 +7,7 @@ on:
       - "apps/trust-ios/**"
       - "apps/jointrust-web/**"
       - ".github/workflows/ci.yml"
+      - ".github/workflows/ios-release-e2e.yml"
   push:
     branches: [main]
     paths:
@@ -14,6 +15,7 @@ on:
       - "apps/trust-ios/**"
       - "apps/jointrust-web/**"
       - ".github/workflows/ci.yml"
+      - ".github/workflows/ios-release-e2e.yml"
   workflow_dispatch:
 
 jobs:
@@ -47,6 +49,8 @@ jobs:
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
+      - name: Test E2E orchestration and direct-API result verification
+        run: python3 -m unittest discover -s apps/trust-ios/Scripts/tests -p 'test_*.py' -v
       - name: Validate localization coverage and freshness
         run: |
           python3 apps/trust-ios/Scripts/emit_localizations.py
@@ -135,7 +139,7 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 9.0.x
-      - name: Start isolated Development API for opt-in UI tests
+      - name: Start isolated Development API with synthetic review fixture for direct-API UI tests
         working-directory: apps/trust-api
         env:
           ASPNETCORE_ENVIRONMENT: Development
@@ -144,6 +148,7 @@ jobs:
           Trust__SeedReviewCircle: "false"
           Auth__AllowDevelopmentSignIn: "true"
           Auth__SigningKey: development-signing-key-32bytes-min!!
+          StoreKit__AllowReviewUnlock: "true"
         run: |
           dotnet build TrustApi.csproj --configuration Release
           nohup dotnet bin/Release/net9.0/TrustApi.dll \
@@ -183,24 +188,17 @@ jobs:
             kill "$api_pid" 2>/dev/null || true
             wait "$api_pid" 2>/dev/null || true
           fi
-      - name: Verify opt-in UI coverage ran
+      - name: Verify direct-API UI inventory, named passes, and proxy-gated skips
         if: always()
         run: |
           result_bundle="$RUNNER_TEMP/trust-local-e2e.xcresult"
           if [[ ! -d "$result_bundle" ]]; then
-            echo "The opt-in UI test result bundle is missing."
+            echo "The direct-API UI test result bundle is missing."
             exit 1
           fi
-
-          xcrun xcresulttool get test-results summary --path "$result_bundle" --format json \
-            | tee "$RUNNER_TEMP/trust-local-e2e-summary.json" \
-            | jq -e '
-                .result == "Passed" and
-                .totalTestCount == 16 and
-                .passedTests == 5 and
-                .skippedTests == 11 and
-                .failedTests == 0
-              '
+          xcrun xcresulttool get test-results summary --path "$result_bundle" \
+            | tee "$RUNNER_TEMP/trust-local-e2e-summary.json"
+          python3 apps/trust-ios/Scripts/verify_direct_e2e_result.py "$result_bundle"
       - name: Collect DEBUG UI interaction traces
         if: always() && env.TRUST_SIMULATOR_ID != ''
         continue-on-error: true

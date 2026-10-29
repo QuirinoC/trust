@@ -30,6 +30,7 @@ public enum TrustCopy {
     /// Legacy key alias used by older call sites / localization tables.
     public static var circle: String { people }
     public static var sharing: String { value("sharing", defaultValue: "Sharing") }
+    public static var sharingTabTitle: String { value("sharing_tab_title", defaultValue: "Sharing") }
     public static var log: String { value("log", defaultValue: "Activity") }
     public static var you: String { value("you", defaultValue: "You") }
     public static var map: String { value("map", defaultValue: "Map") }
@@ -100,9 +101,19 @@ public enum TrustCopy {
     public static var removePicture: String { value("remove_picture", defaultValue: "Remove picture") }
     public static var photoOptions: String { value("photo_options", defaultValue: "Photo options") }
     public static func avatarIconAccessibility(_ name: String) -> String { format("avatar_icon_accessibility", defaultValue: "%@ icon", name) }
+    public static var avatarPreparingPhoto: String { value("avatar_preparing_photo", defaultValue: "Preparing photo…") }
+    public static var avatarPhotoOpenError: String { value("avatar_photo_open_error", defaultValue: "That photo could not be opened. Choose another one.") }
+    public static var avatarPhotoPrepareError: String { value("avatar_photo_prepare_error", defaultValue: "This photo could not be prepared. Choose another one.") }
+    public static var avatarCameraUnavailableMessage: String { value("avatar_camera_unavailable_message", defaultValue: "A camera is not available on this device.") }
+    public static var avatarCameraAccessUnavailable: String { value("avatar_camera_access_unavailable", defaultValue: "Camera access is unavailable.") }
+    public static var avatarPhotoValue: String { value("avatar_photo_value", defaultValue: "Photo") }
+    public static var avatarInitialsValue: String { value("avatar_initials_value", defaultValue: "Initials") }
     public static var sharingPresenceExplanation: String { value("sharing_presence_explanation", defaultValue: "Home or Away appears only for people you chose Sealed or Always for. Off, Pause, and Hidden keep your status out of their view.") }
     public static func moreSharingActions(_ name: String) -> String { format("more_sharing_actions", defaultValue: "More sharing actions for %@", name) }
+    public static var accessibilityExpanded: String { value("accessibility_expanded", defaultValue: "Expanded") }
+    public static var accessibilityCollapsed: String { value("accessibility_collapsed", defaultValue: "Collapsed") }
     public static func presenceGrantLabel(_ name: String) -> String { format("presence_grant_label", defaultValue: "Let %@ know when I’m Home or Away", name) }
+    public static var presenceGrantDetails: String { value("presence_grant_details", defaultValue: "About Home or Away") }
     public static var presenceGrantExplanation: String { value("presence_grant_explanation", defaultValue: "Status only, not location. With sharing on, this also allows a Home-arrival alert. Off, Pause, and Hidden suppress it.") }
     public static var presenceGrantUpdated: String { value("presence_grant_updated", defaultValue: "Home/Away sharing preference updated.") }
     public static func sharingDirections(inbound: String, outbound: String) -> String {
@@ -429,6 +440,12 @@ public enum TrustCopy {
             defaultValue: "Live pins show when someone shares Always."
         )
     }
+    public static var mapFocusUnavailable: String {
+        value(
+            "map_focus_unavailable",
+            defaultValue: "This person's location is unavailable on this map."
+        )
+    }
     public static var backToCircle: String { value("back_to_circle", defaultValue: "Back to People") }
     public static func onMap(count: Int, sealed: Int) -> String {
         format("on_map", defaultValue: "%d on map · %d not shown", count, sealed)
@@ -521,13 +538,43 @@ public enum TrustCopy {
     public static var pause: String { value("pause", defaultValue: "Pause") }
     public static var pauseSharing: String { value("pause_sharing", defaultValue: "Pause") }
     public static func pauseTitle(name: String) -> String {
-        format("pause_title", defaultValue: "Pause sharing with %@", name)
+        format("pause_title", defaultValue: "Pause %@", name)
+    }
+    public static func pauseAccessibilityTitle(name: String) -> String {
+        format("pause_accessibility_title", defaultValue: "Pause sharing with %@", name)
     }
     public static func pauseReturns(mode: String) -> String {
-        format("pause_returns", defaultValue: "Their access pauses, then returns to %@ after the time you choose.", mode)
+        format("pause_returns", defaultValue: "Sharing pauses, then returns to %@.", mode)
     }
     public static func pauseUntil(time: String, mode: String) -> String {
         format("pause_until", defaultValue: "Paused until %@. Back to %@.", time, mode)
+    }
+    public static func pauseEndDateTime(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = TrustAppLanguage.currentLocale
+        formatter.calendar = Calendar.current
+        formatter.dateStyle = Calendar.current.isDateInToday(date) ? .none : .medium
+        formatter.timeStyle = .short
+        return formatter.string(from: date)
+    }
+    public static func pauseDurationLabel(_ duration: PauseDuration) -> String {
+        let formatter = DateComponentsFormatter()
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.locale = TrustAppLanguage.currentLocale
+        formatter.calendar = calendar
+        formatter.unitsStyle = .full
+        formatter.maximumUnitCount = 1
+        switch duration {
+        case .oneHour: formatter.allowedUnits = [.hour]
+        case .eightHours: formatter.allowedUnits = [.hour]
+        case .oneDay: formatter.allowedUnits = [.day]
+        case .twoDays: formatter.allowedUnits = [.day]
+        case .threeDays: formatter.allowedUnits = [.day]
+        }
+        return formatter.string(from: duration.seconds) ?? duration.label
+    }
+    public static func resumePaused(mode: String) -> String {
+        format("resume_paused_mode", defaultValue: "Resume %@", mode)
     }
     public static var stopSharing: String { value("stop_sharing", defaultValue: "Stop sharing") }
     public static var removePerson: String { value("remove_person", defaultValue: "Remove") }
@@ -693,6 +740,11 @@ public enum TrustCopy {
     public static var verificationCode: String { value("verification_code", defaultValue: "Code") }
     public static var verifyCode: String { value("verify_code", defaultValue: "Verify") }
     public static var phoneNumber: String { value("phone_number", defaultValue: "Phone number") }
+    public static var phoneCountryCodeTitle: String { value("phone_country_code_title", defaultValue: "Country code") }
+    public static var phoneCountrySearch: String { value("phone_country_search", defaultValue: "Search country or code") }
+    public static func phoneCountryAccessibilityLabel(_ country: String, callingCode: String) -> String {
+        format("phone_country_accessibility", defaultValue: "Country %@, calling code %@", country, callingCode)
+    }
     public static var phonePlaceholder: String { value("phone_placeholder", defaultValue: "(415) 555-0100") }
     public static var sendCode: String { value("send_code", defaultValue: "Send code") }
     public static var codeSent: String { value("code_sent", defaultValue: "Code sent. Enter it below to verify your number.") }
@@ -789,6 +841,17 @@ public enum TrustCopy {
     public static var seePlus: String { value("see_plus", defaultValue: "See Plus") }
     public static var youHavePlus: String { value("you_have_plus", defaultValue: "You have Plus.") }
     public static var settings: String { value("settings", defaultValue: "Settings") }
+    public static var notificationsHeading: String { value("notifications_heading", defaultValue: "Notifications") }
+    public static var notificationsBody: String {
+        value("notifications_body", defaultValue: "Alerts may be requested for Looks and shared Home arrivals. Delivery is not guaranteed. Activity records Looks and Views.")
+    }
+    public static var notificationsNotEnabled: String { value("notifications_not_enabled", defaultValue: "Not enabled") }
+    public static var notificationsOffInSettings: String { value("notifications_off_in_settings", defaultValue: "Off in Settings") }
+    public static var notificationsAllowed: String { value("notifications_allowed", defaultValue: "Allowed") }
+    public static var notificationsQuietlyAllowed: String { value("notifications_quietly_allowed", defaultValue: "Quietly allowed") }
+    public static var notificationsCheckSettings: String { value("notifications_check_settings", defaultValue: "Check Settings") }
+    public static var notificationsRequesting: String { value("notifications_requesting", defaultValue: "Requesting access…") }
+    public static var enableAlerts: String { value("enable_alerts", defaultValue: "Enable alerts") }
     public static var lookNotifications: String { value("look_notifications", defaultValue: "Look notifications") }
     public static var lookNotificationsBody: String {
         value("look_notifications_body", defaultValue: "Sealed Looks request a notification. Views are logged.")
@@ -988,6 +1051,10 @@ public enum TrustCopy {
     /// Known API error codes → plain copy. Unknown codes pass the server message through.
     public static func apiError(code: String?, fallback: String?) -> String {
         switch code {
+        case "invalid_avatar_preset":
+            return value("api_invalid_avatar_preset", defaultValue: "That profile picture isn’t available. Choose another one.")
+        case "invalid_avatar_image":
+            return value("api_invalid_avatar_image", defaultValue: "That photo couldn’t be saved. Choose another one.")
         case "confirmation_required":
             return value("api_confirmation_required", defaultValue: "Look needs a confirm first.")
         case "not_connected":

@@ -12,9 +12,9 @@ struct RootView: View {
         ZStack {
             palette.canvas.ignoresSafeArea()
             switch model.phase {
-            case .ageChecking, .ageGate, .ageCheckUnavailable, .ageRangeSharingDeclined, .ageRangeBlocked, .ageWaitingForParent, .ageBlocked, .ageConsentRevoked, .agePrivacyHoldPending, .agePrivacyHeld, .appTransactionChecking, .appTransactionUnavailable:
+            case .ageConsentRevoked, .agePrivacyHoldPending, .agePrivacyHeld:
                 AgeGateView()
-            case .login:
+            case .ageChecking, .ageGate, .ageCheckUnavailable, .ageRangeSharingDeclined, .ageRangeBlocked, .ageWaitingForParent, .ageBlocked, .appTransactionChecking, .appTransactionUnavailable, .login:
                 LoginView()
             case .handle:
                 HandleView()
@@ -24,16 +24,26 @@ struct RootView: View {
                 MainShellView()
             }
         }
+#if TRUST_STAGING
+        .overlay(alignment: .topTrailing) {
+            Text("STAGING")
+                .font(.system(size: 10, weight: .bold, design: .rounded))
+                .tracking(0.8)
+                .foregroundStyle(palette.ink)
+                .padding(.horizontal, 9)
+                .padding(.vertical, 5)
+                .background(palette.surface.opacity(0.94), in: Capsule())
+                .overlay(Capsule().stroke(palette.line, lineWidth: 1))
+                .padding(.top, 7)
+                .padding(.trailing, 12)
+                .accessibilityLabel("Staging build")
+        }
+#endif
         .environment(\.trustPalette, palette)
         .environment(\.locale, (TrustAppLanguage(rawValue: appLanguage) ?? .system).resolvedLocale)
         .tint(palette.accent)
         .preferredColorScheme((TrustAppearance(rawValue: appearance) ?? .system).colorScheme)
         .onChange(of: scenePhase) { _, phase in
-            if phase == .background {
-                model.ageUpdateSceneDidEnterBackground()
-            } else if phase == .active {
-                model.ageUpdateSceneDidBecomeActive()
-            }
             model.setSceneActive(phase == .active)
             if phase == .active, model.phase == .home {
                 Task { await model.refreshIfStale() }

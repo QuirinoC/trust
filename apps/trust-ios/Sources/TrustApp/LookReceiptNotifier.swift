@@ -9,10 +9,13 @@ final class LookReceiptNotifier: NSObject, ObservableObject, UNUserNotificationC
 
     private let installationKey = "trust.push.installation-id"
     private var client: TrustClient?
+    private var sessionToken: String?
     private var registeredToken: String?
     private var lastUploadedToken: String?
     private var lastUploadedInstallation: UUID?
     private var sessionGeneration: UInt64 = 0
+    private var authorizationReadGeneration: UInt64 = 0
+    private var pushDeviceMutationTail: Task<Void, Never>?
     var onNotificationTap: ((TrustPushDestination) -> Void)?
 
     override init() {
@@ -22,10 +25,21 @@ final class LookReceiptNotifier: NSObject, ObservableObject, UNUserNotificationC
     }
 
     func prepare(client: TrustClient) {
+        refreshAuthorizationAndRegisterIfAllowed(client: client)
+    }
+
+    /// Refreshes permission without prompting, and re-registers with APNs only
+    /// when the current authorization already allows notifications.
+    func refreshAuthorizationAndRegisterIfAllowed(client: TrustClient) {
         sessionGeneration &+= 1
         let generation = sessionGeneration
         let authorizedToken = client.token
         self.client = client
+        if sessionToken != authorizedToken {
+            lastUploadedToken = nil
+            lastUploadedInstallation = nil
+        }
+        sessionToken = authorizedToken
         Task {
             await registerForPushIfAllowed()
             await uploadTokenIfNeeded(generation: generation, authorizedToken: authorizedToken)
@@ -55,8 +69,47 @@ final class LookReceiptNotifier: NSObject, ObservableObject, UNUserNotificationC
     }
 
     private func loadAuthorization() async {
+        authorizationReadGeneration &+= 1
+        let readGeneration = authorizationReadGeneration
+        let generationBeforeRead = sessionGeneration
+        let clientBeforeRead = client
+        let tokenBeforeRead = sessionToken
+        let installationBeforeRead = clientBeforeRead == nil ? nil : installationId
         let settings = await UNUserNotificationCenter.current().notificationSettings()
+        guard readGeneration == authorizationReadGeneration else { return }
         authorization = settings.authorizationStatus
+        guard settings.authorizationStatus == .denied,
+              generationBeforeRead == sessionGeneration,
+              let clientBeforeRead,
+              self.client === clientBeforeRead,
+              let tokenBeforeRead,
+              sessionToken == tokenBeforeRead,
+              clientBeforeRead.token == tokenBeforeRead,
+              let installationBeforeRead else { return }
+
+        // Denial revokes delivery permission. Invalidate any in-flight upload before
+        // removing this account's old registration; a later allow action can upload
+        // the retained device token under the same current session.
+        sessionGeneration &+= 1
+        let generation = sessionGeneration
+        let registeredClient = clientBeforeRead
+        lastUploadedToken = nil
+        lastUploadedInstallation = nil
+        await enqueuePushDeviceMutation {
+            // A new status read may have observed a grant while this DELETE waited
+            // behind an older registration. Honor the latest OS state at dispatch.
+            guard self.authorization == .denied else { return }
+            try? await registeredClient.removePushDevice(
+                installationId: installationBeforeRead,
+                authorizedToken: tokenBeforeRead
+            )
+            guard generation == self.sessionGeneration,
+                  self.client === registeredClient,
+                  self.sessionToken == tokenBeforeRead,
+                  registeredClient.token == tokenBeforeRead else { return }
+            self.lastUploadedToken = nil
+            self.lastUploadedInstallation = nil
+        }
     }
 
     private static func canRegister(_ status: UNAuthorizationStatus) -> Bool {
@@ -71,14 +124,17 @@ final class LookReceiptNotifier: NSObject, ObservableObject, UNUserNotificationC
         // Detach this session before awaiting the server. A sign-in that happens
         // while DELETE is in flight may prepare a new account and must keep its state.
         client = nil
+        sessionToken = nil
         registeredToken = nil
         lastUploadedToken = nil
         lastUploadedInstallation = nil
         if let previousClient, let previousToken, let previousInstallation {
-            try? await previousClient.removePushDevice(
-                installationId: previousInstallation,
-                authorizedToken: previousToken
-            )
+            await enqueuePushDeviceMutation {
+                try? await previousClient.removePushDevice(
+                    installationId: previousInstallation,
+                    authorizedToken: previousToken
+                )
+            }
         }
     }
 
@@ -94,26 +150,52 @@ final class LookReceiptNotifier: NSObject, ObservableObject, UNUserNotificationC
     /// once both exist, including when the installation id changes under the same token.
     private func uploadTokenIfNeeded(generation: UInt64, authorizedToken: String?) async {
         guard generation == sessionGeneration,
+              Self.canRegister(authorization),
               let client,
               let authorizedToken,
+              sessionToken == authorizedToken,
+              client.token == authorizedToken,
               let token = registeredToken,
               let installationId else { return }
         guard token != lastUploadedToken || installationId != lastUploadedInstallation else { return }
-        do {
-            try await client.registerPushDevice(
-                installationId: installationId,
-                token: token,
-                environment: Self.apnsEnvironment,
-                authorizedToken: authorizedToken
-            )
-            guard generation == sessionGeneration, self.client === client else { return }
-            lastUploadedToken = token
-            lastUploadedInstallation = installationId
-        } catch {
-            guard generation == sessionGeneration, self.client === client else { return }
-            lastUploadedToken = nil
-            lastUploadedInstallation = nil
+        await enqueuePushDeviceMutation {
+            guard generation == self.sessionGeneration,
+                  Self.canRegister(self.authorization),
+                  self.client === client,
+                  self.sessionToken == authorizedToken,
+                  client.token == authorizedToken,
+                  self.registeredToken == token else { return }
+            do {
+                try await client.registerPushDevice(
+                    installationId: installationId,
+                    token: token,
+                    environment: Self.apnsEnvironment,
+                    authorizedToken: authorizedToken
+                )
+                guard generation == self.sessionGeneration,
+                      self.client === client,
+                      self.sessionToken == authorizedToken,
+                      client.token == authorizedToken else { return }
+                self.lastUploadedToken = token
+                self.lastUploadedInstallation = installationId
+            } catch {
+                guard generation == self.sessionGeneration,
+                      self.client === client,
+                      self.sessionToken == authorizedToken else { return }
+                self.lastUploadedToken = nil
+                self.lastUploadedInstallation = nil
+            }
         }
+    }
+
+    private func enqueuePushDeviceMutation(_ operation: @escaping @MainActor () async -> Void) async {
+        let previous = pushDeviceMutationTail
+        let task = Task { @MainActor in
+            await previous?.value
+            await operation()
+        }
+        pushDeviceMutationTail = task
+        await task.value
     }
 
     nonisolated func didFailToRegister(error: Error) {

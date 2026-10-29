@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>method</key>
+	<string>app-store-connect</string>
+	<key>teamID</key>
+	<string>3S529795M9</string>
+	<key>signingStyle</key>
+	<string>manual</string>
+	<key>testFlightInternalTestingOnly</key>
+	<true/>
+	<key>uploadSymbols</key>
+	<true/>
+	<key>destination</key>
+	<string>upload</string>
+	<key>signingCertificate</key>
+	<string>4B1C06CCC53616F7FD6635640D057FF1EB80D685</string>
+	<key>provisioningProfiles</key>
+	<dict>
+		<key>com.collapsetechnologies.trust.staging</key>
+		<string>Trust Staging App Store</string>
+	</dict>
+	<key>manageAppVersionAndBuildNumber</key>
+	<false/>
+</dict>
+</plist>

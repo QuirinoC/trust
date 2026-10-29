@@ -6,8 +6,10 @@ struct SharingView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.trustPalette) private var palette
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var activeConfirmation: SharingConfirmation?
     @State private var showingHomeStatus = false
+    @State private var pausePresentationDetent: PresentationDetent = .height(420)
 
     private enum SharingConfirmation: Equatable {
         case stopSharing(personID: UUID, name: String)
@@ -73,6 +75,7 @@ struct SharingView: View {
                                     compact: geometry.size.width < 430,
                                     onPause: {
                                         model.tracePausePresentation("menu callback")
+                                        pausePresentationDetent = dynamicTypeSize.isAccessibilitySize ? .large : .height(420)
                                         model.pauseSheetPersonID = member.id
                                     },
                                     onStopSharing: { activeConfirmation = .stopSharing(personID: member.id, name: member.firstName) },
@@ -133,10 +136,12 @@ struct SharingView: View {
                     }
                     .environmentObject(model)
                     .environment(\.trustPalette, palette)
-                    .presentationDetents([.height(420)])
+                    .presentationDetents([.height(420), .large], selection: $pausePresentationDetent)
                     .presentationDragIndicator(.visible)
                     .presentationBackground(palette.paper)
-                    .onAppear { model.tracePausePresentation("sheet appeared") }
+                    .onAppear {
+                        model.tracePausePresentation("sheet appeared")
+                    }
                 }
             }
         .alert(
@@ -181,31 +186,64 @@ struct SharingView: View {
         model.circle.firstIndex { $0.id == member.id } ?? 0
     }
 
+    @ViewBuilder
     private var presenceSection: some View {
-        Button {
-            showingHomeStatus = true
-        } label: {
-            HStack(spacing: 12) {
-                Image(systemName: "house")
-                    .foregroundStyle(palette.accent)
-                    .accessibilityHidden(true)
-                Text(TrustCopy.homeStatus)
-                    .trustFont(14, weight: .medium)
-                    .foregroundStyle(palette.ink)
-                Spacer()
-                Text(model.myPresence.label)
-                    .trustFont(13)
-                    .foregroundStyle(palette.muted)
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(palette.muted)
+        if dynamicTypeSize.isAccessibilitySize {
+            Button {
+                showingHomeStatus = true
+            } label: {
+                HStack(spacing: 12) {
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(TrustCopy.homeStatus)
+                            .trustFont(14, weight: .medium)
+                            .foregroundStyle(palette.ink)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Text(model.myPresence.label)
+                            .trustFont(13)
+                            .foregroundStyle(palette.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer(minLength: 4)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(palette.muted)
+                        .accessibilityHidden(true)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
+                .background(RoundedRectangle(cornerRadius: TrustTheme.controlRadius, style: .continuous).fill(palette.surface))
             }
-            .padding(.horizontal, 14)
-            .frame(minHeight: 52)
-            .background(RoundedRectangle(cornerRadius: TrustTheme.controlRadius, style: .continuous).fill(palette.surface))
+            .buttonStyle(.plain)
+            .accessibilityLabel(TrustCopy.homeStatus)
+            .accessibilityValue(model.myPresence.label)
+            .accessibilityIdentifier("home-status-control")
+        } else {
+            Button {
+                showingHomeStatus = true
+            } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: "house")
+                        .foregroundStyle(palette.accent)
+                        .accessibilityHidden(true)
+                    Text(TrustCopy.homeStatus)
+                        .trustFont(14, weight: .medium)
+                        .foregroundStyle(palette.ink)
+                    Spacer()
+                    Text(model.myPresence.label)
+                        .trustFont(13)
+                        .foregroundStyle(palette.muted)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(palette.muted)
+                }
+                .padding(.horizontal, 14)
+                .frame(minHeight: 52)
+                .background(RoundedRectangle(cornerRadius: TrustTheme.controlRadius, style: .continuous).fill(palette.surface))
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("home-status-control")
         }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("home-status-control")
     }
 }
 
@@ -222,6 +260,8 @@ struct OutboundRow: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Namespace private var selectionNamespace
+    @State private var showingPresenceGrantDetails = false
+    @State private var accessibilityActionsExpanded = false
 
     private enum Mode: Hashable { case off, sealed, always }
 
@@ -244,7 +284,7 @@ struct OutboundRow: View {
         case .untilTheyLook: return TrustCopy.sealed
         case .always: return TrustCopy.always
         case .paused(let ends, let restores):
-            let time = ends.formatted(date: .omitted, time: .shortened)
+            let time = TrustCopy.pauseEndDateTime(ends)
             let mode = restores == .always ? TrustCopy.always : TrustCopy.sealed
             return TrustCopy.pauseUntil(time: time, mode: mode)
         }
@@ -260,6 +300,9 @@ struct OutboundRow: View {
                         actionsMenu
                     }
                     modeControl
+                    if dynamicTypeSize.isAccessibilitySize && accessibilityActionsExpanded {
+                        accessibilityActionList
+                    }
                 }
             } else {
                 HStack(spacing: compact ? 3 : 8) {
@@ -276,6 +319,15 @@ struct OutboundRow: View {
         .padding(.vertical, dynamicTypeSize.isAccessibilitySize ? 15 : 9)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("sharing-mode-group-\(member.firstName.lowercased())")
+        .onChange(of: dynamicTypeSize.isAccessibilitySize) { _, isAccessibilitySize in
+            if !isAccessibilitySize { accessibilityActionsExpanded = false }
+        }
+        .alert(TrustCopy.presenceGrantDetails, isPresented: $showingPresenceGrantDetails) {
+            Button(TrustCopy.close, role: .cancel) {}
+                .accessibilityIdentifier("presence-grant-details-close")
+        } message: {
+            Text(TrustCopy.presenceGrantExplanation)
+        }
     }
 
     private var personLabel: some View {
@@ -336,8 +388,56 @@ struct OutboundRow: View {
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: selection)
     }
 
+    @ViewBuilder
     private var actionsMenu: some View {
-        Menu {
+        if dynamicTypeSize.isAccessibilitySize {
+            Button {
+                withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
+                    accessibilityActionsExpanded.toggle()
+                }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(palette.ink)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(TrustCopy.moreSharingActions(member.firstName))
+            .accessibilityValue(accessibilityActionsExpanded ? TrustCopy.accessibilityExpanded : TrustCopy.accessibilityCollapsed)
+            .accessibilityHint(accessibilityActionsExpanded ? TrustCopy.close : TrustCopy.moreSharingActions(member.firstName))
+            .accessibilityIdentifier("sharing-actions-\(member.firstName.lowercased())")
+        } else {
+            Menu {
+                menuActionItems
+            } label: {
+                moreActionsGlyph
+            }
+            .accessibilityLabel(TrustCopy.moreSharingActions(member.firstName))
+            .accessibilityIdentifier("sharing-actions-\(member.firstName.lowercased())")
+        }
+    }
+
+    @ViewBuilder
+    private var menuActionItems: some View {
+            Section {
+                if case .paused = presentation {
+                    let mode = model.restoreMode(for: member.id)
+                    Button {
+                        model.setResting(mode, for: member.id)
+                    } label: {
+                        Label(
+                            TrustCopy.resumePaused(mode: mode == .always ? TrustCopy.always : TrustCopy.sealed),
+                            systemImage: "play.fill"
+                        )
+                    }
+                    .disabled(model.isUpdatingShare(personID: member.id))
+                    .accessibilityIdentifier("resume-sharing-\(member.firstName.lowercased())")
+                }
+                Button(TrustCopy.pause, action: onPause)
+                    .disabled(presentation.isOff || model.isUpdatingShare(personID: member.id))
+                    .accessibilityIdentifier("pause-sharing-\(member.firstName.lowercased())")
+            }
             Section {
                 Button {
                     model.togglePresenceGrant(personID: member.id)
@@ -350,22 +450,108 @@ struct OutboundRow: View {
                 .disabled(model.isDemoMode || model.isUpdatingPresenceGrant(personID: member.id))
                 .accessibilityIdentifier("presence-grant-\(member.firstName.lowercased())")
                 .accessibilityAddTraits(member.outboundPresenceGranted ? [.isSelected] : [])
-                Text(TrustCopy.presenceGrantExplanation)
+                Button(TrustCopy.presenceGrantDetails) {
+                    showingPresenceGrantDetails = true
+                }
+                .accessibilityIdentifier("presence-grant-details-\(member.firstName.lowercased())")
             }
-            Button(TrustCopy.pause, action: onPause)
-                .disabled(presentation.isOff || model.isUpdatingShare(personID: member.id))
-                .accessibilityIdentifier("pause-sharing-\(member.firstName.lowercased())")
             Button(TrustCopy.removePerson, role: .destructive, action: onRemove)
                 .accessibilityIdentifier("remove-person-action-\(member.firstName.lowercased())")
-        } label: {
+    }
+
+    private var moreActionsGlyph: some View {
             Image(systemName: "ellipsis")
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(palette.ink)
                 .frame(width: 44, height: 44)
                 .contentShape(Rectangle())
+    }
+
+    @ViewBuilder
+    private var accessibilityActionList: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if case .paused = presentation {
+                let mode = model.restoreMode(for: member.id)
+                inlineAction(
+                    TrustCopy.resumePaused(mode: mode == .always ? TrustCopy.always : TrustCopy.sealed),
+                    symbol: "play.fill",
+                    identifier: "resume-sharing-\(member.firstName.lowercased())",
+                    disabled: model.isUpdatingShare(personID: member.id)
+                ) {
+                    model.setResting(mode, for: member.id)
+                }
+            }
+            inlineAction(
+                TrustCopy.pause,
+                symbol: "pause.fill",
+                identifier: "pause-sharing-\(member.firstName.lowercased())",
+                disabled: presentation.isOff || model.isUpdatingShare(personID: member.id),
+                action: {
+                    accessibilityActionsExpanded = false
+                    onPause()
+                }
+            )
+            inlineAction(
+                TrustCopy.presenceGrantLabel(member.firstName),
+                symbol: member.outboundPresenceGranted ? "checkmark.circle.fill" : "circle",
+                identifier: "presence-grant-\(member.firstName.lowercased())",
+                disabled: model.isDemoMode || model.isUpdatingPresenceGrant(personID: member.id),
+                selected: member.outboundPresenceGranted
+            ) {
+                model.togglePresenceGrant(personID: member.id)
+            }
+            inlineAction(
+                TrustCopy.presenceGrantDetails,
+                symbol: "info.circle",
+                identifier: "presence-grant-details-\(member.firstName.lowercased())"
+            ) {
+                showingPresenceGrantDetails = true
+            }
+            inlineAction(
+                TrustCopy.removePerson,
+                symbol: "person.crop.circle.badge.minus",
+                identifier: "remove-person-action-\(member.firstName.lowercased())",
+                destructive: true,
+                action: {
+                    accessibilityActionsExpanded = false
+                    onRemove()
+                }
+            )
         }
-        .accessibilityLabel(TrustCopy.moreSharingActions(member.firstName))
-        .accessibilityIdentifier("sharing-actions-\(member.firstName.lowercased())")
+        .padding(.top, 4)
+    }
+
+    private func inlineAction(
+        _ title: String,
+        symbol: String,
+        identifier: String,
+        disabled: Bool = false,
+        selected: Bool = false,
+        destructive: Bool = false,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Image(systemName: symbol)
+                    .accessibilityHidden(true)
+                Text(title)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .multilineTextAlignment(.leading)
+                Spacer(minLength: 0)
+            }
+            .font(TrustTheme.ui(14, weight: selected ? .semibold : .medium))
+            .foregroundStyle(destructive ? palette.danger : palette.ink)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+            .background(palette.surface, in: RoundedRectangle(cornerRadius: TrustTheme.controlRadius, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: TrustTheme.controlRadius, style: .continuous).stroke(palette.line, lineWidth: 1))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(disabled)
+        .accessibilityIdentifier(identifier)
+        .accessibilityAddTraits(selected ? [.isSelected] : [])
     }
 
     private func modeButton(_ mode: Mode, label: String, locked: Bool = false, fillWidth: Bool = false) -> some View {
@@ -420,6 +606,7 @@ struct PauseSharingSheet: View {
     let dismiss: () -> Void
     @EnvironmentObject private var model: AppModel
     @Environment(\.trustPalette) private var palette
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private struct Choice: Identifiable {
         let id: TimeInterval
@@ -427,13 +614,9 @@ struct PauseSharingSheet: View {
     }
 
     private var choices: [Choice] {
-        [
-            .init(id: 3600, label: "1 hour"),
-            .init(id: 8 * 3600, label: "8 hours"),
-            .init(id: 24 * 3600, label: "1 day"),
-            .init(id: 2 * 24 * 3600, label: "2 days"),
-            .init(id: 3 * 24 * 3600, label: "3 days")
-        ]
+        PauseDuration.allCases.map { duration in
+            Choice(id: duration.seconds, label: TrustCopy.pauseDurationLabel(duration))
+        }
     }
 
     private var returnsTo: String {
@@ -441,41 +624,67 @@ struct PauseSharingSheet: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text(TrustCopy.pauseTitle(name: model.member(personID)?.firstName ?? TrustCopy.them))
-                .font(TrustTheme.display(28))
-                .tracking(-0.6)
-                .foregroundStyle(palette.ink)
-                .accessibilityAddTraits(.isHeader)
-            Text(TrustCopy.pauseReturns(mode: returnsTo))
-                .font(TrustTheme.ui(15))
-                .foregroundStyle(palette.muted)
-
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 96), spacing: 8)], spacing: 8) {
-                ForEach(choices) { choice in
-                    Button(choice.label) {
-                        model.pauseSharing(personID: personID, duration: PauseDuration.matching(seconds: choice.id))
-                        dismiss()
-                    }
-                    .buttonStyle(.plain)
-                    .font(TrustTheme.ui(15, weight: .semibold))
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                Text(TrustCopy.pauseTitle(name: model.member(personID)?.firstName ?? TrustCopy.them))
+                    .font(TrustTheme.display(28))
+                    .tracking(-0.6)
                     .foregroundStyle(palette.ink)
-                    .frame(maxWidth: .infinity, minHeight: 44)
-                    .background(Capsule().fill(palette.surface))
-                    .accessibilityIdentifier("pause-duration-\(Int(choice.id))")
-                }
-            }
+                    .accessibilityLabel(TrustCopy.pauseAccessibilityTitle(name: model.member(personID)?.firstName ?? TrustCopy.them))
+                    .accessibilityAddTraits(.isHeader)
+                Text(TrustCopy.pauseReturns(mode: returnsTo))
+                    .font(TrustTheme.ui(15))
+                    .foregroundStyle(palette.muted)
+                    .fixedSize(horizontal: false, vertical: true)
 
-            Button(TrustCopy.cancel, action: dismiss)
-                .buttonStyle(TrustTextButtonStyle())
-                .frame(maxWidth: .infinity)
+                if dynamicTypeSize.isAccessibilitySize {
+                    VStack(spacing: 8) {
+                        ForEach(choices) { choice in
+                            durationButton(choice)
+                        }
+                    }
+                } else {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 96), spacing: 8)], spacing: 8) {
+                        ForEach(choices) { choice in
+                            durationButton(choice)
+                        }
+                    }
+                }
+
+                Button(TrustCopy.cancel, action: dismiss)
+                    .buttonStyle(TrustTextButtonStyle())
+                    .frame(maxWidth: .infinity)
+                    .accessibilityIdentifier("pause-sharing-cancel")
+            }
+            .padding(.horizontal, 22)
+            .padding(.top, 8)
+            .padding(.bottom, 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .trustReadableWidth()
         }
-        .padding(.horizontal, 22)
-        .padding(.top, 8)
-        .padding(.bottom, 12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .trustReadableWidth()
+        .scrollIndicators(.hidden)
+        .accessibilityIdentifier("pause-sharing-scroll")
         .background(palette.paper)
+    }
+
+    private func durationButton(_ choice: Choice) -> some View {
+        Button {
+            model.pauseSharing(personID: personID, duration: PauseDuration.matching(seconds: choice.id))
+            dismiss()
+        } label: {
+            Text(choice.label)
+                .fixedSize(horizontal: false, vertical: true)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, dynamicTypeSize.isAccessibilitySize ? 16 : 8)
+                .padding(.vertical, dynamicTypeSize.isAccessibilitySize ? 12 : 0)
+                .frame(maxWidth: .infinity, minHeight: 44)
+        }
+        .buttonStyle(.plain)
+        .font(TrustTheme.ui(15, weight: .semibold))
+        .foregroundStyle(palette.ink)
+        .frame(maxWidth: .infinity, minHeight: 44)
+        .background(Capsule().fill(palette.surface))
+        .accessibilityIdentifier("pause-duration-\(Int(choice.id))")
     }
 }
 
@@ -507,6 +716,7 @@ struct AlwaysExplainerSheet: View {
                 model.allowAlwaysFromExplainer()
             }
             .buttonStyle(TrustFilledButtonStyle())
+            .accessibilityIdentifier("always-explainer-allow")
 
             Button(TrustCopy.later) {
                 model.showingAlwaysExplainer = false

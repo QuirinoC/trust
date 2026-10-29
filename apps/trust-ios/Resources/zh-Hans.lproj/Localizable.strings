@@ -1,5 +1,7 @@
 "accept_invitation" = "接受邀请";
 "accept_request" = "接受请求";
+"accessibility_collapsed" = "已折叠";
+"accessibility_expanded" = "已展开";
 "account" = "账户";
 "add" = "添加";
 "add_person_explanation" = "先建立连接。共享会保持关闭，直到你主动选择开启。";
@@ -68,6 +70,8 @@
 "api_handle_in_use" = "该句柄已被占用。";
 "api_handle_not_found" = "找不到使用此账号名的 Trust 账户。";
 "api_invalid_apple_token" = "Apple 无法验证此登录。再试一次。";
+"api_invalid_avatar_image" = "无法保存这张照片。请选择其他照片。";
+"api_invalid_avatar_preset" = "此个人资料图片不可用。请选择其他图片。";
 "api_invalid_bundle" = "那个推送主题不是这个应用程序。";
 "api_invalid_code" = "该邀请码不匹配或已过期。";
 "api_invalid_device" = "需要推送令牌和安装 ID。";
@@ -118,12 +122,19 @@
 "avatar" = "动物图标";
 "avatar_bear" = "熊";
 "avatar_british_shorthair" = "英国短毛猫";
+"avatar_camera_access_unavailable" = "相机访问不可用。";
+"avatar_camera_unavailable_message" = "此设备没有可用的相机。";
 "avatar_cat" = "猫";
 "avatar_dog" = "狗";
 "avatar_fox" = "狐狸";
 "avatar_icon_accessibility" = "%@ 图标";
+"avatar_initials_value" = "姓名首字母";
 "avatar_otter" = "水獭";
 "avatar_owl" = "猫头鹰";
+"avatar_photo_open_error" = "无法打开这张照片。请选择其他照片。";
+"avatar_photo_prepare_error" = "无法准备这张照片。请选择其他照片。";
+"avatar_photo_value" = "照片";
+"avatar_preparing_photo" = "正在准备照片…";
 "avatar_rabbit" = "兔子";
 "avatar_ragdoll" = "布偶猫";
 "avatar_siamese" = "暹罗猫";
@@ -188,6 +199,7 @@
 "done" = "完毕";
 "edit_phone" = "编辑";
 "edit_profile_picture" = "编辑头像";
+"enable_alerts" = "启用提醒";
 "enter_a_code" = "输入代码";
 "enter_handle" = "输入句柄以继续。";
 "enter_phone" = "输入电话号码。";
@@ -294,6 +306,7 @@
 "map" = "地图";
 "map_accessibility" = "地图。当有人总是分享时实时固定。";
 "map_empty_body" = "实时图钉会在有人分享时显示。";
+"map_focus_unavailable" = "此地图无法显示此人的位置。";
 "map_legend" = "总是";
 "map_sealed_hint" = "实时图钉会在有人分享时显示。";
 "messages_unavailable" = "此处无法使用“信息”App。已复制邀请链接。";
@@ -311,7 +324,15 @@
 "not_sharing" = "不分享";
 "not_sharing_with_you" = "不与你分享";
 "notification" = "通知";
+"notifications_allowed" = "已允许";
+"notifications_body" = "Trust可能会为Look和已共享的到家状态请求提醒。提醒送达不作保证。活动记录Look和View。";
+"notifications_check_settings" = "检查设置";
+"notifications_heading" = "通知";
+"notifications_not_enabled" = "尚未启用";
 "notifications_off" = "设置中的通知已关闭。看起来仍然显示在日志中。";
+"notifications_off_in_settings" = "已在设置中关闭";
+"notifications_quietly_allowed" = "已静默允许";
+"notifications_requesting" = "正在请求权限…";
 "now" = "现在";
 "off" = "离开";
 "offline" = "离线";
@@ -326,9 +347,10 @@
 "open_settings" = "打开设置";
 "optional_avatar_intro" = "可选 · 选择动物图标或照片";
 "pause" = "暂停";
-"pause_returns" = "他们的访问会暂停，然后在您选择的时间后返回到 %@。";
+"pause_accessibility_title" = "暂停与 %@ 共享";
+"pause_returns" = "共享会暂停，然后恢复为 %@。";
 "pause_sharing" = "暂停";
-"pause_title" = "暂停与 %@ 共享";
+"pause_title" = "暂停 %@";
 "pause_until" = "暂停直到 %@。回到%@。";
 "people" = "人们";
 "people_count_accessibility" = "%d 人";
@@ -345,6 +367,9 @@
 "phone_invite_message_body" = "Trust 会准备一条含邀请链接的短信。只有你在“信息”中点按发送后才会发送。";
 "phone_lookup_country_code_hint" = "请输入包含国家/地区代码的完整电话号码。";
 "phone_number" = "电话号码";
+"phone_country_code_title" = "国家/地区代码";
+"phone_country_search" = "搜索国家/地区或代码";
+"phone_country_accessibility" = "国家/地区%@，代码%@";
 "phone_placeholder" = "(415) 555-0100";
 "phone_request_pending" = "请稍候…";
 "phone_resend_countdown" = "%@后重新发送";
@@ -375,6 +400,7 @@
 "presence" = "在场";
 "presence_away" = "离开";
 "presence_away_copy" = "当您不在家时显示为外出。";
+"presence_grant_details" = "关于在家或外出状态";
 "presence_grant_explanation" = "仅共享状态，不共享位置。开启共享时，也允许发送到家提醒。关闭、暂停和隐藏状态下不会显示。";
 "presence_grant_label" = "让我在家或外出时通知 %@";
 "presence_grant_updated" = "已更新在家/外出状态共享设置。";
@@ -409,6 +435,7 @@
 "request_sent" = "请求已发送";
 "resend_code" = "重新发送代码";
 "restore_purchases" = "恢复购买";
+"resume_paused_mode" = "恢复为%@";
 "retry" = "重试";
 "review_requests" = "查看请求";
 "row_available" = "%@ · 可用";
@@ -453,6 +480,7 @@
 "sharing_requests_accessibility" = "%@，收到 %d 个请求";
 "sharing_stopped" = "与 %@ 的位置共享已停止。";
 "sharing_sub" = "每个人都能看到你的什么。";
+"sharing_tab_title" = "分享";
 "show_on_map" = "在地图上显示 %@";
 "sign_in_expired" = "登录已过期。再次登录。";
 "sign_in_in_progress" = "登录已在进行中。";

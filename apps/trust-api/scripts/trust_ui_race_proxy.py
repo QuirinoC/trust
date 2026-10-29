@@ -7,10 +7,15 @@ never logs request bodies, authorization headers, phone numbers, or coordinates.
 """
 
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+import base64
+import copy
+import hashlib
 import json
+import re
 import threading
 import urllib.error
 import urllib.request
+import uuid
 
 
 UPSTREAM = "http://127.0.0.1:5090"
@@ -27,6 +32,8 @@ STATE = {
     "home_presence_responses": {},
     "fail_circle_after_release": False,
     "fail_next_circle": False,
+    "fail_next_consent_revoked": False,
+    "consent_revoked_count": 0,
     "fail_next_stop_all": False,
     "holding": False,
     "held_resource": None,
@@ -38,10 +45,14 @@ STATE = {
     "stop_all_ack_count": 0,
     "stop_all_failure_count": 0,
     "revoke_ack_count": 0,
+    "push_registration_ack_count": 0,
+    "sandbox_push_registration_ack_count": 0,
     "stale_release_count": 0,
     "circle_failure_count": 0,
     "history_hold_count": 0,
     "history_release_count": 0,
+    "history_status_count": 0,
+    "history_point_count": 0,
     "look_hold_count": 0,
     "look_release_count": 0,
     "request_counts": {},
@@ -50,6 +61,28 @@ STATE = {
     "app_transaction_request_count": 0,
     "app_transaction_failure_count": 0,
     "app_transaction_success_count": 0,
+    "offline_account_id": None,
+    "offline_token_hash": None,
+    "offline_request_count": 0,
+    "offline_circle_count": 0,
+    "fail_next_lookup": False,
+    "fail_lookup_after_send": False,
+    "fail_next_connection_action": False,
+    "lookup_failure_count": 0,
+    "connection_action_failure_count": 0,
+    "connection_send_count": 0,
+    "fail_requests_after_action": False,
+    "fail_next_requests": False,
+    "request_list_failure_count": 0,
+    "stale_lookup_after_send": False,
+    "stale_next_lookup": False,
+    "pair_location_stages": {},
+}
+PAIR_LOCATION_STAGES = {
+    "first-home-ready",
+    "first-away-held",
+    "second-home-ready",
+    "complete",
 }
 RELEASE_HELD = threading.Event()
 
@@ -68,12 +101,13 @@ class Handler(BaseHTTPRequestHandler):
         self.forward()
 
     def do_POST(self):
+        control_body = b""
         if self.path.startswith("/__test/"):
             # XCTest's URLSession may send `{}` for control requests. Consume it
             # before responding so a keep-alive connection starts cleanly.
             length = int(self.headers.get("Content-Length", "0"))
             if length:
-                self.rfile.read(length)
+                control_body = self.rfile.read(length)
         if self.path == "/__test/reset":
             with LOCK:
                 for key in list(STATE):
@@ -90,6 +124,45 @@ class Handler(BaseHTTPRequestHandler):
                 RELEASE_HELD.set()
             self.respond_json(200, {"reset": True})
             return
+        if self.path == "/__test/pair-location":
+            try:
+                value = json.loads(control_body)
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                self.respond_json(400, {"updated": False, "error": "invalid-json"})
+                return
+            if not isinstance(value, dict) or set(value) != {"pairId", "stage"}:
+                self.respond_json(400, {"updated": False, "error": "invalid-control-body"})
+                return
+            pair_id = value.get("pairId")
+            stage = value.get("stage")
+            if not isinstance(pair_id, str) or not re.fullmatch(r"[a-fA-F0-9]{8}", pair_id):
+                self.respond_json(400, {"updated": False, "error": "invalid-pair-id"})
+                return
+            if not isinstance(stage, str) or stage not in PAIR_LOCATION_STAGES:
+                self.respond_json(400, {"updated": False, "error": "invalid-stage"})
+                return
+            pair_id = pair_id.lower()
+            with LOCK:
+                stages = STATE["pair_location_stages"].setdefault(pair_id, {})
+                stages[stage] = True
+            self.respond_json(200, {"updated": True, "pairId": pair_id, "stage": stage})
+            return
+        if self.path in ("/__test/arm-lookup-failure", "/__test/arm-lookup-failure-after-send", "/__test/arm-request-action-failure", "/__test/arm-stale-lookup"):
+            with LOCK:
+                key = {
+                    "/__test/arm-lookup-failure": "fail_next_lookup",
+                    "/__test/arm-lookup-failure-after-send": "fail_lookup_after_send",
+                    "/__test/arm-request-action-failure": "fail_next_connection_action",
+                    "/__test/arm-stale-lookup": "stale_next_lookup",
+                }[self.path]
+                STATE[key] = True
+            self.respond_json(200, {"armed": True})
+            return
+        if self.path in ("/__test/arm-request-refresh-failure", "/__test/arm-stale-lookup-after-send"):
+            with LOCK:
+                STATE["fail_requests_after_action" if self.path.endswith("refresh-failure") else "stale_lookup_after_send"] = True
+            self.respond_json(200, {"armed": True})
+            return
         if self.path in ("/__test/arm-app-transaction", "/__test/arm-app-transaction-retry"):
             with LOCK:
                 STATE.update({
@@ -100,6 +173,46 @@ class Handler(BaseHTTPRequestHandler):
                     "app_transaction_success_count": 0,
                 })
             self.respond_json(200, {"armed": True})
+            return
+        if self.path == "/__test/arm-consent-revoked":
+            with LOCK:
+                STATE["fail_next_consent_revoked"] = True
+                STATE["consent_revoked_count"] = 0
+            self.respond_json(200, {"armed": True})
+            return
+        if self.path == "/__test/arm-offline":
+            try:
+                value = json.loads(control_body or b"{}")
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                self.respond_json(400, {"armed": False, "error": "invalid-json"})
+                return
+            account_id = value.get("accountId") if isinstance(value, dict) else None
+            token_hash = value.get("tokenHash") if isinstance(value, dict) else None
+            if account_id is not None:
+                try:
+                    account_id = str(uuid.UUID(str(account_id)))
+                except (ValueError, AttributeError, TypeError):
+                    self.respond_json(400, {"armed": False, "error": "invalid-account-id"})
+                    return
+            if token_hash is not None and (not isinstance(token_hash, str) or not re.fullmatch(r"[0-9a-fA-F]{64}", token_hash)):
+                self.respond_json(400, {"armed": False, "error": "invalid-token-hash"})
+                return
+            if (account_id is None) == (token_hash is None):
+                self.respond_json(400, {"armed": False, "error": "provide-one-account-id-or-token-hash"})
+                return
+            with LOCK:
+                STATE["offline_account_id"] = account_id
+                STATE["offline_token_hash"] = token_hash.lower() if token_hash else None
+                STATE["offline_request_count"] = 0
+                STATE["offline_circle_count"] = 0
+            self.respond_json(200, {"armed": True, "offline_request_count": 0})
+            return
+        if self.path == "/__test/reconnect":
+            with LOCK:
+                STATE["offline_account_id"] = None
+                STATE["offline_token_hash"] = None
+                offline_request_count = STATE["offline_request_count"]
+            self.respond_json(200, {"reconnected": True, "offline_request_count": offline_request_count})
             return
         if self.path == "/__test/arm":
             with LOCK:
@@ -251,6 +364,37 @@ class Handler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length", "0"))
         body = self.rfile.read(length) if length else None
         path = self.path
+        if self.offline_request_matches():
+            with LOCK:
+                STATE["offline_request_count"] += 1
+                if self.command == "GET" and path.split("?", 1)[0] == "/api/v1/circle":
+                    STATE["offline_circle_count"] += 1
+            self.respond_json(503, {"code": "test_account_offline", "message": "The account is offline in this local test."})
+            return
+        normalized_path = path.split("?", 1)[0]
+        is_lookup = self.command == "POST" and normalized_path == "/api/v1/people/lookup"
+        is_connection_send = self.command == "POST" and normalized_path == "/api/v1/connection-requests"
+        is_connection_action = self.command in ("POST", "DELETE") and normalized_path.startswith("/api/v1/connection-requests/")
+        is_request_list = self.command == "GET" and normalized_path == "/api/v1/connection-requests"
+        with LOCK:
+            fail_lookup = is_lookup and STATE["fail_next_lookup"]
+            fail_action = is_connection_action and STATE["fail_next_connection_action"]
+            fail_requests = is_request_list and STATE["fail_next_requests"]
+            stale_lookup = is_lookup and STATE["stale_next_lookup"]
+            if fail_lookup:
+                STATE["fail_next_lookup"] = False
+                STATE["lookup_failure_count"] += 1
+            if fail_action:
+                STATE["fail_next_connection_action"] = False
+                STATE["connection_action_failure_count"] += 1
+            if fail_requests:
+                STATE["fail_next_requests"] = False
+                STATE["request_list_failure_count"] += 1
+            if stale_lookup:
+                STATE["stale_next_lookup"] = False
+        if fail_lookup or fail_action or fail_requests:
+            self.respond_json(503, {"code": "test_temporary_failure", "message": "A temporary failure was injected by the local test service."})
+            return
         is_phone_send = self.command == "POST" and path.split("?", 1)[0] == "/api/v1/me/phone/send"
         is_phone_verify = self.command == "POST" and path.split("?", 1)[0] == "/api/v1/me/phone/verify"
         is_circle = self.command == "GET" and path.split("?", 1)[0] == "/api/v1/circle"
@@ -303,6 +447,17 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 self.send_response(204)
                 self.end_headers()
+            return
+
+        authorization = self.headers.get("Authorization", "")
+        is_authenticated_circle = is_circle and bool(re.fullmatch(r"Bearer\s+\S+", authorization, re.IGNORECASE))
+        with LOCK:
+            consent_revoked = is_authenticated_circle and STATE["fail_next_consent_revoked"]
+            if consent_revoked:
+                STATE["fail_next_consent_revoked"] = False
+                STATE["consent_revoked_count"] += 1
+        if consent_revoked:
+            self.respond_json(409, {"code": "consent_revoked", "message": "Consent has been revoked."})
             return
 
         with LOCK:
@@ -383,10 +538,26 @@ class Handler(BaseHTTPRequestHandler):
             self.respond_json(502, {"error": "local-test-upstream-unavailable"})
             return
 
+        if self.command == "POST" and normalized_path == "/api/v1/push/devices" and status == 204:
+            # Record only acknowledgement counts. Device tokens and installation
+            # identifiers must never be exposed by the test control endpoint.
+            try:
+                sandbox = json.loads(body or b"{}").get("environment") == "sandbox"
+            except (ValueError, AttributeError):
+                sandbox = False
+            with LOCK:
+                STATE["push_registration_ack_count"] += 1
+                if sandbox:
+                    STATE["sandbox_push_registration_ack_count"] += 1
         if is_home_presence:
             with LOCK:
                 key = str(status)
                 STATE["home_presence_responses"][key] = STATE["home_presence_responses"].get(key, 0) + 1
+        if stale_lookup and 200 <= status < 300:
+            payload = json.loads(response_body)
+            payload["relationship"] = "none"
+            payload["requestId"] = None
+            response_body = json.dumps(payload, separators=(",", ":")).encode()
         held_resource = "phone_send" if hold_this_phone_send else "phone_verify" if hold_this_phone_verify else "circle" if hold_this_circle else "history" if hold_this_history else "look" if hold_this_look else "home_presence" if hold_this_home_presence else "share" if hold_this_share else None
         if held_resource:
             with LOCK:
@@ -394,6 +565,11 @@ class Handler(BaseHTTPRequestHandler):
                 STATE["held_resource"] = held_resource
                 if held_resource == "history":
                     STATE["history_hold_count"] += 1
+                    STATE["history_status_count"] = status
+                    try:
+                        STATE["history_point_count"] = len(json.loads(response_body).get("points", []))
+                    except (ValueError, TypeError, AttributeError):
+                        STATE["history_point_count"] = 0
                 elif held_resource == "look":
                     STATE["look_hold_count"] += 1
                 elif held_resource == "share":
@@ -409,6 +585,17 @@ class Handler(BaseHTTPRequestHandler):
         # before the client can receive the first successful response.
         if 200 <= status < 300:
             with LOCK:
+                if is_connection_send:
+                    STATE["connection_send_count"] += 1
+                    if STATE["fail_lookup_after_send"]:
+                        STATE["fail_lookup_after_send"] = False
+                        STATE["fail_next_lookup"] = True
+                    if STATE["stale_lookup_after_send"]:
+                        STATE["stale_lookup_after_send"] = False
+                        STATE["stale_next_lookup"] = True
+                if is_connection_action and STATE["fail_requests_after_action"]:
+                    STATE["fail_requests_after_action"] = False
+                    STATE["fail_next_requests"] = True
                 if is_share:
                     STATE["share_ack_count"] += 1
                     STATE["share_ack_person_ids"].append(person_id)
@@ -419,6 +606,8 @@ class Handler(BaseHTTPRequestHandler):
 
         if status == 204 or not response_body:
             self.send_response(status)
+            if status != 204:
+                self.send_header("Content-Length", "0")
             self.end_headers()
         else:
             self.send_response(status)
@@ -431,7 +620,29 @@ class Handler(BaseHTTPRequestHandler):
 
     def state_copy(self):
         with LOCK:
-            return dict(STATE)
+            return copy.deepcopy(STATE)
+
+    def offline_request_matches(self):
+        authorization = self.headers.get("Authorization", "")
+        if not authorization.startswith("Bearer "):
+            return False
+        token = authorization[7:]
+        with LOCK:
+            account_id = STATE["offline_account_id"]
+            token_hash = STATE["offline_token_hash"]
+        if account_id:
+            try:
+                parts = token.split(".")
+                if len(parts) != 3:
+                    return False
+                payload = parts[1] + "=" * (-len(parts[1]) % 4)
+                claims = json.loads(base64.urlsafe_b64decode(payload.encode("ascii")))
+                return str(claims.get("sub", "")).lower() == account_id.lower()
+            except (ValueError, UnicodeDecodeError, json.JSONDecodeError):
+                return False
+        if token_hash:
+            return hashlib.sha256(token.encode()).hexdigest() == token_hash
+        return False
 
     def respond_json(self, status, value):
         body = json.dumps(value, separators=(",", ":")).encode()

@@ -1,5 +1,8 @@
 # Trust age assurance
 
+**Current direction — 29 October 2026:** The user paused age-range/parent-update prompts and mandatory App Store app-transaction verification. Current sign-in and restored sessions proceed to normal handle/phone onboarding without these checks. Follow `docs/DESIGN.md` and `docs/operations/staging/STATUS.md`; age-gate instructions and test expectations below are historical and must not be reintroduced. Apple account authentication, existing server privacy holds/consent-revoked account checks, explicit sharing consent, and purchase verification remain effective. New accounts without an AppTransaction link cannot be matched to Apple transaction-consent withdrawal notices; this limitation must be considered before a normal production release. This update is being delivered to Trust Staging, with production services unchanged.
+
+
 Updated 2 October 2026. This is the current implementation record and open product gate. It is not legal advice or a claim of compliance in every jurisdiction.
 
 ## Product rule

@@ -1,0 +1,152 @@
+{
+  "sourceBase": "c70756f390342f6fc859f75eed4cb2f23c0abecc",
+  "build": "47",
+  "capturedOn": "2026-10-25 America/Los_Angeles",
+  "fixture": "DEBUG fictional demo contacts; production behavior not tested",
+  "files": [
+    {
+      "path": "ipad-13/01-map.png",
+      "dimensions": [
+        2064,
+        2752
+      ],
+      "sha256": "8c71cc9411f738ce73bf17e843dac0d95f6160ca58b94f81b497237f89e6cb83"
+    },
+    {
+      "path": "ipad-13/02-look.png",
+      "dimensions": [
+        2064,
+        2752
+      ],
+      "sha256": "d2feb03924ba3d6f45cce0762fa4dfb3bd98cc4d53ac341196fd962811dfc14e"
+    },
+    {
+      "path": "ipad-13/03-share.png",
+      "dimensions": [
+        2064,
+        2752
+      ],
+      "sha256": "e62a169b335f1dce7a11ab70a0ae10a84c5b80607fed55129a28a00350c1aeb7"
+    },
+    {
+      "path": "ipad-13/04-view.png",
+      "dimensions": [
+        2064,
+        2752
+      ],
+      "sha256": "004d5b4a762287f8ff3aaaa87396e0c04e779a4f0859e05be9c3591043b5aacb"
+    },
+    {
+      "path": "ipad-13/05-log.png",
+      "dimensions": [
+        2064,
+        2752
+      ],
+      "sha256": "32104dc83e62106ae10320ef2d7ad636b03c06e6809fd1c04553b3f62cae55b1"
+    },
+    {
+      "path": "ipad-13/06-lookup.png",
+      "dimensions": [
+        2064,
+        2752
+      ],
+      "sha256": "8a4a56129f106a22d18aa4bcd039a2c60a82424da4969ad53c9bc3ab9999531e"
+    },
+    {
+      "path": "iphone-65/01-map.png",
+      "dimensions": [
+        1242,
+        2688
+      ],
+      "sha256": "311ef09ce5934f850b405c85401df19e932846e51c996300a1e6e443b9c004a3"
+    },
+    {
+      "path": "iphone-65/02-look.png",
+      "dimensions": [
+        1242,
+        2688
+      ],
+      "sha256": "0764abb6872aaa191a563551c2983a94d92ba47d458162753f4d3f4de4115057"
+    },
+    {
+      "path": "iphone-65/03-share.png",
+      "dimensions": [
+        1242,
+        2688
+      ],
+      "sha256": "8bf9c900b62176e9f82c4b80039b5f043788cb6a1cfe9c63d6188ea51d9972aa"
+    },
+    {
+      "path": "iphone-65/04-view.png",
+      "dimensions": [
+        1242,
+        2688
+      ],
+      "sha256": "9504b25658e1248798347df6137f9aafe00842bde9956afbe9915b0ccdb6879d"
+    },
+    {
+      "path": "iphone-65/05-log.png",
+      "dimensions": [
+        1242,
+        2688
+      ],
+      "sha256": "3a9bd8151cf64daf4b3a189180b3c18194a8df70a3f9bb3f904769f8af5317e3"
+    },
+    {
+      "path": "iphone-65/06-lookup.png",
+      "dimensions": [
+        1242,
+        2688
+      ],
+      "sha256": "f02a857f97d42defbab8c25d537746bd5b8e21cd3a366ab6855891f92f307e40"
+    },
+    {
+      "path": "iphone-69/01-map.png",
+      "dimensions": [
+        1320,
+        2868
+      ],
+      "sha256": "1b50c1596d59021f1893704fd39d816d9c0a13340550eac072ebe09d4146dc81"
+    },
+    {
+      "path": "iphone-69/02-look.png",
+      "dimensions": [
+        1320,
+        2868
+      ],
+      "sha256": "6fdb7131f82dc05047c9a9e29b0ea92ee49831c415d797bb8169b88af4c6f560"
+    },
+    {
+      "path": "iphone-69/03-share.png",
+      "dimensions": [
+        1320,
+        2868
+      ],
+      "sha256": "fe0668c84c5eb5a7fe6cdfd28cb18678de52b04dabe771a6da1c8f4940e13ed7"
+    },
+    {
+      "path": "iphone-69/04-view.png",
+      "dimensions": [
+        1320,
+        2868
+      ],
+      "sha256": "57d0dcf74cba42fef8c1971d95937678dc3414044d3a49eb87a6334900033142"
+    },
+    {
+      "path": "iphone-69/05-log.png",
+      "dimensions": [
+        1320,
+        2868
+      ],
+      "sha256": "f86799c124e217f60b6483f8c006aa82adf6da72e4482c09aee94af2448a2299"
+    },
+    {
+      "path": "iphone-69/06-lookup.png",
+      "dimensions": [
+        1320,
+        2868
+      ],
+      "sha256": "59eab198708b28bad852fc9a60c9b92500ed3d3522daba32cb560f6c13d761d9"
+    }
+  ]
+}

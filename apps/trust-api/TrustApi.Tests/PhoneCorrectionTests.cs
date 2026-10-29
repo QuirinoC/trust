@@ -29,7 +29,7 @@ public sealed class PhoneCorrectionTests
         await new TrustEngine(store, clock).SignInAsync("development", Guid.NewGuid().ToString(), "Synthetic", default);
     private static string Phone() => "+1" + Random.Shared.Next(200, 800) + "555" + Random.Shared.Next(1000, 9999);
     private static PhoneVerificationService Service(ITrustStore store, Clock clock, ISmsOtpSender? sender = null) => new(store,
-        new TrustEngine(store, clock), sender ?? new Sender(), new AuthOptions { SigningKey = "phone-correction-tests-only-signing-key-at-least-32" },
+        new TrustEngine(store, clock), sender ?? new Sender(), new AuthOptions { SigningKey = "phone-correction-tests-only-signing-key-at-least-32" }, new PhoneVerificationOptions(),
         clock, new Env(), NullLogger<PhoneVerificationService>.Instance);
 
     [Theory][InlineData(false)][InlineData(true)]

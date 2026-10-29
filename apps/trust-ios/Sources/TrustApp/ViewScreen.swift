@@ -7,6 +7,9 @@ import TrustCore
 /// what just happened; the map is muted and secondary.
 struct ViewScreen: View {
     let personID: UUID
+    /// Pins already visible in the leading People map for a split layout.
+    /// Pass an empty list when the map is not on screen.
+    let leadingMapPins: [AppModel.MapPin]
     @EnvironmentObject private var model: AppModel
     @Environment(\.trustPalette) private var palette
     @State private var placeName: PlaceName?
@@ -121,7 +124,7 @@ struct ViewScreen: View {
                 }
                 .padding(.bottom, 8)
 
-                if let point {
+                if let point, !leadingMapShowsCurrentPoint(point) {
                     pinMap(point, name: member.person.displayName)
                         .padding(.bottom, 14)
                 }
@@ -140,7 +143,7 @@ struct ViewScreen: View {
                 .padding(.bottom, 18)
 
                 Button {
-                    model.circlePath = [.map]
+                    model.openMap(focusing: personID)
                 } label: {
                     Label(TrustCopy.circleMap, systemImage: "map")
                 }
@@ -202,6 +205,15 @@ struct ViewScreen: View {
         return parts.joined(separator: " · ")
     }
 
+    /// Hide the small duplicate map only when the leading People map already
+    /// shows this exact point with the same live or snapshot meaning. A newer
+    /// live point, a different snapshot, or an omitted pin keeps the detail map.
+    private func leadingMapShowsCurrentPoint(_ point: LocationPoint) -> Bool {
+        leadingMapPins.contains { pin in
+            pin.id == personID && pin.point == point && pin.live == isAvailable
+        }
+    }
+
     private func directionSummary(_ member: TrustedPerson) -> some View {
         let inbound = shareLabel(member.inboundPresentation)
         let outbound = shareLabel(model.shareState(for: member.id).presentation(at: Date()))
@@ -253,6 +265,7 @@ struct ViewScreen: View {
         .onAppear { position = .region(Self.region(for: point)) }
         .onChange(of: point) { _, next in position = .region(Self.region(for: next)) }
         .accessibilityLabel(TrustCopy.pinAccessibility(name: name, live: isAvailable))
+        .accessibilityIdentifier("view-embedded-map")
     }
 
     private static func region(for point: LocationPoint) -> MKCoordinateRegion {

@@ -1,5 +1,7 @@
 "accept_invitation" = "招待を承諾";
 "accept_request" = "リクエストを承認";
+"accessibility_collapsed" = "折りたたみ";
+"accessibility_expanded" = "展開";
 "account" = "アカウント";
 "add" = "追加";
 "add_person_explanation" = "先につながります。共有は選ぶまでオフのままです。";
@@ -68,6 +70,8 @@
 "api_handle_in_use" = "そのハンドルは使われています。";
 "api_handle_not_found" = "そのハンドルのTrustアカウントが見つかりません。";
 "api_invalid_apple_token" = "Appleはこのサインインを確認できませんでした。もう一度お試しください。";
+"api_invalid_avatar_image" = "この写真を保存できませんでした。別の写真を選んでください。";
+"api_invalid_avatar_preset" = "このプロフィール画像は利用できません。別の画像を選んでください。";
 "api_invalid_bundle" = "そのプッシュトピックはこのアプリのものではありません。";
 "api_invalid_code" = "その招待コードは一致しません。";
 "api_invalid_device" = "プッシュトークンとインストールIDが必要です。";
@@ -118,12 +122,19 @@
 "avatar" = "動物";
 "avatar_bear" = "クマ";
 "avatar_british_shorthair" = "ブリティッシュショートヘア";
+"avatar_camera_access_unavailable" = "カメラにアクセスできません。";
+"avatar_camera_unavailable_message" = "このデバイスではカメラを利用できません。";
 "avatar_cat" = "ネコ";
 "avatar_dog" = "イヌ";
 "avatar_fox" = "キツネ";
 "avatar_icon_accessibility" = "%@ アイコン";
+"avatar_initials_value" = "イニシャル";
 "avatar_otter" = "カワウソ";
 "avatar_owl" = "フクロウ";
+"avatar_photo_open_error" = "この写真を開けませんでした。別の写真を選んでください。";
+"avatar_photo_prepare_error" = "この写真を準備できませんでした。別の写真を選んでください。";
+"avatar_photo_value" = "写真";
+"avatar_preparing_photo" = "写真を準備しています…";
 "avatar_rabbit" = "ウサギ";
 "avatar_ragdoll" = "ラグドール";
 "avatar_siamese" = "シャムネコ";
@@ -188,6 +199,7 @@
 "done" = "完了";
 "edit_phone" = "編集";
 "edit_profile_picture" = "プロフィール写真を編集";
+"enable_alerts" = "通知を有効にする";
 "enter_a_code" = "コードを入力";
 "enter_handle" = "続けるにはハンドルを入力してください。";
 "enter_phone" = "電話番号を入力してください。";
@@ -294,6 +306,7 @@
 "map" = "地図";
 "map_accessibility" = "地図。相手がAlwaysで共有している場合、ライブピンが表示されます。";
 "map_empty_body" = "相手がAlwaysで共有している場合、ライブピンが表示されます。";
+"map_focus_unavailable" = "この人の位置情報はこの地図では利用できません。";
 "map_legend" = "Always";
 "map_sealed_hint" = "相手がAlwaysで共有している場合、ライブピンが表示されます。";
 "messages_unavailable" = "ここではメッセージを利用できません。招待リンクをコピーしました。";
@@ -311,7 +324,15 @@
 "not_sharing" = "共有していません";
 "not_sharing_with_you" = "あなたに共有していません";
 "notification" = "通知";
+"notifications_allowed" = "許可済み";
+"notifications_body" = "TrustはLookと共有中の帰宅について通知をリクエストすることがあります。通知の配信は保証されません。アクティビティにはLookとViewが記録されます。";
+"notifications_check_settings" = "設定を確認";
+"notifications_heading" = "通知";
+"notifications_not_enabled" = "未設定";
 "notifications_off" = "設定で通知がオフです。Lookは引き続きログに表示されます。";
+"notifications_off_in_settings" = "設定でオフ";
+"notifications_quietly_allowed" = "静かに配信";
+"notifications_requesting" = "アクセスをリクエスト中…";
 "now" = "今";
 "off" = "オフ";
 "offline" = "オフライン";
@@ -326,9 +347,10 @@
 "open_settings" = "設定を開く";
 "optional_avatar_intro" = "任意 · 動物アイコンまたは写真を選択";
 "pause" = "一時停止";
-"pause_returns" = "相手のアクセスを一時停止し、選択した時間の後に%@に戻します。";
+"pause_accessibility_title" = "%@さんとの共有を一時停止";
+"pause_returns" = "共有を一時停止し、その後 %@ で再開します。";
 "pause_sharing" = "一時停止";
-"pause_title" = "%@さんとの共有を一時停止";
+"pause_title" = "%@を一時停止";
 "pause_until" = "%@まで一時停止。%@に戻ります。";
 "people" = "つながり";
 "people_count_accessibility" = "%d人";
@@ -345,6 +367,9 @@
 "phone_invite_message_body" = "Trust が招待リンク付きのメッセージを準備します。「メッセージ」で送信をタップした場合のみ送信されます。";
 "phone_lookup_country_code_hint" = "国番号を含む完全な電話番号を入力してください。";
 "phone_number" = "電話番号";
+"phone_country_code_title" = "国番号";
+"phone_country_search" = "国または国番号を検索";
+"phone_country_accessibility" = "国%@、国番号%@";
 "phone_placeholder" = "(415) 555-0100";
 "phone_request_pending" = "しばらくお待ちください…";
 "phone_resend_countdown" = "%@後に再送信";
@@ -375,6 +400,7 @@
 "presence" = "ステータス";
 "presence_away" = "外出中";
 "presence_away_copy" = "自宅にいないとき「外出」と表示されます。";
+"presence_grant_details" = "自宅／外出について";
 "presence_grant_explanation" = "共有するのはステータスのみで、位置情報ではありません。共有中は自宅到着の通知も許可します。オフ、一時停止、非表示では通知されません。";
 "presence_grant_label" = "%@に自宅か外出中かを知らせる";
 "presence_grant_updated" = "自宅／外出ステータスの共有設定を更新しました。";
@@ -409,6 +435,7 @@
 "request_sent" = "リクエストを送信しました";
 "resend_code" = "コードを再送信";
 "restore_purchases" = "購入を復元";
+"resume_paused_mode" = "%@に戻す";
 "retry" = "再試行";
 "review_requests" = "リクエストを確認";
 "row_available" = "%@ · Available";
@@ -453,6 +480,7 @@
 "sharing_requests_accessibility" = "%@、受信リクエスト%d件";
 "sharing_stopped" = "%@さんとの位置情報共有を停止しました。";
 "sharing_sub" = "相手ごとに、あなたについて見られる内容を設定します。";
+"sharing_tab_title" = "共有";
 "show_on_map" = "%@さんを地図に表示";
 "sign_in_expired" = "サインインの期限が切れました。もう一度サインインしてください。";
 "sign_in_in_progress" = "別のサインインが進行中です。";

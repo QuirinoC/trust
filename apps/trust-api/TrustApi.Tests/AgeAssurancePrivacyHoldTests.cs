@@ -78,7 +78,7 @@ public sealed class AgeAssurancePrivacyHoldTests
         var look = await Assert.ThrowsAsync<TrustException>(() => engine.ViewAsync(viewer.Id, held.Id, CancellationToken.None));
         Assert.Equal("not_connected", look.Code);
 
-        var filter = new RevokedAccountEndpointFilter(ageAssurance, store, new TestHostEnvironment("Production"));
+        var filter = new RevokedAccountEndpointFilter(ageAssurance);
         Assert.True(await filter.ShouldBlockForPrivacyHoldAsync(held.Id, "GET", "/api/v1/circle", CancellationToken.None));
         Assert.True(await filter.ShouldBlockForPrivacyHoldAsync(held.Id, "POST", "/api/v1/location", CancellationToken.None));
         Assert.False(await filter.ShouldBlockForPrivacyHoldAsync(held.Id, "DELETE", "/api/v1/account", CancellationToken.None));
@@ -131,14 +131,6 @@ public sealed class AgeAssurancePrivacyHoldTests
     private sealed class FrozenTimeProvider(DateTimeOffset now) : TimeProvider
     {
         public override DateTimeOffset GetUtcNow() => now;
-    }
-
-    private sealed class TestHostEnvironment(string environmentName) : Microsoft.Extensions.Hosting.IHostEnvironment
-    {
-        public string EnvironmentName { get; set; } = environmentName;
-        public string ApplicationName { get; set; } = "TrustApi.Tests";
-        public string ContentRootPath { get; set; } = AppContext.BaseDirectory;
-        public Microsoft.Extensions.FileProviders.IFileProvider ContentRootFileProvider { get; set; } = new Microsoft.Extensions.FileProviders.NullFileProvider();
     }
 
     private sealed class CountingPushDeviceStore : IPushDeviceStore

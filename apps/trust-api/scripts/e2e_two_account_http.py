@@ -5,7 +5,7 @@ Usage:
   python3 apps/trust-api/scripts/e2e_two_account_http.py
 
 Env:
-  TRUST_API_BASE   required; use the isolated local API on http://127.0.0.1:5090
+  TRUST_API_BASE   required; use an isolated local Development API (this run uses :55088)
   TRUST_PG_*       for pause restore + presence delete checks via docker exec
 """
 
@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 import urllib.error
@@ -24,6 +25,7 @@ from typing import Any
 
 BASE = os.environ.get("TRUST_API_BASE", "").rstrip("/")
 PG_CONTAINER = os.environ.get("TRUST_PG_CONTAINER", "trust-api-postgres-1")
+PG_DATABASE = os.environ.get("TRUST_PG_DATABASE", "trust")
 CREATED_SESSIONS: list[tuple[str, str]] = []
 
 PASS = 0
@@ -92,6 +94,8 @@ def check(item: str, assertion: str, ok: bool, detail: str = "") -> None:
 
 
 def psql(sql: str) -> str:
+    if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,62}", PG_DATABASE) is None:
+        raise ValueError("TRUST_PG_DATABASE must be a PostgreSQL identifier using ASCII letters, digits, or underscores.")
     cmd = [
         "docker",
         "exec",
@@ -101,7 +105,7 @@ def psql(sql: str) -> str:
         "-U",
         "trust",
         "-d",
-        "trust",
+        PG_DATABASE,
         "-At",
         "-c",
         sql,
@@ -163,6 +167,12 @@ def grant_plus(token: str) -> None:
 
 
 def main() -> int:
+    if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,62}", PG_DATABASE) is None:
+        print(
+            "Refusing to run: TRUST_PG_DATABASE must be a PostgreSQL identifier using ASCII letters, digits, or underscores.",
+            file=sys.stderr,
+        )
+        return 2
     if not BASE:
         print("Refusing to run: set TRUST_API_BASE to the isolated loopback API at http://127.0.0.1:5090.", file=sys.stderr)
         return 2
@@ -171,7 +181,7 @@ def main() -> int:
     if (
         parsed_base.scheme != "http"
         or parsed_base.hostname not in {"127.0.0.1", "localhost", "::1"}
-        or parsed_base.port != 5090
+        or parsed_base.port not in {5090, 55088}
         or parsed_base.username is not None
         or parsed_base.password is not None
         or parsed_base.path not in {"", "/"}
@@ -179,8 +189,8 @@ def main() -> int:
         or parsed_base.fragment
     ):
         print(
-            "Refusing to run: destructive E2E checks require exactly the isolated local API on port 5090 "
-            "(http://127.0.0.1:5090).",
+            "Refusing to run: destructive E2E checks require the isolated local API on port 5090 or 55088 "
+            "(http://127.0.0.1:5090 or http://127.0.0.1:55088).",
             file=sys.stderr,
         )
         return 2
@@ -197,6 +207,71 @@ def main() -> int:
 
     unauth_status, _ = req("GET", "/api/v1/circle")
     check("setup", "circle endpoint requires authentication", unauth_status == 401, f"status={unauth_status}")
+
+    # Verify a fictional 555-01xx destination through the real HTTP API. Development
+    # OTP is available only because this isolated server has no SMS provider configured.
+    # Never configure a provider for this flow: no real SMS should be sent.
+    # Keep retries isolated from the cross-account destination pacing budget while
+    # staying inside the fictional North American 555-0100..0199 range.
+    test_phone = f"+155555501{int(suffix[-4:], 16) % 100:02d}"
+    send_status, phone_challenge = req(
+        "POST",
+        "/api/v1/me/phone/send",
+        token=sam_tok,
+        body={"phone": test_phone, "consentVersion": 1, "consentAction": "send_code"},
+    )
+    development_code = phone_challenge.get("developmentCode") if isinstance(phone_challenge, dict) else None
+    consent_row_count = psql(
+        f"SELECT count(*)::text FROM trust.phone_sms_consent_events "
+        f"WHERE account_id = '{sam_id}' AND phone_e164 = '{test_phone}' "
+        "AND disclosure_key = 'phone_consent_details' AND disclosure_version = 1 "
+        "AND action = 'send_code' AND source = 'ios_phone_verification';"
+    )
+    check(
+        "Phone verification",
+        "fictional number gets a Development code and consent is persisted before completion",
+        send_status == 200 and isinstance(development_code, str) and len(development_code) == 6
+        and consent_row_count == "1",
+        f"status={send_status} consent_rows={consent_row_count}",
+    )
+    wrong_code_status, wrong_code = req(
+        "POST",
+        "/api/v1/me/phone/verify",
+        token=sam_tok,
+        body={"phone": test_phone, "code": "000000" if development_code != "000000" else "000001"},
+    )
+    check(
+        "Phone verification",
+        "wrong verification code is rejected without verifying the number",
+        wrong_code_status == 400 and isinstance(wrong_code, dict) and wrong_code.get("code") == "otp_invalid",
+        f"status={wrong_code_status} error={wrong_code.get('code') if isinstance(wrong_code, dict) else None}",
+    )
+    verify_status, _ = req(
+        "POST",
+        "/api/v1/me/phone/verify",
+        token=sam_tok,
+        body={"phone": test_phone, "code": development_code},
+    )
+    check(
+        "Phone verification",
+        "correct Development code verifies only Sam's account",
+        verify_status == 204,
+        f"status={verify_status}",
+    )
+    other_account_status, other_account_error = req(
+        "POST",
+        "/api/v1/me/phone/send",
+        token=jordan_tok,
+        body={"phone": test_phone, "consentVersion": 1, "consentAction": "send_code"},
+    )
+    check(
+        "Phone verification",
+        "a second account cannot claim another account's verified number",
+        other_account_status == 409 and isinstance(other_account_error, dict)
+        and other_account_error.get("code") == "phone_unavailable",
+        f"status={other_account_status} error={other_account_error.get('code') if isinstance(other_account_error, dict) else None}",
+    )
+
     initial_sam = circle(sam_tok)
     initial_jordan = circle(jordan_tok)
     check(
