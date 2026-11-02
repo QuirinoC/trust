@@ -68,6 +68,7 @@ class EmbeddedSimulatorEntitlementTests(unittest.TestCase):
             (
                 "testRealSandboxAPNsForegroundAndBackgroundLookRoute",
                 "testRealSandboxAPNsNotificationSettingsRecovery",
+                "testSimulatorBackgroundLocationReachesAPIWithoutForegrounding",
             ),
         )
 

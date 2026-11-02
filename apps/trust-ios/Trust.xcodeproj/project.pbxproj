@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A102030405060708090A0B0C /* SimulatorAppleServiceProbeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A102030405060708090A0B0B /* SimulatorAppleServiceProbeTests.swift */; };
 		00585D58BD36F3EFA822DA36 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 63242874F15C117B93D74C2D /* InfoPlist.strings */; };
 		01A53691B52FF4373F7E12C4 /* AccountHelpSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 828AE558DCB8F024B5255767 /* AccountHelpSheet.swift */; };
 		02D061F3EB0697F1197F546A /* TrustClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C0D44DBC8538A89711936F4 /* TrustClient.swift */; };
@@ -198,6 +199,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		A102030405060708090A0B0B /* SimulatorAppleServiceProbeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SimulatorAppleServiceProbeTests.swift; sourceTree = "<group>"; };
 		057F2F9B693A9E0A942980E1 /* TrustSignInFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrustSignInFlowTests.swift; sourceTree = "<group>"; };
 		08790634D294CA76972CD49E /* TrustInternal.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = TrustInternal.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		09A50789FA9420E08F581CBC /* PhoneView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneView.swift; sourceTree = "<group>"; };
@@ -352,6 +354,7 @@
 		32684315B9D6E187EA13538B /* TrustServiceUITests */ = {
 			isa = PBXGroup;
 			children = (
+				A102030405060708090A0B0B /* SimulatorAppleServiceProbeTests.swift */,
 				4302226952571B448B50AAFB /* RealPushAPNSE2ETests.swift */,
 			);
 			path = TrustServiceUITests;
@@ -744,6 +747,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A102030405060708090A0B0C /* SimulatorAppleServiceProbeTests.swift in Sources */,
 				FA3CFD102051BDDE97FBCCA0 /* RealPushAPNSE2ETests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

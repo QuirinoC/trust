@@ -19,6 +19,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -39,6 +40,7 @@ TEST_CASE = "testRealSandboxAPNsForegroundAndBackgroundLookRoute"
 TEST_CASES = (
     TEST_CASE,
     "testRealSandboxAPNsNotificationSettingsRecovery",
+    "testSimulatorBackgroundLocationReachesAPIWithoutForegrounding",
 )
 TEST_CLASS = "RealPushAPNSE2ETests"
 APNS_ENV_NAMES = (
@@ -274,10 +276,14 @@ def main(argv: list[str] | None = None) -> int:
             args.products, args.xctestrun, output, args.developer_dir, settings["Apns__TeamId"]
         )
         run_xctestrun = copied_xctestrun.with_name("RealPush.runner.xctestrun")
+        location_pair_id = uuid.uuid4().hex[:8]
+        runner_environment = {"TRUST_UI_TEST_BASE_URL": PROXY_URL, "TRUST_REAL_PUSH_E2E": "1"}
+        if args.case == "testSimulatorBackgroundLocationReachesAPIWithoutForegrounding":
+            runner_environment["TRUST_BACKGROUND_LOCATION_PAIR_ID"] = location_pair_id
         module.inject_runner_environment(
             copied_xctestrun,
             run_xctestrun,
-            {"TRUST_UI_TEST_BASE_URL": PROXY_URL, "TRUST_REAL_PUSH_E2E": "1"},
+            runner_environment,
             target_name=TEST_TARGET,
         )
         raw_spec = run_xctestrun.read_bytes()
@@ -294,6 +300,9 @@ def main(argv: list[str] | None = None) -> int:
         )
         database_connection = module.connection_with_database(args.postgres_connection, database.name)
         services = None
+        location_controller_error: list[str] = []
+        location_controller: threading.Thread | None = None
+        location_controller_cancel = threading.Event()
         result_bundle = output / "RealPushAPNS.xcresult"
         try:
             extra_api_environment = dict(settings)
@@ -316,6 +325,38 @@ def main(argv: list[str] | None = None) -> int:
             )
             wait_for_api(services.api, services.proxy, module)
 
+            if args.case == "testSimulatorBackgroundLocationReachesAPIWithoutForegrounding":
+                subprocess.run(
+                    ["xcrun", "simctl", "location", args.device, "set", "12.345678,-45.678901"],
+                    cwd=IOS, env=dict(os.environ, DEVELOPER_DIR=args.developer_dir),
+                    capture_output=True, text=True, check=True, timeout=30,
+                )
+
+                def drive_background_location() -> None:
+                    # Allow the UI test to finish native permission setup and its
+                    # foreground baseline before it signals the background phase.
+                    deadline = time.monotonic() + 180
+                    try:
+                        while not location_controller_cancel.is_set() and time.monotonic() < deadline:
+                            state = module.http_json(PROXY_URL + "/__test/state")
+                            stages = (state.get("pair_location_stages") or {}).get(location_pair_id, {})
+                            if stages.get("first-home-ready") is True:
+                                subprocess.run(
+                                    ["xcrun", "simctl", "location", args.device, "set", "12.355678,-45.678901"],
+                                    cwd=IOS, env=dict(os.environ, DEVELOPER_DIR=args.developer_dir),
+                                    capture_output=True, text=True, check=True, timeout=30,
+                                )
+                                return
+                            location_controller_cancel.wait(0.2)
+                        if not location_controller_cancel.is_set():
+                            raise PushRunnerError("The background location marker did not arrive within 180 seconds.")
+                    except Exception as exc:
+                        location_controller_error.append(str(exc))
+
+                location_controller = threading.Thread(target=drive_background_location,
+                                                      name="trust-background-location", daemon=True)
+                location_controller.start()
+
             command = [
                 "xcodebuild", "test-without-building", "-xctestrun", str(run_xctestrun),
                 "-destination", module.test_dest(args.device),
@@ -334,22 +375,45 @@ def main(argv: list[str] | None = None) -> int:
                 check=False,
             )
             (output / "xcodebuild.log").write_text((run.stdout or "") + (run.stderr or ""), encoding="utf-8")
+            if location_controller is not None:
+                location_controller_cancel.set()
+                location_controller.join(timeout=35)
+                if location_controller.is_alive():
+                    location_controller_error.append("The simulator location controller did not stop after the XCTest.")
+                if location_controller_error:
+                    (output / "background-location-controller-error.txt").write_text(
+                        "\n".join(location_controller_error) + "\n", encoding="utf-8")
             if not result_bundle.exists():
                 raise PushRunnerError("Xcode produced no result bundle; inspect the retained xcodebuild log.")
             summary = module.result_summary(result_bundle, args.developer_dir)
             module.validate_result(summary, result_bundle)
             module.validate_single_case(summary, result_bundle, args.case, args.developer_dir)
             if run.returncode != 0:
-                raise PushRunnerError("The genuine APNs XCTest failed; see the xcresult bundle and xcodebuild log.")
-            (output / "evidence-mode.txt").write_text(
-                "Real sandbox APNs via local Development API and fresh disposable PostgreSQL; "
-                "fictional accounts; Development OTP with Twilio cleared; pre-signed Debug app "
-                "with simulator development APNs entitlement; no simctl push.\n",
-                encoding="utf-8",
-            )
-            print(f"Genuine APNs XCTest passed: {result_bundle}")
+                detail = " Background simulator location control also failed; see its retained diagnostic." if location_controller_error else ""
+                test_kind = "The genuine APNs XCTest" if args.case != "testSimulatorBackgroundLocationReachesAPIWithoutForegrounding" else "The simulator background location XCTest"
+                raise PushRunnerError(test_kind + " failed; see the xcresult bundle and xcodebuild log." + detail)
+            if location_controller_error:
+                raise PushRunnerError("Background simulator location control failed after XCTest diagnostics were retained; see the xcresult bundle, xcodebuild log, and controller diagnostic.")
+            if args.case == "testSimulatorBackgroundLocationReachesAPIWithoutForegrounding":
+                evidence = (
+                    "Native CoreLocation into local Development API and fresh disposable PostgreSQL; "
+                    "fictional accounts and simulator coordinates; Development OTP with Twilio cleared; "
+                    "pre-signed Debug app; simctl changed only the simulator's fictional coordinate.\n"
+                )
+                print(f"Simulator background location XCTest passed: {result_bundle}")
+            else:
+                evidence = (
+                    "Real sandbox APNs via local Development API and fresh disposable PostgreSQL; "
+                    "fictional accounts; Development OTP with Twilio cleared; pre-signed Debug app "
+                    "with simulator development APNs entitlement; no simctl push.\n"
+                )
+                print(f"Genuine APNs XCTest passed: {result_bundle}")
+            (output / "evidence-mode.txt").write_text(evidence, encoding="utf-8")
             return 0
         finally:
+            location_controller_cancel.set()
+            if location_controller is not None and location_controller.is_alive():
+                location_controller.join(timeout=35)
             if services is not None:
                 try:
                     urllib.request.urlopen(PROXY_URL + "/__test/release", timeout=1).close()

@@ -1,6 +1,6 @@
 # Trust Staging: two-iPhone acceptance
 
-**Execution status: not run.** Use **Trust Staging 1.0 (51)**, application source `65d9d0528c400161d2f85860b6071f3202b368db`. Apple verified it VALID, INTERNAL_ONLY and IN_BETA_TESTING in the existing three-tester group. Build 50 predates the automatic-handle flow and is not suitable for this procedure. StoreKit purchases, staging APNs delivery and two real-device acceptance remain to be observed.
+**Execution status: not run.** Use **Trust Staging 1.0 (51)**, application source `65d9d0528c400161d2f85860b6071f3202b368db`. Apple verified it VALID, INTERNAL_ONLY and IN_BETA_TESTING in the existing three-tester group. Build 50 predates the automatic-handle flow and is not suitable for this procedure. StoreKit purchases, staging APNs delivery and two real-device acceptance remain to be observed. Additional simulator checks passed genuine development APNs, notification Settings recovery, and background CoreLocation with fictional movement. The native Staging catalog loaded, but positive Apple sign-in/purchase/restore still requires an Apple Account login; see [the evidence report](evidence/2026-11-01-customer-experience/DEVICE-ACCOUNT-REPORT.md).
 
 Use two adult testers with distinct Apple Accounts and real iPhones. Select two of the three approved testers; these are the only two reserved phone numbers available concurrently for the automatic, no-SMS flow. Do not swap the assigned numbers between accounts during the run. Assign them as follows:
 

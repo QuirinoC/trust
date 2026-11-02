@@ -256,6 +256,106 @@ final class RealPushAPNSE2ETests: XCTestCase {
         attachScreenshot("Settings recovery APNs receipt in Activity", from: app)
     }
 
+    func testSimulatorBackgroundLocationReachesAPIWithoutForegrounding() throws {
+        let suffix = String(UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(8)).lowercased()
+        let mainName = "LocationMain\(suffix)"
+        let peerName = "LocationPeer\(suffix)"
+        let main = try XCTUnwrap(api.createOnboardedAccount(
+            name: mainName, deviceID: "location-main-\(suffix)", handle: "lm\(suffix)",
+            phone: "+155555501\(String(format: "%02d", Int(suffix.prefix(2), radix: 16)! % 100))"
+        ))
+        let peer = try XCTUnwrap(api.createOnboardedAccount(
+            name: peerName, deviceID: "location-peer-\(suffix)", handle: "lp\(suffix)",
+            phone: "+155555501\(String(format: "%02d", (Int(suffix.prefix(2), radix: 16)! + 1) % 100))"
+        ))
+        defer {
+            api.deleteAccount(token: peer.token)
+            api.deleteAccount(token: main.token)
+        }
+        XCTAssertEqual(api.createConnectionRequest(recipientID: main.personID, token: peer.token), 200)
+        let incoming = try XCTUnwrap(api.connectionRequests(token: main.token)?["incoming"] as? [[String: Any]])
+            .first(where: { ($0["otherParty"] as? [String: Any])?["accountId"] as? String == peer.personID })
+        XCTAssertEqual(api.acceptConnectionRequest(id: try XCTUnwrap(incoming?["id"] as? String), token: main.token), 204)
+
+        let app = launchDevelopmentApp(deviceID: "location-main-\(suffix)", displayName: mainName)
+        defer { app.terminate() }
+        XCTAssertTrue(app.buttons["tab-you"].waitForExistence(timeout: 30), app.debugDescription)
+        app.buttons["tab-you"].tap()
+        app.buttons["my-location"].tap()
+        app.buttons["home-set-button"].tap()
+
+        // Setting a home place is an explicit UI action that requests While Using.
+        // The location permission action then asks the system to upgrade to Always.
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        let whileUsing = springboard.alerts.buttons.matching(
+            NSPredicate(format: "label CONTAINS[c] %@", "While Using")
+        ).firstMatch
+        XCTAssertTrue(whileUsing.waitForExistence(timeout: 15), springboard.debugDescription)
+        whileUsing.tap()
+        let permissionAction = app.buttons["location-permission-action"]
+        XCTAssertTrue(permissionAction.waitForExistence(timeout: 15), app.debugDescription)
+        permissionAction.tap()
+        let always = springboard.alerts.buttons.matching(
+            NSPredicate(format: "label CONTAINS[c] %@", "Always")
+        ).firstMatch
+        XCTAssertTrue(always.waitForExistence(timeout: 15), springboard.debugDescription)
+        always.tap()
+        XCTAssertTrue(waitUntil(timeout: 15) {
+            app.staticTexts["location-permission-status"].exists
+                && app.staticTexts["location-permission-status"].label.localizedCaseInsensitiveContains("always")
+        }, "Trust should report native Always authorization after the explicit system choice.\n\(app.debugDescription)")
+
+        let done = app.buttons["Done"]
+        if done.exists && done.isHittable { done.tap() }
+        let sharing = app.buttons["tab-sharing"]
+        XCTAssertTrue(sharing.waitForExistence(timeout: 10), app.debugDescription)
+        sharing.tap()
+        let sealed = app.buttons["sharing-mode-sealed-\(peerName.lowercased())"]
+        XCTAssertTrue(sealed.waitForExistence(timeout: 20), app.debugDescription)
+        sealed.tap()
+        let consent = app.buttons["first-share-confirm"]
+        XCTAssertTrue(consent.waitForExistence(timeout: 10), app.debugDescription)
+        consent.tap()
+        XCTAssertTrue(waitUntil(timeout: 20) { api.isShareActive(personID: main.personID, peer: peer) },
+                      "The UI-selected Sealed share should become active before location collection.")
+        XCTAssertTrue(waitUntil(timeout: 45) {
+            api.latestLocation(subjectID: main.personID, token: peer.token) != nil
+        }, "A real CoreLocation fix should reach the backend before backgrounding.")
+        let baseline = try XCTUnwrap(api.latestLocation(subjectID: main.personID, token: peer.token))
+        attachText("Background location baseline from peer Look", String(describing: baseline))
+
+        XCUIDevice.shared.press(.home)
+        XCTAssertTrue(waitUntil(timeout: 15) { isBackgroundWithoutForegrounding(app) },
+                      "Trust must remain backgrounded before the simulator location changes.")
+        let pairID = try XCTUnwrap(ProcessInfo.processInfo.environment["TRUST_BACKGROUND_LOCATION_PAIR_ID"])
+        XCTAssertTrue(api.markBackgroundLocationReady(pairID: pairID), "The host runner must acknowledge the background location stage.")
+
+        let advanced = waitUntil(timeout: 75) {
+            guard isBackgroundWithoutForegrounding(app),
+                  let point = api.latestLocation(subjectID: main.personID, token: peer.token),
+                  let latitude = point["latitude"] as? Double,
+                  let longitude = point["longitude"] as? Double,
+                  let timestamp = point["timestamp"] as? String,
+                  let date = parseAPITimestamp(timestamp),
+                  let baselineDate = (baseline["timestamp"] as? String).flatMap(parseAPITimestamp)
+            else { return false }
+            return abs(latitude - 12.355678) < 0.0001 && abs(longitude - -45.678901) < 0.0001
+                && date > baselineDate
+        }
+        XCTAssertTrue(advanced, "Peer Look never observed the simulator's changed point with a newer timestamp while Trust stayed backgrounded.\n\(app.debugDescription)")
+        attachText("Background location advanced from peer Look", "Trust remained backgrounded; peer Look observed 12.355678,-45.678901 with a timestamp later than the foreground baseline.")
+    }
+
+    private func isBackgroundWithoutForegrounding(_ app: XCUIApplication) -> Bool {
+        switch app.state {
+        case .runningBackground, .runningBackgroundSuspended:
+            return true
+        default:
+            // In particular, runningForeground never satisfies this condition.
+            return false
+        }
+    }
+
     private func activityEvent(in app: XCUIApplication, id: UUID) -> XCUIElement {
         app.descendants(matching: .any)
             .matching(identifier: "activity-event-\(id.uuidString)")
@@ -500,26 +600,23 @@ final class RealPushAPNSE2ETests: XCTestCase {
         app.launchEnvironment["TRUST_UI_TEST_DISPLAY_NAME"] = displayName
         app.launchEnvironment["TRUST_DEV_SESSION"] = "1"
         app.launchEnvironment["TRUST_UI_TEST_RESET_AUTH"] = "1"
-        app.launchEnvironment["TRUST_AGE_TEST_MODE"] = "1"
-        app.launchEnvironment["TRUST_AGE_TEST_RESET_STATE"] = "1"
         app.launch()
         app.launchEnvironment.removeValue(forKey: "TRUST_UI_TEST_RESET_AUTH")
-        app.launchEnvironment.removeValue(forKey: "TRUST_AGE_TEST_RESET_STATE")
 
-        let month = app.textFields["age-birth-month"]
-        XCTAssertTrue(month.waitForExistence(timeout: 15), app.debugDescription)
-        for (field, value) in [
-            (month, "01"),
-            (app.textFields["age-birth-day"], "01"),
-            (app.textFields["age-birth-year"], "1990")
-        ] {
-            field.tap()
-            field.typeText(value)
-        }
-        let continueButton = app.buttons["age-gate-continue"]
-        XCTAssertTrue(waitUntil(timeout: 5) { continueButton.isEnabled }, app.debugDescription)
-        continueButton.tap()
-        XCTAssertTrue(app.buttons["tab-circle"].waitForExistence(timeout: 45), app.debugDescription)
+        let peopleTab = app.buttons["tab-circle"]
+        XCTAssertTrue(peopleTab.waitForExistence(timeout: 45), app.debugDescription)
+        XCTAssertFalse(app.staticTexts["age-gate-title"].exists,
+                       "The seeded account should complete the current age flow automatically.\n\(app.debugDescription)")
+        XCTAssertFalse(app.staticTexts["app-transaction-title"].exists,
+                       "App transaction gates should not block the seeded account.\n\(app.debugDescription)")
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label == %@", "People")).firstMatch.waitForExistence(timeout: 15),
+                      "The People screen should be reachable after automatic account completion.\n\(app.debugDescription)")
+        let youTab = app.buttons["tab-you"]
+        XCTAssertTrue(youTab.exists && youTab.isHittable, app.debugDescription)
+        youTab.tap()
+        XCTAssertTrue(app.buttons["my-location"].waitForExistence(timeout: 10),
+                      "The current You screen should remain reachable.\n\(app.debugDescription)")
+        peopleTab.tap()
         return app
     }
 
@@ -530,6 +627,12 @@ final class RealPushAPNSE2ETests: XCTestCase {
             RunLoop.current.run(until: Date().addingTimeInterval(0.2))
         }
         return condition()
+    }
+
+    private func parseAPITimestamp(_ value: String) -> Date? {
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return fractional.date(from: value) ?? ISO8601DateFormatter().date(from: value)
     }
 
     private func waitForStableHitTarget(_ element: XCUIElement, timeout: TimeInterval) -> Bool {
@@ -566,6 +669,7 @@ private struct RealPushAPIResponse {
 private final class RealPushTestAPI {
     private let baseURL: URL
     private let session = URLSession(configuration: .ephemeral)
+    private var lastPeerLocationLook = Date.distantPast
 
     init(baseURL: String) {
         self.baseURL = URL(string: baseURL)!
@@ -655,6 +759,33 @@ private final class RealPushTestAPI {
         guard let state = request("GET", "/__test/state").body as? [String: Any],
               let count = state["sandbox_push_registration_ack_count"] as? Int else { return 0 }
         return count
+    }
+
+    func isShareActive(personID: String, peer: RealPushSession) -> Bool {
+        guard let members = circle(token: peer.token)?["members"] as? [[String: Any]],
+              let member = members.first(where: { ($0["person"] as? [String: Any])?["id"] as? String == personID }),
+              let inboundShare = member["inboundShare"] as? [String: Any] else { return false }
+        return inboundShare["presentation"] as? String == "untilTheyLook"
+    }
+
+    func latestLocation(subjectID: String, token: String) -> [String: Any]? {
+        let delay = 5 - Date().timeIntervalSince(lastPeerLocationLook)
+        if delay > 0 { Thread.sleep(forTimeInterval: delay) }
+        lastPeerLocationLook = Date()
+        let response = request("POST", "/api/v1/looks", token: token,
+                               body: ["subjectId": subjectID, "confirmed": true])
+        guard response.status == 200,
+              let session = response.body as? [String: Any],
+              let live = session["live"] as? [String: Any] else { return nil }
+        return live
+    }
+
+    func markBackgroundLocationReady(pairID: String) -> Bool {
+        let response = request("POST", "/__test/pair-location", body: [
+            "pairId": pairID, "stage": "first-home-ready"
+        ])
+        return response.status == 200
+            && (response.body as? [String: Any])?["updated"] as? Bool == true
     }
 
     func deleteAccount(token: String) {

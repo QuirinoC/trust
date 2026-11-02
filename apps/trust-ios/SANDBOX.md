@@ -8,7 +8,7 @@ The `Trust` and `Trust.LocalE2E` schemes use [`Resources/Trust.storekit`](Resour
 
 The release E2E runner starts a Development API and a loopback-only proxy. It uses Memory by default or creates a new disposable PostgreSQL database per API session when explicitly configured. These modes validate app/API behavior against local services, not a production backend. See [the local E2E guide](../../docs/LOCAL-TWO-ACCOUNT-E2E.md) for runner usage and current results.
 
-Several UI tests use the app’s DEBUG age-assurance fixture. The runner can also enable a Development-only synthetic review entitlement fixture with `--allow-review-fixture`. Both are labeled in the run evidence; neither performs Apple age assurance or an App Store transaction.
+Some historical UI tests retain the app’s DEBUG age-assurance fixture. Current RealServices setup goes directly to People for a fully seeded verified account and explicitly rejects the paused age/app-transaction screens; do not restore the old required birth-date entry from historical build-49 tests. The runner can also enable a Development-only synthetic review entitlement fixture with `--allow-review-fixture`. Both are labeled in the run evidence; neither performs Apple age assurance or an App Store transaction.
 
 Local Development OTP and reserved fictional numbers bypass carrier delivery. Twilio test credentials can exercise supported API validation and simulate responses, but they do not send messages to real numbers or trigger message status callbacks. [Twilio: Test credentials](https://www.twilio.com/docs/iam/test-credentials)
 
@@ -16,7 +16,7 @@ Local Development OTP and reserved fictional numbers bypass carrier delivery. Tw
 
 Apple’s App Store Sandbox uses App Store Connect products and Sandbox Apple Accounts. Transactions are simulated by Apple and do not incur charges. TestFlight also uses Apple’s Sandbox environment for in-app purchases. These paths use Apple’s transaction infrastructure, unlike Xcode’s local `.storekit` file. [Apple: Testing In-App Purchases with Sandbox](https://developer.apple.com/documentation/storekit/testing-in-app-purchases-with-sandbox) · [Apple: Testing at all stages](https://developer.apple.com/documentation/storekit/testing-at-all-stages-of-development-with-xcode-and-the-sandbox)
 
-Build 49 is available through TestFlight. That availability alone is not evidence of a completed Sandbox purchase or restore. The `Trust-Sandbox` scheme has no local StoreKit configuration and is intended for an explicitly configured physical-device/API test. Keep credentials and real hostnames out of source control.
+Trust Staging build 51 is available through internal TestFlight. Availability alone is not evidence of a completed Sandbox purchase or restore. The `Trust-Sandbox` scheme has no local StoreKit configuration and is intended for an explicitly configured physical-device/API test. Keep credentials and real hostnames out of source control.
 
 ## Push notification evidence
 
@@ -28,7 +28,7 @@ The separate foreground/background delivery case passed **1/1, 0 skipped, 0 fail
 
 ### Running the genuine APNs simulator lane
 
-The `Trust.RealServices` scheme builds a separate UI-test target. The runner consumes an existing signed Debug simulator build, verifies its signature and embedded `aps-environment=development` entitlement/application identifier, then copies the products without re-signing them. Use a valid development signing setup on the host; ad-hoc signed app products are rejected.
+The `Trust.RealServices` scheme builds a separate UI-test target. The runner consumes an existing Debug simulator build, verifies its code signature and effective embedded `aps-environment=development` entitlement/application identifier against the expected team, then copies the products without re-signing them. Xcode can use its normal local simulator signature; the runner does not require a distribution certificate or reject every ad-hoc outer signature. Actual registration and Apple sandbox delivery must still pass. Keep these temporary simulator entitlements outside the checkout; Release signing and entitlements remain unchanged.
 
 Create a temporary entitlement plist outside the checkout, changing only the APNs environment in a copy of the source entitlements, then build the dedicated scheme:
 
@@ -73,6 +73,14 @@ The default case is `testRealSandboxAPNsForegroundAndBackgroundLookRoute`. To ru
 The runner fails closed if those service ports are occupied. Its output directory is unique under `/tmp` by default; `--output <new-or-empty-directory>` can select another evidence location. Do not reuse or delete another run’s products as the input: set `PREBUILT_DIR` to the folder containing the exact build’s `Build/Products` and `.xctestrun`.
 
 These results establish development APNs delivery to the tested simulator/runtime only. TestFlight uses the production APNs environment even though its in-app purchases use Apple’s Sandbox. The simulator tests do not prove TestFlight or production push delivery, Apple Sign In, carrier SMS, Apple IAP purchase/restore, physical-device behavior, or release readiness. Push delivery remains best-effort.
+
+## Current-source simulator follow-up
+
+On 2 November 2026, current-source genuine foreground/background APNs delivery and notification-denial Settings recovery each passed 1/0/0. A separate native CoreLocation case passed 1/0/0 after simulated movement reached the local API while Trust remained backgrounded. It requests native While Using/Always permission and selects Sealed explicitly; it does not use a direct fixture upload as evidence. Run it with the same signed-product runner and `--case testSimulatorBackgroundLocationReachesAPIWithoutForegrounding`. Its evidence is location-specific and does not claim APNs delivery.
+
+The opt-in `SimulatorAppleServiceProbeTests` require `TRUST_SIMULATOR_APPLE_PROBE=1` and an explicitly installed Staging app (`TRUST_PROBE_APP_BUNDLE_IDENTIFIER=com.collapsetechnologies.trust.staging`). The test spec must point `UITargetAppPath` at that Staging build and contain no local StoreKit configuration. They observe service/account boundaries and cancellation only; they must not be counted as completed Apple authentication or purchases. The Staging catalog displayed actual monthly/annual plans; Apple sign-in required an Apple Account, and Restore reached a credential form. No credential was entered, purchase confirmed or positive entitlement claimed. The final fresh-device probes passed their observation/cancel checks. An earlier failed credential modal survived app relaunch, so isolated fresh simulator state matters.
+
+The current service launcher does not require the paused age screen or manual handle choice for a seeded verified account. Do not restore the historical build-49 age/DOB steps. All follow-up devices and the temporary database/credential were removed. Detailed device/account mapping, failed attempts and durable evidence locations are in [the customer-experience report](../../docs/evidence/2026-11-01-customer-experience/DEVICE-ACCOUNT-REPORT.md).
 
 ## Evidence labels
 
