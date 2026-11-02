@@ -37,150 +37,166 @@ struct SharingView: View {
 
     var body: some View {
         GeometryReader { geometry in
-            let isWide = geometry.size.width >= 760
-            ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-                    TrustPageTitle(text: TrustCopy.sharing)
-                        .padding(.top, 20)
+            ScrollViewReader { scrollProxy in
+                let isWide = geometry.size.width >= 760
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0) {
+                        TrustPageTitle(text: TrustCopy.sharing)
+                            .padding(.top, 20)
 
-                    Text(TrustCopy.sharingIntro)
-                        .trustFont(14)
-                        .foregroundStyle(palette.muted)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(.top, 6)
-                        .accessibilityIdentifier("sharing-intro")
+                        Text(TrustCopy.sharingIntro)
+                            .trustFont(14)
+                            .foregroundStyle(palette.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.top, 6)
+                            .accessibilityIdentifier("sharing-intro")
 
-                    shareReadinessNotice
+                        shareReadinessNotice
+                            .id("share-readiness-notice-anchor")
 
-                    AddSomeoneSection()
-                        .padding(.top, 16)
+                        AddSomeoneSection()
+                            .padding(.top, 16)
 
-                    if !model.connectionRequests.incoming.isEmpty
-                        || !model.connectionRequests.sent.isEmpty
-                        || model.isLoadingConnectionRequests
-                        || model.connectionRequestsNotice != nil
-                        || model.connectionRequiresPhoneVerification {
-                        ConnectionRequestsSection()
-                            .padding(.top, 18)
-                            .transition(.opacity)
-                    }
-
-                    if !model.circle.isEmpty {
-                        TrustSectionHeading(TrustCopy.people)
-                            .padding(.top, 22)
-                            .padding(.bottom, 4)
-                        ForEach(model.circle) { member in
-                            VStack(spacing: 0) {
-                                OutboundRow(
-                                    member: member,
-                                    seed: seed(member),
-                                    compact: geometry.size.width < 430,
-                                    onPause: {
-                                        model.tracePausePresentation("menu callback")
-                                        pausePresentationDetent = dynamicTypeSize.isAccessibilitySize ? .large : .height(420)
-                                        model.pauseSheetPersonID = member.id
-                                    },
-                                    onStopSharing: { activeConfirmation = .stopSharing(personID: member.id, name: member.firstName) },
-                                    onRemove: { activeConfirmation = .removePerson(personID: member.id, name: member.firstName) }
-                                )
-                                TrustRowDivider()
-                            }
-                            .transition(.opacity)
+                        if !model.connectionRequests.incoming.isEmpty
+                            || !model.connectionRequests.sent.isEmpty
+                            || model.isLoadingConnectionRequests
+                            || model.connectionRequestsNotice != nil
+                            || model.connectionRequiresPhoneVerification {
+                            ConnectionRequestsSection()
+                                .padding(.top, 18)
+                                .transition(.opacity)
                         }
 
-                    }
+                        if !model.circle.isEmpty {
+                            TrustSectionHeading(TrustCopy.people)
+                                .padding(.top, 22)
+                                .padding(.bottom, 4)
+                            ForEach(model.circle) { member in
+                                VStack(spacing: 0) {
+                                    OutboundRow(
+                                        member: member,
+                                        seed: seed(member),
+                                        compact: geometry.size.width < 430,
+                                        onPause: {
+                                            model.tracePausePresentation("menu callback")
+                                            pausePresentationDetent = dynamicTypeSize.isAccessibilitySize ? .large : .height(420)
+                                            model.pauseSheetPersonID = member.id
+                                        },
+                                        onStopSharing: { activeConfirmation = .stopSharing(personID: member.id, name: member.firstName) },
+                                        onRemove: { activeConfirmation = .removePerson(personID: member.id, name: member.firstName) }
+                                    )
+                                    TrustRowDivider()
+                                }
+                                .transition(.opacity)
+                            }
+                        }
 
-                    presenceSection
-                        .padding(.top, 22)
-
-                    if model.outboundActiveCount > 0 {
-                        Button(TrustCopy.stopAll) { activeConfirmation = .stopAll }
-                            .buttonStyle(TrustTextButtonStyle(color: palette.danger))
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                        presenceSection
                             .padding(.top, 22)
-                            .accessibilityIdentifier("stop-all-sharing")
+
+                        if model.outboundActiveCount > 0 {
+                            Button(TrustCopy.stopAll) { activeConfirmation = .stopAll }
+                                .buttonStyle(TrustTextButtonStyle(color: palette.danger))
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.top, 22)
+                                .accessibilityIdentifier("stop-all-sharing")
+                        }
+                    }
+                    .padding(.horizontal, TrustTheme.gutter)
+                    .padding(.bottom, 28)
+                    // Keep the sharing controls in a readable column, centered in the
+                    // full open-Duo canvas instead of anchoring them to the right edge.
+                    .frame(maxWidth: isWide ? 760 : TrustTheme.readableWidth, alignment: .leading)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    // Keep the short, empty Sharing state scrollable enough for the native
+                    // pull-to-refresh gesture to work before anyone has been added.
+                    .frame(minHeight: geometry.size.height, alignment: .top)
+                }
+                .accessibilityIdentifier("sharing-scroll")
+                .refreshable {
+                    await model.refresh()
+                }
+                // Keep oversized Dynamic Type content inside the scroll viewport instead
+                // of drawing underneath the status bar while the page is scrolled.
+                // The background added after this clip still extends through the top inset.
+                .clipShape(Rectangle())
+                .background(palette.paper.ignoresSafeArea())
+                .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: model.connectionRequests.incoming.map(\.id))
+                .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: model.connectionRequests.sent.map(\.id))
+                .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: model.circle.map(\.id))
+                .onChange(of: model.outboundActiveCount) { oldCount, newCount in
+                    guard oldCount == 0,
+                          newCount > 0,
+                          model.selectedTab == .sharing,
+                          needsShareReadinessNotice else { return }
+                    let revealNotice = {
+                        scrollProxy.scrollTo("share-readiness-notice-anchor", anchor: .top)
+                    }
+                    if reduceMotion {
+                        revealNotice()
+                    } else {
+                        withAnimation(.easeInOut(duration: 0.22), revealNotice)
                     }
                 }
-                .padding(.horizontal, TrustTheme.gutter)
-                .padding(.bottom, 28)
-                // Keep the sharing controls in a readable column, centered in the
-                // full open-Duo canvas instead of anchoring them to the right edge.
-                .frame(maxWidth: isWide ? 760 : TrustTheme.readableWidth, alignment: .leading)
-                .frame(maxWidth: .infinity, alignment: .center)
-                // Keep the short, empty Sharing state scrollable enough for the native
-                // pull-to-refresh gesture to work before anyone has been added.
-                .frame(minHeight: geometry.size.height, alignment: .top)
-            }
-            .accessibilityIdentifier("sharing-scroll")
-            .refreshable {
-                await model.refresh()
-            }
-            // Keep oversized Dynamic Type content inside the scroll viewport instead
-            // of drawing underneath the status bar while the page is scrolled.
-            // The background added after this clip still extends through the top inset.
-            .clipShape(Rectangle())
-            .background(palette.paper.ignoresSafeArea())
-            .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: model.connectionRequests.incoming.map(\.id))
-            .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: model.connectionRequests.sent.map(\.id))
-            .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: model.circle.map(\.id))
-            .sheet(isPresented: Binding(
-                get: { model.pauseSheetPersonID != nil },
-                set: {
-                    if !$0 {
-                        model.tracePausePresentation("sheet binding dismissed")
-                        model.pauseSheetPersonID = nil
+                .sheet(isPresented: Binding(
+                    get: { model.pauseSheetPersonID != nil },
+                    set: {
+                        if !$0 {
+                            model.tracePausePresentation("sheet binding dismissed")
+                            model.pauseSheetPersonID = nil
+                        }
+                    }
+                )) {
+                    if let personID = model.pauseSheetPersonID {
+                        PauseSharingSheet(personID: personID) {
+                            model.pauseSheetPersonID = nil
+                        }
+                        .environmentObject(model)
+                        .environment(\.trustPalette, palette)
+                        .presentationDetents([.height(420), .large], selection: $pausePresentationDetent)
+                        .presentationDragIndicator(.visible)
+                        .presentationBackground(palette.paper)
+                        .onAppear {
+                            model.tracePausePresentation("sheet appeared")
+                        }
                     }
                 }
-            )) {
-                if let personID = model.pauseSheetPersonID {
-                    PauseSharingSheet(personID: personID) {
-                        model.pauseSheetPersonID = nil
+                .alert(
+                    confirmationTitle,
+                    isPresented: Binding(
+                        get: { activeConfirmation != nil },
+                        set: { if !$0 { activeConfirmation = nil } }
+                    )
+                ) {
+                    switch activeConfirmation {
+                    case .some(.stopSharing(let personID, _)):
+                        Button(TrustCopy.stopSharing, role: .destructive) { model.stopSharing(personID: personID) }
+                            .accessibilityIdentifier("stop-sharing-confirm")
+                        Button(TrustCopy.cancel, role: .cancel) {}
+                    case .some(.removePerson(let personID, _)):
+                        Button(TrustCopy.removePerson, role: .destructive) { model.removePerson(personID: personID) }
+                            .accessibilityIdentifier("remove-person-confirm")
+                        Button(TrustCopy.cancel, role: .cancel) {}
+                    case .some(.stopAll):
+                        Button(TrustCopy.stopAll, role: .destructive) { model.stopAll() }
+                            .accessibilityIdentifier("stop-all-sharing-confirm")
+                        Button(TrustCopy.cancel, role: .cancel) {}
+                    case .none:
+                        Button(TrustCopy.cancel, role: .cancel) {}
                     }
-                    .environmentObject(model)
-                    .environment(\.trustPalette, palette)
-                    .presentationDetents([.height(420), .large], selection: $pausePresentationDetent)
-                    .presentationDragIndicator(.visible)
-                    .presentationBackground(palette.paper)
-                    .onAppear {
-                        model.tracePausePresentation("sheet appeared")
+                } message: {
+                    Text(confirmationMessage)
+                }
+                .confirmationDialog(TrustCopy.homeStatus, isPresented: $showingHomeStatus, titleVisibility: .visible) {
+                    ForEach(HomePresenceKind.triad, id: \.rawValue) { kind in
+                        Button(kind.label) { model.setPresence(kind) }
+                            .accessibilityIdentifier("set-home-status-\(kind.rawValue)")
                     }
+                    Button(TrustCopy.cancel, role: .cancel) {}
+                } message: {
+                    Text(TrustCopy.sharingPresenceExplanation)
                 }
             }
-        .alert(
-            confirmationTitle,
-            isPresented: Binding(
-                get: { activeConfirmation != nil },
-                set: { if !$0 { activeConfirmation = nil } }
-            )
-        ) {
-            switch activeConfirmation {
-            case .some(.stopSharing(let personID, _)):
-                Button(TrustCopy.stopSharing, role: .destructive) { model.stopSharing(personID: personID) }
-                    .accessibilityIdentifier("stop-sharing-confirm")
-                Button(TrustCopy.cancel, role: .cancel) {}
-            case .some(.removePerson(let personID, _)):
-                Button(TrustCopy.removePerson, role: .destructive) { model.removePerson(personID: personID) }
-                    .accessibilityIdentifier("remove-person-confirm")
-                Button(TrustCopy.cancel, role: .cancel) {}
-            case .some(.stopAll):
-                Button(TrustCopy.stopAll, role: .destructive) { model.stopAll() }
-                    .accessibilityIdentifier("stop-all-sharing-confirm")
-                Button(TrustCopy.cancel, role: .cancel) {}
-            case .none:
-                Button(TrustCopy.cancel, role: .cancel) {}
-            }
-        } message: {
-            Text(confirmationMessage)
-        }
-        .confirmationDialog(TrustCopy.homeStatus, isPresented: $showingHomeStatus, titleVisibility: .visible) {
-            ForEach(HomePresenceKind.triad, id: \.rawValue) { kind in
-                Button(kind.label) { model.setPresence(kind) }
-                    .accessibilityIdentifier("set-home-status-\(kind.rawValue)")
-            }
-            Button(TrustCopy.cancel, role: .cancel) {}
-        } message: {
-            Text(TrustCopy.sharingPresenceExplanation)
-        }
         }
     }
 
@@ -191,13 +207,11 @@ struct SharingView: View {
     @ViewBuilder
     private var shareReadinessNotice: some View {
         let message: String? = {
-            guard model.outboundActiveCount > 0 else { return nil }
+            guard needsShareReadinessNotice else { return nil }
             if model.isOffline { return TrustCopy.shareReadinessOffline }
-            if model.location.isDenied || model.location.authorization == .notDetermined {
-                return TrustCopy.shareReadinessLocationOff
-            }
-            if !model.location.hasAlways { return TrustCopy.shareReadinessForegroundOnly }
-            return nil
+            return model.location.isDenied || model.location.authorization == .notDetermined
+                ? TrustCopy.shareReadinessLocationOff
+                : TrustCopy.shareReadinessForegroundOnly
         }()
         if let message {
             VStack(alignment: .leading, spacing: 8) {
@@ -216,8 +230,17 @@ struct SharingView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(RoundedRectangle(cornerRadius: TrustTheme.controlRadius, style: .continuous).fill(palette.surface))
             .padding(.top, 12)
+            .accessibilityElement(children: .contain)
             .accessibilityIdentifier("share-readiness-notice")
         }
+    }
+
+    private var needsShareReadinessNotice: Bool {
+        model.outboundActiveCount > 0
+            && (model.isOffline
+                || model.location.isDenied
+                || model.location.authorization == .notDetermined
+                || !model.location.hasAlways)
     }
 
     @ViewBuilder

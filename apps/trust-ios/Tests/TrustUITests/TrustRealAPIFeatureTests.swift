@@ -829,7 +829,7 @@ final class TrustRealAPIFeatureTests: XCTestCase {
             XCTAssertTrue(waitUntil(timeout: 10) {
                 self.outboundPresentation(personID: peerID, token: session.token) == "untilTheyLook"
             }, "Alice must choose Sealed before Bob can see her Home/Away status.")
-            allowBackgroundLocationIfPrompted(in: app)
+            allowBackgroundLocationIfPrompted(in: app, requireSharingReadiness: true)
             // Mirror Bob's authenticated session so the UI test waits for each
             // Alice status change to become visible to the actual recipient.
             let bobSession = try XCTUnwrap(api.developmentSession(
@@ -949,7 +949,7 @@ final class TrustRealAPIFeatureTests: XCTestCase {
             XCTAssertTrue(firstShare.waitForExistence(timeout: 8), "First sharing requires explicit review.")
             firstShare.tap()
             XCTAssertTrue(waitUntil(timeout: 10) { self.outboundPresentation(personID: aliceID, token: session.token) == "untilTheyLook" }, "Bob's UI should update Bob→Alice, visible as outboundShare in Bob's circle response.")
-            allowBackgroundLocationIfPrompted(in: app)
+            allowBackgroundLocationIfPrompted(in: app, requireSharingReadiness: true)
 
             let aliceSession = try XCTUnwrap(api.developmentSession(
                 name: "PairAlice",
@@ -1011,7 +1011,11 @@ final class TrustRealAPIFeatureTests: XCTestCase {
             let confirmLook = app.buttons["confirm-look-notify"]
             XCTAssertTrue(confirmLook.waitForExistence(timeout: 8))
             confirmLook.tap()
-            XCTAssertTrue(app.buttons["view-open-map"].waitForExistence(timeout: 20), "Bob should open the API-backed Look snapshot, not just see the pre-Look explanation.\n\(app.debugDescription)")
+            let openedLookSnapshot = app.buttons["view-open-map"].waitForExistence(timeout: 20)
+            if !openedLookSnapshot {
+                let lookEventRecorded = api.hasLookEvent(subjectID: aliceID, token: session.token)
+                XCTFail("Bob should open the API-backed Look snapshot, not just see the pre-Look explanation. API Look event recorded: \(lookEventRecorded).\n\(app.debugDescription)")
+            }
             XCTAssertTrue(waitUntil(timeout: 20) { self.api.hasLookEvent(subjectID: aliceID, token: session.token) }, "The API should record Bob's real UI Look for Alice.")
             let lookEvent = try XCTUnwrap(api.latestLookEvent(subjectID: aliceID, token: session.token))
             XCTAssertEqual(lookEvent["kind"] as? String, "look")
@@ -1022,6 +1026,7 @@ final class TrustRealAPIFeatureTests: XCTestCase {
             // should appear in Activity under the same event ID returned by the API.
             let openMap = app.buttons["view-open-map"]
             XCTAssertTrue(openMap.waitForExistence(timeout: 10), app.debugDescription)
+            XCTAssertTrue(scrollUpUntilHittable(openMap, in: app), "The View action should be reachable by scrolling.\n\(app.debugDescription)")
             openMap.tap()
             let mapCanvas = app.descendants(matching: .any)["map-screen-canvas"]
             XCTAssertTrue(mapCanvas.waitForExistence(timeout: 20), "A confirmed Look should add its snapshot pin to the map.")
@@ -1173,12 +1178,12 @@ final class TrustRealAPIFeatureTests: XCTestCase {
             app.buttons["tab-circle"].tap()
             app.swipeDown()
             let hiddenAliceRow = app.buttons["person-row-pairalice"]
-            XCTAssertTrue(hiddenAliceRow.waitForExistence(timeout: 15), "Bob's Duo People list should still show Alice after refreshing the Hidden state.\n\(app.debugDescription)")
+            XCTAssertTrue(hiddenAliceRow.waitForExistence(timeout: 15), "Bob's People list should still show Alice after refreshing the Hidden state.\n\(app.debugDescription)")
             hiddenAliceRow.tap()
             let aliceStatus = app.staticTexts["person-status"]
-            XCTAssertTrue(waitUntil(timeout: 15) {
-                aliceStatus.exists && aliceStatus.label.localizedCaseInsensitiveContains("hidden")
-            }, "Bob's Duo person screen should render Alice as Hidden after a successful recipient response suppressed her Home/Away payload.\n\(app.debugDescription)")
+            let aliceDirections = app.staticTexts["person-sharing-directions"]
+            XCTAssertTrue(aliceDirections.waitForExistence(timeout: 15), "Alice's person screen should remain available after her presence is hidden.\n\(app.debugDescription)")
+            XCTAssertFalse(aliceStatus.exists, "Alice's hidden presence should not expose a status on Bob's person screen.\n\(app.debugDescription)")
             app.buttons["tab-sharing"].tap()
             let later = app.buttons["always-explainer-later"]
             if later.waitForExistence(timeout: 2) { later.tap() }
@@ -3166,14 +3171,75 @@ final class TrustRealAPIFeatureTests: XCTestCase {
         return condition()
     }
 
-    private func allowBackgroundLocationIfPrompted(in app: XCUIApplication) {
+    private func allowBackgroundLocationIfPrompted(in app: XCUIApplication, requireSharingReadiness: Bool = false) {
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
         let locationSheetWasOpen = app.staticTexts["location-permission-status"].exists
+        var openedLocationSheet = false
+        defer {
+            if openedLocationSheet {
+                assertAlwaysLocationPermission(in: app)
+                let done = app.navigationBars.buttons["Done"]
+                XCTAssertTrue(done.waitForExistence(timeout: 10), "The location sheet opened by the test should offer Done.\n\(app.debugDescription)")
+                if done.exists { done.tap() }
+                let sharing = app.buttons["tab-sharing"]
+                XCTAssertTrue(sharing.waitForExistence(timeout: 10))
+                if sharing.exists && !sharing.isSelected { sharing.tap() }
+            }
+        }
         let primaryActions = [
             app.buttons["always-explainer-allow"],
             app.buttons["home-permission-action"],
             app.buttons["location-permission-action"]
         ]
+        if !locationSheetWasOpen && !primaryActions.contains(where: { $0.exists && $0.isHittable }) {
+            if !requireSharingReadiness && app.buttons["tab-sharing"].isSelected {
+                let sharingScroll = app.scrollViews["sharing-scroll"]
+                XCTAssertTrue(sharingScroll.waitForExistence(timeout: 10), "Sharing should be open before checking its readiness notice.\n\(app.debugDescription)")
+                let intro = app.staticTexts["sharing-intro"]
+                for _ in 0..<4 {
+                    if intro.exists && intro.isHittable { break }
+                    sharingScroll.swipeDown()
+                }
+                XCTAssertTrue(intro.exists && intro.isHittable, "The top of Sharing must be visible before checking readiness.\n\(app.debugDescription)")
+            }
+            let readiness = app.buttons["share-readiness-my-location"]
+            let readinessAppeared = readiness.waitForExistence(timeout: requireSharingReadiness ? 5 : 3)
+            if readinessAppeared || requireSharingReadiness {
+                if readinessAppeared {
+                    if requireSharingReadiness {
+                        let viewport = app.scrollViews["sharing-scroll"]
+                        XCTAssertTrue(waitUntil(timeout: 5) {
+                            readiness.isHittable && readiness.frame.width >= 44 && readiness.frame.height >= 44 && viewport.frame.contains(readiness.frame)
+                        }, "Sharing's location readiness action should become fully visible and hittable without scrolling.\n\(app.debugDescription)")
+                    } else {
+                        if !readiness.isHittable { app.scrollViews["sharing-scroll"].swipeUp() }
+                        XCTAssertTrue(readiness.isHittable, "Sharing's location readiness action should be reachable.\n\(app.debugDescription)")
+                    }
+                    readiness.tap()
+                } else {
+                    // No readiness notice is expected when Always is already granted.
+                    // Verify that state in My Location rather than assuming it.
+                    if requireSharingReadiness {
+                        let hierarchy = XCTAttachment(string: app.debugDescription)
+                        hierarchy.name = "Sharing-readiness-missing-hierarchy-before-navigation"
+                        hierarchy.lifetime = .keepAlways
+                        add(hierarchy)
+                        attachScreenshot(of: app, named: "Sharing-readiness-missing-before-navigation")
+                    }
+                    let you = app.buttons["tab-you"]
+                    XCTAssertTrue(you.waitForExistence(timeout: 10), app.debugDescription)
+                    you.tap()
+                }
+                let myLocation = app.buttons["my-location"]
+                XCTAssertTrue(myLocation.waitForExistence(timeout: 10), "The readiness action should open You.\n\(app.debugDescription)")
+                if !myLocation.isHittable { app.swipeUp() }
+                XCTAssertTrue(myLocation.isHittable, "My Location should be reachable.\n\(app.debugDescription)")
+                myLocation.tap()
+                openedLocationSheet = true
+                XCTAssertTrue(app.staticTexts["location-permission-status"].waitForExistence(timeout: 10), app.debugDescription)
+                if !readinessAppeared { assertAlwaysLocationPermission(in: app) }
+            }
+        }
         guard waitUntil(timeout: 3, condition: {
             primaryActions.contains { $0.exists && $0.isHittable }
         }), let primaryAction = primaryActions.first(where: { $0.exists && $0.isHittable }) else { return }
@@ -3182,7 +3248,7 @@ final class TrustRealAPIFeatureTests: XCTestCase {
         // separate Notifications “Open iOS Settings” button.
         if primaryAction.label.localizedCaseInsensitiveContains("Settings") {
             primaryAction.tap()
-            selectAlwaysLocationInSystemSettings(app: app, preserveLocationSheet: locationSheetWasOpen)
+            selectAlwaysLocationInSystemSettings(app: app, preserveLocationSheet: locationSheetWasOpen || openedLocationSheet)
             return
         }
         primaryAction.tap()
@@ -3213,7 +3279,7 @@ final class TrustRealAPIFeatureTests: XCTestCase {
             XCTAssertNotNil(settingsAction,
                              "Without a native authorization choice, Trust should offer its location-scoped Settings recovery action.\n\(app.debugDescription)\n\(springboard.debugDescription)")
             settingsAction?.tap()
-            selectAlwaysLocationInSystemSettings(app: app, preserveLocationSheet: locationSheetWasOpen)
+            selectAlwaysLocationInSystemSettings(app: app, preserveLocationSheet: locationSheetWasOpen || openedLocationSheet)
             return
         }
         if appAlways.exists || systemAlways.exists {

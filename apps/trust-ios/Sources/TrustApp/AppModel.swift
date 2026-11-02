@@ -2087,12 +2087,22 @@ final class AppModel: ObservableObject {
     }
 
     func confirmLook() {
-        guard let subject = lookSubject, !isLooking else { return }
+        traceUIInteraction("Look confirm entered: hasSubject=\(lookSubject != nil) isLooking=\(isLooking)")
+        guard let subject = lookSubject, !isLooking else {
+            traceUIInteraction("Look confirm stopped: subjectPresent=\(lookSubject != nil) isLooking=\(isLooking)")
+            return
+        }
         let operation = isDemoMode ? nil : currentAccountOperation()
-        guard isDemoMode || operation != nil else { return }
+        guard isDemoMode || operation != nil else {
+            traceUIInteraction("Look confirm stopped: operationPresent=false")
+            return
+        }
         let currentSubject = member(subject.id)
         let scope = currentSubject.map(TrustRelationshipScope.init)
-        guard isDemoMode || (scope?.matches(subject) == true && scope?.permitsLookSnapshot(currentSubject) == true) else {
+        let initialScopeMatches = scope?.matches(subject) == true
+        let initialScopePermitsLook = scope?.permitsLookSnapshot(currentSubject) == true
+        traceUIInteraction("Look confirm scope: operationPresent=\(operation != nil) scopeMatches=\(initialScopeMatches) nonOff=\(initialScopePermitsLook)")
+        guard isDemoMode || (initialScopeMatches && initialScopePermitsLook) else {
             lookSubject = nil
             return
         }
@@ -2124,17 +2134,27 @@ final class AppModel: ObservableObject {
                     session = try demo.look(confirmed: true, subjectID: subject.id)
                     publishDemoSnapshot()
                 } else {
-                    guard let operation, isCurrentAccount(operation: operation) else { return }
+                    guard let operation, isCurrentAccount(operation: operation) else {
+                        traceUIInteraction("Look pre-send stopped: operationCurrent=false")
+                        return
+                    }
+                    traceUIInteraction("Look request sending")
                     session = try await client.look(subjectID: subject.id, confirmed: true, authorizedToken: operation.token)
-                    guard isCurrentAccount(operation: operation) else { return }
+                    traceUIInteraction("Look API returned")
+                    let operationCurrentAfterAPI = isCurrentAccount(operation: operation)
+                    traceUIInteraction("Look post-API account guard: current=\(operationCurrentAfterAPI)")
+                    guard operationCurrentAfterAPI else { return }
                     // Re-read relationship consent before retaining or displaying the
                     // delayed response. A peer can Stop or remove this relationship
                     // while the Look request is in flight.
                     let refreshSequenceBeforeReconcile = circleRefreshSequence
                     await refresh()
-                    guard isCurrentAccount(operation: operation),
-                          pendingLookRequests[subject.id]?.validity.accepts(requestID) == true else { return }
-                    guard lastSuccessfulCircleRefreshSequence > refreshSequenceBeforeReconcile else {
+                    let operationCurrentAfterRefresh = isCurrentAccount(operation: operation)
+                    let requestValidAfterRefresh = pendingLookRequests[subject.id]?.validity.accepts(requestID) == true
+                    let refreshAdvanced = lastSuccessfulCircleRefreshSequence > refreshSequenceBeforeReconcile
+                    traceUIInteraction("Look refresh reconciled: advanced=\(refreshAdvanced) operationCurrent=\(operationCurrentAfterRefresh) requestValid=\(requestValidAfterRefresh)")
+                    guard operationCurrentAfterRefresh, requestValidAfterRefresh else { return }
+                    guard refreshAdvanced else {
                         pendingLookRequests[subject.id]?.validity.invalidate()
                         pendingLookRequests[subject.id] = nil
                         openedSnapshots[subject.id] = nil
@@ -2144,7 +2164,9 @@ final class AppModel: ObservableObject {
                         showToast(TrustCopy.locationUnavailable)
                         return
                     }
-                    guard scope?.permitsLookSnapshot(member(subject.id)) == true else {
+                    let refreshedScopePermitsLook = scope?.permitsLookSnapshot(member(subject.id)) == true
+                    traceUIInteraction("Look refreshed scope: permitted=\(refreshedScopePermitsLook)")
+                    guard refreshedScopePermitsLook else {
                         pendingLookRequests[subject.id]?.validity.invalidate()
                         pendingLookRequests[subject.id] = nil
                         if lookSubject?.id == subject.id {
@@ -2160,17 +2182,47 @@ final class AppModel: ObservableObject {
                 } else {
                     openedSnapshotConnectionIDs[subject.id] = scope?.connectionID
                 }
+                traceUIInteraction("Look snapshot stored: demo=\(isDemoMode) scopePresent=\(scope != nil)")
                 setViewReceiptState(.confirmed, connectionID: scope?.connectionID ?? (isDemoMode ? subject.id : nil))
                 if lookSubject?.id == subject.id { lookSubject = nil }
                 // Let the sheet finish dismissing before pushing D1 View.
                 try? await Task.sleep(for: .milliseconds(320))
-                if let operation, !isCurrentAccount(operation: operation) { return }
-                guard pendingLookRequests[subject.id]?.validity.accepts(requestID) == true,
-                      openedSnapshot(for: subject.id) != nil else { return }
+                let operationCurrentBeforeRoute = operation.map { isCurrentAccount(operation: $0) } ?? true
+                let requestValidBeforeRoute = pendingLookRequests[subject.id]?.validity.accepts(requestID) == true
+                let snapshotAvailableBeforeRoute = openedSnapshot(for: subject.id) != nil
+                traceUIInteraction("Look route gate: operationCurrent=\(operationCurrentBeforeRoute) requestValid=\(requestValidBeforeRoute) snapshotAvailable=\(snapshotAvailableBeforeRoute)")
+                guard operationCurrentBeforeRoute, requestValidBeforeRoute, snapshotAvailableBeforeRoute else { return }
                 selectedTab = .circle
                 circlePath = [.view(subject.id)]
+                traceUIInteraction("Look route assigned: depth=\(circlePath.count)")
                 showToast(TrustCopy.lookSaved(name: subject.firstName))
             } catch {
+                let statusCode: Int?
+                if let clientError = error as? TrustClientError {
+                    switch clientError {
+                    case .serverUnavailable(let status), .structuredUnavailable(let status, _, _), .appleUnavailable(let status, _):
+                        statusCode = status
+                    default:
+                        statusCode = nil
+                    }
+                } else {
+                    statusCode = nil
+                }
+                let category: String
+                if error.isLookRequiresSealed {
+                    category = "lookRequiresSealed"
+                } else if error is CancellationError {
+                    category = "cancellation"
+                } else if let clientError = error as? TrustClientError {
+                    switch clientError {
+                    case .unauthorized: category = "unauthorized"
+                    case .unreachable, .timeout, .serverUnavailable, .structuredUnavailable: category = "connectivity"
+                    default: category = "other"
+                    }
+                } else {
+                    category = "other"
+                }
+                traceUIInteraction("Look request failed: category=\(category) status=\(statusCode.map { String($0) } ?? "none")")
                 if let operation, !isCurrentAccount(operation: operation) { return }
                 guard pendingLookRequests[subject.id]?.validity.accepts(requestID) == true else { return }
                 if lookSubject?.id == subject.id { lookSubject = nil }
