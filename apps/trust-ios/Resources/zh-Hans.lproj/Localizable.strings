@@ -210,6 +210,8 @@
 "enter_phone_code" = "输入代码。";
 "export_log" = "导出日志";
 "find_your_person" = "查找联系人";
+"first_share_cta_always" = "共享 Always";
+"first_share_cta_sealed" = "共享 Sealed";
 "first_share_details" = "你将与 %@（@%@）通过 %@ 共享位置。对方会单独选择是否与你共享。Look 是按所选模式进行的查看，不会每次都请求新的批准。";
 "first_share_title" = "与 %@ 共享？";
 "follow_iphone_language" = "跟随 iPhone";
@@ -417,7 +419,6 @@
 "presence_grant_label" = "让我在家或外出时通知 %@";
 "presence_grant_updated" = "已更新在家/外出状态共享设置。";
 "presence_hidden" = "隐";
-"presence_hidden_badge" = "存在隐藏";
 "presence_hidden_copy" = "他们看不到主场或客场。";
 "presence_hidden_toast" = "状态隐藏。";
 "presence_hint" = "设置在家、离开或隐藏。不是一个位置。";

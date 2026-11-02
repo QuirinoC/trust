@@ -8,11 +8,12 @@ struct CircleView: View {
     @Environment(\.trustPalette) private var palette
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var position: MapCameraPosition = .automatic
-    @State private var selectedPin: UUID?
     @State private var sheetFraction: CGFloat = PeopleSheetDetent.half.rawValue
     @State private var dragOrigin: CGFloat?
     @State private var userMovedMap = false
     @State private var didFitInitialCamera = false
+    @State private var mapViewportSize: CGSize = .zero
+    @State private var mapViewportFitTask: Task<Void, Never>?
     @State private var compactHeaderHeight: CGFloat = 76
     @GestureState private var dragTranslation: CGFloat = 0
 
@@ -78,11 +79,9 @@ struct CircleView: View {
         .onChange(of: pinLocations) { _, _ in
             fitOrFocusSelectedView()
         }
-        .onChange(of: PeopleSheetDetent.nearest(to: sheetFraction)) { _, _ in
-            // MapKit uses the compact header and the actual panel as safe-area
-            // insets. Refit against that viewport only while we still own camera
-            // placement; an intentional user pan always wins.
-            fitOrFocusSelectedView()
+        .onChange(of: mapViewportSize) { _, size in
+            guard size.width > 0, size.height > 0 else { return }
+            scheduleViewportCameraFit()
         }
         .onChange(of: model.circlePath) { _, path in
             if case let .view(personID)? = path.last {
@@ -95,31 +94,27 @@ struct CircleView: View {
                 fitOrFocusSelectedView()
             }
         }
-        .onChange(of: selectedPin) { _, personID in
-            guard let personID else { return }
-            let member = model.member(personID)
-            model.traceUIInteraction("people map selection: memberFound=\(member != nil)")
-            if let member { model.openView(member) }
-            // Clear selection before returning from View so the same pin can be
-            // selected again without requiring a second tap to deselect it.
-            selectedPin = nil
-        }
         .onChange(of: model.location.lastFix) { _, fix in
             guard fix != nil, !didFitInitialCamera, !userMovedMap else { return }
             didFitInitialCamera = true
             fitOrFocusSelectedView()
         }
         .onChange(of: position.positionedByUser) { _, movedByUser in
+            model.traceUIInteraction("people map user moved=\(movedByUser)")
             if movedByUser { userMovedMap = true }
         }
-        .onDisappear { model.releaseMapLocation() }
+        .onDisappear {
+            mapViewportFitTask?.cancel()
+            mapViewportFitTask = nil
+            model.releaseMapLocation()
+        }
     }
 
     private func compactRoot(width: CGFloat, height: CGFloat) -> some View {
         let requestedSheetHeight = height * liveSheetFraction(containerHeight: height)
         // Keep enough of the map visible for a complete pin and its age caption,
         // even when Dynamic Type makes the header taller or the device is short.
-        let maximumSheetHeight = max(44, height - compactHeaderHeight - 128)
+        let maximumSheetHeight = max(44, height - compactHeaderHeight - 176)
         let sheetHeight = min(requestedSheetHeight, maximumSheetHeight)
         return VStack(spacing: 0) {
             compactMapHeader
@@ -192,33 +187,71 @@ struct CircleView: View {
     }
 
     private var homeMap: some View {
-        Map(position: $position, selection: $selectedPin) {
-            UserAnnotation()
-            ForEach(pins) { pin in
-                Annotation(pin.name, coordinate: pin.point.coordinate) {
-                    TimelineView(.periodic(from: .now, by: 60)) { context in
-                        TrustMapPin(
-                            initials: pin.name.trustInitials,
-                            live: pin.live,
-                            stale: pin.live && LocationFreshness.status(timestamp: pin.point.timestamp, now: context.date) == .stale,
-                            ageCaption: pin.live ? TrustCopy.locationAgeCaption(timestamp: pin.point.timestamp, now: context.date) : nil
-                        )
-                        .frame(minWidth: 44, minHeight: 44)
-                        .contentShape(Rectangle())
-                        .accessibilityElement(children: .ignore)
-                        .accessibilityLabel(TrustCopy.pinAccessibility(name: pin.name, live: pin.live, timestamp: pin.point.timestamp, now: context.date))
-                        .accessibilityHint(TrustCopy.viewLocation(name: pin.name.trustFirstName))
-                        .accessibilityAddTraits(.isButton)
-                        .accessibilityAction(.default) { selectedPin = pin.id }
-                        .accessibilityIdentifier("people-map-pin-\(pin.id.uuidString.lowercased())")
+        MapReader { proxy in
+            Map(position: $position) {
+                UserAnnotation()
+                ForEach(pins) { pin in
+                    Annotation(pin.name, coordinate: pin.point.coordinate, anchor: .bottom) {
+                        TimelineView(.periodic(from: .now, by: 60)) { context in
+                            TrustMapPin(
+                                initials: pin.name.trustInitials,
+                                live: pin.live,
+                                stale: pin.live && LocationFreshness.status(timestamp: pin.point.timestamp, now: context.date) == .stale,
+                                ageCaption: pin.live ? TrustCopy.locationAgeCaption(timestamp: pin.point.timestamp, now: context.date) : nil
+                            )
+                            .frame(minWidth: 44, minHeight: 44)
+                            .contentShape(Rectangle())
+                            .accessibilityElement(children: .ignore)
+                            .accessibilityLabel(TrustCopy.pinAccessibility(name: pin.name, live: pin.live, timestamp: pin.point.timestamp, now: context.date))
+                            .accessibilityHint(TrustCopy.viewLocation(name: pin.name.trustFirstName))
+                            .accessibilityAddTraits(.isButton)
+                            .accessibilityAction(.default) { activateMapPin(pin.id) }
+                            .accessibilityIdentifier("people-map-pin-\(pin.id.uuidString.lowercased())")
+                        }
                     }
-                }.tag(pin.id)
+                    .annotationTitles(.hidden)
+                }
             }
+            .mapStyle(.standard(elevation: .flat, emphasis: .muted, pointsOfInterest: .excludingAll))
+            .mapControls {}
+            .accessibilityLabel(TrustCopy.mapAccessibility)
+            .accessibilityIdentifier("people-map-canvas")
+            .onGeometryChange(for: CGSize.self) { geometry in
+                geometry.size
+            } action: { size in
+                guard size != mapViewportSize else { return }
+                mapViewportSize = size
+            }
+            .simultaneousGesture(SpatialTapGesture().onEnded { event in
+                activateMapPin(at: event.location, using: proxy)
+            })
         }
-        .mapStyle(.standard(elevation: .flat, emphasis: .muted, pointsOfInterest: .excludingAll))
-        .mapControls {}
-        .accessibilityLabel(TrustCopy.mapAccessibility)
-        .accessibilityIdentifier("people-map-canvas")
+    }
+
+    private func activateMapPin(at location: CGPoint, using proxy: MapProxy) {
+        let projectedPins = pins.compactMap { pin -> (pin: AppModel.MapPin, bounds: CGRect)? in
+            guard let anchor = proxy.convert(pin.point.coordinate, to: .local) else { return nil }
+            let height: CGFloat = pin.live ? 58 : 44
+            return (pin, CGRect(x: anchor.x - 22, y: anchor.y - height, width: 44, height: height))
+        }
+        let exactMatches = projectedPins.filter { $0.bounds.contains(location) }
+        let candidates = exactMatches.isEmpty
+            ? projectedPins.filter { $0.bounds.insetBy(dx: -3, dy: -3).contains(location) }
+            : exactMatches
+        let hit = candidates.min { lhs, rhs in
+            let left = hypot(lhs.bounds.midX - location.x, lhs.bounds.midY - location.y)
+            let right = hypot(rhs.bounds.midX - location.x, rhs.bounds.midY - location.y)
+            return left < right
+        }
+        model.traceUIInteraction("people map spatial tap matched pin=\(hit != nil)")
+        if let hit { activateMapPin(hit.pin.id) }
+    }
+
+    private func activateMapPin(_ personID: UUID) {
+        let member = model.member(personID)
+        model.traceUIInteraction("people map pin activated memberFound=\(member != nil)")
+        guard let member else { return }
+        model.openView(member)
     }
 
     private var compactMapHeader: some View {
@@ -474,7 +507,7 @@ struct CircleView: View {
         }
         withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.35)) {
             if let region = metroRegion(for: coordinates) {
-                position = .region(region)
+                setCamera(to: region)
             } else {
                 position = .automatic
             }
@@ -488,8 +521,61 @@ struct CircleView: View {
             span: MKCoordinateSpan(latitudeDelta: 0.12, longitudeDelta: 0.12)
         )
         withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.35)) {
-            position = .region(region)
+            setCamera(to: region)
         }
+    }
+
+    private func setCamera(to region: MKCoordinateRegion) {
+        guard mapViewportSize.width > 1, mapViewportSize.height > 1 else {
+            position = .region(region)
+            return
+        }
+        position = .rect(mapRect(for: region, viewport: mapViewportSize))
+        model.traceUIInteraction("people map camera fit applied=true")
+    }
+
+    private func scheduleViewportCameraFit() {
+        mapViewportFitTask?.cancel()
+        mapViewportFitTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(120))
+            guard !Task.isCancelled,
+                  mapViewportSize.width > 0,
+                  mapViewportSize.height > 0 else { return }
+            model.traceUIInteraction("people map viewport usable=true")
+            fitOrFocusSelectedView()
+        }
+    }
+
+    private func mapRect(for region: MKCoordinateRegion, viewport: CGSize) -> MKMapRect {
+        let latitudeLimit = 85.05112878
+        let northLatitude = min(latitudeLimit, region.center.latitude + region.span.latitudeDelta / 2)
+        let southLatitude = max(-latitudeLimit, region.center.latitude - region.span.latitudeDelta / 2)
+        let westLongitude = region.center.longitude - region.span.longitudeDelta / 2
+        let eastLongitude = region.center.longitude + region.span.longitudeDelta / 2
+        let north = MKMapPoint(CLLocationCoordinate2D(latitude: northLatitude, longitude: westLongitude))
+        let south = MKMapPoint(CLLocationCoordinate2D(latitude: southLatitude, longitude: eastLongitude))
+        let base = MKMapRect(
+            x: min(north.x, south.x),
+            y: min(north.y, south.y),
+            width: max(1, abs(south.x - north.x)),
+            height: max(1, abs(south.y - north.y))
+        )
+
+        let sideInset: CGFloat = 28
+        let topInset: CGFloat = 64
+        let bottomInset: CGFloat = 36
+        let availableWidth = max(1, Double(viewport.width - sideInset * 2))
+        let availableHeight = max(1, Double(viewport.height - topInset - bottomInset))
+        let mapPointsPerScreenPoint = max(base.width / availableWidth, base.height / availableHeight)
+        let cameraWidth = Double(viewport.width) * mapPointsPerScreenPoint
+        let cameraHeight = Double(viewport.height) * mapPointsPerScreenPoint
+        let shiftedCenterY = base.midY - mapPointsPerScreenPoint * Double((topInset - bottomInset) / 2)
+        return MKMapRect(
+            x: base.midX - cameraWidth / 2,
+            y: shiftedCenterY - cameraHeight / 2,
+            width: cameraWidth,
+            height: cameraHeight
+        )
     }
 
     private func fitOrFocusSelectedView() {
@@ -529,8 +615,8 @@ struct CircleView: View {
         let maxLatitudeSpan: CLLocationDegrees = localCluster ? 0.12 : 170
         let maxLongitudeSpan: CLLocationDegrees = localCluster ? 0.12 : 320
         let span = MKCoordinateSpan(
-            latitudeDelta: min(maxLatitudeSpan, max((maxLat - minLat) * 1.6, 0.045)),
-            longitudeDelta: min(maxLongitudeSpan, max((maxLon - minLon) * 1.6, 0.045))
+            latitudeDelta: min(maxLatitudeSpan, max(maxLat - minLat, 0.045)),
+            longitudeDelta: min(maxLongitudeSpan, max(maxLon - minLon, 0.045))
         )
         return MKCoordinateRegion(center: center, span: span)
     }
@@ -613,6 +699,7 @@ struct CirclePersonRow: View {
 
     private func personButton(multiline: Bool) -> some View {
         TimelineView(.periodic(from: .now, by: 60)) { context in
+            let status = statusText(at: context.date)
             Button {
                 model.openPerson(member)
             } label: {
@@ -624,10 +711,12 @@ struct CirclePersonRow: View {
                             .foregroundStyle(palette.ink)
                             .lineLimit(multiline ? 2 : 1)
                             .fixedSize(horizontal: false, vertical: multiline)
-                        Text(statusText(at: context.date))
-                            .trustFont(13)
-                            .foregroundStyle(palette.muted)
-                            .fixedSize(horizontal: false, vertical: true)
+                        if let status {
+                            Text(status)
+                                .trustFont(13)
+                                .foregroundStyle(palette.muted)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                     }
                     Spacer(minLength: 8)
                 }
@@ -635,7 +724,7 @@ struct CirclePersonRow: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("\(member.person.displayName). \(statusText(at: context.date))")
+            .accessibilityLabel(status.map { "\(member.person.displayName). \($0)" } ?? member.person.displayName)
             .accessibilityIdentifier("person-row-\(member.firstName.lowercased())")
         }
     }
@@ -668,7 +757,7 @@ struct CirclePersonRow: View {
         .accessibilityIdentifier("person-peek-\(member.firstName.lowercased())")
     }
 
-    private func statusText(at now: Date) -> String {
+    private func statusText(at now: Date) -> String? {
         if member.isAvailable {
             guard member.liveAccessIsCurrent else { return TrustCopy.locationUnavailable }
             return TrustCopy.authorizedLiveLocationStatus(
@@ -679,8 +768,7 @@ struct CirclePersonRow: View {
         }
         if member.isPaused { return TrustCopy.pause }
         if isNotSharing { return TrustCopy.choseOff(name: member.firstName) }
-        if let presence = member.visiblePresence { return presence.label }
-        return TrustCopy.presenceHiddenBadge
+        return member.visiblePresence?.label
     }
 }
 
@@ -796,10 +884,12 @@ struct PersonScreen: View {
             TrustAvatar(name: member.person.displayName, seed: seed, size: 88, avatar: member.person.avatar, personID: member.id)
             TrustPageTitle(text: member.person.displayName, size: 32)
                 .multilineTextAlignment(.center)
-            Text(statusText(member))
-                .trustFont(17)
-                .foregroundStyle(palette.muted)
-                .accessibilityIdentifier("person-status")
+            if let status = statusText(member) {
+                Text(status)
+                    .trustFont(17)
+                    .foregroundStyle(palette.muted)
+                    .accessibilityIdentifier("person-status")
+            }
             Text(directionText(member))
                 .trustFont(13)
                 .foregroundStyle(palette.muted)
@@ -830,9 +920,11 @@ struct PersonScreen: View {
                     TrustAvatar(name: member.person.displayName, seed: seed, size: 64, avatar: member.person.avatar, personID: member.id)
                     VStack(alignment: .leading, spacing: 4) {
                         TrustPageTitle(text: member.person.displayName, size: 30)
-                        Text(statusText(member))
-                            .trustFont(15)
-                            .foregroundStyle(palette.muted)
+                        if let status = statusText(member) {
+                            Text(status)
+                                .trustFont(15)
+                                .foregroundStyle(palette.muted)
+                        }
                     }
                 }
                 .padding(.top, 8)
@@ -889,11 +981,10 @@ struct PersonScreen: View {
         }
     }
 
-    private func statusText(_ member: TrustedPerson) -> String {
+    private func statusText(_ member: TrustedPerson) -> String? {
         if member.isPaused { return TrustCopy.pause }
         if member.isNotSharingWithYou { return TrustCopy.choseOff(name: member.firstName) }
-        if let presence = member.visiblePresence { return presence.label }
-        return TrustCopy.presenceHiddenBadge
+        return member.visiblePresence?.label
     }
 
     private func directionText(_ member: TrustedPerson) -> String {

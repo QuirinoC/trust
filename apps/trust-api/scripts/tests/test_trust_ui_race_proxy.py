@@ -200,6 +200,42 @@ class ProxyHTTPTests(unittest.TestCase):
         self.assertEqual(self.state()["completion_mask_count"], 1)
         self.assertEqual(self.upstream_count("POST", "/api/v1/me/onboarding/complete"), 2)
 
+    def test_phone_send_hold_preserves_real_upstream_cooldown_response(self) -> None:
+        def responder(method, path, _headers, _body):
+            if method == "POST" and path == "/api/v1/me/phone/send":
+                return 429, {"Content-Type": "application/json"}, {"code": "otp_cooldown", "retryAfterSeconds": 45}
+            return 200, {"Content-Type": "application/json"}, {"ok": True}
+        self.upstream.responder = responder
+        self.control("/arm-phone-send")
+        result: list[tuple[int, bytes]] = []
+        thread = threading.Thread(target=lambda: result.append(self.request("POST", "/api/v1/me/phone/send", token="fixture", body={})), daemon=True)
+        self._request_threads.append(thread)
+        thread.start()
+        state = self.wait_for_state(lambda current: current.get("held_resource") == "phone_send")
+        self.assertEqual(state["phone_send_held_status"], 429)
+        self.assertEqual(self.upstream_count("POST", "/api/v1/me/phone/send"), 1)
+        self.assertEqual(result, [])
+        self.control("/release")
+        thread.join(timeout=2)
+        self.assertEqual(result[0][0], 429)
+        self.assertEqual(json.loads(result[0][1]), {"code": "otp_cooldown", "retryAfterSeconds": 45})
+
+    def test_held_structured_phone_cooldown_reports_only_redacted_metadata(self) -> None:
+        payload = {"code": "otp_cooldown", "serverTime": "2026-11-01T00:00:00Z", "retryAt": "2026-11-01T00:00:45Z", "retryAfterSeconds": 45, "normalizedPhone": "+15555550123"}
+        self.upstream.responder = lambda method, path, headers, body: (400, {"Content-Type": "application/json"}, payload)
+        self.control("/arm-phone-send")
+        result: list[tuple[int, bytes]] = []
+        thread = threading.Thread(target=lambda: result.append(self.request("POST", "/api/v1/me/phone/send", token="fixture", body={})), daemon=True)
+        self._request_threads.append(thread); thread.start()
+        state = self.wait_for_state(lambda current: current.get("held_resource") == "phone_send")
+        self.assertEqual(state["phone_send_held_status"], 400)
+        self.assertTrue(state["phone_send_held_cooldown"])
+        self.assertTrue(state["phone_send_held_retry_metadata"])
+        self.assertNotIn(payload["normalizedPhone"], json.dumps(state))
+        self.control("/release"); thread.join(timeout=2)
+        self.assertEqual(result[0][0], 400)
+        self.assertEqual(json.loads(result[0][1]), payload)
+
     def test_region_fixture_holds_once_and_otherwise_passes_through(self) -> None:
         status, payload = self.request("GET", "/api/region")
         self.assertEqual(status, 200)

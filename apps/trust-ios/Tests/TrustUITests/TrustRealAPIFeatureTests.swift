@@ -135,10 +135,13 @@ final class TrustRealAPIFeatureTests: XCTestCase {
     func testFirstShareReviewActionsRemainReachableAtAccessibilitySize() throws {
         let suffix = String(UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(8)).lowercased()
         let phones = Array(LocalTrustAPI.reservedPhonePool().shuffled().prefix(2))
-        let mainName = "ReviewMain\(suffix)", peerName = "ReviewPeer\(suffix)"
+        let mainName = "ReviewMain\(suffix)"
+        let peerName = "Grandmother María Dolores Fernández"
+        let peerFirstName = String(peerName.split(separator: " ").first!).lowercased()
+        let peerHandle = "rp\(suffix)"
         let deviceID = "review-main-\(suffix)"
         let main = try makeTestAccount(displayName: mainName, deviceID: deviceID, handle: "rm\(suffix)", phone: "+1\(phones[0])")
-        let peer = try makeTestAccount(displayName: peerName, deviceID: "review-peer-\(suffix)", handle: "rp\(suffix)", phone: "+1\(phones[1])")
+        let peer = try makeTestAccount(displayName: peerName, deviceID: "review-peer-\(suffix)", handle: peerHandle, phone: "+1\(phones[1])")
         defer { api.deleteAccount(token: peer.token); api.deleteAccount(token: main.token) }
         let app = launchDevelopmentApp(deviceID: deviceID, displayName: mainName,
             arguments: ["-trust.appLanguage", "en", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"])
@@ -146,7 +149,7 @@ final class TrustRealAPIFeatureTests: XCTestCase {
         XCTAssertTrue(app.buttons["tab-sharing"].waitForExistence(timeout: 15))
         try connect(main, to: peer)
         app.buttons["tab-sharing"].tap()
-        let sealed = app.buttons["sharing-mode-sealed-\(peerName.lowercased())"]
+        let sealed = app.buttons["sharing-mode-sealed-\(peerFirstName)"]
         XCTAssertTrue(sealed.waitForExistence(timeout: 15))
         XCTAssertTrue(scrollUpUntilHittable(sealed, in: app)); sealed.tap()
         let confirm = app.buttons["first-share-confirm"]
@@ -154,8 +157,38 @@ final class TrustRealAPIFeatureTests: XCTestCase {
         XCTAssertTrue(confirm.waitForExistence(timeout: 10), app.debugDescription)
         XCTAssertTrue(confirm.isHittable, "Confirm must remain reachable at accessibility text size.")
         XCTAssertTrue(cancel.isHittable, "Cancel must remain reachable at accessibility text size.")
+        for button in [confirm, cancel] {
+            XCTAssertGreaterThanOrEqual(button.frame.width, 43.99)
+            XCTAssertGreaterThanOrEqual(button.frame.height, 43.99)
+        }
+        XCTAssertEqual(confirm.label, "Share Sealed")
+        let scroll = app.scrollViews["first-share-scroll"]
+        let recipient = app.staticTexts["first-share-recipient"]
+        let handle = app.staticTexts["first-share-handle"]
+        let details = app.staticTexts["first-share-details"]
+        XCTAssertTrue(scroll.waitForExistence(timeout: 5))
+        XCTAssertTrue(recipient.waitForExistence(timeout: 5))
+        XCTAssertTrue(handle.exists)
+        XCTAssertEqual(recipient.label, "Share with \(peerName)?", "The full Unicode recipient must remain accessible.")
+        XCTAssertEqual(handle.label, "@\(peerHandle)")
+        let viewport = scroll.frame.intersection(app.windows.firstMatch.frame).insetBy(dx: -1, dy: -1)
+        attachScreenshot(of: app, named: "First share - Long Unicode recipient initial accessibility view")
+        XCTAssertTrue(viewport.contains(recipient.frame), "The complete recipient header must be visible on opening.")
+        XCTAssertTrue(viewport.contains(handle.frame), "The complete handle must be visible on opening.")
         XCTAssertEqual(outboundPresentation(personID: peer.personID, token: main.token), "off")
-        attachScreenshot(of: app, named: "First share - Accessibility review before cancel")
+        XCTAssertTrue(details.exists)
+        XCTAssertTrue(details.label.contains(peerName))
+        XCTAssertTrue(details.label.contains("@\(peerHandle)"))
+        XCTAssertTrue(details.label.contains("using Sealed"))
+        XCTAssertTrue(details.label.contains("They choose separately"), "The explanation must describe independent directions.")
+        XCTAssertTrue(details.label.contains("does not ask for a new approval each time"))
+        for _ in 0..<4 {
+            if details.frame.maxY <= scroll.frame.maxY + 1 { break }
+            scroll.swipeUp()
+        }
+        XCTAssertLessThanOrEqual(details.frame.maxY, scroll.frame.maxY + 1, "The end of the explanation must be reachable by scrolling.")
+        XCTAssertTrue(confirm.isHittable); XCTAssertTrue(cancel.isHittable)
+        attachScreenshot(of: app, named: "First share - Long Unicode recipient scrolled explanation")
         cancel.tap()
         XCTAssertEqual(outboundPresentation(personID: peer.personID, token: main.token), "off")
         XCTAssertTrue(scrollUpUntilHittable(sealed, in: app)); sealed.tap()
@@ -488,9 +521,10 @@ final class TrustRealAPIFeatureTests: XCTestCase {
         let suffix = String(UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(8)).lowercased()
         let deviceID = "phone-race-\(suffix)"
         let session = try XCTUnwrap(api.developmentSession(name: "Phone race", deviceID: deviceID))
-        defer { api.deleteAccount(token: session.token) }
+        let other = try XCTUnwrap(api.developmentSession(name: "Phone pacing fixture", deviceID: "phone-pacing-\(suffix)"))
+        defer { api.deleteAccount(token: other.token); api.deleteAccount(token: session.token) }
         XCTAssertEqual(api.request("PUT", "/api/v1/me/handle", token: session.token, body: ["handle": "pr\(suffix)"]).status, 204)
-        let numbers = Array(LocalTrustAPI.reservedPhonePool().shuffled().prefix(2))
+        let numbers = Array(LocalTrustAPI.reservedPhonePool().shuffled().prefix(3))
         let app = launchDevelopmentApp(deviceID: deviceID, displayName: "Phone race")
         defer { app.terminate() }
         let field = app.textFields["phone-number"]
@@ -511,6 +545,40 @@ final class TrustRealAPIFeatureTests: XCTestCase {
         XCTAssertFalse(app.buttons["send-phone-code"].isEnabled, "The late accepted reservation must retain its retry deadline.")
         enter("+1\(numbers[1])")
         XCTAssertTrue(app.buttons["send-phone-code"].isEnabled)
+
+        // Another disposable account reserves destination D, creating a real
+        // destination cooldown without sending SMS on this local Development API.
+        let seeded = api.request("POST", "/api/v1/me/phone/send", token: other.token, body: ["phone": "+1\(numbers[2])"])
+        XCTAssertEqual(seeded.status, 200)
+        enter("+1\(numbers[2])")
+        XCTAssertTrue(app.buttons["send-phone-code"].isEnabled, "D is a new correction before its server cooldown is observed.")
+        XCTAssertEqual(api.request("POST", "/__test/arm-phone-send").status, 200)
+        app.buttons["send-phone-code"].tap()
+        let heldCooldown = waitForProxyState(timeout: 8) {
+            $0["held_resource"] as? String == "phone_send"
+                && ($0["phone_send_held_status"] as? Int) == 400
+                && ($0["phone_send_held_cooldown"] as? Bool) == true
+                && ($0["phone_send_held_retry_metadata"] as? Bool) == true
+        }
+        guard heldCooldown else {
+            let state = api.raceProxyState() ?? [:]
+            let diagnostic = XCTAttachment(string: "Held phone-send response: resource=\(state["held_resource"] as? String ?? "none"), status=\(state["phone_send_held_status"] as? Int ?? 0), cooldown=\(state["phone_send_held_cooldown"] as? Bool ?? false), retryMetadata=\(state["phone_send_held_retry_metadata"] as? Bool ?? false). No destination or token is recorded.")
+            diagnostic.name = "Late phone cooldown - redacted response status"
+            diagnostic.lifetime = .keepAlways
+            add(diagnostic)
+            XCTFail("The local API's structured 400 destination cooldown must be held with retry metadata.")
+            return
+        }
+        enter("+1\(numbers[1])")
+        XCTAssertTrue(api.releaseHeldResponse())
+        XCTAssertTrue(waitUntil(timeout: 5) { app.buttons["send-phone-code"].isEnabled }, "A late D cooldown must not disable the edited B destination.")
+        XCTAssertFalse(app.textFields["phone-code"].exists)
+        XCTAssertFalse(app.buttons["tab-sharing"].exists)
+        enter("+1\(numbers[2])")
+        XCTAssertTrue(waitUntil(timeout: 5) { !app.buttons["send-phone-code"].isEnabled && app.staticTexts["phone-retry-notice"].exists },
+                      "The late cooldown must retain and explain D's real retry deadline.")
+        enter("+1\(numbers[1])")
+        XCTAssertTrue(app.buttons["send-phone-code"].isEnabled, "The untouched B correction must remain available.")
         app.buttons["send-phone-code"].tap()
         let code = app.textFields["phone-code"]
         XCTAssertTrue(code.waitForExistence(timeout: 10))
@@ -719,6 +787,7 @@ final class TrustRealAPIFeatureTests: XCTestCase {
             // The paired request uses Bob's verified phone number. Cancellation is
             // covered in the single-UI test, where the peer cannot race acceptance.
             let bobPhoneDigits = pool[pairPhoneBase + 1]
+            phoneLookup.tap()
             phoneLookup.typeText("+1 (\(bobPhoneDigits.prefix(3))) \(bobPhoneDigits.dropFirst(3).prefix(3))-\(bobPhoneDigits.suffix(4))")
             XCTAssertTrue(app.staticTexts["connection-lookup-handle"].waitForExistence(timeout: 12), "A verified exact phone match should resolve to Bob's handle.")
             XCTAssertEqual(app.staticTexts["connection-lookup-handle"].label, "@\(peerHandle)")
@@ -1144,6 +1213,7 @@ final class TrustRealAPIFeatureTests: XCTestCase {
             let lookup = app.textFields["connection-handle"]
             XCTAssertTrue(lookup.waitForExistence(timeout: 8))
             let alicePhoneDigits = LocalTrustAPI.reservedPhonePool()[pairPhoneBase]
+            lookup.tap()
             lookup.typeText("+1 (\(alicePhoneDigits.prefix(3))) \(alicePhoneDigits.dropFirst(3).prefix(3))-\(alicePhoneDigits.suffix(4))")
             XCTAssertTrue(app.staticTexts["connection-lookup-handle"].waitForExistence(timeout: 12), "Alice's verified fictional phone should resolve for the re-add.")
             XCTAssertEqual(app.staticTexts["connection-lookup-handle"].label, "@\(aliceHandle)")
@@ -1432,6 +1502,7 @@ final class TrustRealAPIFeatureTests: XCTestCase {
         app.buttons["add-someone-button"].tap()
         let lookup = app.textFields["connection-handle"]
         XCTAssertTrue(lookup.waitForExistence(timeout: 8))
+        lookup.tap()
         lookup.typeText(peerHandle)
         XCTAssertTrue(app.staticTexts["connection-lookup-handle"].waitForExistence(timeout: 10))
         app.buttons["send-connection-request"].tap()
@@ -1669,7 +1740,8 @@ final class TrustRealAPIFeatureTests: XCTestCase {
         countrySearch.tap(); countrySearch.typeText("United Kingdom")
         let uk = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "United Kingdom")).firstMatch
         XCTAssertTrue(uk.waitForExistence(timeout: 5)); uk.tap()
-        XCTAssertTrue(country.label.contains("+44"))
+        XCTAssertTrue(waitUntil(timeout: 5) { country.exists && country.label.contains("+44") },
+                      "The country picker should dismiss and render the selected +44 code.\n\(app.debugDescription)")
         lookupField.tap(); lookupField.typeText("2079460123")
         XCTAssertTrue(app.staticTexts["connection-phone-preview"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["connection-phone-preview"].label.contains("+44"))
@@ -1679,8 +1751,11 @@ final class TrustRealAPIFeatureTests: XCTestCase {
         XCTAssertEqual(app.staticTexts["connection-lookup-handle"].label, "@\(peerHandle)")
         XCTAssertTrue(app.descendants(matching: .any)["connection-lookup-avatar"].waitForExistence(timeout: 5), "An exact phone match should show the saved picture descriptor.")
         attachScreenshot(of: app, named: "Requests - Phone match and picture")
+        let matchedDraft = lookupField.value as? String ?? ""
         lookupField.tap()
-        lookupField.typeText(XCUIKeyboardKey.delete.rawValue)
+        lookupField.typeText("x")
+        XCTAssertNotEqual(lookupField.value as? String, matchedDraft, "The edit must change the query.")
+        XCTAssertTrue((lookupField.value as? String ?? "").contains("x"), "A non-phone character prevents an immediate repeat of the same lookup.")
         XCTAssertFalse(app.staticTexts["connection-lookup-handle"].exists, "Editing the query should clear the prior match immediately.")
         app.buttons["clear-connection-lookup"].tap()
         XCTAssertEqual(lookupField.value as? String, "Handle or phone number", "The clear control should empty the entire previous query.")
@@ -1733,6 +1808,8 @@ final class TrustRealAPIFeatureTests: XCTestCase {
         }
         if !didRelaunchAfterShareSheet {
             app.buttons["clear-connection-lookup"].tap()
+        } else {
+            lookupField.tap()
         }
         lookupField.typeText(peerHandle)
         XCTAssertTrue(app.staticTexts["connection-lookup-handle"].waitForExistence(timeout: 10))
@@ -1955,6 +2032,10 @@ final class TrustRealAPIFeatureTests: XCTestCase {
 
         XCTAssertTrue(api.armShareResponse(failureAfterRelease: false))
         sealed.tap()
+        let firstShare = app.buttons["first-share-confirm"]
+        XCTAssertTrue(firstShare.waitForExistence(timeout: 8), "The first non-Off mode requires explicit review.")
+        XCTAssertEqual(outboundPresentation(personID: personID, token: fixture.main.token), "off", "No Share request should precede explicit confirmation.")
+        firstShare.tap()
         XCTAssertTrue(waitForProxyState(timeout: 12) {
             $0["holding"] as? Bool == true && $0["held_resource"] as? String == "share"
         }, "The proxy should hold the successful Share response after the API has processed it.")
@@ -2556,7 +2637,8 @@ final class TrustRealAPIFeatureTests: XCTestCase {
         XCTAssertTrue(search.waitForExistence(timeout: 5)); search.tap(); search.typeText("United Kingdom")
         let uk = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "United Kingdom")).firstMatch
         XCTAssertTrue(uk.waitForExistence(timeout: 5)); uk.tap()
-        XCTAssertTrue(country.label.contains("+44"))
+        XCTAssertTrue(waitUntil(timeout: 5) { country.exists && country.label.contains("+44") },
+                      "The selected +44 code must be reflected after the country picker dismisses.\n\(app.debugDescription)")
         XCTAssertTrue(scrollUpUntilHittable(accessibilityQuery, in: app)); accessibilityQuery.tap()
         accessibilityQuery.typeText("2079460123")
         let preview = app.staticTexts["connection-phone-preview"]

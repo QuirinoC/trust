@@ -229,8 +229,6 @@ struct ViewScreen: View {
     private func presenceBadge(_ member: TrustedPerson) -> some View {
         if let presence = member.visiblePresence {
             TrustBadge(glyph: presence == .home ? "house" : "figure.walk", text: presence.label)
-        } else {
-            TrustBadge(glyph: "lock", text: TrustCopy.presenceHiddenBadge)
         }
     }
 

@@ -31,6 +31,9 @@ STATE = {
     "view_hold_count": 0,
     "view_release_count": 0,
     "hold_next_phone_send": False,
+    "phone_send_held_status": 0,
+    "phone_send_held_cooldown": False,
+    "phone_send_held_retry_metadata": False,
     "hold_next_phone_verify": False,
     "hold_next_circle": False,
     "hold_next_history": False,
@@ -362,6 +365,10 @@ class Handler(BaseHTTPRequestHandler):
         if self.path in ("/__test/arm-phone-send", "/__test/arm-phone-verify"):
             with LOCK:
                 STATE["hold_next_phone_send" if self.path.endswith("send") else "hold_next_phone_verify"] = True
+                if self.path.endswith("send"):
+                    STATE["phone_send_held_status"] = 0
+                    STATE["phone_send_held_cooldown"] = False
+                    STATE["phone_send_held_retry_metadata"] = False
                 RELEASE_HELD.clear()
             self.respond_json(200, {"armed": True})
             return
@@ -644,7 +651,15 @@ class Handler(BaseHTTPRequestHandler):
             with LOCK:
                 STATE["holding"] = True
                 STATE["held_resource"] = held_resource
-                if held_resource == "view":
+                if held_resource == "phone_send":
+                    STATE["phone_send_held_status"] = status
+                    try:
+                        payload = json.loads(response_body)
+                        STATE["phone_send_held_cooldown"] = payload.get("code") == "otp_cooldown"
+                        STATE["phone_send_held_retry_metadata"] = bool(payload.get("serverTime") and payload.get("retryAt") and (payload.get("retryAfterSeconds") or 0) > 0)
+                    except (ValueError, TypeError, AttributeError):
+                        pass
+                elif held_resource == "view":
                     STATE["view_hold_count"] += 1
                 elif held_resource == "history":
                     STATE["history_hold_count"] += 1

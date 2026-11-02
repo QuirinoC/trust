@@ -55,7 +55,6 @@
   "presence_away": "Loin",
   "presence_hidden": "Caché",
   "presence_unknown": "Aucun signal",
-  "presence_hidden_badge": "Présence cachée",
   "timed_15m": "15 minutes",
   "timed_1h": "1 heure",
   "timed_4h": "4 heures",
@@ -596,5 +595,7 @@
   "recovery_proof_unavailable": "Aucun achat vérifié n’est disponible. Restaurez les achats, puis réessayez.",
   "recovery_restore_help": "Aide à la restauration",
   "recovery_request_reference": "Référence : %@",
-  "phone_operation_mismatch": "Cette réponse de vérification ne correspond pas à la demande de téléphone actuelle. Trust vérifie son état."
+  "phone_operation_mismatch": "Cette réponse de vérification ne correspond pas à la demande de téléphone actuelle. Trust vérifie son état.",
+  "first_share_cta_always": "Partager en Always",
+  "first_share_cta_sealed": "Partager en Sealed"
 }

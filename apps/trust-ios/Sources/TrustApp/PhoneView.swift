@@ -314,7 +314,9 @@ struct PhoneView: View {
                         Text(country.name).foregroundStyle(palette.ink)
                         Spacer()
                         Text(country.displayCallingCode).foregroundStyle(palette.muted)
-                    }.frame(minHeight: 44)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                    .contentShape(Rectangle())
                 }
                 .accessibilityIdentifier("phone-country-\(country.code.lowercased())")
             }

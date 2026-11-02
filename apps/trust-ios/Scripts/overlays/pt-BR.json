@@ -226,7 +226,6 @@
   "presence_away": "Fora",
   "presence_away_copy": "Aparece como Fora quando você não está em Casa.",
   "presence_hidden": "Oculto",
-  "presence_hidden_badge": "Presença oculta",
   "presence_hidden_copy": "Essa pessoa não vê Casa ou Fora.",
   "presence_hidden_toast": "Status oculto.",
   "presence_hint": "Define Em casa, Fora ou Oculto. Não é uma localização.",
@@ -596,5 +595,7 @@
   "recovery_proof_unavailable": "Não há registro de compra verificado disponível. Restaure as compras e tente novamente.",
   "recovery_restore_help": "Obter ajuda para restaurar",
   "recovery_request_reference": "Referência: %@",
-  "phone_operation_mismatch": "Esta resposta de verificação não corresponde à solicitação de telefone atual. O Trust está verificando o status da solicitação."
+  "phone_operation_mismatch": "Esta resposta de verificação não corresponde à solicitação de telefone atual. O Trust está verificando o status da solicitação.",
+  "first_share_cta_always": "Compartilhar Always",
+  "first_share_cta_sealed": "Compartilhar Sealed"
 }

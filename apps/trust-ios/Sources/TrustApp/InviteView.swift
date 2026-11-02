@@ -157,7 +157,7 @@ struct AddPersonSheet: View {
                                     } label: {
                                         Image(systemName: "xmark.circle.fill")
                                             .foregroundStyle(palette.muted)
-                                            .frame(width: 44, height: 44)
+                                            .frame(width: 45, height: 45)
                                             .contentShape(Rectangle())
                                     }
                                     .buttonStyle(.plain)
@@ -364,7 +364,8 @@ struct AddPersonSheet: View {
                                 Image(systemName: "checkmark").foregroundStyle(palette.accent)
                             }
                         }
-                        .frame(minHeight: 44)
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                        .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                 }

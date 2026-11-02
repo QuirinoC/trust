@@ -144,7 +144,7 @@ struct MainShellView: View {
             FirstShareApprovalSheet(request: request)
                 .environmentObject(model)
                 .environment(\.trustPalette, palette)
-                .presentationDetents([.medium, .large])
+                .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
                 .presentationBackground(palette.paper)
                 .trustFormSheet()

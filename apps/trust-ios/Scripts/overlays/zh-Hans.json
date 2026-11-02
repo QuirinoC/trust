@@ -99,7 +99,6 @@
   "presence_away": "离开",
   "presence_hidden": "隐",
   "presence_unknown": "无信号",
-  "presence_hidden_badge": "存在隐藏",
   "timed_15m": "15分钟",
   "timed_1h": "1小时",
   "timed_4h": "4小时",
@@ -596,5 +595,7 @@
   "recovery_proof_unavailable": "没有可用的已验证购买记录。请恢复购买后重试。",
   "recovery_restore_help": "获取恢复购买帮助",
   "recovery_request_reference": "参考编号：%@",
-  "phone_operation_mismatch": "此验证响应与当前电话号码请求不匹配。Trust 正在检查请求状态。"
+  "phone_operation_mismatch": "此验证响应与当前电话号码请求不匹配。Trust 正在检查请求状态。",
+  "first_share_cta_always": "共享 Always",
+  "first_share_cta_sealed": "共享 Sealed"
 }

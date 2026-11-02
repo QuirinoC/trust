@@ -210,6 +210,8 @@
 "enter_phone_code" = "コードを入力してください。";
 "export_log" = "記録を書き出す";
 "find_your_person" = "相手を探す";
+"first_share_cta_always" = "Alwaysを共有";
+"first_share_cta_sealed" = "Sealedを共有";
 "first_share_details" = "%@（@%@）さんと%@で位置情報を共有します。相手があなたと共有するかは別に選択します。Lookは選択したモードでの確認であり、毎回新たな承認を求めるものではありません。";
 "first_share_title" = "%@さんと共有しますか？";
 "follow_iphone_language" = "iPhone の設定に従う";
@@ -417,7 +419,6 @@
 "presence_grant_label" = "%@に自宅か外出中かを知らせる";
 "presence_grant_updated" = "自宅／外出ステータスの共有設定を更新しました。";
 "presence_hidden" = "非表示";
-"presence_hidden_badge" = "ステータス非表示";
 "presence_hidden_copy" = "相手に自宅・外出は表示されません。";
 "presence_hidden_toast" = "ステータスを非表示にしました。";
 "presence_hint" = "自宅、外出、または非表示を設定します。位置情報ではありません。";

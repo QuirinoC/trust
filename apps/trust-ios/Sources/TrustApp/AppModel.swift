@@ -3987,6 +3987,27 @@ final class AppModel: ObservableObject {
                 replacementIdentityToken: freshIdentity?.identityToken,
                 replacementNonce: freshIdentity?.nonce
             )
+            // A late successful response can still carry authoritative retry timing.
+            // Merge only that budget metadata while the captured account and age
+            // authorization remain current; never let it replace a newer operation,
+            // challenge, draft, or presentation after the user edits or resends.
+            guard isCurrentAccount(operation: operation),
+                  canAccessAccountData,
+                  hasCurrentAgeAuthorization(generation: ageGeneration) else { return }
+            let now = Date()
+            phoneRetry.apply(
+                phone: sent.normalizedPhone ?? phone,
+                serverTime: sent.serverTime,
+                resendAt: sent.resendRetryAt ?? (sent.serverTime ?? now).addingTimeInterval(Double(sent.resendAfterSeconds)),
+                correctionAt: sent.correctionRetryAt,
+                remaining: sent.immediateNumberAttemptsRemaining,
+                accepted: true,
+                now: now,
+                accountAt: sent.accountRetryAt,
+                accountWindow: sent.accountWindowStartedAt,
+                accountCount: sent.accountSendCount
+            )
+            savePhoneRetry()
             guard phoneOperationIsCurrent(operation, ageGeneration: ageGeneration, generation: generation),
                   phoneRetry.operationRequestID == requestId,
                   phoneRetry.operationPhone == phone,
@@ -3997,16 +4018,10 @@ final class AppModel: ObservableObject {
             phoneRetry.editingPhoneNumber = false
             phoneRetry.editedPhoneDraft = nil
             phoneRetry.phoneEditOriginRequestID = nil
-            let now = Date()
 #if TRUST_STAGING
             let normalizedPhone = TrustPhoneRetryState.normalized(sent.normalizedPhone ?? phone)
             let isStagingTestPhone = Self.stagingTestPhoneNumbers.contains(normalizedPhone)
 #endif
-            phoneRetry.apply(phone: sent.normalizedPhone ?? phone, serverTime: sent.serverTime,
-                resendAt: sent.resendRetryAt ?? (sent.serverTime ?? now).addingTimeInterval(Double(sent.resendAfterSeconds)),
-                correctionAt: sent.correctionRetryAt, remaining: sent.immediateNumberAttemptsRemaining, accepted: true, now: now,
-                accountAt: sent.accountRetryAt, accountWindow: sent.accountWindowStartedAt, accountCount: sent.accountSendCount)
-            savePhoneRetry()
             challengedPhone = sent.normalizedPhone ?? phone
             phoneRetry.challengeNumber = challengedPhone
             phoneRetry.challengeExpiresAt = now.addingTimeInterval(sent.expiresAt.timeIntervalSince(sent.serverTime ?? now))
@@ -4053,6 +4068,23 @@ final class AppModel: ObservableObject {
         } catch is CancellationError {
             return
         } catch {
+            guard isCurrentAccount(operation: operation),
+                  canAccessAccountData,
+                  hasCurrentAgeAuthorization(generation: ageGeneration) else { return }
+            if case TrustClientError.phoneRetry(let code, _, let details) = error {
+                let now = Date()
+                let retryAt = details.retryAt ?? (details.serverTime ?? now).addingTimeInterval(Double(details.retryAfterSeconds ?? 0))
+                phoneRetry.apply(phone: details.normalizedPhone ?? phone, serverTime: details.serverTime,
+                    resendAt: details.resendRetryAt, correctionAt: details.correctionRetryAt,
+                    remaining: details.immediateNumberAttemptsRemaining, retryAt: retryAt,
+                    accepted: code == "otp_send_failed", now: now,
+                    accountAt: details.accountRetryAt, accountWindow: details.accountWindowStartedAt, accountCount: details.accountSendCount)
+                if details.immediateNumberAttemptsRemaining == nil {
+                    let incomingGlobalDeadline = now.addingTimeInterval(retryAt.timeIntervalSince(details.serverTime ?? now))
+                    phoneRetry.globalDeadline = max(phoneRetry.globalDeadline ?? .distantPast, incomingGlobalDeadline)
+                }
+                savePhoneRetry()
+            }
             guard phoneOperationIsCurrent(operation, ageGeneration: ageGeneration, generation: generation),
                   phoneRetry.operationRequestID == requestId,
                   phoneRetry.operationPhone == phone else { return }
@@ -4064,19 +4096,6 @@ final class AppModel: ObservableObject {
                 guard phoneOperationIsCurrent(operation, ageGeneration: ageGeneration, generation: generation),
                       phoneRetry.operationRequestID == requestId,
                       phoneRetry.operationPhone == phone else { return }
-            }
-            if case TrustClientError.phoneRetry(let code, _, let details) = error {
-                let now = Date()
-                let retryAt = details.retryAt ?? (details.serverTime ?? now).addingTimeInterval(Double(details.retryAfterSeconds ?? 0))
-                phoneRetry.apply(phone: details.normalizedPhone ?? phone, serverTime: details.serverTime,
-                    resendAt: details.resendRetryAt, correctionAt: details.correctionRetryAt,
-                    remaining: details.immediateNumberAttemptsRemaining, retryAt: retryAt,
-                    accepted: code == "otp_send_failed", now: now,
-                    accountAt: details.accountRetryAt, accountWindow: details.accountWindowStartedAt, accountCount: details.accountSendCount)
-                if details.immediateNumberAttemptsRemaining == nil {
-                    phoneRetry.globalDeadline = now.addingTimeInterval(retryAt.timeIntervalSince(details.serverTime ?? now))
-                }
-                savePhoneRetry()
             }
             guard phoneOperationIsCurrent(operation, ageGeneration: ageGeneration, generation: generation),
                   action == .resendCode || phoneDraft.trimmingCharacters(in: .whitespacesAndNewlines) == phone else { return }

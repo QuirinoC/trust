@@ -79,6 +79,8 @@ public enum TrustCopy {
     public static func firstShareDetails(_ name: String, handle: String, mode: String) -> String {
         format("first_share_details", defaultValue: "You’ll share your location with %@ (@%@) using %@. They choose separately whether to share with you. A Look is a check under the mode you chose; it does not ask for a new approval each time.", name, handle, mode)
     }
+    public static var firstShareCTAAlways: String { value("first_share_cta_always", defaultValue: "Share Always") }
+    public static var firstShareCTASealed: String { value("first_share_cta_sealed", defaultValue: "Share Sealed") }
     public static func shareWithPerson(_ name: String) -> String {
         format("share_with_person", defaultValue: "Share with %@", name)
     }
@@ -359,7 +361,6 @@ public enum TrustCopy {
     public static var presenceAway: String { value("presence_away", defaultValue: "Away") }
     public static var presenceHidden: String { value("presence_hidden", defaultValue: "Hidden") }
     public static var presenceUnknown: String { value("presence_unknown", defaultValue: "No signal") }
-    public static var presenceHiddenBadge: String { value("presence_hidden_badge", defaultValue: "Presence hidden") }
 
     public static var timed15m: String { value("timed_15m", defaultValue: "15 minutes") }
     public static var timed1h: String { value("timed_1h", defaultValue: "1 hour") }

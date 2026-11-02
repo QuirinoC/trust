@@ -210,6 +210,8 @@
 "enter_phone_code" = "Entrez le code.";
 "export_log" = "Journal d'exportation";
 "find_your_person" = "Trouvez la personne";
+"first_share_cta_always" = "Partager en Always";
+"first_share_cta_sealed" = "Partager en Sealed";
 "first_share_details" = "Vous partagerez votre position avec %@ (@%@) en mode %@. Cette personne choisit séparément de partager ou non avec vous. Un Look est une consultation selon le mode choisi ; il ne demande pas une nouvelle autorisation à chaque fois.";
 "first_share_title" = "Partager avec %@ ?";
 "follow_iphone_language" = "Suivre la langue de l’iPhone";
@@ -417,7 +419,6 @@
 "presence_grant_label" = "Prévenez %@ quand je suis chez moi ou absent";
 "presence_grant_updated" = "Préférence de partage du statut mise à jour.";
 "presence_hidden" = "Caché";
-"presence_hidden_badge" = "Présence cachée";
 "presence_hidden_copy" = "Ils ne voient ni Domicile ni Absent.";
 "presence_hidden_toast" = "Statut masqué.";
 "presence_hint" = "Définit Domicile, Absent ou Masqué. Pas un emplacement.";

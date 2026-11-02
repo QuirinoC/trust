@@ -55,7 +55,6 @@
   "presence_away": "Weg",
   "presence_hidden": "Versteckt",
   "presence_unknown": "Kein Signal",
-  "presence_hidden_badge": "Präsenz verborgen",
   "timed_15m": "15 Minuten",
   "timed_1h": "1 Stunde",
   "timed_4h": "4 Stunden",
@@ -596,5 +595,7 @@
   "recovery_proof_unavailable": "Es ist kein verifizierter Kaufbeleg verfügbar. Stelle Käufe wieder her und versuche es erneut.",
   "recovery_restore_help": "Hilfe zur Wiederherstellung",
   "recovery_request_reference": "Referenz: %@",
-  "phone_operation_mismatch": "Diese Verifizierungsantwort passt nicht zur aktuellen Telefonanfrage. Trust prüft den Status der Anfrage."
+  "phone_operation_mismatch": "Diese Verifizierungsantwort passt nicht zur aktuellen Telefonanfrage. Trust prüft den Status der Anfrage.",
+  "first_share_cta_always": "Always teilen",
+  "first_share_cta_sealed": "Sealed teilen"
 }

@@ -99,7 +99,6 @@
   "presence_away": "外出中",
   "presence_hidden": "非表示",
   "presence_unknown": "信号なし",
-  "presence_hidden_badge": "ステータス非表示",
   "timed_15m": "15分",
   "timed_1h": "1時間",
   "timed_4h": "4時間",
@@ -596,5 +595,7 @@
   "recovery_proof_unavailable": "確認済みの購入記録がありません。購入を復元してから再試行してください。",
   "recovery_restore_help": "復元についてヘルプを利用",
   "recovery_request_reference": "参照番号：%@",
-  "phone_operation_mismatch": "この確認応答は現在の電話番号リクエストと一致しません。Trustがリクエストの状況を確認しています。"
+  "phone_operation_mismatch": "この確認応答は現在の電話番号リクエストと一致しません。Trustがリクエストの状況を確認しています。",
+  "first_share_cta_always": "Alwaysを共有",
+  "first_share_cta_sealed": "Sealedを共有"
 }
