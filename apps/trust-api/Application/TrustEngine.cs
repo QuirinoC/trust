@@ -1,13 +1,20 @@
 using TrustApi.Domain;
+using TrustApi.Configuration;
 using TrustApi.Infrastructure.AgeAssurance;
+using TrustApi.Infrastructure.StoreKit;
+using Microsoft.Extensions.Options;
 
 namespace TrustApi.Application;
 
 public sealed class TrustEngine(
     ITrustStore store,
     TimeProvider time,
-    IAgeAssuranceAccountStore? ageAssurance = null)
+    IAgeAssuranceAccountStore? ageAssurance = null,
+    IStoreKitEntitlementStore? entitlements = null,
+    IOptions<StoreKitOptions>? storeKitOptions = null)
 {
+    private readonly StoreKitOptions storeKit = storeKitOptions?.Value ?? new StoreKitOptions();
+
     public async Task<Account> SignInAsync(
         string provider,
         string subject,
@@ -48,6 +55,7 @@ public sealed class TrustEngine(
 
     public async Task<CircleSnapshot> GetCircleAsync(Guid accountId, CancellationToken cancellationToken)
     {
+        if (entitlements is not null) await entitlements.RefreshAccountCoverageAsync(accountId, time.GetUtcNow(), cancellationToken);
         var you = await RequireAccount(accountId, cancellationToken);
         var now = time.GetUtcNow();
         await store.RestoreExpiredPausesAsync(now, cancellationToken);
@@ -55,9 +63,11 @@ public sealed class TrustEngine(
         var visibleConnected = new List<Account>(connected.Count);
         foreach (var person in connected)
         {
-            if (!await IsAccountBlockedAsync(person.Id, cancellationToken)) visibleConnected.Add(person);
+            if (entitlements is not null) await entitlements.RefreshAccountCoverageAsync(person.Id, time.GetUtcNow(), cancellationToken);
+            var freshPerson = await store.FindAccountAsync(person.Id, cancellationToken) ?? person;
+            if (!await IsAccountBlockedAsync(person.Id, cancellationToken)) visibleConnected.Add(freshPerson);
         }
-        var coverage = CoverageOf(you, visibleConnected);
+        now = time.GetUtcNow();
         var members = new List<CircleMember>();
         var yourHome = await store.GetHomePlaceAsync(you.Id, cancellationToken);
         var yourPresence = await store.GetCurrentHomePresenceAsync(you.Id, cancellationToken);
@@ -68,11 +78,16 @@ public sealed class TrustEngine(
             if (connectionId is not { } activeConnectionId) continue;
             var outbound = await store.GetShareAsync(you.Id, person.Id, cancellationToken);
             var inbound = await store.GetShareAsync(person.Id, you.Id, cancellationToken);
-            var inboundLive = inbound.RevealsLive(now);
-            // Always coordinates are a Plus pin for the viewer. A paying friend does not cover you.
-            // Sealed stays coordinate-free here; Look still returns its own snapshot.
+            var shareReadAt = time.GetUtcNow();
+            var receiveExpiry = inbound.RevealsLive(shareReadAt) && entitlements is not null
+                ? await entitlements.GetActiveEntitlementExpiryAsync(person.Id, cancellationToken)
+                : null;
+            var inboundLive = inbound.RevealsLive(shareReadAt)
+                && HasCurrentOwnerEntitlement(person, receiveExpiry, time.GetUtcNow());
+            // Receive access follows the sharing person's current entitlement. The
+            // viewer's own Plus status remains independent and never grants access.
             LocationFix? live = null;
-            if (inboundLive && you.HasCircle)
+            if (inboundLive)
             {
                 live = await store.LatestLocationAsync(person.Id, cancellationToken);
             }
@@ -86,13 +101,16 @@ public sealed class TrustEngine(
             var inboundGrant = await store.GetPresenceGrantAsync(person.Id, you.Id, cancellationToken);
             var outboundPresenceGranted = outboundGrant?.Enabled == true;
             var inboundPresenceGranted = inboundGrant?.Enabled == true;
+            var unavailableReason = !inbound.RevealsLive(shareReadAt)
+                ? inbound.Effective(shareReadAt) == ShareResting.Paused ? "paused" : "not_shared"
+                : !HasCurrentOwnerEntitlement(person, receiveExpiry, time.GetUtcNow()) ? "unavailable" : null;
 
             VisibleHomePresence? homePresence = null;
             var current = await store.GetCurrentHomePresenceAsync(person.Id, cancellationToken);
             // Status and arrival notifications require both independent permissions:
             // the subject's explicit grant and this pair's effective share mode.
             // Hidden remains distinct from no signal and never becomes visible.
-            if (inbound.AcceptsLocation(now)
+            if (inbound.AcceptsLocation(shareReadAt)
                 && inboundGrant?.Enabled == true
                 && current is not null
                 && current.State is HomePresenceState.Home or HomePresenceState.Away)
@@ -106,8 +124,49 @@ public sealed class TrustEngine(
 
             var promiseView = await BuildPromiseViewAsync(you.Id, person.Id, cancellationToken);
 
+            // Keep the finite expiry in the response even when it crossed while
+            // the location/presence reads were in flight; clients can expire cache.
+            Account currentOwner = person;
+            if (entitlements is not null)
+            {
+                await entitlements.RefreshAccountCoverageAsync(person.Id, time.GetUtcNow(), cancellationToken);
+                currentOwner = await store.FindAccountAsync(person.Id, cancellationToken) ?? person;
+                receiveExpiry = inbound.RevealsLive(time.GetUtcNow())
+                    ? await entitlements.GetActiveEntitlementExpiryAsync(person.Id, cancellationToken)
+                    : null;
+            }
+            if (homePresence is not null)
+            {
+                var currentHomePresence = await store.GetCurrentHomePresenceAsync(person.Id, cancellationToken);
+                if (currentHomePresence is null || currentHomePresence.State is not (HomePresenceState.Home or HomePresenceState.Away))
+                    homePresence = null;
+            }
+
+            // Read the share, membership, and grant after all other awaited reads so a
+            // concurrent Off/Pause/disconnect cannot leave an old authorization in the response.
+            var currentConnection = await store.GetActiveMembershipIdAsync(you.Id, person.Id, cancellationToken);
+            var currentInbound = await store.GetShareAsync(person.Id, you.Id, cancellationToken);
+            var currentInboundGrant = await store.GetPresenceGrantAsync(person.Id, you.Id, cancellationToken);
+            var currentReadAt = time.GetUtcNow();
+            inboundPresenceGranted = currentInboundGrant?.Enabled == true;
+            var sharingStillAuthorized = currentConnection == activeConnectionId
+                && currentInbound.RevealsLive(currentReadAt);
+            var homeStillAuthorized = currentConnection == activeConnectionId
+                && currentInbound.AcceptsLocation(currentReadAt)
+                && currentInboundGrant?.Enabled == true;
+            var ownerStillEntitled = HasCurrentOwnerEntitlement(currentOwner, receiveExpiry, currentReadAt);
+            if (inboundLive && (!sharingStillAuthorized || !ownerStillEntitled))
+            {
+                inboundLive = false;
+                live = null;
+                presence = null;
+            }
+            if (!ownerStillEntitled && currentOwner.HasCircle == false && receiveExpiry is not null)
+                inboundLive = false;
+            if (!homeStillAuthorized) homePresence = null;
+
             members.Add(new CircleMember(
-                person,
+                currentOwner,
                 activeConnectionId,
                 presence,
                 outbound,
@@ -118,9 +177,20 @@ public sealed class TrustEngine(
                 outboundGrant?.Revision ?? 0,
                 inboundPresenceGranted,
                 homePresence,
-                promiseView));
+                promiseView,
+                receiveExpiry,
+                inboundLive ? null : unavailableReason ?? (receiveExpiry is not null ? "unavailable" : null),
+                1));
         }
 
+        if (entitlements is not null)
+        {
+            await entitlements.RefreshAccountCoverageAsync(accountId, time.GetUtcNow(), cancellationToken);
+            you = await store.FindAccountAsync(accountId, cancellationToken) ?? you;
+        }
+        now = time.GetUtcNow();
+        var currentConnected = members.Select(member => member.Person).ToList();
+        var coverage = CoverageOf(you, currentConnected);
         var since = now.AddDays(-coverage.LookLogDays);
         var log = await store.ListLooksAsync(you.Id, since, cancellationToken);
         var allLog = await store.ListLooksAsync(you.Id, DateTimeOffset.MinValue, cancellationToken);
@@ -128,10 +198,79 @@ public sealed class TrustEngine(
         allLog = await RemoveBlockedSubjectsAsync(allLog, cancellationToken);
         var invite = await store.FindPendingInviteAsync(you.Id, cancellationToken);
 
+        // Circle assembled each member from several independent reads. Recheck the
+        // current pair authorization and owner entitlement after the history/invite
+        // reads too, then make blocked-account filtering the final awaited operation.
+        var finalMembers = new List<CircleMember>(members.Count);
+        foreach (var member in members)
+        {
+            Account currentOwner = member.Person;
+            DateTimeOffset? currentExpiry = member.LiveAccessExpiresAt;
+            if (entitlements is not null)
+            {
+                await entitlements.RefreshAccountCoverageAsync(member.Person.Id, time.GetUtcNow(), cancellationToken);
+                currentOwner = await store.FindAccountAsync(member.Person.Id, cancellationToken) ?? member.Person;
+                currentExpiry = await entitlements.GetActiveEntitlementExpiryAsync(member.Person.Id, cancellationToken);
+            }
+
+            VisibleHomePresence? currentHomePresence = member.HomePresence;
+            if (currentHomePresence is not null)
+            {
+                var latestHomePresence = await store.GetCurrentHomePresenceAsync(member.Person.Id, cancellationToken);
+                currentHomePresence = latestHomePresence is { State: HomePresenceState.Home or HomePresenceState.Away }
+                    ? new VisibleHomePresence(latestHomePresence.State, latestHomePresence.LastChangedAt, currentHomePresence.PlaceLabel)
+                    : null;
+            }
+
+            var currentOutboundGrant = await store.GetPresenceGrantAsync(you.Id, member.Person.Id, cancellationToken);
+            var currentConnection = await store.GetActiveMembershipIdAsync(you.Id, member.Person.Id, cancellationToken);
+            var currentOutbound = await store.GetShareAsync(you.Id, member.Person.Id, cancellationToken);
+            var currentInbound = await store.GetShareAsync(member.Person.Id, you.Id, cancellationToken);
+            var currentGrant = await store.GetPresenceGrantAsync(member.Person.Id, you.Id, cancellationToken);
+            var finalReadAt = time.GetUtcNow();
+            var sameConnection = currentConnection == member.ConnectionId;
+            var ownerStillEntitled = HasCurrentOwnerEntitlement(currentOwner, currentExpiry, finalReadAt);
+            var liveStillAuthorized = member.InboundLive && sameConnection
+                && currentInbound.RevealsLive(finalReadAt) && ownerStillEntitled;
+            var homeStillAuthorized = sameConnection && currentInbound.AcceptsLocation(finalReadAt)
+                && currentGrant?.Enabled == true;
+            if (!homeStillAuthorized) currentHomePresence = null;
+            finalMembers.Add(member with
+            {
+                Person = currentOwner,
+                OutboundShare = currentOutbound,
+                InboundShare = currentInbound,
+                InboundLive = liveStillAuthorized,
+                Live = liveStillAuthorized ? member.Live : null,
+                Presence = liveStillAuthorized ? member.Presence : null,
+                OutboundPresenceGranted = currentOutboundGrant?.Enabled == true,
+                InboundPresenceGranted = currentGrant?.Enabled == true,
+                HomePresence = currentHomePresence,
+                LiveAccessExpiresAt = currentInbound.RevealsLive(finalReadAt) ? currentExpiry : null,
+                LiveUnavailableReason = liveStillAuthorized ? null
+                    : !currentInbound.RevealsLive(finalReadAt)
+                        ? currentInbound.Effective(finalReadAt) == ShareResting.Paused ? "paused" : "not_shared"
+                        : "unavailable"
+            });
+        }
+
+        await RequireNotRevokedSubjectAsync(you.Id, cancellationToken);
+        var blockedMemberIds = new HashSet<Guid>();
+        foreach (var member in finalMembers)
+        {
+            if (await IsAccountBlockedAsync(member.Person.Id, cancellationToken)) blockedMemberIds.Add(member.Person.Id);
+        }
+        finalMembers.RemoveAll(member => blockedMemberIds.Contains(member.Person.Id));
+        log = log.Where(look => !blockedMemberIds.Contains(look.SubjectId)
+            && !blockedMemberIds.Contains(look.ViewerId)).ToList();
+        allLog = allLog.Where(look => !blockedMemberIds.Contains(look.SubjectId)
+            && !blockedMemberIds.Contains(look.ViewerId)).ToList();
+        var finalCoverage = CoverageOf(you, finalMembers.Select(member => member.Person).ToList());
+
         return new CircleSnapshot(
             you,
-            members,
-            coverage,
+            finalMembers,
+            finalCoverage,
             invite,
             null,
             null,
@@ -210,6 +349,7 @@ public sealed class TrustEngine(
         PauseDuration? pause,
         CancellationToken cancellationToken)
     {
+        if (entitlements is not null) await entitlements.RefreshAccountCoverageAsync(accountId, time.GetUtcNow(), cancellationToken);
         var you = await RequireAccount(accountId, cancellationToken);
         var connectionId = await store.GetActiveMembershipIdAsync(you.Id, granteeId, cancellationToken)
             ?? throw TrustException.NotConnected();
@@ -233,6 +373,7 @@ public sealed class TrustEngine(
         PauseDuration? pause,
         CancellationToken cancellationToken)
     {
+        if (entitlements is not null) await entitlements.RefreshAccountCoverageAsync(accountId, time.GetUtcNow(), cancellationToken);
         var you = await RequireAccount(accountId, cancellationToken);
 
         if (resting is null && pause is null) return;
@@ -241,6 +382,7 @@ public sealed class TrustEngine(
             throw TrustException.ClientUpdateRequired();
 
         var now = time.GetUtcNow();
+        var currentEntitlementExpiry = entitlements is null ? null : await entitlements.GetActiveEntitlementExpiryAsync(you.Id, cancellationToken);
         await store.RestoreExpiredPausesAsync(now, cancellationToken);
         var current = await store.GetShareAsync(you.Id, granteeId, cancellationToken);
 
@@ -271,7 +413,7 @@ public sealed class TrustEngine(
 
         // Always is Plus on this account. A friend's Plus does not unlock it.
         // Sealed, Off, and Pause are never paywalled.
-        if (resting == ShareResting.Always && !you.HasCircle)
+        if (resting == ShareResting.Always && !HasCurrentPlus(you, currentEntitlementExpiry, time.GetUtcNow()))
         {
             throw TrustException.ProRequired();
         }
@@ -306,9 +448,19 @@ public sealed class TrustEngine(
         Guid subjectId,
         CancellationToken cancellationToken)
     {
+        if (entitlements is not null)
+        {
+            await entitlements.RefreshAccountCoverageAsync(viewerId, time.GetUtcNow(), cancellationToken);
+            await entitlements.RefreshAccountCoverageAsync(subjectId, time.GetUtcNow(), cancellationToken);
+        }
         var viewer = await RequireAccount(viewerId, cancellationToken);
+        var subject = await RequireAccount(subjectId, cancellationToken);
         await RequireNotRevokedSubjectAsync(subjectId, cancellationToken);
-        if (!await store.AreConnectedAsync(viewer.Id, subjectId, cancellationToken))
+        await RequireNotRevokedSubjectAsync(viewerId, cancellationToken);
+        var viewerExpiry = entitlements is null ? null : await entitlements.GetActiveEntitlementExpiryAsync(viewerId, cancellationToken);
+        var subjectExpiry = entitlements is null ? null : await entitlements.GetActiveEntitlementExpiryAsync(subjectId, cancellationToken);
+        var initialConnection = await store.GetActiveMembershipIdAsync(viewer.Id, subjectId, cancellationToken);
+        if (initialConnection is null)
         {
             throw TrustException.NotConnected();
         }
@@ -318,13 +470,32 @@ public sealed class TrustEngine(
         var shareToViewer = await store.GetShareAsync(subjectId, viewer.Id, cancellationToken);
         // History is an ongoing trail and is available only in Always. Sealed grants
         // exactly one confirmed snapshot through LookAsync.
-        if (!shareToViewer.SharesHistory(now))
+        if (!shareToViewer.SharesHistory(now) || !HasCurrentPlus(subject, subjectExpiry, now))
         {
             throw TrustException.ShareOff();
         }
 
         var window = TrustRules.HistoryWindow(viewer.HasCircle);
         var points = await store.UnlockLocationsAsync(subjectId, now - window, now, cancellationToken);
+        if (entitlements is not null)
+        {
+            await entitlements.RefreshAccountCoverageAsync(subjectId, time.GetUtcNow(), cancellationToken);
+            subject = await store.FindAccountAsync(subjectId, cancellationToken) ?? subject;
+            subjectExpiry = await entitlements.GetActiveEntitlementExpiryAsync(subjectId, cancellationToken);
+            await entitlements.RefreshAccountCoverageAsync(viewerId, time.GetUtcNow(), cancellationToken);
+            viewer = await store.FindAccountAsync(viewerId, cancellationToken) ?? viewer;
+            viewerExpiry = await entitlements.GetActiveEntitlementExpiryAsync(viewerId, cancellationToken);
+        }
+        var checkedAt = time.GetUtcNow();
+        var currentConnection = await store.GetActiveMembershipIdAsync(viewerId, subjectId, cancellationToken);
+        var stillSharingHistory = await store.GetShareAsync(subjectId, viewerId, cancellationToken);
+        await RequireNotRevokedSubjectAsync(subjectId, cancellationToken);
+        await RequireNotRevokedSubjectAsync(viewerId, cancellationToken);
+        if (currentConnection != initialConnection || stillSharingHistory.Revision != shareToViewer.Revision
+            || !stillSharingHistory.SharesHistory(checkedAt) || !HasCurrentPlus(subject, subjectExpiry, checkedAt))
+            throw TrustException.ShareOff();
+        if (!HasCurrentPlus(viewer, viewerExpiry, checkedAt))
+            points = points.Where(point => point.Timestamp >= checkedAt - TimeSpan.FromHours(24)).ToList();
         return points.OrderByDescending(point => point.Timestamp).ToList();
     }
 
@@ -343,7 +514,9 @@ public sealed class TrustEngine(
         bool? isCharging,
         CancellationToken cancellationToken)
     {
+        if (entitlements is not null) await entitlements.RefreshAccountCoverageAsync(accountId, time.GetUtcNow(), cancellationToken);
         var you = await RequireAccount(accountId, cancellationToken);
+        var ownerExpiry = entitlements is null ? null : await entitlements.GetActiveEntitlementExpiryAsync(accountId, cancellationToken);
         var connected = await store.ListConnectedAsync(you.Id, cancellationToken);
         if (connected.Count == 0)
         {
@@ -357,17 +530,21 @@ public sealed class TrustEngine(
         // If every outbound share is Off, wipe what's stored.
         var acceptsLocation = false;
         var keepsTrail = false;
+        var acceptingAlwaysShare = false;
         var acceptingShareRevisions = new Dictionary<Guid, long>();
         foreach (var person in connected)
         {
             var outbound = await store.GetShareAsync(you.Id, person.Id, cancellationToken);
-            if (outbound.AcceptsLocation(now))
+            var effective = outbound.Effective(now);
+            var ownerEntitled = effective != ShareResting.Always || HasCurrentPlus(you, ownerExpiry, time.GetUtcNow());
+            if (ownerEntitled && outbound.AcceptsLocation(now))
             {
                 acceptsLocation = true;
                 acceptingShareRevisions[person.Id] = outbound.Revision;
+                if (effective == ShareResting.Always) acceptingAlwaysShare = true;
             }
 
-            if (outbound.KeepsTrail(now))
+            if (ownerEntitled && outbound.KeepsTrail(now))
             {
                 keepsTrail = true;
             }
@@ -399,6 +576,15 @@ public sealed class TrustEngine(
             }
 
             var fix = raw with { Timestamp = recorded };
+            if (entitlements is not null && acceptingAlwaysShare)
+            {
+                await entitlements.RefreshAccountCoverageAsync(accountId, time.GetUtcNow(), cancellationToken);
+                you = await store.FindAccountAsync(accountId, cancellationToken) ?? you;
+                ownerExpiry = await entitlements.GetActiveEntitlementExpiryAsync(accountId, cancellationToken);
+                if (!HasCurrentPlus(you, ownerExpiry, time.GetUtcNow())) return;
+            }
+            if (ownerExpiry is { } finiteExpiry && finiteExpiry <= time.GetUtcNow() && acceptingAlwaysShare)
+                return;
             if (!await store.TryIngestLocationWhileSharingAsync(you.Id, fix, now, acceptingShareRevisions, cancellationToken))
             {
                 return;
@@ -439,7 +625,10 @@ public sealed class TrustEngine(
 
         var viewer = await RequireAccount(viewerId, cancellationToken);
         var subject = await RequireAccount(subjectId, cancellationToken);
-        if (!await store.AreConnectedAsync(viewer.Id, subject.Id, cancellationToken))
+        await RequireNotRevokedSubjectAsync(subjectId, cancellationToken);
+        await RequireNotRevokedSubjectAsync(viewerId, cancellationToken);
+        var initialConnection = await store.GetActiveMembershipIdAsync(viewer.Id, subject.Id, cancellationToken);
+        if (initialConnection is null)
         {
             throw TrustException.NotConnected();
         }
@@ -487,22 +676,41 @@ public sealed class TrustEngine(
         Guid subjectId,
         CancellationToken cancellationToken)
     {
+        if (entitlements is not null) await entitlements.RefreshAccountCoverageAsync(subjectId, time.GetUtcNow(), cancellationToken);
         var viewer = await RequireAccount(viewerId, cancellationToken);
         var subject = await RequireAccount(subjectId, cancellationToken);
-        if (!await store.AreConnectedAsync(viewer.Id, subject.Id, cancellationToken))
+        await RequireNotRevokedSubjectAsync(subjectId, cancellationToken);
+        await RequireNotRevokedSubjectAsync(viewerId, cancellationToken);
+        var subjectExpiry = entitlements is null ? null : await entitlements.GetActiveEntitlementExpiryAsync(subjectId, cancellationToken);
+        var initialConnection = await store.GetActiveMembershipIdAsync(viewer.Id, subject.Id, cancellationToken);
+        if (initialConnection is null)
         {
             throw TrustException.NotConnected();
         }
 
         var now = time.GetUtcNow();
         var shareToViewer = await store.GetShareAsync(subject.Id, viewer.Id, cancellationToken);
-        if (!shareToViewer.RevealsLive(now))
+        if (!shareToViewer.RevealsLive(now) || !HasCurrentPlus(subject, subjectExpiry, now))
         {
             throw TrustException.ViewRequiresAvailable();
         }
 
         var since = now - TrustRules.ViewDedupeWindow;
         var recent = await store.ListLooksAsync(viewer.Id, since, cancellationToken);
+        if (entitlements is not null)
+        {
+            await entitlements.RefreshAccountCoverageAsync(subject.Id, time.GetUtcNow(), cancellationToken);
+            subject = await store.FindAccountAsync(subject.Id, cancellationToken) ?? subject;
+            subjectExpiry = await entitlements.GetActiveEntitlementExpiryAsync(subject.Id, cancellationToken);
+        }
+        var checkedAt = time.GetUtcNow();
+        var currentConnection = await store.GetActiveMembershipIdAsync(viewer.Id, subject.Id, cancellationToken);
+        var currentShare = await store.GetShareAsync(subject.Id, viewer.Id, cancellationToken);
+        await RequireNotRevokedSubjectAsync(subject.Id, cancellationToken);
+        await RequireNotRevokedSubjectAsync(viewer.Id, cancellationToken);
+        if (currentConnection != initialConnection || currentShare.Revision != shareToViewer.Revision
+            || !currentShare.RevealsLive(checkedAt) || !HasCurrentPlus(subject, subjectExpiry, checkedAt))
+            throw TrustException.ViewRequiresAvailable();
         var deduped = recent.Any(look =>
             look.Kind == LookKind.View && look.ViewerId == viewer.Id && look.SubjectId == subject.Id);
         if (deduped)
@@ -1089,6 +1297,20 @@ public sealed class TrustEngine(
         return existing;
     }
 
+    private bool HasCurrentOwnerEntitlement(Account account, DateTimeOffset? verifiedExpiry, DateTimeOffset now)
+    {
+        if (!account.HasCircle) return false;
+        if (entitlements is null) return true;
+        if (verifiedExpiry is { } expiry) return expiry > now;
+
+        // Preserve only the existing server-gated review grant sources. A StoreKit
+        // source with no verified current transaction is never treated as perpetual.
+        return storeKit.AllowReviewUnlock
+            && (string.Equals(account.CircleSource, "storekit-review", StringComparison.Ordinal)
+                || string.Equals(account.CircleSource, storeKit.MonthlyProductId, StringComparison.Ordinal)
+                || string.Equals(account.CircleSource, storeKit.AnnualProductId, StringComparison.Ordinal));
+    }
+
     /// Plus is this account. A paying friend does not cover you.
     private static CircleCoverage CoverageOf(Account you, IReadOnlyList<Account> connected)
     {
@@ -1185,6 +1407,9 @@ public sealed class TrustEngine(
 
         return new string(chars);
     }
+
+    private bool HasCurrentPlus(Account account, DateTimeOffset? verifiedExpiry, DateTimeOffset now) =>
+        HasCurrentOwnerEntitlement(account, verifiedExpiry, now);
 }
 
 public static class LocationTrail

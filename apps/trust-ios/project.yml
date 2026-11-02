@@ -136,7 +136,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.collapsetechnologies.trust.staging
         PRODUCT_NAME: Trust Staging
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        CURRENT_PROJECT_VERSION: 50
+        CURRENT_PROJECT_VERSION: 51
         MARKETING_VERSION: 1.0
         ENABLE_USER_SCRIPT_SANDBOXING: YES
         SWIFT_STRICT_CONCURRENCY: targeted
@@ -322,6 +322,32 @@ targets:
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: 3S529795M9
 schemes:
+  Trust.LocalE2E:
+    build:
+      targets:
+        Trust: all
+    run:
+      config: Debug
+      storeKitConfiguration: Resources/Trust.storekit
+    test:
+      config: Debug
+      macroExpansion: Trust
+      targets:
+        - name: TrustCoreTests
+          parallelizable: false
+        - name: TrustUITests
+          parallelizable: false
+      testPlans:
+        - path: Trust.LocalE2E.xctestplan
+          defaultPlan: true
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release
+    management:
+      shared: true
   Trust.RealServices:
     build:
       targets:

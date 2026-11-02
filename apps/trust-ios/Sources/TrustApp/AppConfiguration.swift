@@ -29,6 +29,18 @@ enum AppConfiguration {
     static let privacyURL = URL(string: "https://jointrust.app/privacy")!
     static let termsURL = URL(string: "https://jointrust.app/terms")!
     static let supportURL = URL(string: "https://jointrust.app/support")!
+    static let supportEmailAddress = "hello@collapsetechnologies.com"
+
+    static func supportEmailURL(reference: String) -> URL {
+        var components = URLComponents()
+        components.scheme = "mailto"
+        components.path = supportEmailAddress
+        components.queryItems = [
+            URLQueryItem(name: "subject", value: "Trust support request"),
+            URLQueryItem(name: "body", value: "I opened a Trust support request. Reference: \(reference). Please let me know the next steps.")
+        ]
+        return components.url!
+    }
     static let marketingURL = URL(string: "https://jointrust.app")!
 
     static let requestTimeout: TimeInterval = 15

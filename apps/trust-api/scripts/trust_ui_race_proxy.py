@@ -21,6 +21,15 @@ import uuid
 UPSTREAM = "http://127.0.0.1:5090"
 LOCK = threading.Lock()
 STATE = {
+    "fail_next_completion": False,
+    "completion_mask_account_id": None,
+    "completion_mask_count": 0,
+    "completion_failure_count": 0,
+    "hold_next_region": False,
+    "hold_next_view": False,
+    "region_hold_count": 0,
+    "view_hold_count": 0,
+    "view_release_count": 0,
     "hold_next_phone_send": False,
     "hold_next_phone_verify": False,
     "hold_next_circle": False,
@@ -97,6 +106,25 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == "/__test/state":
             self.respond_json(200, self.state_copy())
+            return
+        if self.path == "/api/region":
+            with LOCK:
+                hold = STATE["hold_next_region"]
+                if hold:
+                    STATE["hold_next_region"] = False
+                    STATE["region_hold_count"] += 1
+                    STATE["holding"] = True
+                    STATE["held_resource"] = "region"
+            if not hold:
+                self.forward()
+                return
+            if not RELEASE_HELD.wait(timeout=30):
+                with LOCK:
+                    STATE["holding"] = False
+                    STATE["held_resource"] = None
+                self.respond_json(504, {"error": "test-did-not-release-region"})
+                return
+            self.respond_json(200, {"countryCode": "GB"})
             return
         self.forward()
 
@@ -311,6 +339,26 @@ class Handler(BaseHTTPRequestHandler):
                 })
             self.respond_json(200, {"armed": True})
             return
+        if self.path == "/__test/arm-completion-failure":
+            try:
+                value = json.loads(control_body)
+                if not isinstance(value, dict) or set(value) != {"accountId"}:
+                    raise ValueError()
+                account_id = str(uuid.UUID(value["accountId"]))
+            except (ValueError, TypeError, KeyError, AttributeError, json.JSONDecodeError, UnicodeDecodeError):
+                self.respond_json(400, {"armed": False, "error": "invalid-account-id"})
+                return
+            with LOCK:
+                STATE["fail_next_completion"] = True
+                STATE["completion_mask_account_id"] = account_id
+            self.respond_json(200, {"armed": True})
+            return
+        if self.path in ("/__test/arm-region", "/__test/arm-view"):
+            with LOCK:
+                STATE["hold_next_region" if self.path.endswith("region") else "hold_next_view"] = True
+                RELEASE_HELD.clear()
+            self.respond_json(200, {"armed": True})
+            return
         if self.path in ("/__test/arm-phone-send", "/__test/arm-phone-verify"):
             with LOCK:
                 STATE["hold_next_phone_send" if self.path.endswith("send") else "hold_next_phone_verify"] = True
@@ -343,6 +391,8 @@ class Handler(BaseHTTPRequestHandler):
                     STATE["look_release_count"] += 1
                 elif released_resource == "share":
                     STATE["share_release_count"] += 1
+                elif released_resource == "view":
+                    STATE["view_release_count"] += 1
                 RELEASE_HELD.set()
             self.respond_json(200, {"released": True})
             return
@@ -364,6 +414,16 @@ class Handler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length", "0"))
         body = self.rfile.read(length) if length else None
         path = self.path
+        account_id = self.request_account_id()
+        with LOCK:
+            targeted_completion = bool(account_id and account_id == STATE["completion_mask_account_id"])
+            fail_completion = (targeted_completion and self.command == "POST" and path.split("?", 1)[0] == "/api/v1/me/onboarding/complete" and STATE["fail_next_completion"])
+            if fail_completion:
+                STATE["fail_next_completion"] = False
+                STATE["completion_failure_count"] += 1
+        if fail_completion:
+            self.respond_json(503, {"code": "test_temporary_failure", "message": "A temporary failure was injected by the local test service."})
+            return
         if self.offline_request_matches():
             with LOCK:
                 STATE["offline_request_count"] += 1
@@ -400,6 +460,7 @@ class Handler(BaseHTTPRequestHandler):
         is_circle = self.command == "GET" and path.split("?", 1)[0] == "/api/v1/circle"
         is_home_presence = self.command == "POST" and path.split("?", 1)[0] == "/api/v1/me/home/presence"
         is_history = self.command == "GET" and path.split("?", 1)[0].startswith("/api/v1/people/") and path.endswith("/history")
+        is_view = self.command == "POST" and path.split("?", 1)[0] == "/api/v1/views"
         is_look = self.command == "POST" and path.split("?", 1)[0] == "/api/v1/looks"
         is_share = self.command == "PATCH" and path.split("?", 1)[0].startswith("/api/v1/people/") and path.endswith("/share")
         is_stop_all = self.command == "POST" and path.split("?", 1)[0] == "/api/v1/me/sharing/stop-all"
@@ -461,6 +522,8 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         with LOCK:
+            hold_this_view = is_view and STATE["hold_next_view"]
+            if hold_this_view: STATE["hold_next_view"] = False
             hold_this_phone_send = is_phone_send and STATE["hold_next_phone_send"]
             hold_this_phone_verify = is_phone_verify and STATE["hold_next_phone_verify"]
             if hold_this_phone_send: STATE["hold_next_phone_send"] = False
@@ -538,6 +601,24 @@ class Handler(BaseHTTPRequestHandler):
             self.respond_json(502, {"error": "local-test-upstream-unavailable"})
             return
 
+        # Synthetic legacy response only: the upstream account remains unchanged.
+        if is_circle and targeted_completion and status == 200:
+            try:
+                payload = json.loads(response_body)
+                you = payload.get("you")
+                if isinstance(you, dict) and str(you.get("id", "")).lower() == account_id:
+                    you["handle"] = None
+                    you["onboardingComplete"] = False
+                    response_body = json.dumps(payload, separators=(",", ":")).encode()
+                    with LOCK:
+                        STATE["completion_mask_count"] += 1
+            except (ValueError, TypeError, AttributeError):
+                pass
+        if targeted_completion and self.command == "POST" and normalized_path == "/api/v1/me/onboarding/complete" and 200 <= status < 300:
+            with LOCK:
+                if STATE["completion_mask_account_id"] == account_id:
+                    STATE["completion_mask_account_id"] = None
+
         if self.command == "POST" and normalized_path == "/api/v1/push/devices" and status == 204:
             # Record only acknowledgement counts. Device tokens and installation
             # identifiers must never be exposed by the test control endpoint.
@@ -558,12 +639,14 @@ class Handler(BaseHTTPRequestHandler):
             payload["relationship"] = "none"
             payload["requestId"] = None
             response_body = json.dumps(payload, separators=(",", ":")).encode()
-        held_resource = "phone_send" if hold_this_phone_send else "phone_verify" if hold_this_phone_verify else "circle" if hold_this_circle else "history" if hold_this_history else "look" if hold_this_look else "home_presence" if hold_this_home_presence else "share" if hold_this_share else None
+        held_resource = "view" if hold_this_view else "phone_send" if hold_this_phone_send else "phone_verify" if hold_this_phone_verify else "circle" if hold_this_circle else "history" if hold_this_history else "look" if hold_this_look else "home_presence" if hold_this_home_presence else "share" if hold_this_share else None
         if held_resource:
             with LOCK:
                 STATE["holding"] = True
                 STATE["held_resource"] = held_resource
-                if held_resource == "history":
+                if held_resource == "view":
+                    STATE["view_hold_count"] += 1
+                elif held_resource == "history":
                     STATE["history_hold_count"] += 1
                     STATE["history_status_count"] = status
                     try:
@@ -620,7 +703,23 @@ class Handler(BaseHTTPRequestHandler):
 
     def state_copy(self):
         with LOCK:
-            return copy.deepcopy(STATE)
+            snapshot = copy.deepcopy(STATE)
+        snapshot.pop("completion_mask_account_id", None)
+        return snapshot
+
+    def request_account_id(self):
+        authorization = self.headers.get("Authorization", "")
+        if not authorization.startswith("Bearer "):
+            return None
+        try:
+            parts = authorization[7:].split(".")
+            if len(parts) != 3:
+                return None
+            payload = parts[1] + "=" * (-len(parts[1]) % 4)
+            subject = json.loads(base64.urlsafe_b64decode(payload.encode("ascii"))).get("sub")
+            return str(uuid.UUID(subject))
+        except (ValueError, TypeError, AttributeError, UnicodeDecodeError, json.JSONDecodeError):
+            return None
 
     def offline_request_matches(self):
         authorization = self.headers.get("Authorization", "")

@@ -20,11 +20,15 @@ from typing import Any
 
 SOURCE = Path(__file__).resolve().parents[1] / "Tests/TrustUITests/TrustRealAPIFeatureTests.swift"
 SERIAL_EXCLUSIONS = {
+    "testSignedApplePhoneReplacementPreservesAccountAndDiscovery": "requires the explicitly selected local signed Apple fixture host",
     "testSameAccountHomeHandoffOwnerSetsHome": "requires shared A/B/A Home marker and synthetic device locations",
     "testSameAccountHomeHandoffFirstUseDeviceTakesOver": "requires the preceding A phase and same shared Home marker",
     "testSameAccountHomeHandoffPreviousOwnerDetectsTakeoverAndClear": "requires the preceding A/B phases and same shared Home marker",
 }
 DIRECT_PASS_CASES = {
+    "testFirstShareReviewActionsRemainReachableAtAccessibilitySize",
+    "testPhoneConflictOffersGuidedSupportWithoutTransferringAccount",
+    "testFreshAccountVerifiesPhoneAndReceivesAutomaticHandle",
     "testRequiredPhoneCorrectionsCooldownEditRelaunchAndReturningVerifiedAccount",
     "testAppleSignInFailureCanRetryDirectlyToOnboarding",
     "testPrivacyHeldAccountCanDeleteAfterRelaunch",
@@ -35,6 +39,9 @@ DIRECT_PASS_CASES = {
     "testProfilePictureIsStagedAndDiscoveryStaysExplicitAcrossRelaunch",
 }
 DIRECT_SKIP_REASONS = {
+    "testVerifiedPhoneCompletionFailureKeepsSetupUntilRetry": "requires fault proxy one-shot completion failure",
+    "testDelayedRegionHintCannotOverrideManualCountry": "requires fault proxy delayed region hint",
+    "testViewReceiptWaitsForServerAcknowledgement": "requires fault proxy held View acknowledgement",
     "testConsentRevokedResponseKeepsAccountBlocked": "requires fault proxy to inject a consent-revoked response",
     "testLatePhoneResponsesAfterEditPreserveRetryWithoutOpeningCodeOrHome": "requires fault proxy to hold phone send/verify responses",
     "testManualHomeChoicesReachServerAndRetirePreviousNotice": "requires fault proxy to hold Home presence responses",

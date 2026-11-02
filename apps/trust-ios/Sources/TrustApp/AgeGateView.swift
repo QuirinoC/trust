@@ -7,12 +7,15 @@ import UIKit
 struct AgeGateView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.trustPalette) private var palette
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var birthMonth = ""
     @State private var birthDay = ""
     @State private var birthYear = ""
     @State private var didSubmitBirthDate = false
     @State private var showingDeleteAccount = false
+    @State private var showingAccountHelp = false
+    @State private var showingSignOutOptions = false
     @FocusState private var focusedField: BirthDateField?
 
     private enum BirthDateField: Hashable {
@@ -82,7 +85,7 @@ struct AgeGateView: View {
                         Link(TrustCopy.termsOfService, destination: AppConfiguration.termsURL)
                         Link(TrustCopy.privacy, destination: AppConfiguration.privacyURL)
                         if model.phase == .ageBlocked || model.phase == .ageCheckUnavailable || model.phase == .ageRangeSharingDeclined || model.phase == .ageRangeBlocked || model.phase == .ageConsentRevoked || model.phase == .agePrivacyHoldPending || model.phase == .agePrivacyHeld || model.phase == .appTransactionUnavailable {
-                            Link(TrustCopy.support, destination: AppConfiguration.supportURL)
+                            Button(TrustCopy.accountHelp) { showingAccountHelp = true }
                                 .accessibilityIdentifier("age-gate-support")
                         }
                     }
@@ -117,6 +120,23 @@ struct AgeGateView: View {
             .accessibilityIdentifier("age-privacy-hold-delete-confirm")
             Button(TrustCopy.cancel, role: .cancel) {}
                 .accessibilityIdentifier("age-privacy-hold-delete-cancel")
+        }
+        .sheet(isPresented: $showingAccountHelp) {
+            AccountHelpSheet(onSignOut: {
+                if model.outboundActiveCount > 0 { showingSignOutOptions = true }
+                else { model.signOut() }
+            }, onDelete: { showingDeleteAccount = true })
+                .presentationDetents(dynamicTypeSize.isAccessibilitySize ? [.large] : [.medium, .large])
+                .presentationDragIndicator(.visible)
+        }
+        .confirmationDialog(TrustCopy.signOut, isPresented: $showingSignOutOptions, titleVisibility: .visible) {
+            if model.canStopAllBeforeSignOut {
+                Button(TrustCopy.stopAllAndSignOut, role: .destructive) { Task { await model.stopAllAndSignOut() } }
+            }
+            Button(TrustCopy.signOut) { model.signOut() }
+            Button(TrustCopy.cancel, role: .cancel) {}
+        } message: {
+            Text(TrustCopy.signOutSharingWarning)
         }
     }
 

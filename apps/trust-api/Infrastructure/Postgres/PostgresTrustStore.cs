@@ -1258,12 +1258,46 @@ public sealed class PostgresTrustStore(string connectionString) : ITrustStore
         }
     }
 
+    public async Task<Account> SetGeneratedHandleIfMissingAsync(Guid accountId, string handle, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        Account account;
+        await using (var read = new NpgsqlCommand($"SELECT {AccountColumns} FROM trust.accounts WHERE account_id=$1 FOR UPDATE;", connection, transaction))
+        {
+            read.Parameters.AddWithValue(accountId);
+            await using var reader = await read.ExecuteReaderAsync(cancellationToken);
+            if (!await reader.ReadAsync(cancellationToken)) throw TrustException.Unauthorized();
+            account = ReadAccount(reader);
+        }
+        if (account.HasHandle)
+        {
+            await transaction.CommitAsync(cancellationToken);
+            return account;
+        }
+        try
+        {
+            var displayName = account.HasChosenDisplayName ? account.DisplayName : handle;
+            await using var update = new NpgsqlCommand("UPDATE trust.accounts SET handle=$2,display_name=$3 WHERE account_id=$1;", connection, transaction);
+            update.Parameters.AddWithValue(accountId); update.Parameters.AddWithValue(handle); update.Parameters.AddWithValue(displayName);
+            await update.ExecuteNonQueryAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return account with { Handle = handle, DisplayName = displayName };
+        }
+        catch (PostgresException exception) when (exception.SqlState == PostgresErrorCodes.UniqueViolation)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            throw TrustException.HandleInUse();
+        }
+    }
+
     public async Task<PhoneChallenge?> GetPhoneChallengeAsync(Guid accountId, CancellationToken cancellationToken)
     {
         await using var connection = await OpenAsync(cancellationToken);
         await using var command = new NpgsqlCommand(
             """
-            SELECT account_id, phone_e164, code_hash, expires_at, attempts, sent_at, send_count, window_started_at
+            SELECT account_id, phone_e164, code_hash, expires_at, attempts, sent_at, send_count, window_started_at,
+                   challenge_id, request_id, purpose, delivery_state, expected_phone_e164
             FROM trust.phone_challenges
             WHERE account_id = $1;
             """,
@@ -1278,6 +1312,33 @@ public sealed class PostgresTrustStore(string connectionString) : ITrustStore
         return ReadChallenge(reader);
     }
 
+    public async Task<PhoneVerificationOperation?> GetPhoneVerificationOperationAsync(Guid accountId, Guid requestId, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var command = new NpgsqlCommand("SELECT account_id,request_id,challenge_id,phone_e164,purpose,verification_state,delivery_state,expires_at,updated_at FROM trust.phone_verification_operations WHERE account_id=$1 AND request_id=$2;", connection);
+        command.Parameters.AddWithValue(accountId); command.Parameters.AddWithValue(requestId);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        return await reader.ReadAsync(cancellationToken) ? new PhoneVerificationOperation(reader.GetGuid(0), reader.GetGuid(1), reader.GetGuid(2), reader.GetString(3), reader.GetString(4), reader.GetString(5), reader.GetString(6), reader.GetFieldValue<DateTimeOffset>(7), reader.GetFieldValue<DateTimeOffset>(8)) : null;
+    }
+
+    public async Task SetPhoneDeliveryStateAsync(Guid accountId, Guid challengeId, Guid? requestId, string state, DateTimeOffset updatedAt, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        await using (var challenge = new NpgsqlCommand("UPDATE trust.phone_challenges SET delivery_state=$3 WHERE account_id=$1 AND challenge_id=$2;", connection, transaction))
+        {
+            challenge.Parameters.AddWithValue(accountId); challenge.Parameters.AddWithValue(challengeId); challenge.Parameters.AddWithValue(state);
+            await challenge.ExecuteNonQueryAsync(cancellationToken);
+        }
+        if (requestId is { } id)
+        {
+            await using var operation = new NpgsqlCommand("UPDATE trust.phone_verification_operations SET delivery_state=$3,updated_at=$4 WHERE account_id=$1 AND request_id=$2;", connection, transaction);
+            operation.Parameters.AddWithValue(accountId); operation.Parameters.AddWithValue(id); operation.Parameters.AddWithValue(state); operation.Parameters.AddWithValue(updatedAt);
+            await operation.ExecuteNonQueryAsync(cancellationToken);
+        }
+        await transaction.CommitAsync(cancellationToken);
+    }
+
     public async Task UpsertPhoneChallengeAsync(PhoneChallenge challenge, CancellationToken cancellationToken)
     {
         await using var connection = await OpenAsync(cancellationToken);
@@ -1289,8 +1350,9 @@ public sealed class PostgresTrustStore(string connectionString) : ITrustStore
         await using var command = new NpgsqlCommand(
             """
             INSERT INTO trust.phone_challenges (
-                account_id, phone_e164, code_hash, expires_at, attempts, sent_at, send_count, window_started_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                account_id, phone_e164, code_hash, expires_at, attempts, sent_at, send_count, window_started_at,
+                challenge_id, request_id, purpose, delivery_state, expected_phone_e164)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
             ON CONFLICT (account_id) DO UPDATE SET
                 phone_e164 = EXCLUDED.phone_e164,
                 code_hash = EXCLUDED.code_hash,
@@ -1298,7 +1360,12 @@ public sealed class PostgresTrustStore(string connectionString) : ITrustStore
                 attempts = EXCLUDED.attempts,
                 sent_at = EXCLUDED.sent_at,
                 send_count = EXCLUDED.send_count,
-                window_started_at = EXCLUDED.window_started_at;
+                window_started_at = EXCLUDED.window_started_at,
+                challenge_id = EXCLUDED.challenge_id,
+                request_id = EXCLUDED.request_id,
+                purpose = EXCLUDED.purpose,
+                delivery_state = EXCLUDED.delivery_state,
+                expected_phone_e164 = EXCLUDED.expected_phone_e164;
             """,
             connection, transaction);
         command.Parameters.AddWithValue(challenge.AccountId);
@@ -1309,7 +1376,22 @@ public sealed class PostgresTrustStore(string connectionString) : ITrustStore
         command.Parameters.AddWithValue(challenge.SentAt);
         command.Parameters.AddWithValue(challenge.SendCount);
         command.Parameters.AddWithValue(challenge.WindowStartedAt);
+        command.Parameters.AddWithValue(challenge.ChallengeId == Guid.Empty ? Guid.NewGuid() : challenge.ChallengeId);
+        command.Parameters.AddWithValue((object?)challenge.RequestId ?? DBNull.Value);
+        command.Parameters.AddWithValue(challenge.Purpose);
+        command.Parameters.AddWithValue(challenge.DeliveryState);
+        command.Parameters.AddWithValue((object?)challenge.ExpectedPhoneE164 ?? DBNull.Value);
         await command.ExecuteNonQueryAsync(cancellationToken);
+        if (challenge.RequestId is { } requestId)
+        {
+            await using var operation = new NpgsqlCommand("INSERT INTO trust.phone_verification_operations (account_id,request_id,challenge_id,phone_e164,purpose,verification_state,delivery_state,expires_at,updated_at) VALUES ($1,$2,$3,$4,$5,'pending',$6,$7,$8) ON CONFLICT (account_id,request_id) DO UPDATE SET delivery_state=EXCLUDED.delivery_state,updated_at=EXCLUDED.updated_at WHERE trust.phone_verification_operations.challenge_id=EXCLUDED.challenge_id;", connection, transaction);
+            operation.Parameters.AddWithValue(challenge.AccountId); operation.Parameters.AddWithValue(requestId);
+            operation.Parameters.AddWithValue(challenge.ChallengeId == Guid.Empty ? Guid.NewGuid() : challenge.ChallengeId);
+            operation.Parameters.AddWithValue(challenge.PhoneE164); operation.Parameters.AddWithValue(challenge.Purpose);
+            operation.Parameters.AddWithValue(challenge.DeliveryState); operation.Parameters.AddWithValue(challenge.ExpiresAt);
+            operation.Parameters.AddWithValue(challenge.SentAt);
+            await operation.ExecuteNonQueryAsync(cancellationToken);
+        }
     }
 
     public async Task ClearPhoneChallengeAsync(Guid accountId, CancellationToken cancellationToken)
@@ -1388,19 +1470,41 @@ public sealed class PostgresTrustStore(string connectionString) : ITrustStore
         (await ReserveSmsAsync(budgets.Select(row => row.ScopeKey).ToArray(), null, null, now, cancellationToken)).Accepted;
 
     public Task<PhoneSmsReservation> ReservePhoneSmsAsync(IReadOnlyList<string> keys, PhoneChallenge challenge,
-        PhoneSmsConsentEvent consent, DateTimeOffset now, CancellationToken cancellationToken) =>
-        ReserveSmsAsync(keys, challenge, consent, now, cancellationToken);
+        PhoneSmsConsentEvent consent, DateTimeOffset now, CancellationToken cancellationToken, int maxGlobalSendsPerDay = 40) =>
+        ReserveSmsAsync(keys, challenge, consent, now, cancellationToken, maxGlobalSendsPerDay);
 
     private async Task<PhoneSmsReservation> ReserveSmsAsync(IReadOnlyList<string> requestedKeys, PhoneChallenge? challenge,
-        PhoneSmsConsentEvent? consent, DateTimeOffset now, CancellationToken cancellationToken)
+        PhoneSmsConsentEvent? consent, DateTimeOffset now, CancellationToken cancellationToken, int maxGlobalSendsPerDay = 40)
     {
         await using var connection = await OpenAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        var duplicateOperation = false;
+        string? currentPhone = null;
+        var currentVerified = false;
         if (challenge is not null)
         {
-            await using var accountLock = new NpgsqlCommand("SELECT account_id FROM trust.accounts WHERE account_id = $1 FOR UPDATE;", connection, transaction);
+            await using var accountLock = new NpgsqlCommand("SELECT phone_e164,phone_verified_at FROM trust.accounts WHERE account_id = $1 FOR UPDATE;", connection, transaction);
             accountLock.Parameters.AddWithValue(challenge.AccountId);
-            if (await accountLock.ExecuteScalarAsync(cancellationToken) is null) throw TrustException.Unauthorized();
+            await using (var reader = await accountLock.ExecuteReaderAsync(cancellationToken))
+            {
+                if (!await reader.ReadAsync(cancellationToken)) throw TrustException.Unauthorized();
+                currentPhone = reader.IsDBNull(0) ? null : reader.GetString(0);
+                currentVerified = !reader.IsDBNull(1);
+            }
+            if (challenge.RequestId is { } requestId)
+            {
+                await using var existing = new NpgsqlCommand("SELECT phone_e164,purpose FROM trust.phone_verification_operations WHERE account_id=$1 AND request_id=$2;", connection, transaction);
+                existing.Parameters.AddWithValue(challenge.AccountId); existing.Parameters.AddWithValue(requestId);
+                await using var reader = await existing.ExecuteReaderAsync(cancellationToken);
+                if (await reader.ReadAsync(cancellationToken))
+                {
+                    var same = reader.GetString(0) == challenge.PhoneE164 && reader.GetString(1) == challenge.Purpose;
+                    await reader.DisposeAsync();
+                    if (!same) throw new TrustException("idempotency_conflict", "This request id was already used for another phone action.");
+                    duplicateOperation = true;
+                }
+            }
+            if (!duplicateOperation) ValidatePhoneChallengeBinding(currentPhone, currentVerified, challenge);
         }
         var keys = requestedKeys.Order(StringComparer.Ordinal).ToArray();
         await using (var seed = new NpgsqlCommand(
@@ -1428,12 +1532,17 @@ public sealed class PostgresTrustStore(string connectionString) : ITrustStore
         var latest = rows.Select(row => row.LastSentAt).OfType<DateTimeOffset>().DefaultIfEmpty(now).Max();
         if (latest > now) now = latest;
         rows = rows.Select(row => PhoneSmsPolicy.Normalize(row, row.ScopeKey, now)).ToList();
+        if (duplicateOperation)
+        {
+            await transaction.CommitAsync(cancellationToken);
+            return new(true, PhoneSmsPolicy.Metadata(rows, challenge?.PhoneE164, now, now, maxGlobalSendsPerDay), false);
+        }
         if (challenge is not null) challenge = challenge with { SentAt = now, WindowStartedAt = now, ExpiresAt = now.AddMinutes(10) };
         if (consent is not null) consent = consent with { ConsentedAt = now };
         var account = rows.FirstOrDefault(row => row.ScopeKey.StartsWith("account:", StringComparison.Ordinal));
         var correction = account is not null && PhoneSmsPolicy.IsNewCorrection(account, challenge?.PhoneE164);
-        var deadline = PhoneSmsPolicy.Deadline(rows, now, correction);
-        if (deadline > now) return new(false, PhoneSmsPolicy.Metadata(rows, challenge?.PhoneE164, now, deadline));
+        var deadline = PhoneSmsPolicy.Deadline(rows, now, correction, maxGlobalSendsPerDay: maxGlobalSendsPerDay);
+        if (deadline > now) return new(false, PhoneSmsPolicy.Metadata(rows, challenge?.PhoneE164, now, deadline, maxGlobalSendsPerDay));
         rows = rows.Select(row => PhoneSmsPolicy.Increment(row, challenge?.PhoneE164, now)).ToList();
         foreach (var row in rows)
         {
@@ -1447,10 +1556,29 @@ public sealed class PostgresTrustStore(string connectionString) : ITrustStore
             update.Parameters.AddWithValue(NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Text, (object?)row.PhoneAttempts ?? DBNull.Value);
             await update.ExecuteNonQueryAsync(cancellationToken);
         }
-        if (challenge is not null) await UpsertPhoneChallengeAsync(connection, transaction, challenge, cancellationToken);
+        if (challenge is not null)
+        {
+            if (challenge.RequestId is not null)
+            {
+                Guid? oldRequestId = null;
+                await using (var old = new NpgsqlCommand("SELECT request_id FROM trust.phone_challenges WHERE account_id=$1 FOR UPDATE;", connection, transaction))
+                {
+                    old.Parameters.AddWithValue(challenge.AccountId);
+                    var value = await old.ExecuteScalarAsync(cancellationToken);
+                    oldRequestId = value is null or DBNull ? null : (Guid)value;
+                }
+                if (oldRequestId is { } prior && prior != challenge.RequestId)
+                {
+                    await using var supersede = new NpgsqlCommand("UPDATE trust.phone_verification_operations SET verification_state='superseded',updated_at=$3 WHERE account_id=$1 AND request_id=$2 AND verification_state='pending';", connection, transaction);
+                    supersede.Parameters.AddWithValue(challenge.AccountId); supersede.Parameters.AddWithValue(prior); supersede.Parameters.AddWithValue(now);
+                    await supersede.ExecuteNonQueryAsync(cancellationToken);
+                }
+            }
+            await UpsertPhoneChallengeAsync(connection, transaction, challenge, cancellationToken);
+        }
         if (consent is not null) await RecordPhoneSmsConsentAsync(connection, transaction, consent, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-        return new(true, PhoneSmsPolicy.Metadata(rows, challenge?.PhoneE164, now, now));
+        return new(true, PhoneSmsPolicy.Metadata(rows, challenge?.PhoneE164, now, now, maxGlobalSendsPerDay));
     }
 
     public async Task<int?> IncrementPhoneChallengeFailureAsync(Guid accountId, string phoneE164, string expectedCodeHash, DateTimeOffset now, int maxAttempts, CancellationToken cancellationToken)
@@ -1486,20 +1614,28 @@ public sealed class PostgresTrustStore(string connectionString) : ITrustStore
         return attempts;
     }
 
-    public async Task<bool> TryCompletePhoneChallengeAsync(Guid accountId, string phoneE164, string codeHash, DateTimeOffset verifiedAt, int maxAttempts, CancellationToken cancellationToken)
+    public async Task<bool> TryCompletePhoneChallengeAsync(Guid accountId, string phoneE164, string codeHash, DateTimeOffset verifiedAt, int maxAttempts, CancellationToken cancellationToken, string? generatedHandle = null)
     {
         await using var connection = await OpenAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
-        await using (var accountLock = new NpgsqlCommand("SELECT account_id FROM trust.accounts WHERE account_id = $1 FOR UPDATE;", connection, transaction))
+        string? currentPhone;
+        bool currentVerified;
+        await using (var accountLock = new NpgsqlCommand("SELECT phone_e164,phone_verified_at FROM trust.accounts WHERE account_id = $1 FOR UPDATE;", connection, transaction))
         {
             accountLock.Parameters.AddWithValue(accountId);
-            if (await accountLock.ExecuteScalarAsync(cancellationToken) is null) return false;
+            await using var reader = await accountLock.ExecuteReaderAsync(cancellationToken);
+            if (!await reader.ReadAsync(cancellationToken)) return false;
+            currentPhone = reader.IsDBNull(0) ? null : reader.GetString(0);
+            currentVerified = !reader.IsDBNull(1);
         }
         string? storedHash = null;
+        Guid? requestId = null;
+        var challengePurpose = "onboarding";
+        string? expectedPhone = null;
         DateTimeOffset expiresAt = default;
         var attempts = maxAttempts;
         await using (var read = new NpgsqlCommand(
-            "SELECT code_hash, expires_at, attempts FROM trust.phone_challenges WHERE account_id = $1 AND phone_e164 = $2 FOR UPDATE;",
+            "SELECT code_hash, expires_at, attempts, request_id, purpose, expected_phone_e164 FROM trust.phone_challenges WHERE account_id = $1 AND phone_e164 = $2 FOR UPDATE;",
             connection,
             transaction))
         {
@@ -1511,6 +1647,9 @@ public sealed class PostgresTrustStore(string connectionString) : ITrustStore
                 storedHash = reader.GetString(0);
                 expiresAt = reader.GetFieldValue<DateTimeOffset>(1);
                 attempts = reader.GetInt32(2);
+                requestId = reader.IsDBNull(3) ? null : reader.GetGuid(3);
+                challengePurpose = reader.GetString(4);
+                expectedPhone = reader.IsDBNull(5) ? null : reader.GetString(5);
             }
         }
 
@@ -1520,21 +1659,61 @@ public sealed class PostgresTrustStore(string connectionString) : ITrustStore
             return false;
         }
 
+        try { ValidatePhoneChallengeBinding(currentPhone, currentVerified, new PhoneChallenge(accountId, phoneE164, codeHash, expiresAt, attempts, verifiedAt, 0, verifiedAt, RequestId: requestId, Purpose: challengePurpose, ExpectedPhoneE164: expectedPhone)); }
+        catch (TrustException exception) when (exception.Code == "phone_binding_changed")
+        {
+            if (requestId is { } staleRequestId)
+            {
+                await using var stale = new NpgsqlCommand("UPDATE trust.phone_verification_operations SET verification_state='superseded',updated_at=$3 WHERE account_id=$1 AND request_id=$2;", connection, transaction);
+                stale.Parameters.AddWithValue(accountId); stale.Parameters.AddWithValue(staleRequestId); stale.Parameters.AddWithValue(verifiedAt);
+                await stale.ExecuteNonQueryAsync(cancellationToken);
+            }
+            await using (var delete = new NpgsqlCommand("DELETE FROM trust.phone_challenges WHERE account_id=$1;", connection, transaction))
+            {
+                delete.Parameters.AddWithValue(accountId); await delete.ExecuteNonQueryAsync(cancellationToken);
+            }
+            await transaction.CommitAsync(cancellationToken);
+            return false;
+        }
+
         try
         {
+            await using (var savepoint = new NpgsqlCommand("SAVEPOINT before_phone_completion;", connection, transaction))
+                await savepoint.ExecuteNonQueryAsync(cancellationToken);
             await using var update = new NpgsqlCommand(
-                "UPDATE trust.accounts SET phone_e164 = $2, phone_verified_at = $3 WHERE account_id = $1;",
+                "UPDATE trust.accounts SET phone_e164 = $2, phone_verified_at = $3, handle = CASE WHEN handle IS NULL OR handle !~ '^[a-z][a-z0-9_]{2,19}$' THEN $4 ELSE handle END, discovery_consent_version = CASE WHEN $5 = 'replacement' THEN NULL ELSE discovery_consent_version END WHERE account_id = $1;",
                 connection,
                 transaction);
             update.Parameters.AddWithValue(accountId);
             update.Parameters.AddWithValue(phoneE164);
             update.Parameters.AddWithValue(verifiedAt);
+            update.Parameters.AddWithValue((object?)generatedHandle ?? DBNull.Value);
+            update.Parameters.AddWithValue((object?)challengePurpose ?? DBNull.Value);
             await update.ExecuteNonQueryAsync(cancellationToken);
         }
         catch (PostgresException exception) when (exception.SqlState == PostgresErrorCodes.UniqueViolation)
         {
+            if (string.Equals(exception.ConstraintName, "ux_accounts_handle", StringComparison.Ordinal))
+            {
+                await using var rollback = new NpgsqlCommand("ROLLBACK TO SAVEPOINT before_phone_completion;", connection, transaction);
+                await rollback.ExecuteNonQueryAsync(cancellationToken);
+                await transaction.RollbackAsync(cancellationToken);
+                throw TrustException.HandleInUse();
+            }
             await transaction.RollbackAsync(cancellationToken);
             throw TrustException.PhoneInUse();
+        }
+
+        await using (var supersede = new NpgsqlCommand("UPDATE trust.phone_verification_operations SET verification_state='superseded',updated_at=$2 WHERE account_id=$1 AND verification_state='pending';", connection, transaction))
+        {
+            supersede.Parameters.AddWithValue(accountId); supersede.Parameters.AddWithValue(verifiedAt);
+            await supersede.ExecuteNonQueryAsync(cancellationToken);
+        }
+        if (requestId is { } verifiedRequestId)
+        {
+            await using var operation = new NpgsqlCommand("UPDATE trust.phone_verification_operations SET verification_state='verified',updated_at=$3 WHERE account_id=$1 AND request_id=$2;", connection, transaction);
+            operation.Parameters.AddWithValue(accountId); operation.Parameters.AddWithValue(verifiedRequestId); operation.Parameters.AddWithValue(verifiedAt);
+            await operation.ExecuteNonQueryAsync(cancellationToken);
         }
 
         await using (var delete = new NpgsqlCommand(
@@ -2226,7 +2405,27 @@ public sealed class PostgresTrustStore(string connectionString) : ITrustStore
             reader.GetInt32(4),
             reader.GetFieldValue<DateTimeOffset>(5),
             reader.GetInt32(6),
-            reader.GetFieldValue<DateTimeOffset>(7));
+            reader.GetFieldValue<DateTimeOffset>(7),
+            reader.GetGuid(8),
+            reader.IsDBNull(9) ? null : reader.GetGuid(9),
+            reader.GetString(10),
+            reader.GetString(11),
+            reader.IsDBNull(12) ? null : reader.GetString(12));
+
+    private static void ValidatePhoneChallengeBinding(string? currentPhone, bool currentVerified, PhoneChallenge challenge)
+    {
+        if (challenge.Purpose == "replacement")
+        {
+            if (!currentVerified || !string.Equals(currentPhone, challenge.ExpectedPhoneE164, StringComparison.Ordinal))
+                throw new TrustException("phone_binding_changed", "The verified phone changed. Sign in with Apple again before requesting another replacement code.");
+            return;
+        }
+
+        if (currentVerified && !string.Equals(currentPhone, challenge.PhoneE164, StringComparison.Ordinal))
+            throw new TrustException("phone_binding_changed", "A verified phone is already bound to this account. Sign in with Apple before changing it.");
+        if (!currentVerified && !string.Equals(currentPhone, challenge.ExpectedPhoneE164, StringComparison.Ordinal))
+            throw new TrustException("phone_binding_changed", "The phone binding changed while this code was being requested. Request a new code.");
+    }
 
     private static LocationFix ReadFix(NpgsqlDataReader reader) =>
         new(

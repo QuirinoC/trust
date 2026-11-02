@@ -17,7 +17,7 @@ struct RootView: View {
             case .ageChecking, .ageGate, .ageCheckUnavailable, .ageRangeSharingDeclined, .ageRangeBlocked, .ageWaitingForParent, .ageBlocked, .appTransactionChecking, .appTransactionUnavailable, .login:
                 LoginView()
             case .handle:
-                HandleView()
+                PhoneOnboardingCompletionView()
             case .phone:
                 PhoneView()
             case .home:

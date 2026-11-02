@@ -17,11 +17,11 @@ final class TrustUsageTests: XCTestCase {
             let handle = app.buttons["people-sheet-detent"]
             let header = app.otherElements["people-map-header"]
             let pin = app.buttons.matching(
-                NSPredicate(format: "identifier BEGINSWITH %@", "people-map-pin-")
+                NSPredicate(format: "identifier BEGINSWITH %@ AND label BEGINSWITH %@", "people-map-pin-", "Leo Park")
             ).firstMatch
             XCTAssertTrue(handle.waitForExistence(timeout: 20))
             XCTAssertTrue(header.waitForExistence(timeout: 5))
-            XCTAssertTrue(pin.waitForExistence(timeout: 10), "The fixture must expose a location pin.")
+            XCTAssertTrue(pin.waitForExistence(timeout: 10), "The fixture must expose Leo's authorized live location pin.")
 
             // Expand by tapping, then drag down to the compact detent. Check the real
             // annotation hit region, not a duplicated camera calculation.
@@ -31,6 +31,10 @@ final class TrustUsageTests: XCTestCase {
                 XCTAssertEqual(XCTWaiter.wait(for: [selected], timeout: 5), .completed)
                 var visibleSince: TimeInterval?
                 let unobscured = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+                    guard pin.exists, handle.exists, header.exists, app.windows.firstMatch.exists else {
+                        visibleSince = nil
+                        return false
+                    }
                     let now = ProcessInfo.processInfo.systemUptime
                     let frame = pin.frame
                     let sheet = handle.frame
@@ -46,7 +50,10 @@ final class TrustUsageTests: XCTestCase {
                 let viewportResult = XCTWaiter.wait(for: [unobscured], timeout: 10)
                 if viewportResult != .completed {
                     add(XCTAttachment(screenshot: app.screenshot()))
-                    add(XCTAttachment(string: "Pin: \(pin.frame); header: \(header.frame); panel: \(handle.frame)"))
+                    let pinFrame = pin.exists ? String(describing: pin.frame) : "<absent>"
+                    let headerFrame = header.exists ? String(describing: header.frame) : "<absent>"
+                    let panelFrame = handle.exists ? String(describing: handle.frame) : "<absent>"
+                    add(XCTAttachment(string: "Pin: \(pinFrame); header: \(headerFrame); panel: \(panelFrame)"))
                 }
                 XCTAssertEqual(viewportResult, .completed,
                                "The entire pin must remain above the People panel at \(detent).")
@@ -64,8 +71,27 @@ final class TrustUsageTests: XCTestCase {
                 }
             }
             pin.tap()
+            guard app.staticTexts["person-sharing-directions"].waitForExistence(timeout: 5) else {
+                let screenshot = XCTAttachment(screenshot: app.screenshot())
+                screenshot.name = "People viewport - Leo pin activation failure - \(dark ? "dark" : "light") - \(textSize)"
+                screenshot.lifetime = .keepAlways
+                add(screenshot)
+                let hierarchy = XCTAttachment(string: app.debugDescription)
+                hierarchy.name = "People viewport - Leo pin activation hierarchy"
+                hierarchy.lifetime = .keepAlways
+                add(hierarchy)
+                XCTFail("The visible Leo pin must open its person after resizing the panel.")
+                return
+            }
+            let back = app.buttons["circle-back"]
+            XCTAssertTrue(back.waitForExistence(timeout: 5))
+            back.tap()
+            XCTAssertTrue(handle.waitForExistence(timeout: 5), "Returning should restore the People sheet.")
+            XCTAssertTrue(pin.waitForExistence(timeout: 5), "The same Leo pin should remain available.")
+            XCTAssertTrue(pin.isHittable)
+            pin.tap()
             XCTAssertTrue(app.staticTexts["person-sharing-directions"].waitForExistence(timeout: 5),
-                          "The visible pin must remain actionable after resizing the panel.")
+                          "A single tap on the same pin must reopen the person after returning to People.")
             app.terminate()
         }
     }
@@ -1124,9 +1150,9 @@ final class TrustUsageTests: XCTestCase {
                       "Returning to Map after a tab switch must preserve the selected person.")
     }
 
-    func testViewMapDoesNotCreatePinForFreeLiveOnlyPerson() {
-        // The ordinary demo is Free: Maya's confirmed Look is an eligible
-        // snapshot pin, while Leo's live Always pin is Plus-gated.
+    func testFreeViewerMapShowsPaidSharerAndLookSnapshot() {
+        // The demo viewer is Free. Leo's Always direction is already authorized,
+        // and Maya becomes visible on the map only after a confirmed Look.
         let app = launchDemo()
         let maya = app.buttons["person-row-maya"]
         XCTAssertTrue(maya.waitForExistence(timeout: 20))
@@ -1136,56 +1162,44 @@ final class TrustUsageTests: XCTestCase {
         app.buttons["confirm-look-notify"].tap()
         XCTAssertTrue(app.staticTexts["view-location-freshness"].waitForExistence(timeout: 8))
         app.buttons["circle-back"].tap()
-
         XCTAssertTrue(app.buttons["person-peek-leo"].waitForExistence(timeout: 20))
         app.buttons["person-peek-leo"].tap()
         XCTAssertTrue(app.staticTexts["view-location-freshness"].waitForExistence(timeout: 8))
         let openMap = app.buttons["view-open-map"]
-        XCTAssertTrue(openMap.waitForExistence(timeout: 8))
-        openMap.tap()
-
-        XCTAssertTrue(app.descendants(matching: .any)["map-screen-canvas"].waitForExistence(timeout: 8),
-                      "The eligible Maya snapshot should keep the generic map available.")
+        XCTAssertTrue(openMap.waitForExistence(timeout: 8)); openMap.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["map-screen-canvas"].waitForExistence(timeout: 8))
         let showMaya = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Show Maya")).firstMatch
         let showLeo = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Show Leo")).firstMatch
-        XCTAssertTrue(showMaya.waitForExistence(timeout: 8), "Maya's confirmed snapshot should remain on the map.")
-        XCTAssertFalse(showLeo.exists, "Opening Leo's Free live-only View must not add a Plus-gated pin.")
-        XCTAssertFalse(app.staticTexts["map-selected-person-name"].exists)
-        XCTAssertTrue(app.staticTexts["map-focus-unavailable"].waitForExistence(timeout: 5),
-                      "Map should explain why Leo is not selected.")
-        XCTAssertTrue(showMaya.isHittable,
-                      "With one eligible pin, the panel must still provide an explicit way to select it.")
-        XCTAssertFalse(app.buttons["map-view-selected-person"].exists,
-                       "Map must not imply that the other eligible person's pin belongs to Leo.")
-        showMaya.tap()
+        XCTAssertTrue(showMaya.waitForExistence(timeout: 8), "The confirmed Maya snapshot remains available.")
+        XCTAssertTrue(showLeo.waitForExistence(timeout: 8), "A Free viewer can receive Leo's authorized Always location.")
+        XCTAssertTrue(showLeo.isSelected)
+        XCTAssertTrue(app.staticTexts["map-selected-person-name"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.staticTexts["map-selected-person-name"].label, "Leo Park")
+        XCTAssertFalse(app.staticTexts["map-focus-unavailable"].exists)
+        XCTAssertTrue(showMaya.isHittable); showMaya.tap()
         XCTAssertTrue(app.staticTexts["map-selected-person-name"].waitForExistence(timeout: 5))
         XCTAssertEqual(app.staticTexts["map-selected-person-name"].label, "Maya Chen")
         XCTAssertTrue(app.buttons["map-view-selected-person"].exists)
-        XCTAssertFalse(app.staticTexts["map-focus-unavailable"].exists,
-                       "Selecting an eligible pin should dismiss the unavailable-person explanation.")
-        app.buttons["tab-sharing"].tap()
-        app.buttons["tab-circle"].tap()
-        XCTAssertEqual(app.staticTexts["map-selected-person-name"].label, "Maya Chen",
-                       "Choosing the only eligible pin must persist as Map focus across tab return.")
+        app.buttons["tab-sharing"].tap(); app.buttons["tab-circle"].tap()
+        XCTAssertEqual(app.staticTexts["map-selected-person-name"].label, "Maya Chen", "Map focus persists across tab return.")
     }
 
-    func testViewMapExplainsFocusedPersonWhenNoEligiblePinsExist() {
+    func testFreeViewerMapExcludesPeopleWithoutAnAuthorizedLocation() {
         let app = launchDemo()
         XCTAssertTrue(app.buttons["person-peek-leo"].waitForExistence(timeout: 20))
         app.buttons["person-peek-leo"].tap()
         XCTAssertTrue(app.staticTexts["view-location-freshness"].waitForExistence(timeout: 8))
         app.buttons["view-open-map"].tap()
-
-        XCTAssertTrue(app.staticTexts["No locations yet"].waitForExistence(timeout: 8))
-        XCTAssertTrue(app.staticTexts["This person's location is unavailable on this map."].waitForExistence(timeout: 5),
-                      "The empty Map state should explain that Leo has no eligible pin.")
-        XCTAssertFalse(app.descendants(matching: .any)["map-screen-canvas"].exists)
+        XCTAssertTrue(app.descendants(matching: .any)["map-screen-canvas"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Show Leo")).firstMatch.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Show Noah")).firstMatch.exists, "Noah's Off direction does not authorize a pin.")
+        XCTAssertFalse(app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Show Maya")).firstMatch.exists, "Maya's Sealed direction has no pin before a confirmed Look.")
+        XCTAssertFalse(app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Show Jules")).firstMatch.exists, "Jules's paused direction does not authorize a pin.")
+        XCTAssertTrue(app.staticTexts["map-selected-person-name"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.staticTexts["map-selected-person-name"].label, "Leo Park")
         let back = app.buttons["map-back-to-people"]
-        XCTAssertTrue(back.isHittable,
-                      "The focused-person empty state should retain the People navigation action.")
-        back.tap()
-        XCTAssertTrue(app.buttons["person-row-maya"].waitForExistence(timeout: 5),
-                      "The Map back action should return to People.")
+        XCTAssertTrue(back.isHittable); back.tap()
+        XCTAssertTrue(app.buttons["person-row-maya"].waitForExistence(timeout: 5))
     }
 
     func testSharingGermanExtraExtraLargeRowBoundary() {
@@ -1306,6 +1320,7 @@ final class TrustUsageTests: XCTestCase {
         add(addScreenshot)
         XCTAssertFalse(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "complete phone number")).firstMatch.exists, "Do not repeat the identifier guidance below the field.")
         XCTAssertFalse(app.buttons["lookup-connection-handle"].exists, "Lookup should happen automatically as the person types.")
+        handle.tap()
         handle.typeText("jordan")
         XCTAssertTrue(app.staticTexts["connection-lookup-notice"].waitForExistence(timeout: 5), "The demo should not fabricate handle lookup results.")
         XCTAssertFalse(app.textFields["invite-code"].exists)

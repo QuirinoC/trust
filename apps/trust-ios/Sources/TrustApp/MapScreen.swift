@@ -2,7 +2,7 @@ import MapKit
 import SwiftUI
 import TrustCore
 
-/// D2 Map — secondary push from View. Confirmed Look snapshots and permitted Plus-gated
+/// D2 Map — secondary push from View. Confirmed Look snapshots and server-authorized
 /// live pins appear here; a Sealed person without a recorded snapshot has no pin.
 /// Regular width: full-bleed map + trailing panel.
 struct MapScreen: View {

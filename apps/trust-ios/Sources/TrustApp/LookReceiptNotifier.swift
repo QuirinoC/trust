@@ -13,6 +13,7 @@ final class LookReceiptNotifier: NSObject, ObservableObject, UNUserNotificationC
     private var registeredToken: String?
     private var lastUploadedToken: String?
     private var lastUploadedInstallation: UUID?
+    private var lastUploadedLanguage: String?
     private var sessionGeneration: UInt64 = 0
     private var authorizationReadGeneration: UInt64 = 0
     private var pushDeviceMutationTail: Task<Void, Never>?
@@ -157,19 +158,22 @@ final class LookReceiptNotifier: NSObject, ObservableObject, UNUserNotificationC
               client.token == authorizedToken,
               let token = registeredToken,
               let installationId else { return }
-        guard token != lastUploadedToken || installationId != lastUploadedInstallation else { return }
+        let appLanguage = Self.resolvedAppLanguage
+        guard token != lastUploadedToken || installationId != lastUploadedInstallation || appLanguage != lastUploadedLanguage else { return }
         await enqueuePushDeviceMutation {
             guard generation == self.sessionGeneration,
                   Self.canRegister(self.authorization),
                   self.client === client,
                   self.sessionToken == authorizedToken,
                   client.token == authorizedToken,
-                  self.registeredToken == token else { return }
+                  self.registeredToken == token,
+                  Self.resolvedAppLanguage == appLanguage else { return }
             do {
                 try await client.registerPushDevice(
                     installationId: installationId,
                     token: token,
                     environment: Self.apnsEnvironment,
+                    appLanguage: appLanguage,
                     authorizedToken: authorizedToken
                 )
                 guard generation == self.sessionGeneration,
@@ -178,13 +182,26 @@ final class LookReceiptNotifier: NSObject, ObservableObject, UNUserNotificationC
                       client.token == authorizedToken else { return }
                 self.lastUploadedToken = token
                 self.lastUploadedInstallation = installationId
+                self.lastUploadedLanguage = appLanguage
             } catch {
                 guard generation == self.sessionGeneration,
                       self.client === client,
                       self.sessionToken == authorizedToken else { return }
                 self.lastUploadedToken = nil
                 self.lastUploadedInstallation = nil
+                self.lastUploadedLanguage = nil
             }
+        }
+    }
+
+    private static var resolvedAppLanguage: String {
+        switch TrustAppLanguage.currentLocale.identifier.lowercased() {
+        case let value where value.hasPrefix("zh"): return "zh-Hans"
+        case let value where value.hasPrefix("ja"): return "ja"
+        case let value where value.hasPrefix("de"): return "de"
+        case let value where value.hasPrefix("fr"): return "fr"
+        case let value where value.hasPrefix("pt-br"): return "pt-BR"
+        default: return "en"
         }
     }
 

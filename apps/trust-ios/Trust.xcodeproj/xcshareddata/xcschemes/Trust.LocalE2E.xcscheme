@@ -29,6 +29,12 @@
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
       shouldUseLaunchSchemeArgsEnv = "YES"
       onlyGenerateCoverageForSpecifiedTargets = "NO">
+      <TestPlans>
+         <TestPlanReference
+            default = "YES"
+            reference = "container:Trust.LocalE2E.xctestplan">
+         </TestPlanReference>
+      </TestPlans>
       <MacroExpansion>
          <BuildableReference
             BuildableIdentifier = "primary"
@@ -62,12 +68,6 @@
             </BuildableReference>
          </TestableReference>
       </Testables>
-      <TestPlans>
-         <TestPlanReference
-            reference = "container:Trust.LocalE2E.xctestplan"
-            default = "YES">
-         </TestPlanReference>
-      </TestPlans>
       <CommandLineArguments>
       </CommandLineArguments>
    </TestAction>

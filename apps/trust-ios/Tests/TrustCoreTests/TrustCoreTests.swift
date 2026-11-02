@@ -1794,9 +1794,11 @@ final class LookServiceTests: XCTestCase {
         XCTAssertEqual(TrustProductRules.peek(inbound: .off), .none)
         XCTAssertEqual(TrustProductRules.peek(inbound: .paused(ends: Date().addingTimeInterval(60), revertsTo: .always)), .none)
         XCTAssertTrue(TrustProductRules.rowOpensPerson())
-        XCTAssertFalse(TrustProductRules.showsLivePin(viewerHasPlus: false, inbound: .always))
-        XCTAssertTrue(TrustProductRules.showsLivePin(viewerHasPlus: true, inbound: .always))
-        XCTAssertFalse(TrustProductRules.showsLivePin(viewerHasPlus: true, inbound: .untilTheyLook))
+        XCTAssertFalse(TrustProductRules.showsLivePin(receiveAuthorized: false, inbound: .always))
+        XCTAssertTrue(TrustProductRules.showsLivePin(receiveAuthorized: true, inbound: .always))
+        XCTAssertFalse(TrustProductRules.showsLivePin(receiveAuthorized: true, inbound: .untilTheyLook))
+        XCTAssertFalse(TrustProductRules.showsLivePin(receiveAuthorized: true, inbound: .off))
+        XCTAssertFalse(TrustProductRules.showsLivePin(receiveAuthorized: true, inbound: .paused(ends: Date().addingTimeInterval(60), revertsTo: .always)))
     }
 
     @MainActor
@@ -1949,16 +1951,15 @@ final class LocationFreshnessTests: XCTestCase {
         XCTAssertEqual(LocationFreshness.status(timestamp: now.addingTimeInterval(-301), now: now), .stale)
     }
 
-    func testMissingAlwaysPointDistinguishesUnavailableFromPlusAccessAndKeepsPresence() {
+    func testMissingAuthorizedAlwaysPointShowsUnavailableAndKeepsPresence() {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
         XCTAssertEqual(
-            TrustCopy.availableLocationStatus(timestamp: nil, now: now, viewerHasPlus: true),
+            TrustCopy.authorizedLiveLocationStatus(timestamp: nil, now: now),
             TrustCopy.locationUnavailable
         )
-        let freeViewer = TrustCopy.availableLocationStatus(timestamp: nil, now: now, viewerHasPlus: false, presence: "Home")
+        let freeViewer = TrustCopy.authorizedLiveLocationStatus(timestamp: nil, now: now, presence: "Home")
         XCTAssertTrue(freeViewer.contains("Home"))
-        XCTAssertTrue(freeViewer.contains(TrustCopy.plusLockHint))
-        XCTAssertFalse(freeViewer.contains(TrustCopy.locationUnavailable))
+        XCTAssertTrue(freeViewer.contains(TrustCopy.locationUnavailable))
     }
 }
 

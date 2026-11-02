@@ -41,6 +41,8 @@ projects:
                   property: connectionString
               - key: StoreKit__Enabled
                 value: "true"
+              - key: PhoneVerification__MaxGlobalSendsPerDay
+                value: "1000"
               - key: StoreKit__AllowReviewUnlock
                 value: "false"
               - key: StoreKit__BundleId

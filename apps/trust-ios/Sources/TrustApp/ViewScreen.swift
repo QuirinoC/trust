@@ -21,7 +21,7 @@ struct ViewScreen: View {
     private var isAvailable: Bool { member?.isAvailable ?? false }
 
     private var point: LocationPoint? {
-        if isAvailable { return member?.livePoint }
+        if isAvailable { return member?.currentLivePoint }
         return snapshot?.live
     }
 
@@ -67,7 +67,6 @@ struct ViewScreen: View {
                 .accessibilityIdentifier("circle-back")
             }
         }
-        .onAppear { model.prepareMapLocation() }
         .task(id: point) {
             await geocodeIfNeeded()
         }
@@ -129,17 +128,7 @@ struct ViewScreen: View {
                         .padding(.bottom, 14)
                 }
 
-                HStack(spacing: 8) {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(palette.positive)
-                        .accessibilityHidden(true)
-                    Text(isAvailable
-                        ? TrustCopy.receiptViewLogged(name: member.firstName)
-                        : TrustCopy.receiptNotified(name: member.firstName))
-                        .foregroundStyle(palette.ink)
-                }
-                .font(TrustTheme.ui(12, weight: .medium))
+                receiptState(member)
                 .padding(.bottom, 18)
 
                 Button {
@@ -168,6 +157,60 @@ struct ViewScreen: View {
             .padding(.horizontal, TrustTheme.gutter)
             .padding(.bottom, 28)
             .trustReadableWidth()
+        }
+    }
+
+    @ViewBuilder
+    private func receiptState(_ member: TrustedPerson) -> some View {
+        let state = model.viewReceiptState(for: member)
+        HStack(spacing: 8) {
+            switch state {
+            case .confirmed:
+                Image(systemName: "checkmark")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(palette.positive)
+                    .accessibilityHidden(true)
+                Text(isAvailable
+                    ? TrustCopy.receiptViewLogged(name: member.firstName)
+                    : TrustCopy.receiptNotified(name: member.firstName))
+                    .foregroundStyle(palette.ink)
+            case .pending:
+                ProgressView().controlSize(.small).tint(palette.accent)
+                Text(TrustCopy.viewReceiptPending).foregroundStyle(palette.muted)
+            case .failed:
+                Image(systemName: "exclamationmark.circle")
+                    .foregroundStyle(palette.danger)
+                    .accessibilityHidden(true)
+                Text(TrustCopy.viewReceiptFailed).foregroundStyle(palette.muted)
+            case .offline:
+                Image(systemName: "wifi.slash")
+                    .foregroundStyle(palette.muted)
+                    .accessibilityHidden(true)
+                Text(TrustCopy.viewReceiptOffline).foregroundStyle(palette.muted)
+            case .none:
+                Text(TrustCopy.viewReceiptUnknown).foregroundStyle(palette.muted)
+            }
+        }
+        .font(TrustTheme.ui(12, weight: .medium))
+        .accessibilityIdentifier("view-receipt-\(receiptStateIdentifier(state))")
+        if state == .failed || state == .offline {
+            Button(TrustCopy.retry) {
+                if member.isAvailable { model.openView(member) }
+                else { model.openLook(member) }
+            }
+            .buttonStyle(TrustTextButtonStyle(color: palette.accent))
+            .frame(minHeight: 44, alignment: .leading)
+            .accessibilityIdentifier("view-receipt-retry")
+        }
+    }
+
+    private func receiptStateIdentifier(_ state: ViewReceiptState?) -> String {
+        switch state {
+        case .pending: "pending"
+        case .confirmed: "confirmed"
+        case .failed: "failed"
+        case .offline: "offline"
+        case .none: "unknown"
         }
     }
 

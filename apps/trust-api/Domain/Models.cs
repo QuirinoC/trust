@@ -222,7 +222,16 @@ public sealed record PhoneChallenge(
     int Attempts,
     DateTimeOffset SentAt,
     int SendCount,
-    DateTimeOffset WindowStartedAt);
+    DateTimeOffset WindowStartedAt,
+    Guid ChallengeId = default,
+    Guid? RequestId = null,
+    string Purpose = "onboarding",
+    string DeliveryState = "queued",
+    string? ExpectedPhoneE164 = null);
+
+public sealed record PhoneVerificationOperation(Guid AccountId, Guid RequestId, Guid ChallengeId,
+    string PhoneE164, string Purpose, string VerificationState, string DeliveryState,
+    DateTimeOffset ExpiresAt, DateTimeOffset UpdatedAt);
 
 public sealed record PhoneSmsConsentEvent(
     Guid AccountId,
@@ -408,7 +417,10 @@ public sealed record CircleMember(
     long OutboundPresenceGrantRevision,
     bool InboundPresenceGranted,
     VisibleHomePresence? HomePresence,
-    PromiseView? Promise);
+    PromiseView? Promise,
+    DateTimeOffset? LiveAccessExpiresAt = null,
+    string? LiveUnavailableReason = null,
+    int ReceiveAuthorizationVersion = 1);
 
 public sealed record CircleSnapshot(
     Account You,
@@ -645,15 +657,18 @@ public interface ITrustStore
     Task DeclineConnectionRequestAsync(Guid requestId, Guid recipientId, DateTimeOffset now, CancellationToken cancellationToken);
     Task CancelConnectionRequestAsync(Guid requestId, Guid senderId, DateTimeOffset now, CancellationToken cancellationToken);
     Task SetHandleAsync(Guid accountId, string handle, string displayName, int? discoveryConsentVersion, CancellationToken cancellationToken);
+    Task<Account> SetGeneratedHandleIfMissingAsync(Guid accountId, string handle, CancellationToken cancellationToken);
     Task<PhoneChallenge?> GetPhoneChallengeAsync(Guid accountId, CancellationToken cancellationToken);
+    Task<PhoneVerificationOperation?> GetPhoneVerificationOperationAsync(Guid accountId, Guid requestId, CancellationToken cancellationToken);
+    Task SetPhoneDeliveryStateAsync(Guid accountId, Guid challengeId, Guid? requestId, string state, DateTimeOffset updatedAt, CancellationToken cancellationToken);
     Task UpsertPhoneChallengeAsync(PhoneChallenge challenge, CancellationToken cancellationToken);
     Task ClearPhoneChallengeAsync(Guid accountId, CancellationToken cancellationToken);
     Task RecordPhoneSmsConsentAsync(PhoneSmsConsentEvent consentEvent, CancellationToken cancellationToken);
     Task<IReadOnlyList<PhoneSmsConsentEvent>> ListPhoneSmsConsentEventsAsync(Guid accountId, CancellationToken cancellationToken);
-    Task<PhoneSmsReservation> ReservePhoneSmsAsync(IReadOnlyList<string> keys, PhoneChallenge challenge, PhoneSmsConsentEvent consent, DateTimeOffset now, CancellationToken cancellationToken);
+    Task<PhoneSmsReservation> ReservePhoneSmsAsync(IReadOnlyList<string> keys, PhoneChallenge challenge, PhoneSmsConsentEvent consent, DateTimeOffset now, CancellationToken cancellationToken, int maxGlobalSendsPerDay = 40);
     Task<bool> TryReserveSmsAsync(IReadOnlyList<SmsSendBudget> budgets, DateTimeOffset now, CancellationToken cancellationToken);
     Task<int?> IncrementPhoneChallengeFailureAsync(Guid accountId, string phoneE164, string expectedCodeHash, DateTimeOffset now, int maxAttempts, CancellationToken cancellationToken);
-    Task<bool> TryCompletePhoneChallengeAsync(Guid accountId, string phoneE164, string codeHash, DateTimeOffset verifiedAt, int maxAttempts, CancellationToken cancellationToken);
+    Task<bool> TryCompletePhoneChallengeAsync(Guid accountId, string phoneE164, string codeHash, DateTimeOffset verifiedAt, int maxAttempts, CancellationToken cancellationToken, string? generatedHandle = null);
     Task<SmsSendBudget?> GetSmsSendBudgetAsync(string scopeKey, CancellationToken cancellationToken);
     Task UpsertSmsSendBudgetAsync(SmsSendBudget budget, CancellationToken cancellationToken);
 

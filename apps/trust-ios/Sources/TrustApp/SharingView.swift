@@ -50,6 +50,8 @@ struct SharingView: View {
                         .padding(.top, 6)
                         .accessibilityIdentifier("sharing-intro")
 
+                    shareReadinessNotice
+
                     AddSomeoneSection()
                         .padding(.top, 16)
 
@@ -184,6 +186,38 @@ struct SharingView: View {
 
     private func seed(_ member: TrustedPerson) -> Int {
         model.circle.firstIndex { $0.id == member.id } ?? 0
+    }
+
+    @ViewBuilder
+    private var shareReadinessNotice: some View {
+        let message: String? = {
+            guard model.outboundActiveCount > 0 else { return nil }
+            if model.isOffline { return TrustCopy.shareReadinessOffline }
+            if model.location.isDenied || model.location.authorization == .notDetermined {
+                return TrustCopy.shareReadinessLocationOff
+            }
+            if !model.location.hasAlways { return TrustCopy.shareReadinessForegroundOnly }
+            return nil
+        }()
+        if let message {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(message)
+                    .trustFont(13)
+                    .foregroundStyle(palette.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                if !model.isOffline {
+                    Button(TrustCopy.openMyLocation) { model.selectedTab = .you }
+                        .buttonStyle(TrustTextButtonStyle(color: palette.accent))
+                        .accessibilityIdentifier("share-readiness-my-location")
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: TrustTheme.controlRadius, style: .continuous).fill(palette.surface))
+            .padding(.top, 12)
+            .accessibilityIdentifier("share-readiness-notice")
+        }
     }
 
     @ViewBuilder
@@ -567,8 +601,14 @@ struct OutboundRow: View {
             switch mode {
             case .off:
                 onStopSharing()
-            case .sealed: model.setResting(.untilTheyLook, for: member.id)
-            case .always: model.setResting(.always, for: member.id)
+            case .sealed:
+                if !model.requestFirstShareApproval(for: member, mode: .untilTheyLook) {
+                    model.setResting(.untilTheyLook, for: member.id)
+                }
+            case .always:
+                if !model.requestFirstShareApproval(for: member, mode: .always) {
+                    model.setResting(.always, for: member.id)
+                }
             }
         } label: {
             Text(label)

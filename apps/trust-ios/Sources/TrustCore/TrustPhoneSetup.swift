@@ -2,9 +2,14 @@ import Foundation
 
 public enum TrustPhoneSetupRoute: Equatable {
     case handle, phone, home
-    public static func route(handle: String?, phoneVerified: Bool) -> Self {
-        guard let handle, case .valid = TrustHandle.status(of: handle) else { return .handle }
-        return phoneVerified ? .home : .phone
+    public static func route(handle: String?, phoneVerified: Bool, onboardingComplete: Bool = true) -> Self {
+        // A verified account with incomplete profile data stays in the automatic
+        // server-completion state; it never returns to OTP or a manual handle gate.
+        guard phoneVerified else { return .phone }
+        guard onboardingComplete,
+              let handle,
+              case .valid = TrustHandle.status(of: handle) else { return .handle }
+        return .home
     }
 }
 
@@ -14,6 +19,19 @@ public struct TrustPhoneRetryState: Codable, Equatable {
     public var challengeNumber: String?
     public var challengeExpiresAt: Date?
     public var showingCode: Bool? = false
+    /// A deliberate return to number entry survives relaunch and does not get
+    /// overridden by a server reconciliation of the previous pending challenge.
+    public var editingPhoneNumber: Bool? = false
+    public var editedPhoneDraft: String?
+    public var phoneEditOriginRequestID: UUID?
+    /// Durable operation metadata allows a lost response to be reconciled with the
+    /// server without retaining the one-time code.
+    public var operationRequestID: UUID?
+    public var operationChallengeID: UUID?
+    public var operationIntent: String?
+    public var operationPhone: String?
+    public var operationVerificationState: String?
+    public var operationDeliveryState: String?
     public var attemptedNumbers: Set<String> = []
     public var numberDeadlines: [String: Date] = [:]
     public var accountWindowStartedAt: Date?

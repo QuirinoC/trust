@@ -13,7 +13,8 @@ public sealed class PostgresPushDeviceStore(string connectionString) : IPushDevi
         string token,
         string environment,
         string bundleId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? language = null)
     {
         var env = string.Equals(environment, "sandbox", StringComparison.OrdinalIgnoreCase)
             ? "sandbox"
@@ -41,13 +42,14 @@ public sealed class PostgresPushDeviceStore(string connectionString) : IPushDevi
             """
             INSERT INTO trust.push_devices (
                 installation_id, account_id, apns_token, environment, bundle_id,
-                enabled, last_seen_at, invalidated_at, created_at, updated_at)
-            VALUES ($1, $2, $3, $4, $5, true, now(), NULL, now(), now())
+                enabled, last_seen_at, invalidated_at, created_at, updated_at, app_language)
+            VALUES ($1, $2, $3, $4, $5, true, now(), NULL, now(), now(), $6)
             ON CONFLICT (installation_id) DO UPDATE SET
                 account_id = EXCLUDED.account_id,
                 apns_token = EXCLUDED.apns_token,
                 environment = EXCLUDED.environment,
                 bundle_id = EXCLUDED.bundle_id,
+                app_language = EXCLUDED.app_language,
                 enabled = true,
                 last_seen_at = now(),
                 invalidated_at = NULL,
@@ -61,6 +63,7 @@ public sealed class PostgresPushDeviceStore(string connectionString) : IPushDevi
             command.Parameters.AddWithValue(token);
             command.Parameters.AddWithValue(env);
             command.Parameters.AddWithValue(bundleId);
+            command.Parameters.AddWithValue(NotificationLanguage.Normalize(language));
             await command.ExecuteNonQueryAsync(cancellationToken);
         }
 
@@ -117,7 +120,7 @@ public sealed class PostgresPushDeviceStore(string connectionString) : IPushDevi
         await connection.OpenAsync(cancellationToken);
         await using var command = new NpgsqlCommand(
             """
-            SELECT installation_id, account_id, apns_token, environment, bundle_id, enabled
+            SELECT installation_id, account_id, apns_token, environment, bundle_id, enabled, app_language
             FROM trust.push_devices
             WHERE account_id = $1 AND enabled = true AND invalidated_at IS NULL;
             """,
@@ -133,7 +136,8 @@ public sealed class PostgresPushDeviceStore(string connectionString) : IPushDevi
                 reader.GetString(2),
                 reader.GetString(3),
                 reader.GetString(4),
-                reader.GetBoolean(5)));
+                reader.GetBoolean(5),
+                NotificationLanguage.Normalize(reader.GetString(6))));
         }
 
         return devices;

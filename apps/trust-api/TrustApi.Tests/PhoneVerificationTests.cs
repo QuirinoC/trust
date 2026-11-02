@@ -134,8 +134,183 @@ public sealed class PhoneVerificationTests
         await phones.VerifyAsync(account.Id, "5555550123", sent.DevelopmentCode, CancellationToken.None);
         var updated = await store.FindAccountAsync(account.Id, CancellationToken.None);
         Assert.True(updated!.HasVerifiedPhone);
-        Assert.False(updated.OnboardingComplete);
+        Assert.True(updated.OnboardingComplete);
         Assert.Equal("+15555550123", updated.PhoneE164);
+        Assert.Matches("^person_[a-z2-7]{12}$", updated.Handle);
+    }
+
+    [Fact]
+    public async Task ReplayingPhoneRequestIdReturnsSameChallengeWithoutSpendingBudgetAgain()
+    {
+        var store = new MemoryTrustStore();
+        var engine = new TrustEngine(store, TimeProvider.System);
+        var account = await engine.SignInAsync("development", "otp-replay", "Sam", CancellationToken.None);
+        var phones = NewPhones(store, new UnconfiguredSms(), new ListLogger(), Environments.Development);
+        var requestId = Guid.NewGuid();
+
+        var first = await phones.SendAsync(account.Id, "+15555550123", CancellationToken.None,
+            requestId: requestId);
+        var replay = await phones.SendAsync(account.Id, "+15555550123", CancellationToken.None,
+            requestId: requestId);
+
+        Assert.Equal(first.ChallengeId, replay.ChallengeId);
+        Assert.Equal(first.ExpiresAt, replay.ExpiresAt);
+        Assert.Equal("sent", replay.DeliveryState);
+        var budget = await store.GetSmsSendBudgetAsync(SmsSendBudget.AccountKey(account.Id), CancellationToken.None);
+        Assert.Equal(1, budget!.SendCount);
+        var consent = await store.ListPhoneSmsConsentEventsAsync(account.Id, CancellationToken.None);
+        Assert.Single(consent);
+    }
+
+    [Fact]
+    public async Task ReusingPhoneRequestIdWithDifferentPayloadConflicts()
+    {
+        var store = new MemoryTrustStore();
+        var engine = new TrustEngine(store, TimeProvider.System);
+        var account = await engine.SignInAsync("development", "otp-conflict", "Sam", CancellationToken.None);
+        var phones = NewPhones(store, new UnconfiguredSms(), new ListLogger(), Environments.Development);
+        var requestId = Guid.NewGuid();
+        _ = await phones.SendAsync(account.Id, "+15555550123", CancellationToken.None, requestId: requestId);
+
+        var error = await Assert.ThrowsAsync<TrustException>(() =>
+            phones.SendAsync(account.Id, "+15555550124", CancellationToken.None, requestId: requestId));
+        Assert.Equal("idempotency_conflict", error.Code);
+    }
+
+    [Fact]
+    public async Task DelayedSmsCompletionCannotRestoreSupersededOrConsumedChallenge()
+    {
+        var store = new MemoryTrustStore();
+        var engine = new TrustEngine(store, TimeProvider.System);
+        var account = await engine.SignInAsync("development", "otp-late-completion", "Sam", CancellationToken.None);
+        var sms = new FirstSendBlocksSms();
+        var phones = NewPhones(store, sms, NullLogger<PhoneVerificationService>.Instance, Environments.Development);
+        var firstId = Guid.NewGuid();
+        var secondId = Guid.NewGuid();
+
+        var firstSend = phones.SendAsync(account.Id, "+15555550123", CancellationToken.None, requestId: firstId);
+        await sms.FirstStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        var secondSend = await phones.SendAsync(account.Id, "+15555550124", CancellationToken.None, requestId: secondId);
+        await phones.VerifyAsync(account.Id, "+15555550124", sms.Codes[1], CancellationToken.None,
+            secondId, secondSend.ChallengeId);
+        sms.ReleaseFirst.TrySetResult();
+        await firstSend;
+
+        Assert.Null(await store.GetPhoneChallengeAsync(account.Id, CancellationToken.None));
+        Assert.Equal("superseded", (await store.GetPhoneVerificationOperationAsync(account.Id, firstId, CancellationToken.None))!.VerificationState);
+        Assert.Equal("verified", (await store.GetPhoneVerificationOperationAsync(account.Id, secondId, CancellationToken.None))!.VerificationState);
+        Assert.Equal("+15555550124", (await store.FindAccountAsync(account.Id, CancellationToken.None))!.PhoneE164);
+    }
+
+    [Fact]
+    public async Task ConcurrentVerifyReplayAcknowledgesTheSingleCommittedChallenge()
+    {
+        var store = new MemoryTrustStore();
+        var engine = new TrustEngine(store, TimeProvider.System);
+        var account = await engine.SignInAsync("development", "otp-verify-race", "Sam", CancellationToken.None);
+        var phones = NewPhones(store, new UnconfiguredSms(), NullLogger<PhoneVerificationService>.Instance, Environments.Development);
+        var requestId = Guid.NewGuid();
+        var sent = await phones.SendAsync(account.Id, "+15555550125", CancellationToken.None, requestId: requestId);
+
+        await Task.WhenAll(Enumerable.Range(0, 2).Select(_ => phones.VerifyAsync(account.Id, "+15555550125",
+            sent.DevelopmentCode, CancellationToken.None, requestId, sent.ChallengeId)));
+
+        Assert.True((await store.FindAccountAsync(account.Id, CancellationToken.None))!.OnboardingComplete);
+        Assert.Equal("verified", (await store.GetPhoneVerificationOperationAsync(account.Id, requestId, CancellationToken.None))!.VerificationState);
+    }
+
+    [Fact]
+    public async Task OnboardingRepairDoesNotOverwriteAHandleChosenConcurrently()
+    {
+        var store = new MemoryTrustStore();
+        var engine = new TrustEngine(store, TimeProvider.System);
+        var account = await engine.SignInAsync("development", "otp-complete-race", "Élodie", CancellationToken.None);
+        await store.SetVerifiedPhoneAsync(account.Id, "+15555550126", DateTimeOffset.UtcNow, CancellationToken.None);
+        var phones = NewPhones(store, new UnconfiguredSms(), new ListLogger(), Environments.Development);
+
+        await Task.WhenAll(
+            phones.CompleteOnboardingAsync(account.Id, CancellationToken.None),
+            engine.SetHandleAsync(account.Id, "elodie_custom", CancellationToken.None));
+
+        var repaired = await phones.CompleteOnboardingAsync(account.Id, CancellationToken.None);
+        Assert.Equal("elodie_custom", repaired.Handle);
+        Assert.Equal("Élodie", repaired.DisplayName);
+        Assert.True(repaired.OnboardingComplete);
+    }
+
+    [Fact]
+    public async Task PhoneReplacementKeepsOldBindingUntilVerificationAndResetsDiscoveryConsent()
+    {
+        var store = new MemoryTrustStore();
+        var engine = new TrustEngine(store, TimeProvider.System);
+        var account = await engine.SignInAsync("development", "otp-replacement", "Sofía", CancellationToken.None);
+        await engine.SetHandleAsync(account.Id, "sofia_user", CancellationToken.None);
+        await store.SetVerifiedPhoneAsync(account.Id, "+15555550127", DateTimeOffset.UtcNow, CancellationToken.None);
+        await engine.SetDiscoveryConsentAsync(account.Id, true, 1, CancellationToken.None);
+        var phones = NewPhones(store, new UnconfiguredSms(), NullLogger<PhoneVerificationService>.Instance, Environments.Development);
+
+        var sent = await phones.SendAsync(account.Id, "+15555550128", CancellationToken.None, requestId: Guid.NewGuid(), intent: "replacement");
+        var before = await store.FindAccountAsync(account.Id, CancellationToken.None);
+        Assert.Equal("+15555550127", before!.PhoneE164);
+        Assert.True(before.DiscoveryEnabled);
+
+        await phones.VerifyAsync(account.Id, "+15555550128", sent.DevelopmentCode, CancellationToken.None,
+            sent.RequestId, sent.ChallengeId);
+
+        var after = await store.FindAccountAsync(account.Id, CancellationToken.None);
+        Assert.Equal("+15555550128", after!.PhoneE164);
+        Assert.Equal("sofia_user", after.Handle);
+        Assert.Equal("Sofía", after.DisplayName);
+        Assert.False(after.DiscoveryEnabled);
+    }
+
+    [Fact]
+    public async Task StaleOnboardingChallengeCannotOverwriteANewerVerifiedReplacement()
+    {
+        var store = new MemoryTrustStore();
+        var engine = new TrustEngine(store, TimeProvider.System);
+        var account = await engine.SignInAsync("development", "otp-binding-race", "Sam", CancellationToken.None);
+        var oldPhone = "+15555550161";
+        var newPhone = "+15555550162";
+        await store.SetVerifiedPhoneAsync(account.Id, oldPhone, DateTimeOffset.UtcNow, CancellationToken.None);
+        var now = DateTimeOffset.UtcNow;
+        var requestId = Guid.NewGuid();
+        var challenge = new PhoneChallenge(account.Id, oldPhone, "otp-hash-fixture", now.AddMinutes(10), 0,
+            now, 1, now, Guid.NewGuid(), requestId, "onboarding", "queued", oldPhone);
+        var keys = new[] { SmsSendBudget.AccountKey(account.Id), SmsSendBudget.PhoneKey(oldPhone), SmsSendBudget.AccountDayKey(account.Id) };
+        var consent = new PhoneSmsConsentEvent(account.Id, oldPhone, null, null, now, PhoneVerificationService.LegacyPhoneConsentSource, null);
+        Assert.True((await store.ReservePhoneSmsAsync(keys, challenge, consent, now, CancellationToken.None, 1000)).Accepted);
+
+        await store.SetVerifiedPhoneAsync(account.Id, newPhone, now.AddSeconds(1), CancellationToken.None);
+        var completed = await store.TryCompletePhoneChallengeAsync(account.Id, oldPhone, challenge.CodeHash,
+            now.AddSeconds(2), PhoneVerificationService.MaxAttempts, CancellationToken.None, "person_aaaaaaaaaaaa");
+
+        Assert.False(completed);
+        Assert.Equal(newPhone, (await store.FindAccountAsync(account.Id, CancellationToken.None))!.PhoneE164);
+        Assert.Equal("superseded", (await store.GetPhoneVerificationOperationAsync(account.Id, requestId, CancellationToken.None))!.VerificationState);
+    }
+
+    [Fact]
+    public async Task StalePreReservationPhoneActionIsRejectedAtomically()
+    {
+        var store = new MemoryTrustStore();
+        var engine = new TrustEngine(store, TimeProvider.System);
+        var account = await engine.SignInAsync("development", "otp-reserve-binding-race", "Sam", CancellationToken.None);
+        var oldPhone = "+15555550163";
+        await store.SetVerifiedPhoneAsync(account.Id, oldPhone, DateTimeOffset.UtcNow, CancellationToken.None);
+        var now = DateTimeOffset.UtcNow;
+        var challenge = new PhoneChallenge(account.Id, oldPhone, "otp-hash-fixture", now.AddMinutes(10), 0,
+            now, 1, now, Guid.NewGuid(), Guid.NewGuid(), "onboarding", "queued", oldPhone);
+        var keys = new[] { SmsSendBudget.AccountKey(account.Id), SmsSendBudget.PhoneKey(oldPhone), SmsSendBudget.AccountDayKey(account.Id) };
+        var consent = new PhoneSmsConsentEvent(account.Id, oldPhone, null, null, now, PhoneVerificationService.LegacyPhoneConsentSource, null);
+        await store.SetVerifiedPhoneAsync(account.Id, "+15555550164", now.AddSeconds(1), CancellationToken.None);
+
+        var rejected = await Assert.ThrowsAsync<TrustException>(() =>
+            store.ReservePhoneSmsAsync(keys, challenge, consent, now.AddSeconds(2), CancellationToken.None, 1000));
+
+        Assert.Equal("phone_binding_changed", rejected.Code);
+        Assert.Empty(await store.ListPhoneSmsConsentEventsAsync(account.Id, CancellationToken.None));
+        Assert.Equal(0, (await store.GetSmsSendBudgetAsync(SmsSendBudget.AccountKey(account.Id), CancellationToken.None))?.SendCount ?? 0);
     }
 
     [Fact]
@@ -647,6 +822,26 @@ public sealed class PhoneVerificationTests
         }
     }
 
+    private sealed class FirstSendBlocksSms : ISmsOtpSender
+    {
+        private int _calls;
+        public bool IsConfigured => true;
+        public TaskCompletionSource FirstStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource ReleaseFirst { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public List<string> Codes { get; } = [];
+        public async Task SendAsync(string e164, string code, CancellationToken cancellationToken)
+        {
+            var call = Interlocked.Increment(ref _calls);
+            lock (Codes) Codes.Add(code);
+            if (call == 1)
+            {
+                FirstStarted.TrySetResult();
+                await ReleaseFirst.Task.WaitAsync(cancellationToken);
+            }
+        }
+        public Task SendTextAsync(string e164, string body, CancellationToken cancellationToken) => Task.CompletedTask;
+    }
+
     private sealed class ConsentObservingSms(ITrustStore store, Guid accountId) : ISmsOtpSender
     {
         public bool IsConfigured => true;
@@ -723,7 +918,7 @@ public sealed class PhoneVerificationApiTests : IClassFixture<TrustApiFactory>
     }
 
     [Fact]
-    public async Task HttpSendAndVerifyDoesNotCompleteOnboarding()
+    public async Task HttpPhoneVerificationCompletesOnboardingWithGeneratedHandle()
     {
         var deviceId = Guid.NewGuid().ToString("N");
         var session = await _client.PostAsJsonAsync(
@@ -764,8 +959,63 @@ public sealed class PhoneVerificationApiTests : IClassFixture<TrustApiFactory>
         var circleResponse = await _client.SendAsync(circleRequest);
         circleResponse.EnsureSuccessStatusCode();
         var circle = await circleResponse.Content.ReadFromJsonAsync<CircleOnboardingWire>(Json);
-        Assert.False(circle!.You.OnboardingComplete);
+        Assert.True(circle!.You.OnboardingComplete);
         Assert.True(circle.You.PhoneVerified);
+        Assert.Matches("^person_[a-z2-7]{12}$", circle.You.Handle);
+    }
+
+    [Fact]
+    public async Task HttpPhoneOperationReplayAndRichVerifyReturnAccountState()
+    {
+        var session = await _client.PostAsJsonAsync("/api/v1/session/development",
+            new { displayName = "Zoë", provider = "development", deviceId = Guid.NewGuid().ToString("N") });
+        session.EnsureSuccessStatusCode();
+        var payload = await session.Content.ReadFromJsonAsync<SessionOnboardingWire>(Json);
+        var token = payload!.Token;
+        var requestId = Guid.NewGuid();
+        var phone = UniquePhone();
+
+        using var send = Authorized(HttpMethod.Post, "/api/v1/me/phone/send", token);
+        send.Content = JsonContent.Create(new { phone, requestId, consentVersion = 1, consentAction = "send_code" });
+        var sendResponse = await _client.SendAsync(send);
+        sendResponse.EnsureSuccessStatusCode();
+        var first = await sendResponse.Content.ReadFromJsonAsync<SendOperationWire>(Json);
+        Assert.Equal(requestId, first!.RequestId);
+        Assert.NotEqual(Guid.Empty, first.ChallengeId);
+        Assert.Equal(phone, first.NormalizedPhone);
+
+        using var replay = Authorized(HttpMethod.Post, "/api/v1/me/phone/send", token);
+        replay.Content = JsonContent.Create(new { phone, requestId, consentVersion = 1, consentAction = "send_code" });
+        var replayResponse = await _client.SendAsync(replay);
+        replayResponse.EnsureSuccessStatusCode();
+        var duplicate = await replayResponse.Content.ReadFromJsonAsync<SendOperationWire>(Json);
+        Assert.Equal(first.ChallengeId, duplicate!.ChallengeId);
+        Assert.Equal(first.ExpiresAt, duplicate.ExpiresAt);
+        Assert.Equal("sent", duplicate.DeliveryState);
+
+        using var statusRequest = Authorized(HttpMethod.Get, $"/api/v1/me/phone/verification-state?requestId={requestId}", token);
+        var statusResponse = await _client.SendAsync(statusRequest);
+        statusResponse.EnsureSuccessStatusCode();
+        Assert.True(statusResponse.Headers.CacheControl?.NoStore);
+        using var status = JsonDocument.Parse(await statusResponse.Content.ReadAsStringAsync());
+        Assert.Equal("pending", status.RootElement.GetProperty("operation").GetProperty("verificationState").GetString());
+
+        using var verify = Authorized(HttpMethod.Post, "/api/v1/me/phone/verify", token);
+        verify.Content = JsonContent.Create(new { phone, code = first.DevelopmentCode, requestId,
+            challengeId = first.ChallengeId, returnAccountState = true });
+        var verifiedResponse = await _client.SendAsync(verify);
+        verifiedResponse.EnsureSuccessStatusCode();
+        using var verified = JsonDocument.Parse(await verifiedResponse.Content.ReadAsStringAsync());
+        Assert.True(verified.RootElement.GetProperty("verified").GetBoolean());
+        Assert.True(verified.RootElement.GetProperty("you").GetProperty("onboardingComplete").GetBoolean());
+        Assert.Matches("^person_[a-z2-7]{12}$", verified.RootElement.GetProperty("you").GetProperty("handle").GetString());
+
+        using var complete = Authorized(HttpMethod.Post, "/api/v1/me/onboarding/complete", token);
+        complete.Content = JsonContent.Create(new { });
+        var completeResponse = await _client.SendAsync(complete);
+        completeResponse.EnsureSuccessStatusCode();
+        using var completed = JsonDocument.Parse(await completeResponse.Content.ReadAsStringAsync());
+        Assert.True(completed.RootElement.GetProperty("onboardingComplete").GetBoolean());
     }
 
     [Fact]
@@ -902,8 +1152,9 @@ public sealed class PhoneVerificationApiTests : IClassFixture<TrustApiFactory>
         $"+1555555{RandomNumberGenerator.GetInt32(1000, 10000)}";
 
     private sealed record SessionOnboardingWire(string Token, OnboardingPersonWire You);
-    private sealed record OnboardingPersonWire(Guid Id, string DisplayName, bool HasCircle, bool OnboardingComplete, bool PhoneVerified);
+    private sealed record OnboardingPersonWire(Guid Id, string DisplayName, bool HasCircle, bool OnboardingComplete, bool PhoneVerified, string? Handle = null);
     private sealed record SendWire(string? DevelopmentCode);
+    private sealed record SendOperationWire(string? DevelopmentCode, Guid? RequestId, Guid? ChallengeId, DateTimeOffset ExpiresAt, string? DeliveryState, string? NormalizedPhone);
     private sealed record CircleOnboardingWire(OnboardingPersonWire You);
     private sealed record CirclePeopleWire(List<MemberWire> Members);
     private sealed record MemberWire(OnboardingPersonWire Person);

@@ -25,7 +25,9 @@ public sealed class LookReceiptPublisher(
             "look",
             null,
             look.ViewerId,
-            cancellationToken);
+            cancellationToken,
+            actorName: look.ViewerName,
+            eventAt: look.At);
 
     public async Task NotifyQuietAsync(
         Guid accountId,
@@ -43,7 +45,9 @@ public sealed class LookReceiptPublisher(
         Guid? subjectId,
         Guid? relatedAccountId,
         CancellationToken cancellationToken,
-        Func<CancellationToken, Task<bool>>? canDeliver = null)
+        Func<CancellationToken, Task<bool>>? canDeliver = null,
+        string? actorName = null,
+        DateTimeOffset? eventAt = null)
     {
         if (subjectId is { } subject && await IsBlockedForNotificationAsync(subject, cancellationToken)) return;
         if (relatedAccountId is { } related && await IsBlockedForNotificationAsync(related, cancellationToken)) return;
@@ -78,7 +82,10 @@ public sealed class LookReceiptPublisher(
             if (canDeliver is not null && !await canDeliver(cancellationToken)) return;
             try
             {
-                var outcome = await apns.SendNotificationAsync(device, title, body, kind, cancellationToken);
+                var message = actorName is not null && kind is "look" or "home_arrival"
+                    ? NotificationLanguage.Localize(device.Language, kind, actorName)
+                    : (title, body);
+                var outcome = await apns.SendNotificationAsync(device, message.Item1, message.Item2, kind, cancellationToken, eventAt);
                 if (outcome.Result == ApnsDeliveryResult.InvalidToken)
                 {
                     await devices.InvalidateTokenAsync(device.Token, cancellationToken);
@@ -126,8 +133,9 @@ public sealed class LookReceiptPublisher(
             return;
         }
 
+        var current = await store.GetCurrentHomePresenceAsync(subjectId, cancellationToken);
+        if (current is null || current.TransitionId != transitionId || current.State != HomePresenceState.Home) return;
         var connected = await store.ListConnectedAsync(subjectId, cancellationToken);
-        var timeLabel = DateTimeOffset.UtcNow.ToOffset(TimeSpan.Zero).ToString("h:mm tt");
         foreach (var person in connected)
         {
             if (await IsBlockedForNotificationAsync(subjectId, cancellationToken)) return;
@@ -154,12 +162,14 @@ public sealed class LookReceiptPublisher(
             await NotifyQuietCoreAsync(
                 person.Id,
                 subject.DisplayName + " is home",
-                subject.DisplayName + " is home · " + timeLabel,
+                subject.DisplayName + " is home.",
                 "home_arrival",
                 subjectId,
                 null,
                 cancellationToken,
-                ConsentStillAllowsDelivery);
+                ConsentStillAllowsDelivery,
+                subject.DisplayName,
+                current.LastChangedAt);
         }
     }
 

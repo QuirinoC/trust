@@ -19,6 +19,8 @@ services:
         value: postgres
       - key: Trust__SeedReviewCircle
         value: "false" # set true only while Apple is reviewing
+      - key: PhoneVerification__MaxGlobalSendsPerDay
+        value: "1000"
       - key: StoreKit__Enabled
         value: "true"
       - key: StoreKit__AllowReviewUnlock

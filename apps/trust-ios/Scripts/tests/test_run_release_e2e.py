@@ -12,7 +12,7 @@ import tempfile
 import unittest
 from types import SimpleNamespace
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 
 SCRIPT = Path(__file__).resolve().parents[1] / "run_release_e2e.py"
@@ -83,6 +83,35 @@ class PostgresConnectionTests(unittest.TestCase):
         self.assertEqual(api_environment["Apns__KeyId"], "test-key-id")
         self.assertNotIn("Apns__InheritedSecret", api_environment)
         self.assertFalse(any(key.casefold().startswith("apns__") for key in proxy_environment))
+
+    def test_signed_fixture_preflight_checks_marker_health_and_proxy(self) -> None:
+        process = SimpleNamespace(poll=lambda: None)
+        health = MagicMock()
+        health.__enter__.return_value.status = 200
+        def fake_json(url, timeout=2.0):
+            if url == runner.API_URL + "/__test/signed-apple-fixture":
+                return {"signedAppleFixture": True, "noSms": True}
+            if url == runner.PROXY_URL + "/__test/state":
+                return {}
+            self.fail(f"Unexpected preflight endpoint: {url}")
+        with patch.object(runner, "http_json", side_effect=fake_json), patch.object(runner.urllib.request, "urlopen", return_value=health) as open_url:
+            runner.wait_for_services(process, process, signed_apple_fixture=True)
+        self.assertEqual(open_url.call_args.args[0], runner.API_URL + "/health/live")
+        for marker in ({"signedAppleFixture": True, "noSms": False}, {"noSms": True}):
+            with self.subTest(marker=marker), patch.object(runner, "http_json", return_value=marker), self.assertRaises(runner.RunnerError):
+                runner.wait_for_services(process, process, signed_apple_fixture=True)
+        health.__enter__.return_value.status = 503
+        with patch.object(runner, "http_json", side_effect=fake_json), patch.object(runner.urllib.request, "urlopen", return_value=health), self.assertRaises(runner.RunnerError):
+            runner.wait_for_services(process, process, signed_apple_fixture=True)
+
+    def test_regular_preflight_still_requires_development_otp_without_sms(self) -> None:
+        process = SimpleNamespace(poll=lambda: None)
+        with patch.object(runner, "http_json", return_value={"developmentOtpWithoutSms": False}), self.assertRaises(runner.RunnerError):
+            runner.wait_for_services(process, process)
+        with patch.object(runner, "http_json", side_effect=[{"developmentOtpWithoutSms": True}, {}]) as read_json:
+            runner.wait_for_services(process, process)
+        self.assertEqual(read_json.call_args_list[0].args[0], runner.API_URL + "/api/v1/local-test-capabilities")
+        self.assertEqual(read_json.call_args_list[1].args[0], runner.PROXY_URL + "/__test/state")
 
     def test_temporary_database_name_is_runner_generated(self) -> None:
         connection = "Host=localhost;Port=5433;Database=trust_ui_e2e;Username=trust;Password=trust"
@@ -496,6 +525,17 @@ class ResultValidationTests(unittest.TestCase):
         self.assertIn("testAppleSignInFailureCanRetryDirectlyToOnboarding", runner.FAULT_CASES)
         self.assertEqual(len(runner.FAULT_CASES), len(set(runner.FAULT_CASES)))
 
+    def test_signed_apple_fixture_is_explicit_and_case_scoped(self) -> None:
+        signed = runner.SIGNED_APPLE_CASE
+        parsed = runner.parse_args(["--lane", "real-api", "--case", signed, "--signed-apple-fixture"])
+        self.assertTrue(parsed.signed_apple_fixture)
+        with self.assertRaises(SystemExit):
+            runner.parse_args(["--lane", "real-api", "--case", signed])
+        with self.assertRaises(SystemExit):
+            runner.parse_args(["--lane", "fault-matrix", "--signed-apple-fixture"])
+        self.assertIn(signed, verifier.SERIAL_EXCLUSIONS)
+        self.assertNotIn(signed, verifier.DIRECT_PASS_CASES)
+
     def test_direct_api_verifier_requires_exact_source_inventory_and_named_statuses(self) -> None:
         source = verifier.source_case_names()
         excluded = set(verifier.SERIAL_EXCLUSIONS)
@@ -512,7 +552,7 @@ class ResultValidationTests(unittest.TestCase):
         }
         report = verifier.verify(source, summary, {"testNodes": nodes})
         self.assertIn(f"{len(verifier.DIRECT_PASS_CASES)} expected passes", report)
-        self.assertIn("15 named proxy/role skips", report)
+        self.assertIn(f"{len(verifier.DIRECT_SKIP_REASONS)} named proxy/role skips", report)
         self.assertIn("not StoreKit evidence", report)
         for invalid_summary in (
             {**summary, "totalTestCount": 0},

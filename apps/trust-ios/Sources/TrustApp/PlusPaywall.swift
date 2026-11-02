@@ -87,6 +87,13 @@ struct PlusPaywall: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.bottom, 6)
 
+            Text(TrustCopy.plusSharingDirection)
+                .trustFont(12)
+                .lineSpacing(2)
+                .foregroundStyle(palette.muted)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.bottom, 6)
+
             Text(TrustCopy.plusLegal)
                 .trustFont(11)
                 .lineSpacing(1)
@@ -110,6 +117,7 @@ struct PlusPaywall: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, 6)
                     .accessibilityLabel(TrustCopy.subscriptionLinked)
+                RecoverySupportActions(kind: .purchase)
             }
 
             if showsClose, model.snapshot?.allowsReviewUnlock == true {
@@ -163,6 +171,10 @@ struct PlusPaywall: View {
                 .disabled(model.store.isWorking)
                 .accessibilityIdentifier("plus-restore-purchases")
                 .padding(.horizontal, TrustTheme.gutter)
+                if model.store.linkedToAnotherAccount {
+                    RecoverySupportActions(kind: .purchase)
+                        .padding(.horizontal, TrustTheme.gutter)
+                }
                 HStack(spacing: 8) {
                     Link(TrustCopy.privacy, destination: AppConfiguration.privacyURL)
                     Text("·")

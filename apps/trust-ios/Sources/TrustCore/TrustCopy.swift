@@ -62,6 +62,30 @@ public enum TrustCopy {
     public static var preferences: String { value("preferences", defaultValue: "Preferences") }
     public static var account: String { value("account", defaultValue: "Account") }
     public static var sendAnInvite: String { value("send_an_invite", defaultValue: "Send an invite") }
+    public static var shareInviteLink: String { value("share_invite_link", defaultValue: "Share invite link") }
+    public static var shareReadinessLocationOff: String {
+        value("share_readiness_location_off", defaultValue: "Location access is off. Your selected share mode is saved, but new location updates are unavailable until you allow access in You → My location.")
+    }
+    public static var shareReadinessForegroundOnly: String {
+        value("share_readiness_foreground_only", defaultValue: "Location access is limited to while you use Trust. Always sharing updates only while the app is in use until you change access in You → My location.")
+    }
+    public static var shareReadinessOffline: String {
+        value("share_readiness_offline", defaultValue: "Trust is offline. Your confirmed sharing choices remain; updates and changes resume when the server is reachable.")
+    }
+    public static var openMyLocation: String { value("open_my_location", defaultValue: "Open My location") }
+    public static func firstShareTitle(_ name: String) -> String {
+        format("first_share_title", defaultValue: "Share with %@?", name)
+    }
+    public static func firstShareDetails(_ name: String, handle: String, mode: String) -> String {
+        format("first_share_details", defaultValue: "You’ll share your location with %@ (@%@) using %@. They choose separately whether to share with you. A Look is a check under the mode you chose; it does not ask for a new approval each time.", name, handle, mode)
+    }
+    public static func shareWithPerson(_ name: String) -> String {
+        format("share_with_person", defaultValue: "Share with %@", name)
+    }
+    public static var viewReceiptPending: String { value("view_receipt_pending", defaultValue: "Waiting for Trust to confirm this view…") }
+    public static var viewReceiptFailed: String { value("view_receipt_failed", defaultValue: "Trust couldn’t confirm this view.") }
+    public static var viewReceiptOffline: String { value("view_receipt_offline", defaultValue: "Offline · this view is not confirmed yet.") }
+    public static var viewReceiptUnknown: String { value("view_receipt_unknown", defaultValue: "View status unavailable.") }
     public static var haveInviteCode: String { value("have_invite_code", defaultValue: "Have an invite code?") }
     public static var yourStatus: String { value("your_status", defaultValue: "Your status") }
     public static var homeStatus: String { value("home_status", defaultValue: "Home status") }
@@ -89,13 +113,43 @@ public enum TrustCopy {
     public static var inviteCreateBody: String { value("invite_create_body", defaultValue: "Create a link for them to accept. They join before either of you shares.") }
     public static var createInviteLink: String { value("create_invite_link", defaultValue: "Create invite link") }
     public static var lookNotificationNote: String { value("look_notification_note", defaultValue: "Trust records this Look. A notification may be delivered.") }
-    public static func plusFeatureSummary(_ log: String) -> String { format("plus_feature_summary", defaultValue: "Live pins · %@", log) }
+    public static func plusFeatureSummary(_ log: String) -> String { format("plus_feature_summary", defaultValue: "Your Always sharing · %@", log) }
     public static func subscriptionError(_ message: String) -> String { format("subscription_error", defaultValue: "Subscription error. %@", message) }
     public static var avatarVisibleToConnections: String { value("avatar_visible_to_connections", defaultValue: "Visible to people connected with you.") }
     public static var avatarVisibleToDiscoverablePeople: String { value("avatar_visible_to_discoverable_people", defaultValue: "When phone discovery is on, your picture can appear in exact handle or phone matches.") }
     public static var avatarVisibleToConnectionsOnly: String { value("avatar_visible_to_connections_only", defaultValue: "When phone discovery is off, your picture is visible only to people you connect with.") }
     public static var demoAvatarNotice: String { value("demo_avatar_notice", defaultValue: "Photos and camera need an account. Animal icons work in this demo and stay on this device.") }
     public static var save: String { value("save", defaultValue: "Save") }
+    public static var saving: String { value("saving", defaultValue: "Saving…") }
+    public static var editProfile: String { value("edit_profile", defaultValue: "Edit profile") }
+    public static var profileName: String { value("profile_name", defaultValue: "Name") }
+    public static var changePhoneNumber: String { value("change_phone_number", defaultValue: "Change phone number") }
+    public static var phoneNumberUnavailable: String { value("phone_number_unavailable", defaultValue: "Phone number unavailable") }
+    public static var phoneSetupFinishingTitle: String { value("phone_setup_finishing_title", defaultValue: "Phone verified. Finishing setup.") }
+    public static var phoneSetupFinishingBody: String { value("phone_setup_finishing_body", defaultValue: "Trust is completing your account setup. You can continue once your account is ready.") }
+    public static var phoneCompletionInvalidResponse: String { value("phone_completion_invalid_response", defaultValue: "Trust could not confirm that account setup is complete. Try again or contact Support.") }
+    public static var phoneOperationMismatch: String { value("phone_operation_mismatch", defaultValue: "This verification response did not match the current phone request. Trust is checking the request status.") }
+    public static var recoveryGetHelp: String { value("recovery_get_help", defaultValue: "Get help") }
+    public static var recoveryRequestPending: String { value("recovery_request_pending", defaultValue: "A support request is open. Email support with its reference if you need to add details. Trust does not send email for you.") }
+    public static var recoveryRequestFailed: String { value("recovery_request_failed", defaultValue: "Trust could not open a support request. Try again or contact Support.") }
+    public static var recoveryPhoneNotice: String { value("recovery_phone_notice", defaultValue: "Support can review this phone ownership conflict. An account transfer is not automatic.") }
+    public static var recoveryPurchaseNotice: String { value("recovery_purchase_notice", defaultValue: "Support can review a verified purchase. A request does not transfer a subscription or grant Plus.") }
+    public static var recoveryEmailSupport: String { value("recovery_email_support", defaultValue: "Open support email") }
+    public static var recoveryCopyReference: String { value("recovery_copy_reference", defaultValue: "Copy reference") }
+    public static var recoveryReferenceCopied: String { value("recovery_reference_copied", defaultValue: "Reference copied") }
+    public static var recoveryProofUnavailable: String { value("recovery_proof_unavailable", defaultValue: "A verified purchase record is not available. Restore purchases, then try again.") }
+    public static var recoveryRestoreHelp: String { value("recovery_restore_help", defaultValue: "Get help restoring") }
+    public static func recoveryRequestReference(_ reference: String) -> String {
+        format("recovery_request_reference", defaultValue: "Reference: %@", reference)
+    }
+    public static var accountHelp: String { value("account_help", defaultValue: "Account help") }
+    public static var accountHelpBody: String {
+        value("account_help_body", defaultValue: "Get help with your account, manage an Apple subscription, sign out, or delete your Trust account. Deleting your Trust account does not cancel an Apple subscription.")
+    }
+    public static var signOutSharingWarning: String {
+        value("sign_out_sharing_warning", defaultValue: "Updates from this phone stop when you sign out. Your sharing choices remain, and existing grants may still allow a connected person to check your latest available location.")
+    }
+    public static var stopAllAndSignOut: String { value("stop_all_and_sign_out", defaultValue: "Stop sharing and sign out") }
     public static var chooseFromPhotos: String { value("choose_from_photos", defaultValue: "Choose from Photos") }
     public static var takePhoto: String { value("take_photo", defaultValue: "Take Photo") }
     public static var removePicture: String { value("remove_picture", defaultValue: "Remove picture") }
@@ -402,14 +456,8 @@ public enum TrustCopy {
     public static func locationAgeCaption(timestamp: Date, now: Date) -> String {
         timestamp.formatted(.relative(presentation: .named))
     }
-    public static func availableLocationStatus(
-        timestamp: Date?,
-        now: Date,
-        viewerHasPlus: Bool,
-        presence: String? = nil
-    ) -> String {
-        let location = timestamp.map { locationFreshness(timestamp: $0, now: now) }
-            ?? (viewerHasPlus ? locationUnavailable : plusLockHint)
+    public static func authorizedLiveLocationStatus(timestamp: Date?, now: Date, presence: String? = nil) -> String {
+        let location = timestamp.map { locationFreshness(timestamp: $0, now: now) } ?? locationUnavailable
         return presence.map { "\($0) · \(location)" } ?? location
     }
     public static func pinAccessibility(name: String, live: Bool, timestamp: Date?, now: Date) -> String {
@@ -428,7 +476,7 @@ public enum TrustCopy {
     }
     public static var noLocationYet: String { value("no_location_yet", defaultValue: "Getting location…") }
     public static var noLocationBody: String {
-        value("no_location_body", defaultValue: "This usually takes a moment.")
+        value("no_location_body", defaultValue: "No location is available to display right now.")
     }
 
     // MARK: Map (D2)
@@ -534,7 +582,6 @@ public enum TrustCopy {
         format("desc_timed", defaultValue: "Paused until %@. Then the previous mode returns.", until)
     }
     public static var plus: String { value("plus", defaultValue: "Plus") }
-    public static var plusLockHint: String { value("plus_lock_hint", defaultValue: "Always is Plus.") }
     public static var pause: String { value("pause", defaultValue: "Pause") }
     public static var pauseSharing: String { value("pause_sharing", defaultValue: "Pause") }
     public static func pauseTitle(name: String) -> String {
@@ -600,7 +647,7 @@ public enum TrustCopy {
     public static var search: String { value("search", defaultValue: "Search") }
     public static var addPersonLookupPlaceholder: String { value("add_person_lookup_placeholder", defaultValue: "Handle or phone number") }
     public static var addPersonLookupHelper: String { value("add_person_lookup_helper", defaultValue: "Enter a Trust handle or a complete phone number.") }
-    public static var phoneLookupCountryCodeHint: String { value("phone_lookup_country_code_hint", defaultValue: "Enter a complete phone number, including the country code.") }
+    public static var phoneLookupCountryCodeHint: String { value("phone_lookup_country_code_hint", defaultValue: "Enter a complete phone number. Choose a country for a national number; a pasted + number uses its own country code.") }
     public static var lookupNoMatch: String { value("lookup_no_match", defaultValue: "No match found") }
     public static var inviteToTrust: String { value("invite_to_trust", defaultValue: "Share invite link") }
     public static var discoveryEnabledLabel: String { value("discovery_enabled_label", defaultValue: "Help people find me") }
@@ -693,7 +740,6 @@ public enum TrustCopy {
     }
     public static var yourCode: String { value("your_code", defaultValue: "Your code") }
     public static var createInvite: String { value("create_invite", defaultValue: "Create invite") }
-    public static var shareInviteLink: String { value("share_invite_link", defaultValue: "Share invite link") }
     public static var enterACode: String { value("enter_a_code", defaultValue: "Enter a code") }
     public static var codePlaceholder: String { value("code_placeholder", defaultValue: "ABC123") }
     public static var inviteFootnote: String {
@@ -823,7 +869,7 @@ public enum TrustCopy {
         format("presence_set_toast", defaultValue: "Status set to %@.", label)
     }
     public static var trustPlus: String { value("trust_plus", defaultValue: "Trust Plus") }
-    public static var plusHeadline: String { value("plus_headline", defaultValue: "Always, 20 people, live pins.") }
+    public static var plusHeadline: String { value("plus_headline", defaultValue: "Share Always with up to 20 people.") }
     public static var plusFreeLine: String {
         value("plus_free_line", defaultValue: "Up to 5 people. Sealed and Look stay on.")
     }
@@ -833,7 +879,7 @@ public enum TrustCopy {
     public static func plusNote(monthly: String, annual: String) -> String {
         format(
             "plus_note",
-            defaultValue: "Plus adds Always, 20 people, and live pins. %@/mo or %@/yr.",
+            defaultValue: "Plus lets you share Always with up to 20 people, with 30 days of history and export. %@/mo or %@/yr.",
             monthly,
             annual
         )
@@ -947,15 +993,18 @@ public enum TrustCopy {
         value("plus_feature_modes", defaultValue: "Always.")
     }
     public static var plusFeatureMap: String { value("plus_feature_map", defaultValue: "Live pins when someone shares Always.") }
-    public static var plusFeatureLog: String { value("plus_feature_log", defaultValue: "Log for a year, with export.") }
+    public static var plusFeatureLog: String { value("plus_feature_log", defaultValue: "30-day history with export.") }
     public static var plusStaysFree: String {
         value(
             "plus_stays_free",
             defaultValue: "Look, Pause, Home / Away / Hidden, Stop, Invite, and Delete stay free."
         )
     }
+    public static var plusSharingDirection: String {
+        value("plus_sharing_direction", defaultValue: "A Plus member can share Always with anyone. The person viewing can see that live location for free; Plus is needed only to turn on their own Always sharing.")
+    }
     public static var plusCoveredBody: String {
-        value("plus_covered_body", defaultValue: "Always, 20 people, live pins, and 30 days of history.")
+        value("plus_covered_body", defaultValue: "Share Always with up to 20 people; keep 30 days of history with export.")
     }
     public static func plusActivePlan(name: String, price: String) -> String {
         format("plus_active_plan", defaultValue: "%@ · %@", name, price)

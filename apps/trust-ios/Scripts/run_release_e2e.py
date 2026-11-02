@@ -33,6 +33,8 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[3]
 IOS = ROOT / "apps/trust-ios"
 API_PROJECT = ROOT / "apps/trust-api/TrustApi.csproj"
+SIGNED_APPLE_HOST = ROOT / "apps/trust-api-testhost/TrustApi.TestHost.csproj"
+SIGNED_APPLE_CASE = "testSignedApplePhoneReplacementPreservesAccountAndDiscovery"
 PROXY = ROOT / "apps/trust-api/scripts/trust_ui_race_proxy.py"
 PAIR_CONTROLLER = IOS / "Scripts/trust_pair_location_controller.py"
 API_URL = "http://127.0.0.1:5090"
@@ -46,6 +48,9 @@ HANDOFF_CASES = (
 PAIR_CASE = "testPairedRequestAcceptAndPresenceGrantRole"
 TEST_SOURCE = IOS / "Tests/TrustUITests/TrustRealAPIFeatureTests.swift"
 FAULT_CASE_CANDIDATES = (
+    "testVerifiedPhoneCompletionFailureKeepsSetupUntilRetry",
+    "testDelayedRegionHintCannotOverrideManualCountry",
+    "testViewReceiptWaitsForServerAcknowledgement",
     "testLatePhoneResponsesAfterEditPreserveRetryWithoutOpeningCodeOrHome",
     "testManualHomeChoicesReachServerAndRetirePreviousNotice",
     "testAppleSignInFailureCanRetryDirectlyToOnboarding",
@@ -69,6 +74,7 @@ STANDARD_OPT_IN_SETUP_SKIP_CASES = frozenset({
 EXPECTED_STANDARD_SKIP_CASES = frozenset(ALL_REAL_CASES) | STANDARD_OPT_IN_SETUP_SKIP_CASES
 FAULT_CASES = tuple(FAULT_CASE_CANDIDATES)
 REVIEW_FIXTURE_CASES = {
+    "testViewReceiptWaitsForServerAcknowledgement",
     PAIR_CASE,
     "testAlwaysSharedLocationHistoryRendersAndClearsAfterStop",
     "testDelayedHistoryFixtureCannotReappearAfterStopRemoveAndReconnect",
@@ -237,7 +243,8 @@ def http_json(url: str, timeout: float = 2.0) -> dict[str, Any]:
     return value
 
 
-def wait_for_services(api: subprocess.Popen[str], proxy: subprocess.Popen[str], timeout: int = 45) -> None:
+def wait_for_services(api: subprocess.Popen[str], proxy: subprocess.Popen[str], timeout: int = 45,
+                      *, signed_apple_fixture: bool = False) -> None:
     deadline = time.monotonic() + timeout
     last_error: Exception | None = None
     while time.monotonic() < deadline:
@@ -246,9 +253,17 @@ def wait_for_services(api: subprocess.Popen[str], proxy: subprocess.Popen[str], 
         if proxy.poll() is not None:
             raise RunnerError("Fault proxy exited during startup.")
         try:
-            caps = http_json(API_URL + "/api/v1/local-test-capabilities")
-            if caps.get("developmentOtpWithoutSms") is not True:
-                raise RunnerError("API did not confirm Development OTP without SMS.")
+            if signed_apple_fixture:
+                marker = http_json(API_URL + "/__test/signed-apple-fixture")
+                if marker.get("signedAppleFixture") is not True or marker.get("noSms") is not True:
+                    raise RunnerError("Signed Apple fixture did not confirm its isolated no-SMS identity host.")
+                with urllib.request.urlopen(API_URL + "/health/live", timeout=2.0) as health:
+                    if health.status != 200:
+                        raise RunnerError("Signed Apple fixture API health check failed.")
+            else:
+                caps = http_json(API_URL + "/api/v1/local-test-capabilities")
+                if caps.get("developmentOtpWithoutSms") is not True:
+                    raise RunnerError("API did not confirm Development OTP without SMS.")
             # Verify the public test endpoint is actually the runner-owned proxy.
             state = http_json(PROXY_URL + "/__test/state")
             if not isinstance(state, dict):
@@ -357,7 +372,8 @@ def stop_process(process: subprocess.Popen[str] | None, *, process_group: bool =
 
 def start_services(log_dir: Path, developer_dir: str, *, postgres_connection: str | None = None,
                    allow_review_fixture: bool = False,
-                   extra_api_environment: dict[str, str] | None = None) -> Services:
+                   extra_api_environment: dict[str, str] | None = None,
+                   signed_apple_fixture: bool = False) -> Services:
     assert_ports_free()
     env = os.environ.copy()
     # Never inherit APNs provider secrets into the shared baseline environment:
@@ -381,7 +397,7 @@ def start_services(log_dir: Path, developer_dir: str, *, postgres_connection: st
     api_env.update(extra_api_environment or {})
     api_log = open(log_dir / "api.log", "w", encoding="utf-8")
     try:
-        api = subprocess.Popen(["dotnet", "run", "--no-launch-profile", "--project", str(API_PROJECT)],
+        api = subprocess.Popen(["dotnet", "run", "--no-launch-profile", "--project", str(SIGNED_APPLE_HOST if signed_apple_fixture else API_PROJECT)],
                                cwd=ROOT, env=api_env, stdout=api_log, stderr=subprocess.STDOUT, text=True,
                                start_new_session=True)
     finally:
@@ -400,7 +416,7 @@ def start_services(log_dir: Path, developer_dir: str, *, postgres_connection: st
         wait_for_ports_free()
         raise
     try:
-        wait_for_services(api, proxy)
+        wait_for_services(api, proxy, signed_apple_fixture=signed_apple_fixture)
         return Services(api, proxy)
     except BaseException:
         stop_process(proxy, process_group=True)
@@ -806,12 +822,15 @@ class Harness:
             evidence = "postgres (fresh disposable database)" if connection else "memory"
             if self.args.allow_review_fixture:
                 evidence += "; synthetic Development review-unlock fixture enabled (not StoreKit evidence)"
+            if self.args.signed_apple_fixture:
+                evidence += "; local signed synthetic Apple identity fixture (not genuine Apple evidence)"
             self.evidence_mode = evidence
             print(f"  Evidence mode: {evidence}", flush=True)
             try:
                 self.owned_services = start_services(
                     case_dir, self.developer_dir, postgres_connection=connection,
                     allow_review_fixture=self.args.allow_review_fixture,
+                    signed_apple_fixture=self.args.signed_apple_fixture,
                 )
             except BaseException:
                 if self.owned_database:
@@ -850,6 +869,8 @@ class Harness:
         self.ensure_services(case_dir)
         (case_dir / "evidence-mode.txt").write_text(self.evidence_mode + "\n", encoding="utf-8")
         env = {"TRUST_UI_TEST_BASE_URL": PROXY_URL}
+        if self.args.signed_apple_fixture:
+            env["TRUST_UI_TEST_SIGNED_APPLE_AUTH"] = "1"
         env.update(extra or {})
         xctestrun = self.logs / f"runner-{case}.xctestrun"
         inject_runner_environment(self.args.xctestrun, xctestrun, env)
@@ -974,6 +995,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
                         help="Explicit local Docker container whose loopback port mapping matches the connection.")
     parser.add_argument("--postgres-direct", action="store_true",
                         help="Use native psql against the supplied loopback PostgreSQL endpoint; create/drop only this run's generated database.")
+    parser.add_argument("--signed-apple-fixture", action="store_true",
+                        help="Run the one signed synthetic Apple replacement case on the isolated local test host; not genuine Apple evidence.")
     parser.add_argument("--allow-review-fixture", action="store_true",
                         help="Explicitly enable the Development-only synthetic review entitlement fixture; this is not StoreKit evidence.")
     parser.add_argument("--developer-dir", default=os.environ.get("DEVELOPER_DIR", DEFAULT_DEVELOPER_DIR))
@@ -983,6 +1006,10 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     args = parser.parse_args(argv)
     if args.store == "postgres" and not args.postgres_direct and not args.postgres_container:
         args.postgres_container = os.environ.get("TRUST_E2E_POSTGRES_CONTAINER")
+    if args.signed_apple_fixture and (args.lane != "real-api" or args.case != SIGNED_APPLE_CASE):
+        parser.error("--signed-apple-fixture is restricted to the signed Apple phone replacement case")
+    if args.case == SIGNED_APPLE_CASE and not args.signed_apple_fixture:
+        parser.error("the signed Apple phone replacement case requires --signed-apple-fixture")
     if args.lane == "real-api" and not args.case:
         parser.error("--lane real-api requires --case")
     if args.lane == "real-api" and args.case in {PAIR_CASE, *HANDOFF_CASES}:
@@ -1078,6 +1105,9 @@ def main(argv: list[str] | None = None) -> int:
             harness.run_standard(single[0])
             standalone_cases, _handoff_cases, _paired_cases = all_lane_case_partition()
             for case in standalone_cases:
+                if case == SIGNED_APPLE_CASE:
+                    print("  Signed Apple replacement is excluded from all; run its explicit --signed-apple-fixture lane.", flush=True)
+                    continue
                 harness.run_real_case(case, single[0])
                 harness.stop_services()
             harness.run_handoff(pair[0], pair[1])

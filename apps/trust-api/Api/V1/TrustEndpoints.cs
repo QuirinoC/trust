@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using System.Buffers;
+using System.IdentityModel.Tokens.Jwt;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Options;
@@ -64,8 +65,10 @@ public static class TrustEndpoints
         auth.MapGet("/handles/available", CheckHandleAvailableAsync);
         auth.MapPut("/me/handle", SetHandleAsync);
         auth.MapPut("/me/discovery", SetDiscoveryAsync);
-        auth.MapPost("/me/phone/send", SendPhoneCodeAsync).RequireRateLimiting(RateLimitPolicies.PhoneSend);
+        auth.MapPost("/me/phone/send", SendPhoneCodeWithProofAsync).RequireRateLimiting(RateLimitPolicies.PhoneSend);
         auth.MapPost("/me/phone/verify", VerifyPhoneCodeAsync).RequireRateLimiting(RateLimitPolicies.PhoneVerify);
+        auth.MapGet("/me/phone/verification-state", PhoneVerificationStateAsync);
+        auth.MapPost("/me/onboarding/complete", CompleteOnboardingAsync);
         auth.MapPost("/people/phone", AddPersonByPhoneAsync).RequireRateLimiting(RateLimitPolicies.Invite);
         auth.MapGet("/people/lookup", LookupPersonAsync);
         auth.MapPost("/people/lookup", SearchPersonAsync);
@@ -93,6 +96,8 @@ public static class TrustEndpoints
         auth.MapPost("/circle/entitlement", EntitlementAsync);
         auth.MapGet("/storekit/account-token", StoreKitAccountTokenAsync);
         auth.MapPost("/storekit/transactions", VerifyStoreKitTransactionAsync);
+        auth.MapPost("/storekit/recovery-requests", CreateStoreKitRecoveryRequestAsync).RequireRateLimiting(RateLimitPolicies.Invite);
+        auth.MapPost("/me/recovery-requests", CreateAccountRecoveryRequestAsync).RequireRateLimiting(RateLimitPolicies.Invite);
         auth.MapPut("/age-assurance/app-transaction", RegisterAgeAssuranceAppTransactionAsync);
         auth.MapPost("/age-assurance/privacy-hold", PlaceAccountPrivacyHoldAsync);
         api.MapPost("/storekit/notifications", StoreKitNotificationAsync);
@@ -550,10 +555,38 @@ public static class TrustEndpoints
         catch (TrustException exception) { return Map(exception); }
     }
 
+    // Compatibility helper used by direct legacy callers and tests; routed requests
+    // resolve the proof-aware overload below.
     public static async Task<IResult> SendPhoneCodeAsync(
         SendPhoneCodeRequest request,
         ClaimsPrincipal principal,
         PhoneVerificationService phones,
+        CancellationToken cancellationToken)
+    {
+        if (string.Equals(request.Intent, "replacement", StringComparison.Ordinal))
+            return Results.BadRequest(new ApiError("reauth_required", "Sign in with Apple again before changing the verified phone number."));
+        var accountId = AccountClaims.AccountId(principal);
+        if (accountId is null) return Results.Unauthorized();
+        try
+        {
+            var result = await phones.SendAsync(accountId.Value, request.Phone, cancellationToken,
+                request.ConsentAction, request.ConsentVersion, request.RequestId, request.Intent);
+            return Results.Ok(new SendPhoneCodeResponse(result.ExpiresAt, result.ResendAfterSeconds,
+                result.DevelopmentCode, result.Retry.ServerTime, result.Retry.ResendRetryAt,
+                result.Retry.CorrectionRetryAt, result.Retry.ImmediateNumberAttemptsRemaining,
+                result.Retry.NormalizedPhone, result.Retry.AccountRetryAt, result.Retry.AccountWindowStartedAt,
+                result.Retry.AccountSendCount, result.RequestId, result.ChallengeId, result.DeliveryState));
+        }
+        catch (TrustException exception) { return Map(exception); }
+    }
+
+    public static async Task<IResult> SendPhoneCodeWithProofAsync(
+        SendPhoneCodeRequest request,
+        ClaimsPrincipal principal,
+        PhoneVerificationService phones,
+        IAppleIdentityValidator apple,
+        ITrustStore store,
+        TimeProvider time,
         CancellationToken cancellationToken)
     {
         var accountId = AccountClaims.AccountId(principal);
@@ -564,23 +597,62 @@ public static class TrustEndpoints
 
         try
         {
+            if (string.Equals(request.Intent, "replacement", StringComparison.Ordinal))
+            {
+                if (string.IsNullOrWhiteSpace(request.IdentityToken)
+                    || string.IsNullOrWhiteSpace(request.Nonce)
+                    || !AppleNonceValidator.Matches(request.IdentityToken, request.Nonce)
+                    || !IsFreshAppleIdentityToken(request.IdentityToken, time.GetUtcNow()))
+                    return Results.Json(new ApiError("reauth_required", "Sign in with Apple again to change your phone."), statusCode: StatusCodes.Status401Unauthorized);
+
+                var identity = await apple.ValidateAsync(request.IdentityToken, cancellationToken);
+                var current = await store.FindAccountAsync(accountId.Value, cancellationToken);
+                if (current is null || !string.Equals(current.Provider, "apple", StringComparison.OrdinalIgnoreCase)
+                    || !string.Equals(identity.Provider, current.Provider, StringComparison.OrdinalIgnoreCase)
+                    || !string.Equals(identity.Subject, current.ProviderSubject, StringComparison.Ordinal))
+                    return Results.Json(new ApiError("reauth_required", "This Apple account does not match the signed-in Trust account."), statusCode: StatusCodes.Status401Unauthorized);
+            }
             var result = await phones.SendAsync(
                 accountId.Value,
                 request.Phone,
                 cancellationToken,
                 request.ConsentAction,
-                request.ConsentVersion);
+                request.ConsentVersion,
+                request.RequestId,
+                request.Intent);
             return Results.Ok(new SendPhoneCodeResponse(
                 result.ExpiresAt,
                 result.ResendAfterSeconds,
                 result.DevelopmentCode, result.Retry.ServerTime, result.Retry.ResendRetryAt,
                 result.Retry.CorrectionRetryAt, result.Retry.ImmediateNumberAttemptsRemaining, result.Retry.NormalizedPhone,
-                result.Retry.AccountRetryAt, result.Retry.AccountWindowStartedAt, result.Retry.AccountSendCount));
+                result.Retry.AccountRetryAt, result.Retry.AccountWindowStartedAt, result.Retry.AccountSendCount,
+                result.RequestId, result.ChallengeId, result.DeliveryState));
         }
         catch (TrustException exception)
         {
             return Map(exception);
         }
+        catch (Exception exception) when (IsAppleTokenFailure(exception) || IsAppleDirectoryFailure(exception))
+        {
+            return Results.Json(new ApiError("reauth_required", "Apple could not confirm this phone change. Sign in again and retry."),
+                statusCode: IsAppleDirectoryFailure(exception) ? StatusCodes.Status503ServiceUnavailable : StatusCodes.Status401Unauthorized);
+        }
+    }
+
+    private static bool IsFreshAppleIdentityToken(string token, DateTimeOffset now)
+    {
+        var handler = new JwtSecurityTokenHandler { MapInboundClaims = false };
+        if (!handler.CanReadToken(token)) return false;
+        var jwt = handler.ReadJwtToken(token);
+        var issuedAt = jwt.Claims.FirstOrDefault(claim => claim.Type == "iat")?.Value;
+        var authenticatedAt = jwt.Claims.FirstOrDefault(claim => claim.Type == "auth_time")?.Value;
+        if (!long.TryParse(issuedAt, out var issuedUnix) || !long.TryParse(authenticatedAt, out var authUnix)) return false;
+        var issued = DateTimeOffset.FromUnixTimeSeconds(issuedUnix);
+        var authenticated = DateTimeOffset.FromUnixTimeSeconds(authUnix);
+        return IsRecent(issued, now) && IsRecent(authenticated, now);
+
+        static bool IsRecent(DateTimeOffset timestamp, DateTimeOffset reference) =>
+            timestamp <= reference.AddSeconds(30) && timestamp >= reference.AddMinutes(-5);
     }
 
     public static async Task<IResult> VerifyPhoneCodeAsync(
@@ -597,13 +669,45 @@ public static class TrustEndpoints
 
         try
         {
-            await phones.VerifyAsync(accountId.Value, request.Phone, request.Code, cancellationToken);
-            return Results.NoContent();
+            await phones.VerifyAsync(accountId.Value, request.Phone, request.Code, cancellationToken, request.RequestId, request.ChallengeId);
+            if (!request.ReturnAccountState) return Results.NoContent();
+            var account = await phones.GetAccountAsync(accountId.Value, cancellationToken);
+            return Results.Ok(new VerifiedPhoneResponse(true, request.RequestId, request.ChallengeId,
+                ContractMap.Person(account, includeDiscoveryEnabled: true)));
         }
         catch (TrustException exception)
         {
             return Map(exception);
         }
+    }
+
+    public static async Task<IResult> PhoneVerificationStateAsync(
+        [FromQuery] Guid? requestId,
+        ClaimsPrincipal principal,
+        PhoneVerificationService phones,
+        HttpContext httpContext,
+        CancellationToken cancellationToken)
+    {
+        httpContext.Response.Headers.CacheControl = "private, no-store";
+        var accountId = AccountClaims.AccountId(principal);
+        if (accountId is null) return Results.Unauthorized();
+        var state = await phones.GetVerificationStateAsync(accountId.Value, requestId, cancellationToken);
+        return Results.Ok(state);
+    }
+
+    public static async Task<IResult> CompleteOnboardingAsync(
+        ClaimsPrincipal principal,
+        PhoneVerificationService phones,
+        CancellationToken cancellationToken)
+    {
+        var accountId = AccountClaims.AccountId(principal);
+        if (accountId is null) return Results.Unauthorized();
+        try
+        {
+            var account = await phones.CompleteOnboardingAsync(accountId.Value, cancellationToken);
+            return Results.Ok(ContractMap.Person(account, includeDiscoveryEnabled: true));
+        }
+        catch (TrustException exception) { return Map(exception); }
     }
 
     public static async Task<IResult> AddPersonByPhoneAsync(
@@ -987,6 +1091,7 @@ public static class TrustEndpoints
         ViewRequest request,
         ClaimsPrincipal principal,
         TrustEngine engine,
+        TimeProvider time,
         CancellationToken cancellationToken)
     {
         var accountId = AccountClaims.AccountId(principal);
@@ -999,7 +1104,8 @@ public static class TrustEndpoints
         {
             // View never sends a push — it's Available's no-sheet counterpart to Look.
             var view = await engine.ViewAsync(accountId.Value, request.SubjectId, cancellationToken);
-            return Results.Ok(new ViewResponse(view is not null, view is null ? null : ContractMap.Look(view)));
+            return Results.Ok(new ViewResponse(view is not null, view is null ? null : ContractMap.Look(view),
+                view?.At ?? time.GetUtcNow()));
         }
         catch (TrustException exception)
         {
@@ -1227,6 +1333,65 @@ public static class TrustEndpoints
             cancellationToken);
     }
 
+    public static async Task<IResult> CreateStoreKitRecoveryRequestAsync(
+        CreateStoreKitRecoveryRequest request,
+        ClaimsPrincipal principal,
+        IStoreKitTransactionVerifier verifier,
+        IStoreKitEntitlementStore entitlements,
+        IAgeAssuranceAccountStore ageAssurance,
+        TimeProvider time,
+        CancellationToken cancellationToken)
+    {
+        var accountId = AccountClaims.AccountId(principal);
+        if (accountId is null) return Results.Unauthorized();
+        if (string.IsNullOrWhiteSpace(request.SignedTransactionInfo) || request.SignedTransactionInfo.Length > 64_000)
+            return Results.BadRequest(new ApiError("invalid_purchase_reference", "Provide a valid signed App Store purchase reference."));
+        var verified = verifier.Verify(request.SignedTransactionInfo);
+        if (!verified.IsValid || verified.Transaction is null)
+            return Results.BadRequest(new ApiError("invalid_purchase_reference", "Apple could not verify that purchase reference."));
+        var now = time.GetUtcNow();
+        if (verified.Transaction.RevokedAt is not null || verified.Transaction.ExpiresAt <= now)
+            return Results.Conflict(new ApiError("recovery_purchase_inactive", "That purchase is expired or revoked."));
+        if (await ageAssurance.IsAccountBlockedAsync(accountId.Value, cancellationToken)
+            || await ageAssurance.IsAccountPrivacyHeldAsync(accountId.Value, cancellationToken))
+            return Results.Json(new ApiError("recovery_target_restricted", "This Trust account cannot receive purchase recovery."), statusCode: StatusCodes.Status403Forbidden);
+        var reason = string.IsNullOrWhiteSpace(request.Reason) ? null : request.Reason.Trim()[..Math.Min(request.Reason.Trim().Length, 500)];
+        var requestId = await entitlements.CreateRecoveryRequestAsync(accountId.Value, verified.Transaction, reason, now, cancellationToken);
+        return Results.Accepted(value: new StoreKitRecoveryResponse(requestId, "pending", now));
+    }
+
+    public static async Task<IResult> CreateAccountRecoveryRequestAsync(
+        CreateAccountRecoveryRequest request,
+        ClaimsPrincipal principal,
+        IStoreKitTransactionVerifier verifier,
+        IStoreKitEntitlementStore entitlements,
+        IAgeAssuranceAccountStore ageAssurance,
+        TimeProvider time,
+        CancellationToken cancellationToken)
+    {
+        if (!string.IsNullOrWhiteSpace(request.SignedTransactionInfo))
+        {
+            if (!string.IsNullOrWhiteSpace(request.Kind))
+                return Results.BadRequest(new ApiError("invalid_recovery_request", "Choose one recovery request type."));
+            return await CreateStoreKitRecoveryRequestAsync(
+                new CreateStoreKitRecoveryRequest(request.SignedTransactionInfo, request.Reason),
+                principal, verifier, entitlements, ageAssurance, time, cancellationToken);
+        }
+
+        if (!string.Equals(request.Kind, "phone_ownership_conflict", StringComparison.Ordinal))
+            return Results.BadRequest(new ApiError("invalid_recovery_request", "Choose a supported recovery request type."));
+
+        var accountId = AccountClaims.AccountId(principal);
+        if (accountId is null) return Results.Unauthorized();
+        var reason = string.IsNullOrWhiteSpace(request.Reason)
+            ? null
+            : request.Reason.Trim()[..Math.Min(request.Reason.Trim().Length, 500)];
+        var createdAt = time.GetUtcNow();
+        var requestId = await entitlements.CreatePhoneOwnershipRecoveryRequestAsync(
+            accountId.Value, reason, createdAt, cancellationToken);
+        return Results.Accepted(value: new StoreKitRecoveryResponse(requestId, "pending", createdAt));
+    }
+
     public static async Task<IResult> StoreKitNotificationAsync(
         StoreKitNotificationRequest request,
         IStoreKitTransactionVerifier verifier,
@@ -1432,7 +1597,8 @@ public static class TrustEndpoints
             request.Token.Trim(),
             request.Environment,
             bundleId,
-            cancellationToken);
+            cancellationToken,
+            NotificationLanguage.Normalize(request.AppLanguage));
         return Results.NoContent();
     }
 
@@ -1636,9 +1802,10 @@ public static class TrustEndpoints
         "verification_required" => Results.Json(ApiError.From(exception), statusCode: StatusCodes.Status403Forbidden),
         "request_not_found" => Results.NotFound(ApiError.From(exception)),
         "request_expired" or "request_declined_recently" or "request_limit"
-            or "connection_changed" or "share_state_changed" or "presence_state_changed" or "client_update_required" =>
+            or "connection_changed" or "share_state_changed" or "presence_state_changed" or "client_update_required"
+            or "idempotency_conflict" or "reauth_required" or "phone_binding_changed" =>
             Results.Json(ApiError.From(exception), statusCode: StatusCodes.Status409Conflict),
-        "otp_not_configured" or "otp_send_failed" =>
+        "otp_not_configured" or "otp_send_failed" or "recovery_authority_unavailable" =>
             Results.Json(ApiError.From(exception), statusCode: StatusCodes.Status503ServiceUnavailable),
         "not_connected" or "pair_inactive" or "no_location" or "phone_in_use" or "phone_unavailable" or "handle_in_use"
             or "share_off" or "look_requires_sealed" or "view_requires_available" =>

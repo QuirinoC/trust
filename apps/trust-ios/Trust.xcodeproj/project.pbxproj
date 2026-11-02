@@ -8,12 +8,16 @@
 
 /* Begin PBXBuildFile section */
 		00585D58BD36F3EFA822DA36 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 63242874F15C117B93D74C2D /* InfoPlist.strings */; };
+		01A53691B52FF4373F7E12C4 /* AccountHelpSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 828AE558DCB8F024B5255767 /* AccountHelpSheet.swift */; };
 		02D061F3EB0697F1197F546A /* TrustClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C0D44DBC8538A89711936F4 /* TrustClient.swift */; };
 		06C22804C292C872FF35523A /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = BF4B0475D551D63F000821DA /* Localizable.strings */; };
 		0A2BDB08D8BE78D54C86926F /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 482B3013C3B6C0C8532F5DE6 /* LoginView.swift */; };
 		0A872DF45F12B026110B1128 /* TrustCore in Frameworks */ = {isa = PBXBuildFile; productRef = 26D261D4D2888B2D50331783 /* TrustCore */; };
+		0AB310CCF8B0EA47F8C4BF05 /* TrustLiveCachePrivacyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31394D09C0C4FBD5BA9D7C4D /* TrustLiveCachePrivacyTests.swift */; };
 		0B084813F08FF4C2C2135AC1 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 5508C24A56E81A67A0FC1D03 /* InfoPlist.strings */; };
+		0BCCF4477BD8B2F7FC980A21 /* PhoneOnboardingCompletionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D04F219E6B7CDFCD25261BA2 /* PhoneOnboardingCompletionView.swift */; };
 		0E72ABED245CB14527B66739 /* InviteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD364338836BC73381136435 /* InviteView.swift */; };
+		101D291A0EFAB1F409E82EFD /* FirstShareApprovalSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = D37049DB0415BDDA261545E8 /* FirstShareApprovalSheet.swift */; };
 		127C565893C1515E163CA5D2 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = B2063F803335BC6D0150423D /* InfoPlist.strings */; };
 		13E2A161E66349EECDEABC52 /* StoreManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A764AB895F51BD53D38551D7 /* StoreManager.swift */; };
 		178B7A55AD6CCE0921F4718D /* YouView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A8356A446C938EFA37466BE /* YouView.swift */; };
@@ -24,13 +28,13 @@
 		1D5998C920DF9A63255FA22A /* LookConfirmSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = D82E8777B7F80A59F2D53EFE /* LookConfirmSheet.swift */; };
 		1D6858ABFAC472EDEE6A7B86 /* PhoneView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09A50789FA9420E08F581CBC /* PhoneView.swift */; };
 		20624BD70DED7D4BF2F8F2C3 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 5BDC5D2F3934AD105418EDE7 /* InfoPlist.strings */; };
-		2094D814F9A29D960ECE9EF2 /* HandleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F1E3DD239C74673D1C841A9 /* HandleView.swift */; };
 		2281C76EBA0BF930EB2E9E14 /* PhoneView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09A50789FA9420E08F581CBC /* PhoneView.swift */; };
 		246152EF83A0646E77282322 /* LocationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47B487800F3DADB918917BA8 /* LocationCoordinator.swift */; };
 		267789FF20B8D5E1170FB10B /* PermissionKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9A0293AEE98FCEA8FA92356D /* PermissionKit.framework */; settings = {ATTRIBUTES = (Weak, ); }; };
 		2A3AEB12A7E60C44D1B9A3A2 /* LookReceiptNotifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = F84BA6FBFFF34D5A92798BF4 /* LookReceiptNotifier.swift */; };
 		2B59C363D0E89485B2FA6536 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 4C8229953A6861B1EAF998E1 /* Localizable.strings */; };
 		2F3CB1F1EFAF7273473E217E /* ProfileAvatarPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = A144B075570E3EC71B3A9E9E /* ProfileAvatarPicker.swift */; };
+		32772CF8676FBCF4F173D080 /* PhoneOnboardingCompletionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D04F219E6B7CDFCD25261BA2 /* PhoneOnboardingCompletionView.swift */; };
 		32D9A6ABCEC1A4215D80BC3E /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = CC2380F09F1CF772604EADCB /* Localizable.strings */; };
 		33EB9367B6F0B4A496B10697 /* IBMPlexMono-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 1A43013E81099AA3717EC066 /* IBMPlexMono-Medium.ttf */; };
 		3536D6E6D2CDA1C1A64A66D5 /* TrustPhoneSetupTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46FEA85CB113D010FB90A0EF /* TrustPhoneSetupTests.swift */; };
@@ -50,23 +54,25 @@
 		4739F0C7171B14DA02E1E454 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = D08EA0C8184116A2084F89DF /* InfoPlist.strings */; };
 		475BAE7872E77E7A785D709A /* SharingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93DD05E4CE1F61BF819BD58D /* SharingView.swift */; };
 		4763A640E03EB07B51E1F626 /* ProfileAvatarPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = A144B075570E3EC71B3A9E9E /* ProfileAvatarPicker.swift */; };
-		4897B21DDD553C24D56716DA /* HandleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F1E3DD239C74673D1C841A9 /* HandleView.swift */; };
 		49510C5034BE08BB9B662B51 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 4C8229953A6861B1EAF998E1 /* Localizable.strings */; };
 		4ACD58F2A12DD09313D2B5A5 /* AppConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE3763646FBA2DF7BEE36D79 /* AppConfiguration.swift */; };
 		4CCCCC2A037ACB0296AA3895 /* MapScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE3BE1E107A89A8B8D4FDBD2 /* MapScreen.swift */; };
 		4D7E4979F75F43BD52F9FA7A /* TrustKeychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 706E76871CAC53B051985DCC /* TrustKeychain.swift */; };
+		5271936DA6FFB69BCA0FA196 /* AccountHelpSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 828AE558DCB8F024B5255767 /* AccountHelpSheet.swift */; };
 		5596F0F96B6FAA72F3786D6E /* ThirdPartyNotices.txt in Resources */ = {isa = PBXBuildFile; fileRef = 83FA68130D0F7B64F24990F8 /* ThirdPartyNotices.txt */; };
+		55F53BED08C3BE7AE5F0279E /* AccountHelpSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 828AE558DCB8F024B5255767 /* AccountHelpSheet.swift */; };
 		589AB8550DA30DFC5FFC5033 /* ThirdPartyNotices.txt in Resources */ = {isa = PBXBuildFile; fileRef = 83FA68130D0F7B64F24990F8 /* ThirdPartyNotices.txt */; };
 		589BFF4023D7D97E102AC521 /* PhoneView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09A50789FA9420E08F581CBC /* PhoneView.swift */; };
 		591032D036F1CFD94E6CA3F4 /* Syne-Variable.ttf in Resources */ = {isa = PBXBuildFile; fileRef = CDAFEB434DDE7B2096119E2F /* Syne-Variable.ttf */; };
 		59983BB9309B95B0CA9EF455 /* CircleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D99492A6161FC4D64E0C386 /* CircleView.swift */; };
-		5AB3AA0A940E3CCA67C9E4A1 /* HandleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F1E3DD239C74673D1C841A9 /* HandleView.swift */; };
+		5CBACCF8C43010DDE1CFAEF1 /* RecoverySupportActions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6AD992707424D54A9A896033 /* RecoverySupportActions.swift */; };
 		5ED0A8636725D0867AAB4F2C /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 66B76ABCAC45B392F6A35D09 /* PrivacyInfo.xcprivacy */; };
 		5F79DFCB903C5F40ED84A31F /* TrustClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C0D44DBC8538A89711936F4 /* TrustClient.swift */; };
 		627353ECF82DC2417ECAE25C /* AgeAssuranceCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35620E6EF77E541AD03BCD66 /* AgeAssuranceCoordinator.swift */; };
 		64814159FDA81159802267D1 /* LookConfirmSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = D82E8777B7F80A59F2D53EFE /* LookConfirmSheet.swift */; };
 		6569A55D0BFD1E0588AAC5AE /* LocationIngestStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EC0AFA3E5CFC1D9047DE372 /* LocationIngestStore.swift */; };
 		67217F4E367E03AC88AFF7D7 /* MapKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0D907524021AC2732B10CC12 /* MapKit.framework */; };
+		6795092BE8713F4733032EB1 /* PhoneOnboardingCompletionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D04F219E6B7CDFCD25261BA2 /* PhoneOnboardingCompletionView.swift */; };
 		681EDD0BAF595CBD804C6090 /* MapKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0D907524021AC2732B10CC12 /* MapKit.framework */; };
 		6A5FBBCB79681D56E3B98DFE /* TrustTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5980035418744C890C9440B9 /* TrustTheme.swift */; };
 		6A892FDA221785F31F67CDD9 /* LocationIngestStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EC0AFA3E5CFC1D9047DE372 /* LocationIngestStore.swift */; };
@@ -92,11 +98,13 @@
 		863B5887EB707AD2B4A82126 /* YouView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A8356A446C938EFA37466BE /* YouView.swift */; };
 		86AF23F721D59EF2A6C0BCCB /* IBMPlexMono-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 1A43013E81099AA3717EC066 /* IBMPlexMono-Medium.ttf */; };
 		89382677C827E997231126DE /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 63242874F15C117B93D74C2D /* InfoPlist.strings */; };
+		8A100371161C289BF9BA26FE /* FirstShareApprovalSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = D37049DB0415BDDA261545E8 /* FirstShareApprovalSheet.swift */; };
 		8ABAC708AFCFF13717C9F880 /* TrustRealAPIFeatureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0929D5A5788EE4C0AB1DF23 /* TrustRealAPIFeatureTests.swift */; };
 		8CB775A757CC7C8EF6DE0A2E /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B07B3706D2CCD8A7AC80B91D /* Assets.xcassets */; };
 		8D923C0A5271D91381623F02 /* StoreManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A764AB895F51BD53D38551D7 /* StoreManager.swift */; };
 		8E0A4923A05E7B254EC35FD3 /* _PermissionKit_SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9616640E4E521FA6F45A24DE /* _PermissionKit_SwiftUI.framework */; settings = {ATTRIBUTES = (Weak, ); }; };
 		8EBFAA09C67AE6703DF64EE5 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DD39690718850F57B59DFBA /* RootView.swift */; };
+		90EDFA86A9D45781099CB190 /* RecoverySupportActions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6AD992707424D54A9A896033 /* RecoverySupportActions.swift */; };
 		923A84716E8CC7679543E31D /* PermissionKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9A0293AEE98FCEA8FA92356D /* PermissionKit.framework */; settings = {ATTRIBUTES = (Weak, ); }; };
 		9397BF8E6BD901AF17EDAE19 /* Syne-Variable.ttf in Resources */ = {isa = PBXBuildFile; fileRef = CDAFEB434DDE7B2096119E2F /* Syne-Variable.ttf */; };
 		97E605EA1CADA01C0A8D1B94 /* IBMPlexMono-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 1A43013E81099AA3717EC066 /* IBMPlexMono-Medium.ttf */; };
@@ -112,6 +120,7 @@
 		A2B4D18C8D2BFC1698AA4307 /* PlusPaywall.swift in Sources */ = {isa = PBXBuildFile; fileRef = 536A9B0B5FFE1F350CE3E140 /* PlusPaywall.swift */; };
 		A3B85FA87D3F11B02F7A4B0C /* TrustCore in Frameworks */ = {isa = PBXBuildFile; productRef = C0333FDFA631E42B914FD748 /* TrustCore */; };
 		A469578F6FDB8AB757E04034 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 63242874F15C117B93D74C2D /* InfoPlist.strings */; };
+		A6323CC7957873ED195D0331 /* RecoverySupportActions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6AD992707424D54A9A896033 /* RecoverySupportActions.swift */; };
 		A8BC08E8C79CE43694921C35 /* ViewScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDAA41799C1A974BBE1DF210 /* ViewScreen.swift */; };
 		A94B6401AD264CF3FFD212E6 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 4C699BBDA4EB0CC57ED36887 /* Localizable.strings */; };
 		AB1369C7286F2EAD6C9E6E79 /* TrustCore in Frameworks */ = {isa = PBXBuildFile; productRef = 6F0F2223F70D2E4CB8AABFF1 /* TrustCore */; };
@@ -154,6 +163,7 @@
 		E24E002D73086B63A3CCF2BA /* TrustApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 913C99EC0D7E0E081DA468B0 /* TrustApp.swift */; };
 		E33BB7F292DE7044850B1E45 /* StoreManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A764AB895F51BD53D38551D7 /* StoreManager.swift */; };
 		E49DDC8353F5FC877D89AF55 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 4C699BBDA4EB0CC57ED36887 /* Localizable.strings */; };
+		E60A1C53CE4E9183CDA20B10 /* FirstShareApprovalSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = D37049DB0415BDDA261545E8 /* FirstShareApprovalSheet.swift */; };
 		E71484E1111F57EE1C72C24D /* HomePlaceStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6AEC0BF1A6640B58DEED252 /* HomePlaceStore.swift */; };
 		EAEEA02218F48B35D5332C3E /* PermissionKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9A0293AEE98FCEA8FA92356D /* PermissionKit.framework */; settings = {ATTRIBUTES = (Weak, ); }; };
 		EB88077E49EE7F81F90A3DEC /* MainShellView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74231FF47EE26FCD87F0BE18 /* MainShellView.swift */; };
@@ -192,11 +202,11 @@
 		08790634D294CA76972CD49E /* TrustInternal.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = TrustInternal.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		09A50789FA9420E08F581CBC /* PhoneView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneView.swift; sourceTree = "<group>"; };
 		0D907524021AC2732B10CC12 /* MapKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MapKit.framework; path = System/Library/Frameworks/MapKit.framework; sourceTree = SDKROOT; };
-		0F1E3DD239C74673D1C841A9 /* HandleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HandleView.swift; sourceTree = "<group>"; };
 		0FD7594384721372A16D9E19 /* AuthSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthSession.swift; sourceTree = "<group>"; };
 		1A43013E81099AA3717EC066 /* IBMPlexMono-Medium.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "IBMPlexMono-Medium.ttf"; sourceTree = "<group>"; };
 		1C0D44DBC8538A89711936F4 /* TrustClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrustClient.swift; sourceTree = "<group>"; };
 		21DE05806EC4C8A79F6791CC /* TrustAPIErrorPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrustAPIErrorPolicyTests.swift; sourceTree = "<group>"; };
+		31394D09C0C4FBD5BA9D7C4D /* TrustLiveCachePrivacyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrustLiveCachePrivacyTests.swift; sourceTree = "<group>"; };
 		35620E6EF77E541AD03BCD66 /* AgeAssuranceCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgeAssuranceCoordinator.swift; sourceTree = "<group>"; };
 		3DD39690718850F57B59DFBA /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		4302226952571B448B50AAFB /* RealPushAPNSE2ETests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RealPushAPNSE2ETests.swift; sourceTree = "<group>"; };
@@ -218,10 +228,12 @@
 		63242874F15C117B93D74C2D /* InfoPlist.strings */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = InfoPlist.strings; path = "zh-Hans.lproj/InfoPlist.strings"; sourceTree = "<group>"; };
 		66B76ABCAC45B392F6A35D09 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		6A37121DEAA99065100C6667 /* Localizable.strings */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = Localizable.strings; path = "pt-BR.lproj/Localizable.strings"; sourceTree = "<group>"; };
+		6AD992707424D54A9A896033 /* RecoverySupportActions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecoverySupportActions.swift; sourceTree = "<group>"; };
 		6BCC3CAB70FB747A74A2A255 /* SpaceGrotesk-Variable.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "SpaceGrotesk-Variable.ttf"; sourceTree = "<group>"; };
 		706E76871CAC53B051985DCC /* TrustKeychain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrustKeychain.swift; sourceTree = "<group>"; };
 		74231FF47EE26FCD87F0BE18 /* MainShellView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainShellView.swift; sourceTree = "<group>"; };
 		7526B1C396A531BB1264D7D4 /* DeclaredAgeRange.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = DeclaredAgeRange.framework; path = System/Library/Frameworks/DeclaredAgeRange.framework; sourceTree = SDKROOT; };
+		828AE558DCB8F024B5255767 /* AccountHelpSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountHelpSheet.swift; sourceTree = "<group>"; };
 		83FA68130D0F7B64F24990F8 /* ThirdPartyNotices.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = ThirdPartyNotices.txt; sourceTree = "<group>"; };
 		8863CE33D489634538BAC18E /* TrustComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrustComponents.swift; sourceTree = "<group>"; };
 		893275B32856BF35CACA1FD0 /* TrustServiceUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = TrustServiceUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -242,9 +254,11 @@
 		BF4B0475D551D63F000821DA /* Localizable.strings */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = Localizable.strings; path = fr.lproj/Localizable.strings; sourceTree = "<group>"; };
 		CC2380F09F1CF772604EADCB /* Localizable.strings */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = Localizable.strings; path = ja.lproj/Localizable.strings; sourceTree = "<group>"; };
 		CDAFEB434DDE7B2096119E2F /* Syne-Variable.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Syne-Variable.ttf"; sourceTree = "<group>"; };
+		D04F219E6B7CDFCD25261BA2 /* PhoneOnboardingCompletionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneOnboardingCompletionView.swift; sourceTree = "<group>"; };
 		D08EA0C8184116A2084F89DF /* InfoPlist.strings */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = InfoPlist.strings; path = fr.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		D0929D5A5788EE4C0AB1DF23 /* TrustRealAPIFeatureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrustRealAPIFeatureTests.swift; sourceTree = "<group>"; };
 		D10CA18C94885D409ED3D7B7 /* TrustCoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrustCoreTests.swift; sourceTree = "<group>"; };
+		D37049DB0415BDDA261545E8 /* FirstShareApprovalSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirstShareApprovalSheet.swift; sourceTree = "<group>"; };
 		D5A777201D5537C1D7D029F3 /* TrustUsageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrustUsageTests.swift; sourceTree = "<group>"; };
 		D82E8777B7F80A59F2D53EFE /* LookConfirmSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LookConfirmSheet.swift; sourceTree = "<group>"; };
 		E0E16CA26F45FCA3514EB874 /* Trust.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Trust.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -368,13 +382,14 @@
 		6D8909A703521D7E860A2DE0 /* TrustApp */ = {
 			isa = PBXGroup;
 			children = (
+				828AE558DCB8F024B5255767 /* AccountHelpSheet.swift */,
 				35620E6EF77E541AD03BCD66 /* AgeAssuranceCoordinator.swift */,
 				57B898D038C6021727ABDACD /* AgeGateView.swift */,
 				AE3763646FBA2DF7BEE36D79 /* AppConfiguration.swift */,
 				ED1688A0F63E95BC3BD349AD /* AppModel.swift */,
 				0FD7594384721372A16D9E19 /* AuthSession.swift */,
 				4D99492A6161FC4D64E0C386 /* CircleView.swift */,
-				0F1E3DD239C74673D1C841A9 /* HandleView.swift */,
+				D37049DB0415BDDA261545E8 /* FirstShareApprovalSheet.swift */,
 				F6AEC0BF1A6640B58DEED252 /* HomePlaceStore.swift */,
 				FD364338836BC73381136435 /* InviteView.swift */,
 				47B487800F3DADB918917BA8 /* LocationCoordinator.swift */,
@@ -384,9 +399,11 @@
 				F84BA6FBFFF34D5A92798BF4 /* LookReceiptNotifier.swift */,
 				74231FF47EE26FCD87F0BE18 /* MainShellView.swift */,
 				BE3BE1E107A89A8B8D4FDBD2 /* MapScreen.swift */,
+				D04F219E6B7CDFCD25261BA2 /* PhoneOnboardingCompletionView.swift */,
 				09A50789FA9420E08F581CBC /* PhoneView.swift */,
 				536A9B0B5FFE1F350CE3E140 /* PlusPaywall.swift */,
 				A144B075570E3EC71B3A9E9E /* ProfileAvatarPicker.swift */,
+				6AD992707424D54A9A896033 /* RecoverySupportActions.swift */,
 				3DD39690718850F57B59DFBA /* RootView.swift */,
 				93DD05E4CE1F61BF819BD58D /* SharingView.swift */,
 				A764AB895F51BD53D38551D7 /* StoreManager.swift */,
@@ -458,6 +475,7 @@
 			children = (
 				21DE05806EC4C8A79F6791CC /* TrustAPIErrorPolicyTests.swift */,
 				D10CA18C94885D409ED3D7B7 /* TrustCoreTests.swift */,
+				31394D09C0C4FBD5BA9D7C4D /* TrustLiveCachePrivacyTests.swift */,
 				46FEA85CB113D010FB90A0EF /* TrustPhoneSetupTests.swift */,
 			);
 			path = TrustCoreTests;
@@ -734,13 +752,14 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				55F53BED08C3BE7AE5F0279E /* AccountHelpSheet.swift in Sources */,
 				DB9ED407C7588BAB29C8EFAD /* AgeAssuranceCoordinator.swift in Sources */,
 				EDCFA9A1DC37C2B3CE09D820 /* AgeGateView.swift in Sources */,
 				FB5A039144351F60575D8744 /* AppConfiguration.swift in Sources */,
 				A13CE8F38B1CD3B9DACB8E2E /* AppModel.swift in Sources */,
 				B54974F68A38E7221D995E39 /* AuthSession.swift in Sources */,
 				BFBCEE93CC8B3321A0924D53 /* CircleView.swift in Sources */,
-				2094D814F9A29D960ECE9EF2 /* HandleView.swift in Sources */,
+				E60A1C53CE4E9183CDA20B10 /* FirstShareApprovalSheet.swift in Sources */,
 				7841602D93EE1A9F61026567 /* HomePlaceStore.swift in Sources */,
 				B19D2AB1C4FC8FFE2598C835 /* InviteView.swift in Sources */,
 				782D4136776A2EC066ADCDC6 /* LocationCoordinator.swift in Sources */,
@@ -750,9 +769,11 @@
 				C9DAE176C7A0161EEC13548E /* LookReceiptNotifier.swift in Sources */,
 				6B6B1D78FCA327FF3C9D1B06 /* MainShellView.swift in Sources */,
 				4CCCCC2A037ACB0296AA3895 /* MapScreen.swift in Sources */,
+				6795092BE8713F4733032EB1 /* PhoneOnboardingCompletionView.swift in Sources */,
 				2281C76EBA0BF930EB2E9E14 /* PhoneView.swift in Sources */,
 				998C3D952BFB8E194461E822 /* PlusPaywall.swift in Sources */,
 				2F3CB1F1EFAF7273473E217E /* ProfileAvatarPicker.swift in Sources */,
+				90EDFA86A9D45781099CB190 /* RecoverySupportActions.swift in Sources */,
 				8EBFAA09C67AE6703DF64EE5 /* RootView.swift in Sources */,
 				7CB75B07FEA94DC19C75750C /* SharingView.swift in Sources */,
 				8D923C0A5271D91381623F02 /* StoreManager.swift in Sources */,
@@ -780,13 +801,14 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				01A53691B52FF4373F7E12C4 /* AccountHelpSheet.swift in Sources */,
 				A0715ABB2E26D8AA0A07EC5E /* AgeAssuranceCoordinator.swift in Sources */,
 				B2C01F65BA75F564AF16A791 /* AgeGateView.swift in Sources */,
 				C66C2CA89604A2D5F1B526B9 /* AppConfiguration.swift in Sources */,
 				CE01EB4E572A9DEEB10D7C54 /* AppModel.swift in Sources */,
 				187663D82E2A11219A0F304B /* AuthSession.swift in Sources */,
 				19BE34C70451CFF5A92EE689 /* CircleView.swift in Sources */,
-				5AB3AA0A940E3CCA67C9E4A1 /* HandleView.swift in Sources */,
+				8A100371161C289BF9BA26FE /* FirstShareApprovalSheet.swift in Sources */,
 				4393758321BEDD27F92398FA /* HomePlaceStore.swift in Sources */,
 				0E72ABED245CB14527B66739 /* InviteView.swift in Sources */,
 				246152EF83A0646E77282322 /* LocationCoordinator.swift in Sources */,
@@ -796,9 +818,11 @@
 				A1E928DF92CDC40F7B07952E /* LookReceiptNotifier.swift in Sources */,
 				F073EE1FC303C57F678D770D /* MainShellView.swift in Sources */,
 				354041B2EFE230A68D8027BE /* MapScreen.swift in Sources */,
+				0BCCF4477BD8B2F7FC980A21 /* PhoneOnboardingCompletionView.swift in Sources */,
 				589BFF4023D7D97E102AC521 /* PhoneView.swift in Sources */,
 				A2B4D18C8D2BFC1698AA4307 /* PlusPaywall.swift in Sources */,
 				D3C213AB13032F840DEB0B8C /* ProfileAvatarPicker.swift in Sources */,
+				5CBACCF8C43010DDE1CFAEF1 /* RecoverySupportActions.swift in Sources */,
 				42D582439AE244465775A887 /* RootView.swift in Sources */,
 				475BAE7872E77E7A785D709A /* SharingView.swift in Sources */,
 				13E2A161E66349EECDEABC52 /* StoreManager.swift in Sources */,
@@ -816,13 +840,14 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				5271936DA6FFB69BCA0FA196 /* AccountHelpSheet.swift in Sources */,
 				627353ECF82DC2417ECAE25C /* AgeAssuranceCoordinator.swift in Sources */,
 				F07B21D4A300287BFA60C0BF /* AgeGateView.swift in Sources */,
 				4ACD58F2A12DD09313D2B5A5 /* AppConfiguration.swift in Sources */,
 				DFFBEE5D0D01B241A4135CEA /* AppModel.swift in Sources */,
 				84BE9D98514962D89C64E092 /* AuthSession.swift in Sources */,
 				59983BB9309B95B0CA9EF455 /* CircleView.swift in Sources */,
-				4897B21DDD553C24D56716DA /* HandleView.swift in Sources */,
+				101D291A0EFAB1F409E82EFD /* FirstShareApprovalSheet.swift in Sources */,
 				E71484E1111F57EE1C72C24D /* HomePlaceStore.swift in Sources */,
 				E247582832E57FCF03E00E94 /* InviteView.swift in Sources */,
 				1A823F0D9D29C2BDC9FCBE6C /* LocationCoordinator.swift in Sources */,
@@ -832,9 +857,11 @@
 				2A3AEB12A7E60C44D1B9A3A2 /* LookReceiptNotifier.swift in Sources */,
 				EB88077E49EE7F81F90A3DEC /* MainShellView.swift in Sources */,
 				D8F5CCC726E45D5063491D25 /* MapScreen.swift in Sources */,
+				32772CF8676FBCF4F173D080 /* PhoneOnboardingCompletionView.swift in Sources */,
 				1D6858ABFAC472EDEE6A7B86 /* PhoneView.swift in Sources */,
 				F5105B339EEB9BC685DD81E9 /* PlusPaywall.swift in Sources */,
 				4763A640E03EB07B51E1F626 /* ProfileAvatarPicker.swift in Sources */,
+				A6323CC7957873ED195D0331 /* RecoverySupportActions.swift in Sources */,
 				45EC5C7C8D79144D752CD0A7 /* RootView.swift in Sources */,
 				D89C9E13F5267A3D8384EF03 /* SharingView.swift in Sources */,
 				E33BB7F292DE7044850B1E45 /* StoreManager.swift in Sources */,
@@ -854,6 +881,7 @@
 			files = (
 				F347AB93730F03441F530197 /* TrustAPIErrorPolicyTests.swift in Sources */,
 				193D0475C68E66AF65A7DFD7 /* TrustCoreTests.swift in Sources */,
+				0AB310CCF8B0EA47F8C4BF05 /* TrustLiveCachePrivacyTests.swift in Sources */,
 				3536D6E6D2CDA1C1A64A66D5 /* TrustPhoneSetupTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -906,7 +934,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = "Trust-Staging.entitlements";
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 50;
+				CURRENT_PROJECT_VERSION = 51;
 				DEVELOPMENT_TEAM = 3S529795M9;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				INFOPLIST_FILE = "Staging-Info.plist";
@@ -1119,7 +1147,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = "Trust-Staging.entitlements";
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 50;
+				CURRENT_PROJECT_VERSION = 51;
 				DEVELOPMENT_TEAM = 3S529795M9;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				INFOPLIST_FILE = "Staging-Info.plist";

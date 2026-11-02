@@ -172,6 +172,68 @@ class ProxyHTTPTests(unittest.TestCase):
             time.sleep(0.03)
         self.fail(f"Timed out waiting for proxy state: {last}")
 
+    def test_legacy_completion_fixture_masks_only_target_response_and_clears_on_success(self) -> None:
+        account_id, other_id = str(uuid.uuid4()), str(uuid.uuid4())
+        token, other_token = encode_jwt_sub(account_id), encode_jwt_sub(other_id)
+        def responder(method, path, headers, _body):
+            if method == "GET" and path == "/api/v1/circle":
+                identity = account_id if headers.get("Authorization") == f"Bearer {token}" else other_id
+                return 200, {"Content-Type": "application/json"}, {"you": {"id": identity, "handle": "serverhandle", "phoneVerified": True, "onboardingComplete": True}}
+            return 200, {"Content-Type": "application/json"}, {"ok": True}
+        self.upstream.responder = responder
+        self.assertEqual(self.request("POST", "/__test/arm-completion-failure", body={})[0], 400)
+        self.control("/arm-completion-failure", {"accountId": account_id})
+        _, original = self.request("GET", "/api/v1/circle", token=other_token)
+        self.assertEqual(json.loads(original)["you"]["handle"], "serverhandle")
+        _, masked = self.request("GET", "/api/v1/circle", token=token)
+        self.assertIsNone(json.loads(masked)["you"]["handle"])
+        self.assertFalse(json.loads(masked)["you"]["onboardingComplete"])
+        self.assertTrue(json.loads(masked)["you"]["phoneVerified"])
+        self.assertNotIn(account_id, json.dumps(self.state()))
+        self.assertEqual(self.request("POST", "/api/v1/me/onboarding/complete", token=other_token, body={})[0], 200)
+        self.assertEqual(self.request("POST", "/api/v1/me/onboarding/complete", token=token, body={})[0], 503)
+        self.assertEqual(self.request("POST", "/api/v1/me/onboarding/complete", token=token, body={})[0], 200)
+        _, restored = self.request("GET", "/api/v1/circle", token=token)
+        self.assertEqual(json.loads(restored)["you"]["handle"], "serverhandle")
+        self.assertTrue(json.loads(restored)["you"]["onboardingComplete"])
+        self.assertEqual(self.state()["completion_failure_count"], 1)
+        self.assertEqual(self.state()["completion_mask_count"], 1)
+        self.assertEqual(self.upstream_count("POST", "/api/v1/me/onboarding/complete"), 2)
+
+    def test_region_fixture_holds_once_and_otherwise_passes_through(self) -> None:
+        status, payload = self.request("GET", "/api/region")
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(payload)["path"], "/api/region")
+        self.control("/arm-region")
+        result: list[tuple[int, bytes]] = []
+        thread = threading.Thread(target=lambda: result.append(self.request("GET", "/api/region")), daemon=True)
+        self._request_threads.append(thread)
+        thread.start()
+        state = self.wait_for_state(lambda current: current.get("held_resource") == "region")
+        self.assertEqual(state["region_hold_count"], 1)
+        self.assertEqual(self.upstream_count("GET", "/api/region"), 1)
+        self.control("/release")
+        thread.join(timeout=2)
+        self.assertEqual(json.loads(result[0][1]), {"countryCode": "GB"})
+        self.request("GET", "/api/region")
+        self.assertEqual(self.upstream_count("GET", "/api/region"), 2)
+
+    def test_view_ack_is_forwarded_before_hold_and_released_unchanged(self) -> None:
+        self.control("/arm-view")
+        result: list[tuple[int, bytes]] = []
+        thread = threading.Thread(target=lambda: result.append(self.request("POST", "/api/v1/views", token="fixture", body={"subjectId": "fixture"})), daemon=True)
+        self._request_threads.append(thread)
+        thread.start()
+        state = self.wait_for_state(lambda current: current.get("held_resource") == "view")
+        self.assertEqual(state["view_hold_count"], 1)
+        self.assertEqual(self.upstream_count("POST", "/api/v1/views"), 1)
+        self.assertEqual(result, [])
+        self.control("/release")
+        thread.join(timeout=2)
+        self.assertEqual(result[0][0], 200)
+        self.assertEqual(json.loads(result[0][1])["path"], "/api/v1/views")
+        self.assertEqual(self.state()["view_release_count"], 1)
+
     def test_consent_revocation_is_one_shot_and_only_intercepts_authenticated_circle_get(self) -> None:
         self.control("/arm-consent-revoked")
         self.assertEqual(self.request("GET", "/api/v1/circle")[0], 200)

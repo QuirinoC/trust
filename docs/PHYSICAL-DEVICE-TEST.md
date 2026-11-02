@@ -1,13 +1,13 @@
 # Trust Staging: two-iPhone acceptance
 
-**Execution status: not run.** Build 50 is available to the staging internal TestFlight group, so physical acceptance can begin. StoreKit product metadata may exist before the app can fetch products or complete a Sandbox purchase; verify those behaviors and staging APNs delivery on-device below.
+**Execution status: not run.** Build 50 is an older TestFlight build and does not contain the approved automatic-handle flow. Use the next unused internal build containing the changes in this guide; record its number and source revision before testing. Do not treat build 50 as evidence for the new flow. StoreKit purchase and staging APNs delivery remain physical-device checks.
 
 Use two adult testers with distinct Apple Accounts and real iPhones. Select two of the three approved testers; these are the only two reserved phone numbers available concurrently for the automatic, no-SMS flow. Do not swap the assigned numbers between accounts during the run. Assign them as follows:
 
 - **A:** `+1 202 555 0101`, handle `trustqatesta`
 - **B:** `+1 202 555 0102`, handle `trustqatestb`
 
-If either handle is already taken, choose another unique handle and record it. Use A’s invited Apple Account for both TestFlight and Apple sign-in on A; use B’s different invited Apple Account for both on B. Age-range and App Store app-verification screens are paused in build 50. Do not enable global phone-verification skips or use demo accounts; only the two reserved numbers use the approved automatic staging flow.
+After automatic assignment, optionally edit each handle to the test value if available; otherwise choose and record another unique handle. Use A’s invited Apple Account for both TestFlight and Apple sign-in on A; use B’s different invited Apple Account for both on B. Confirm the build’s actual age and account-verification behavior. Do not enable global phone-verification skips or use demo accounts; only the two reserved numbers use the approved automatic staging flow.
 
 Record each phone’s model, iOS version, app build, and location and notification permissions. Confirm both apps say **Trust Staging**, show the STAGING badge, and use the same build. [TestFlight purchases automatically use Apple’s sandbox](https://developer.apple.com/help/app-store-connect/test-a-beta-version/testing-subscriptions-and-in-app-purchases-in-testflight/) and are not charged. No extra dedicated Sandbox Apple Account is needed for these baseline purchase checks. If products do not load, record that step as blocked; do not substitute a local purchase fixture.
 
@@ -17,9 +17,9 @@ For every numbered step, record **Pass**, **Fail**, **Blocked**, or **Not run**.
 
 1. **Install and distinguish the app.** Install the processed Trust Staging TestFlight build on both phones while keeping the normal Trust app installed. **Expected:** the staging app is labeled Trust Staging, shows the STAGING badge, and coexists with the production app without replacing it.
 
-2. **Complete real Apple sign-in.** On A and B, sign in with the assigned distinct Apple Accounts. **Expected:** successful Apple authentication leads to handle or phone setup, with no age-range, parent-update approval, or App Store app-verification screen. Cancelled or failed Apple authentication does not open the account.
+2. **Complete real Apple sign-in.** On A and B, sign in with the assigned distinct Apple Accounts. **Expected:** successful Apple authentication leads to phone setup for a fresh account, with no age-range, parent-update approval, or App Store app-verification screen. Cancelled or failed Apple authentication does not open the account.
 
-3. **Finish each profile and phone setup.** Set A to `trustqatesta` and B to `trustqatestb`, leave discovery off, then enter each assigned reserved number and wait for the staging flow. **Expected:** each handle is accepted if available; only these two reserved numbers auto-verify after the normal Apple sign-in and handle steps; the phone screen says “No SMS is sent”; no SMS-code entry screen appears. Both accounts enter Trust with sharing Off. Check that the country selector defaults to +1 when no approximate region is available, supports country/name/code search, and preserves a manual selection or pasted international prefix. Record any sign-in, country-selector, or handle failure.
+3. **Finish each profile and phone setup.** Enter each assigned reserved number and wait for the staging flow. **Expected:** only these two reserved numbers auto-verify after Apple sign-in; the phone screen says “No SMS is sent”; no SMS-code entry screen appears. A handle is assigned automatically and both accounts enter People with discovery and sharing Off. Relaunch and confirm no new text or handle choice is required. Then optionally edit each display name and handle separately; verify the chosen values persist and no edit enables sharing. Check that the country selector defaults to +1 when no approximate region is available, supports country/name/code search, and preserves a manual selection or pasted international prefix. Record any sign-in, country-selector, or handle failure.
 
 4. **Check phone discovery while B is opted out.** On A, search for B using B's complete phone number. **Expected:** no eligible phone match or unconnected profile-picture preview appears while B's discovery choice is off.
 
@@ -29,9 +29,9 @@ For every numbered step, record **Pass**, **Fail**, **Blocked**, or **Not run**.
 
 7. **Exercise decline, resend, and acceptance.** A sends a new request; B declines it. A sends again; B accepts. **Expected:** decline creates no connection; acceptance creates one, and both directions remain Off until independently chosen.
 
-8. **Verify sharing directions are independent.** A chooses Sealed for B. B keeps Off for A. **Expected:** A's confirmed direction becomes Sealed while B's remains Off; changing one person's direction does not change the other.
+8. **Verify sharing directions are independent.** A chooses Sealed for B, reviews the first-share explanation and completes any location readiness steps. B keeps Off for A. **Expected:** A's confirmed direction becomes Sealed while B's remains Off; changing one person's direction does not change the other.
 
-9. **Complete a Sealed Look and receipt.** Keep A's Sealed direction active. If prompted, grant A location access While Using the App. On B, select A and confirm a Look. **Expected:** B sees a one-time snapshot with its timestamp; A sees the corresponding receipt in Trust Activity. The snapshot is the latest available location, not guaranteed-current GPS.
+9. **Complete a Sealed Look and receipt.** Keep A's Sealed direction active. If prompted, grant A location access While Using the App. On B, select A and confirm a Look. **Expected:** B sees a one-time snapshot with its timestamp; A sees the corresponding receipt in Trust Activity. A View receipt must be shown as confirmed only after server acknowledgement. The snapshot is the latest available location, not guaranteed-current GPS.
 
 10. **Confirm a snapshot does not become live.** Move A to a different place without changing its sharing mode or performing another Look. Check the existing point from B. **Expected:** the prior snapshot remains until a new authorized Look; movement alone does not turn Sealed into live sharing.
 
@@ -45,9 +45,9 @@ For every numbered step, record **Pass**, **Fail**, **Blocked**, or **Not run**.
 
 15. **Check the free-account Always gate.** On free account A, choose Always for B. **Expected:** the Plus purchase screen appears and Always does not become active before an entitlement is verified.
 
-16. **Make A's real Sandbox purchase.** In TestFlight, use A's Apple Sandbox purchase account to fetch and purchase the offered staging subscription. Record the product and period shown by StoreKit and the transaction outcome. After the server verifies A's entitlement, set A's direction to B to Always, then check from B while B is still free. **Expected:** A's entitlement and Always mode take effect only after verification; B sees the existing free-viewer Plus treatment. Do not count sandbox metadata or a local StoreKit test as a purchase.
+16. **Make A's real Sandbox purchase.** In TestFlight, use A's Apple Sandbox purchase account to fetch and purchase the offered staging subscription. Record the product and period shown by StoreKit and the transaction outcome. After the server verifies A's entitlement, set A's direction to B to Always, then check from B while B is still free. **Expected:** A's entitlement and Always mode take effect only after verification; B can View A’s permitted coordinates and map without buying Plus. Buying Plus does not itself enable Always. Verify B cannot share Always in the reverse direction without B’s own Plus. Do not count sandbox metadata or a local StoreKit test as a purchase.
 
-17. **Purchase for B and check live freshness.** On B, fetch and purchase a staging subscription through its distinct Apple Sandbox account. Recheck A's Always share from B. **Expected:** after B's entitlement is verified, B can view the latest available point with its age, or a clear unavailable state if A has no point. Record product fetch, purchase, and entitlement separately.
+17. **Purchase for B and check live freshness.** On B, fetch and purchase a staging subscription through its distinct Apple Sandbox account. Recheck A's Always share from B. **Expected:** B can still view the latest available point with its age, or a clear unavailable state if A has no point. Verify the free 24-hour and Plus 30-day history windows where suitable data exists. Record product fetch, purchase, and entitlement separately.
 
 18. **Exercise real background location.** With A's Always share and the required Always location permission enabled, lock or background A, move it a meaningful distance, and check from B after the device has had time to report. **Expected:** any updated point and age reflect actual observed background delivery. Record the timestamp and permission state; a foreground update alone does not pass this check.
 
@@ -65,7 +65,7 @@ For every numbered step, record **Pass**, **Fail**, **Blocked**, or **Not run**.
 
 25. **Reinstall B and restore the same account.** Delete and reinstall only B's Trust Staging app, then sign in with B's same Apple Account. **Expected:** the server account and verified phone remain; no additional phone-verification SMS is requested. Record whether iOS asks for location or notification permissions again; permission prompts may depend on OS state.
 
-26. **Remove access and clean up staging accounts.** Remove the connection and confirm; reconnect once to verify both directions begin Off, then remove it again. After recording the run, use the app's Delete account action for both staging test accounts and verify staging-only cleanup through the approved staging process. **Expected:** the connection and its grants are revoked, deleted staging accounts are removed, and no production account or resource is changed.
+26. **Remove access and clean up staging accounts.** Remove the connection and confirm; reconnect once to verify both directions begin Off, then remove it again. Check Support, sign out, and Delete account are reachable during authenticated setup and any restricted state. Confirm deletion warns that Apple billing is managed separately and offers Manage Subscriptions without forcing cancellation. After recording the run, use the app's Delete account action for both staging test accounts and verify staging-only cleanup through the approved staging process. **Expected:** the connection and its grants are revoked, deleted staging accounts are removed, and no production account or resource is changed.
 
 ## Privacy-safe run record
 

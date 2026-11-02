@@ -61,6 +61,7 @@ public sealed class PhoneVerificationOptions
 {
     public const string SectionName = "PhoneVerification";
     public string[] StagingTestNumbers { get; set; } = [];
+    public int MaxGlobalSendsPerDay { get; set; } = 1000;
     public static readonly string[] ApprovedStagingTestNumbers = ["+12025550101", "+12025550102"];
 }
 
@@ -68,6 +69,8 @@ public static class PhoneVerificationOptionsGuard
 {
     public static void EnsureSafe(PhoneVerificationOptions options, string environment)
     {
+        if (options.MaxGlobalSendsPerDay is < 1 or > 1000)
+            throw new InvalidOperationException("PhoneVerification:MaxGlobalSendsPerDay must be between 1 and 1000.");
         var configured = options.StagingTestNumbers ?? [];
         if (configured.Length == 0) return;
         if (!string.Equals(environment, "Staging", StringComparison.OrdinalIgnoreCase))

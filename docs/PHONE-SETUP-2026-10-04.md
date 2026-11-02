@@ -1,5 +1,7 @@
 # Required phone setup and correction retries — 4 October 2026
 
+**Historical implementation record.** Current source follows Apple sign-in → server-verified phone → automatic account completion → People; a missing handle is assigned by the server and optional profile editing comes later, with age and App Store app-verification prompts paused. Use [DESIGN.md](DESIGN.md) for the active order. The dated sequence and physical-device checklist below describe the earlier implementation and must not restore its prerequisites or handle-first order.
+
 ## Implemented behavior
 
 Authenticated setup follows the existing required age/AppTransaction/privacy checks, then handle, then verified phone, then the main app. Internal source no longer bypasses phone verification. No Later action can enter the app from phone setup. A server-verified returning account does not request another text. Historical uploaded build 45 remains unchanged and does not contain this work.

@@ -517,9 +517,10 @@ public enum TrustProductRules {
         }
     }
 
-    /// Live pin only when they are Always and you have Plus.
-    public static func showsLivePin(viewerHasPlus: Bool, inbound: SharePresentation) -> Bool {
-        viewerHasPlus && inbound.isAvailable
+    /// The API supplies effective, owner-funded receive authorization. Keep the
+    /// configured share mode as a second guard so snapshots/Sealed never become live pins.
+    public static func showsLivePin(receiveAuthorized: Bool, inbound: SharePresentation) -> Bool {
+        receiveAuthorized && inbound.isAvailable
     }
 
     public static func pauseWireValue(_ duration: PauseDuration) -> String {
@@ -536,6 +537,10 @@ public struct TrustedPerson: Identifiable, Equatable, Sendable {
     public var share: PersonShareState
     /// Their share toward you reveals live (Always / For a while) — "Available".
     public var inboundLive: Bool
+    /// Owner entitlement expiry for received live authorization. Configured mode is
+    /// retained separately in `inboundPresentation` after this time.
+    public var liveAccessExpiresAt: Date?
+    public var liveUnavailableReason: String?
     /// Coordinates only when this person is visible to you. Always nil when sealed.
     public var livePoint: LocationPoint?
     public var outboundPresenceGranted: Bool
@@ -564,6 +569,18 @@ public struct TrustedPerson: Identifiable, Equatable, Sendable {
     /// True only when the server said their share toward you is Off.
     public var isNotSharingWithYou: Bool { inboundPresentation?.isOff == true }
 
+    public var liveAccessIsCurrent: Bool {
+        inboundLive && (liveAccessExpiresAt.map { $0 > Date() } ?? true)
+    }
+
+    public var currentLivePoint: LocationPoint? {
+        liveAccessIsCurrent ? livePoint : nil
+    }
+
+    public var currentLocationHistory: [LocationVisit] {
+        liveAccessIsCurrent ? locationHistory : []
+    }
+
     /// Home / Away when visible; nil means the row reads "presence hidden".
     public var visiblePresence: HomePresenceKind? {
         guard let state = homePresence?.state, state == .home || state == .away else { return nil }
@@ -583,13 +600,17 @@ public struct TrustedPerson: Identifiable, Equatable, Sendable {
         homePresence: HomePresenceSnapshot? = nil,
         promise: PromiseSnapshot? = nil,
         inboundPresentation: SharePresentation? = nil,
-        locationHistory: [LocationVisit] = []
+        locationHistory: [LocationVisit] = [],
+        liveAccessExpiresAt: Date? = nil,
+        liveUnavailableReason: String? = nil
     ) {
         self.person = person
         self.connectionID = connectionID
         self.presence = presence
         self.share = share
         self.inboundLive = inboundLive
+        self.liveAccessExpiresAt = liveAccessExpiresAt
+        self.liveUnavailableReason = liveUnavailableReason
         self.livePoint = inboundLive ? livePoint : nil
         self.outboundPresenceGranted = outboundPresenceGranted
         self.outboundPresenceRevision = outboundPresenceRevision

@@ -8,6 +8,7 @@ struct CircleView: View {
     @Environment(\.trustPalette) private var palette
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var position: MapCameraPosition = .automatic
+    @State private var selectedPin: UUID?
     @State private var sheetFraction: CGFloat = PeopleSheetDetent.half.rawValue
     @State private var dragOrigin: CGFloat?
     @State private var userMovedMap = false
@@ -93,6 +94,15 @@ struct CircleView: View {
             } else {
                 fitOrFocusSelectedView()
             }
+        }
+        .onChange(of: selectedPin) { _, personID in
+            guard let personID else { return }
+            let member = model.member(personID)
+            model.traceUIInteraction("people map selection: memberFound=\(member != nil)")
+            if let member { model.openView(member) }
+            // Clear selection before returning from View so the same pin can be
+            // selected again without requiring a second tap to deselect it.
+            selectedPin = nil
         }
         .onChange(of: model.location.lastFix) { _, fix in
             guard fix != nil, !didFitInitialCamera, !userMovedMap else { return }
@@ -182,27 +192,27 @@ struct CircleView: View {
     }
 
     private var homeMap: some View {
-        Map(position: $position) {
+        Map(position: $position, selection: $selectedPin) {
             UserAnnotation()
             ForEach(pins) { pin in
                 Annotation(pin.name, coordinate: pin.point.coordinate) {
                     TimelineView(.periodic(from: .now, by: 60)) { context in
-                        Button {
-                            if let member = model.member(pin.id) { model.openView(member) }
-                        } label: {
-                            TrustMapPin(
-                                initials: pin.name.trustInitials,
-                                live: pin.live,
-                                stale: pin.live && LocationFreshness.status(timestamp: pin.point.timestamp, now: context.date) == .stale,
-                                ageCaption: pin.live ? TrustCopy.locationAgeCaption(timestamp: pin.point.timestamp, now: context.date) : nil
-                            )
-                        }
-                        .buttonStyle(.plain)
+                        TrustMapPin(
+                            initials: pin.name.trustInitials,
+                            live: pin.live,
+                            stale: pin.live && LocationFreshness.status(timestamp: pin.point.timestamp, now: context.date) == .stale,
+                            ageCaption: pin.live ? TrustCopy.locationAgeCaption(timestamp: pin.point.timestamp, now: context.date) : nil
+                        )
+                        .frame(minWidth: 44, minHeight: 44)
+                        .contentShape(Rectangle())
+                        .accessibilityElement(children: .ignore)
                         .accessibilityLabel(TrustCopy.pinAccessibility(name: pin.name, live: pin.live, timestamp: pin.point.timestamp, now: context.date))
                         .accessibilityHint(TrustCopy.viewLocation(name: pin.name.trustFirstName))
+                        .accessibilityAddTraits(.isButton)
+                        .accessibilityAction(.default) { selectedPin = pin.id }
                         .accessibilityIdentifier("people-map-pin-\(pin.id.uuidString.lowercased())")
                     }
-                }
+                }.tag(pin.id)
             }
         }
         .mapStyle(.standard(elevation: .flat, emphasis: .muted, pointsOfInterest: .excludingAll))
@@ -257,7 +267,9 @@ struct CircleView: View {
 
     private var recenterButton: some View {
         Button {
-            fitAll(includeUser: true)
+            model.requestMapRecenter {
+                fitAll(includeUser: true)
+            }
         } label: {
             Image(systemName: "location.fill")
                 .font(.system(size: 15, weight: .semibold))
@@ -658,10 +670,10 @@ struct CirclePersonRow: View {
 
     private func statusText(at now: Date) -> String {
         if member.isAvailable {
-            return TrustCopy.availableLocationStatus(
-                timestamp: member.livePoint?.timestamp,
+            guard member.liveAccessIsCurrent else { return TrustCopy.locationUnavailable }
+            return TrustCopy.authorizedLiveLocationStatus(
+                timestamp: member.currentLivePoint?.timestamp,
                 now: now,
-                viewerHasPlus: model.coverage.isCovered,
                 presence: member.visiblePresence?.label
             )
         }

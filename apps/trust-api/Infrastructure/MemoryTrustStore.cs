@@ -16,6 +16,7 @@ public sealed class MemoryTrustStore : ITrustStore
     private readonly ConcurrentDictionary<string, Invite> _invites = new();
     private readonly Dictionary<Guid, ConnectionRequest> _connectionRequests = new();
     private readonly ConcurrentDictionary<Guid, PhoneChallenge> _phoneChallenges = new();
+    private readonly ConcurrentDictionary<(Guid AccountId, Guid RequestId), PhoneVerificationOperation> _phoneOperations = new();
     private readonly ConcurrentDictionary<Guid, PhoneSmsConsentEvent> _phoneSmsConsentEvents = new();
     private readonly ConcurrentDictionary<string, SmsSendBudget> _smsBudgets = new();
     private readonly SemaphoreSlim _smsGate = new(1, 1);
@@ -1012,15 +1013,49 @@ public sealed class MemoryTrustStore : ITrustStore
         return Task.CompletedTask;
     }
 
+    public Task<Account> SetGeneratedHandleIfMissingAsync(Guid accountId, string handle, CancellationToken cancellationToken)
+    {
+        lock (_gate)
+        {
+            if (!_accounts.TryGetValue(accountId, out var account)) throw TrustException.Unauthorized();
+            if (account.HasHandle) return Task.FromResult(account);
+            if (_accounts.Values.Any(other => other.Id != accountId && string.Equals(other.Handle, handle, StringComparison.OrdinalIgnoreCase)))
+                throw TrustException.HandleInUse();
+            var displayName = account.HasChosenDisplayName ? account.DisplayName : handle;
+            var updated = account with { Handle = handle, DisplayName = displayName };
+            _accounts[accountId] = updated;
+            return Task.FromResult(updated);
+        }
+    }
+
     public Task<PhoneChallenge?> GetPhoneChallengeAsync(Guid accountId, CancellationToken cancellationToken)
     {
         _phoneChallenges.TryGetValue(accountId, out var challenge);
         return Task.FromResult(challenge);
     }
 
+    public Task<PhoneVerificationOperation?> GetPhoneVerificationOperationAsync(Guid accountId, Guid requestId, CancellationToken cancellationToken) =>
+        Task.FromResult(_phoneOperations.GetValueOrDefault((accountId, requestId)));
+
+    public Task SetPhoneDeliveryStateAsync(Guid accountId, Guid challengeId, Guid? requestId, string state, DateTimeOffset updatedAt, CancellationToken cancellationToken)
+    {
+        lock (_gate)
+        {
+            if (_phoneChallenges.TryGetValue(accountId, out var challenge) && challenge.ChallengeId == challengeId)
+                _phoneChallenges[accountId] = challenge with { DeliveryState = state };
+            if (requestId is { } id && _phoneOperations.TryGetValue((accountId, id), out var operation))
+                _phoneOperations[(accountId, id)] = operation with { DeliveryState = state, UpdatedAt = updatedAt };
+        }
+        return Task.CompletedTask;
+    }
+
     public Task UpsertPhoneChallengeAsync(PhoneChallenge challenge, CancellationToken cancellationToken)
     {
         _phoneChallenges[challenge.AccountId] = challenge;
+        if (challenge.RequestId is { } requestId)
+            _phoneOperations.AddOrUpdate((challenge.AccountId, requestId), key => new(key.AccountId, key.RequestId,
+                challenge.ChallengeId, challenge.PhoneE164, challenge.Purpose, "pending", challenge.DeliveryState,
+                challenge.ExpiresAt, challenge.SentAt), (_, old) => old with { DeliveryState = challenge.DeliveryState, UpdatedAt = challenge.SentAt });
         return Task.CompletedTask;
     }
 
@@ -1053,11 +1088,11 @@ public sealed class MemoryTrustStore : ITrustStore
         (await ReserveSmsAsync(budgets.Select(row => row.ScopeKey).ToArray(), null, null, now, cancellationToken)).Accepted;
 
     public Task<PhoneSmsReservation> ReservePhoneSmsAsync(IReadOnlyList<string> keys, PhoneChallenge challenge,
-        PhoneSmsConsentEvent consent, DateTimeOffset now, CancellationToken cancellationToken) =>
-        ReserveSmsAsync(keys, challenge, consent, now, cancellationToken);
+        PhoneSmsConsentEvent consent, DateTimeOffset now, CancellationToken cancellationToken, int maxGlobalSendsPerDay = 40) =>
+        ReserveSmsAsync(keys, challenge, consent, now, cancellationToken, maxGlobalSendsPerDay);
 
     private async Task<PhoneSmsReservation> ReserveSmsAsync(IReadOnlyList<string> keys, PhoneChallenge? challenge,
-        PhoneSmsConsentEvent? consent, DateTimeOffset now, CancellationToken cancellationToken)
+        PhoneSmsConsentEvent? consent, DateTimeOffset now, CancellationToken cancellationToken, int maxGlobalSendsPerDay = 40)
     {
         await _smsGate.WaitAsync(cancellationToken);
         try
@@ -1065,6 +1100,15 @@ public sealed class MemoryTrustStore : ITrustStore
             lock (_gate)
             {
                 if (challenge is not null && !_accounts.ContainsKey(challenge.AccountId)) throw TrustException.Unauthorized();
+                if (challenge?.RequestId is { } stableRequestId
+                    && _phoneOperations.TryGetValue((challenge.AccountId, stableRequestId), out var recorded))
+                {
+                    if (recorded.PhoneE164 != challenge.PhoneE164 || recorded.Purpose != challenge.Purpose)
+                        throw new TrustException("idempotency_conflict", "This request id was already used for another phone action.");
+                    var recordedRows = keys.Select(key => PhoneSmsPolicy.Normalize(_smsBudgets.GetValueOrDefault(key), key, now)).ToArray();
+                    return new(true, PhoneSmsPolicy.Metadata(recordedRows, challenge.PhoneE164, now, now, maxGlobalSendsPerDay), false);
+                }
+                if (challenge is not null) ValidatePhoneChallengeBinding(_accounts[challenge.AccountId], challenge);
                 var latest = keys.Select(key => _smsBudgets.GetValueOrDefault(key)?.LastSentAt).OfType<DateTimeOffset>().DefaultIfEmpty(now).Max();
                 if (latest > now) now = latest;
                 if (challenge is not null) challenge = challenge with { SentAt = now, WindowStartedAt = now, ExpiresAt = now.AddMinutes(10) };
@@ -1072,16 +1116,43 @@ public sealed class MemoryTrustStore : ITrustStore
                 var rows = keys.Select(key => PhoneSmsPolicy.Normalize(_smsBudgets.GetValueOrDefault(key), key, now)).ToArray();
                 var account = rows.FirstOrDefault(row => row.ScopeKey.StartsWith("account:", StringComparison.Ordinal));
                 var correction = account is not null && PhoneSmsPolicy.IsNewCorrection(account, challenge?.PhoneE164);
-                var deadline = PhoneSmsPolicy.Deadline(rows, now, correction);
-                if (deadline > now) return new(false, PhoneSmsPolicy.Metadata(rows, challenge?.PhoneE164, now, deadline));
+                var deadline = PhoneSmsPolicy.Deadline(rows, now, correction, maxGlobalSendsPerDay: maxGlobalSendsPerDay);
+                if (deadline > now) return new(false, PhoneSmsPolicy.Metadata(rows, challenge?.PhoneE164, now, deadline, maxGlobalSendsPerDay));
                 rows = rows.Select(row => PhoneSmsPolicy.Increment(row, challenge?.PhoneE164, now)).ToArray();
                 foreach (var row in rows) _smsBudgets[row.ScopeKey] = row;
+                var previousChallenge = challenge is not null && _phoneChallenges.TryGetValue(challenge.AccountId, out var previousValue)
+                    ? previousValue : null;
                 if (challenge is not null) _phoneChallenges[challenge.AccountId] = challenge;
+                if (challenge?.RequestId is { } requestId)
+                {
+                    if (previousChallenge?.RequestId is { } prior && prior != requestId)
+                        _phoneOperations.AddOrUpdate((challenge.AccountId, prior), key => new(key.AccountId, key.RequestId,
+                            previousChallenge.ChallengeId, previousChallenge.PhoneE164, previousChallenge.Purpose, "superseded", previousChallenge.DeliveryState,
+                            previousChallenge.ExpiresAt, now), (_, old) => old with { VerificationState = "superseded", UpdatedAt = now });
+                    _phoneOperations[(challenge.AccountId, requestId)] = new(challenge.AccountId, requestId,
+                        challenge.ChallengeId, challenge.PhoneE164, challenge.Purpose, "pending", challenge.DeliveryState,
+                        challenge.ExpiresAt, now);
+                }
                 if (consent is not null) _phoneSmsConsentEvents[Guid.NewGuid()] = consent;
-                return new(true, PhoneSmsPolicy.Metadata(rows, challenge?.PhoneE164, now, now));
+                return new(true, PhoneSmsPolicy.Metadata(rows, challenge?.PhoneE164, now, now, maxGlobalSendsPerDay));
             }
         }
         finally { _smsGate.Release(); }
+    }
+
+    private static void ValidatePhoneChallengeBinding(Account account, PhoneChallenge challenge)
+    {
+        if (challenge.Purpose == "replacement")
+        {
+            if (!account.HasVerifiedPhone || !string.Equals(account.PhoneE164, challenge.ExpectedPhoneE164, StringComparison.Ordinal))
+                throw new TrustException("phone_binding_changed", "The verified phone changed. Sign in with Apple again before requesting another replacement code.");
+            return;
+        }
+
+        if (account.HasVerifiedPhone && !string.Equals(account.PhoneE164, challenge.PhoneE164, StringComparison.Ordinal))
+            throw new TrustException("phone_binding_changed", "A verified phone is already bound to this account. Sign in with Apple before changing it.");
+        if (!account.HasVerifiedPhone && !string.Equals(account.PhoneE164, challenge.ExpectedPhoneE164, StringComparison.Ordinal))
+            throw new TrustException("phone_binding_changed", "The phone binding changed while this code was being requested. Request a new code.");
     }
 
     public async Task<int?> IncrementPhoneChallengeFailureAsync(Guid accountId, string phoneE164, string expectedCodeHash, DateTimeOffset now, int maxAttempts, CancellationToken cancellationToken)
@@ -1118,7 +1189,7 @@ public sealed class MemoryTrustStore : ITrustStore
         }
     }
 
-    public async Task<bool> TryCompletePhoneChallengeAsync(Guid accountId, string phoneE164, string codeHash, DateTimeOffset verifiedAt, int maxAttempts, CancellationToken cancellationToken)
+    public async Task<bool> TryCompletePhoneChallengeAsync(Guid accountId, string phoneE164, string codeHash, DateTimeOffset verifiedAt, int maxAttempts, CancellationToken cancellationToken, string? generatedHandle = null)
     {
         await _smsGate.WaitAsync(cancellationToken);
         try
@@ -1142,7 +1213,27 @@ public sealed class MemoryTrustStore : ITrustStore
 
                 if (_accounts.TryGetValue(accountId, out var account))
                 {
-                    _accounts[accountId] = account with { PhoneE164 = phoneE164, PhoneVerifiedAt = verifiedAt };
+                    try { ValidatePhoneChallengeBinding(account, challenge); }
+                    catch (TrustException exception) when (exception.Code == "phone_binding_changed")
+                    {
+                        if (challenge.RequestId is { } staleId)
+                            _phoneOperations.AddOrUpdate((accountId, staleId), key => new(key.AccountId, key.RequestId,
+                                challenge.ChallengeId, phoneE164, challenge.Purpose, "superseded", challenge.DeliveryState,
+                                challenge.ExpiresAt, verifiedAt), (_, old) => old with { VerificationState = "superseded", UpdatedAt = verifiedAt });
+                        _phoneChallenges.TryRemove(accountId, out _);
+                        return false;
+                    }
+                    var assignedHandle = account.HasHandle ? account.Handle : generatedHandle;
+                    if (!account.HasHandle && assignedHandle is not null && _accounts.Values.Any(other => other.Id != accountId && string.Equals(other.Handle, assignedHandle, StringComparison.OrdinalIgnoreCase)))
+                        throw TrustException.HandleInUse();
+                    _accounts[accountId] = account with { PhoneE164 = phoneE164, PhoneVerifiedAt = verifiedAt, Handle = assignedHandle,
+                        DiscoveryConsentVersion = challenge.Purpose == "replacement" ? null : account.DiscoveryConsentVersion };
+                    foreach (var pending in _phoneOperations.Where(pair => pair.Key.AccountId == accountId && pair.Value.VerificationState == "pending").ToArray())
+                        _phoneOperations[pending.Key] = pending.Value with { VerificationState = "superseded", UpdatedAt = verifiedAt };
+                    if (challenge.RequestId is { } requestId)
+                        _phoneOperations.AddOrUpdate((accountId, requestId), key => new(key.AccountId, key.RequestId,
+                            challenge.ChallengeId, phoneE164, challenge.Purpose, "verified", challenge.DeliveryState,
+                            challenge.ExpiresAt, verifiedAt), (_, old) => old with { VerificationState = "verified", UpdatedAt = verifiedAt });
                     _phoneChallenges.TryRemove(accountId, out _);
                     return true;
                 }

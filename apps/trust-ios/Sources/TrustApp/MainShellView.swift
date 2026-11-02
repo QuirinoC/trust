@@ -5,6 +5,7 @@ import TrustCore
 struct MainShellView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.trustPalette) private var palette
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage(TrustAppLanguage.storageKey) private var appLanguage = TrustAppLanguage.system.rawValue
@@ -105,7 +106,7 @@ struct MainShellView: View {
             LookConfirmSheet(subject: subject)
                 .environmentObject(model)
                 .environment(\.trustPalette, palette)
-                .presentationDetents([.medium, .large])
+                .presentationDetents(dynamicTypeSize.isAccessibilitySize ? [.large] : [.medium, .large])
                 .presentationDragIndicator(.visible)
                 .presentationBackground(palette.sheet)
                 .presentationCornerRadius(28)
@@ -137,6 +138,15 @@ struct MainShellView: View {
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
                 .presentationBackground(palette.sheet)
+                .trustFormSheet()
+        }
+        .sheet(item: $model.firstShareApproval, onDismiss: { model.cancelFirstShareApproval() }) { request in
+            FirstShareApprovalSheet(request: request)
+                .environmentObject(model)
+                .environment(\.trustPalette, palette)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+                .presentationBackground(palette.paper)
                 .trustFormSheet()
         }
     }

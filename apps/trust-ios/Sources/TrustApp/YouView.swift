@@ -11,8 +11,12 @@ struct YouView: View {
     @AppStorage(TrustAppearance.storageKey) private var appearance = TrustAppearance.system.rawValue
     @AppStorage(TrustAppLanguage.storageKey) private var appLanguage = TrustAppLanguage.system.rawValue
     @State private var showingDeleteAccount = false
+    @State private var showingSignOutOptions = false
     @State private var showingAvatarPicker = false
     @State private var showingLocation = false
+    @State private var showingPhoneReplacement = false
+    @State private var showingProfileEditor = false
+    @State private var showingAccountHelp = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -24,8 +28,17 @@ struct YouView: View {
                     profileCard
                         .padding(.top, 22)
 
+                    Button(TrustCopy.editProfile) { showingProfileEditor = true }
+                        .buttonStyle(TrustOutlineButtonStyle(compact: true))
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 8)
+                        .accessibilityIdentifier("edit-profile")
+
                     discoveryCard
                         .padding(.top, 16)
+
+                    phoneRow
+                        .padding(.top, 12)
 
                     myLocationRow
                         .padding(.top, 16)
@@ -46,7 +59,11 @@ struct YouView: View {
 
                     TrustSectionHeading(TrustCopy.account)
                         .padding(.bottom, 4)
-                    Button(TrustCopy.signOut) { model.signOut() }
+                    Button(TrustCopy.accountHelp) { showingAccountHelp = true }
+                        .buttonStyle(TrustTextButtonStyle())
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .accessibilityIdentifier("account-help")
+                    Button(TrustCopy.signOut) { requestSignOut() }
                         .buttonStyle(TrustTextButtonStyle())
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.bottom, 8)
@@ -78,23 +95,58 @@ struct YouView: View {
             }
             Button(TrustCopy.cancel, role: .cancel) {}
         }
+        .confirmationDialog(TrustCopy.signOut, isPresented: $showingSignOutOptions, titleVisibility: .visible) {
+            if model.canStopAllBeforeSignOut {
+                Button(TrustCopy.stopAllAndSignOut, role: .destructive) { Task { await model.stopAllAndSignOut() } }
+            }
+            Button(TrustCopy.signOut) { model.signOut() }
+            Button(TrustCopy.cancel, role: .cancel) {}
+        } message: {
+            Text(TrustCopy.signOutSharingWarning)
+        }
         .sheet(isPresented: $showingAvatarPicker) {
             ProfileAvatarPicker()
                 .environmentObject(model)
-                .presentationDetents([.medium, .large])
+                .presentationDetents(dynamicTypeSize.isAccessibilitySize ? [.large] : [.medium, .large])
         }
         .sheet(isPresented: $showingLocation) {
             locationSheet
                 .environmentObject(model)
                 .presentationDetents([.large])
         }
+        .sheet(isPresented: $showingProfileEditor) {
+            EditProfileSheet()
+                .environmentObject(model)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $showingPhoneReplacement) {
+            PhoneView()
+                .environmentObject(model)
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+                .onDisappear { model.endPhoneReplacement() }
+        }
+        .sheet(isPresented: $showingAccountHelp) {
+            AccountHelpSheet(onSignOut: {
+                requestSignOut()
+            }, onDelete: { showingDeleteAccount = true })
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+        }
         .task {
             if model.selectedTab == .you { model.refreshNotificationStatus() }
+            if model.selectedTab == .you { await model.refreshPhoneVerificationState() }
             guard !model.isDemoMode else { return }
             if let signed = await model.store.refreshEntitlement() {
                 await model.syncCircleEntitlement(signedTransactionInfo: signed)
             }
         }
+    }
+
+    private func requestSignOut() {
+        if model.outboundActiveCount > 0 { showingSignOutOptions = true }
+        else { model.signOut() }
     }
 
     private var legalLinks: some View {
@@ -254,6 +306,7 @@ struct YouView: View {
         .onChange(of: appLanguage) { _, language in
             let value = TrustAppLanguage(rawValue: language) ?? .system
             model.traceUIInteraction("picker language observed: \(value.rawValue)")
+            model.refreshPushRegistrationForLanguage()
         }
     }
 
@@ -320,6 +373,36 @@ struct YouView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
+    }
+
+    private var phoneRow: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "phone.fill")
+                .font(.system(size: 18))
+                .foregroundStyle(palette.accent)
+                .frame(width: 28)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(TrustCopy.phoneNumber)
+                    .trustFont(15, weight: .medium)
+                    .foregroundStyle(palette.ink)
+                Text(model.verifiedPhoneMasked ?? TrustCopy.phoneNumberUnavailable)
+                    .trustFont(13)
+                    .foregroundStyle(palette.muted)
+            }
+            Spacer(minLength: 8)
+            Button(TrustCopy.changePhoneNumber) {
+                model.beginPhoneReplacement()
+                showingPhoneReplacement = true
+            }
+            .font(TrustTheme.ui(13, weight: .semibold))
+            .foregroundStyle(palette.accent)
+            .frame(minHeight: 44)
+            .accessibilityIdentifier("change-phone-number")
+        }
+        .padding(.horizontal, 14)
+        .frame(maxWidth: .infinity, minHeight: 58, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: TrustTheme.controlRadius, style: .continuous).fill(palette.surface))
     }
 
     private var myLocationRow: some View {
@@ -494,6 +577,83 @@ struct YouView: View {
         )
     }
 }
+
+private struct EditProfileSheet: View {
+    @EnvironmentObject private var model: AppModel
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.trustPalette) private var palette
+    @State private var displayName = ""
+    @State private var handle = ""
+    @State private var saving = false
+    @State private var saveError: String?
+
+    private var handleIsValid: Bool {
+        if case .valid = TrustHandle.status(of: handle) { return true }
+        return false
+    }
+
+    private var handleIsAcceptable: Bool { handle == model.you.handle || handleIsValid }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section(TrustCopy.profileName) {
+                    TextField(TrustCopy.profileName, text: $displayName)
+                        .textInputAutocapitalization(.words)
+                        .autocorrectionDisabled()
+                        .accessibilityIdentifier("profile-display-name")
+                }
+                Section(TrustCopy.handle) {
+                    TextField(TrustCopy.handlePlaceholder, text: $handle)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .accessibilityIdentifier("profile-handle")
+                    if !handle.isEmpty && !handleIsValid {
+                        Text(TrustCopy.handleRules)
+                            .font(.footnote)
+                            .foregroundStyle(palette.muted)
+                    }
+                }
+                if let saveError {
+                    Section {
+                        Text(saveError)
+                            .font(.footnote)
+                            .foregroundStyle(palette.danger)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityIdentifier("profile-save-error")
+                    }
+                }
+            }
+            .scrollContentBackground(.hidden)
+            .background(palette.paper)
+            .navigationTitle(TrustCopy.editProfile)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(TrustCopy.cancel) { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(saving ? TrustCopy.saving : TrustCopy.save) {
+                        saving = true
+                        saveError = nil
+                        Task {
+                            let saved = await model.saveProfile(displayName: displayName, handle: handle)
+                            saving = false
+                            if saved { dismiss() }
+                            else { saveError = model.profileSaveNotice ?? TrustCopy.requestFailed }
+                        }
+                    }
+                    .disabled(saving || displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !handleIsAcceptable || model.isDemoMode)
+                }
+            }
+            .task {
+                displayName = model.you.displayName
+                handle = model.you.handle ?? ""
+            }
+        }
+    }
+}
+
 
 private struct NotificationsSettingsSection: View {
     @EnvironmentObject private var model: AppModel

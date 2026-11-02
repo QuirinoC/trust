@@ -136,7 +136,7 @@ public sealed class AgeAssurancePrivacyHoldTests
     private sealed class CountingPushDeviceStore : IPushDeviceStore
     {
         public List<Guid> LookupAccountIds { get; } = [];
-        public Task RegisterAsync(Guid accountId, Guid installationId, string token, string environment, string bundleId, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task RegisterAsync(Guid accountId, Guid installationId, string token, string environment, string bundleId, CancellationToken cancellationToken, string? language = null) => Task.CompletedTask;
         public Task RemoveAsync(Guid accountId, Guid installationId, CancellationToken cancellationToken) => Task.CompletedTask;
         public Task RemoveAllAsync(Guid accountId, CancellationToken cancellationToken) => Task.CompletedTask;
         public Task InvalidateTokenAsync(string token, CancellationToken cancellationToken) => Task.CompletedTask;

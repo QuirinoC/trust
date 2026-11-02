@@ -6,7 +6,7 @@ public sealed record PhoneRetryMetadata(DateTimeOffset ServerTime, DateTimeOffse
     int ImmediateNumberAttemptsRemaining, string? NormalizedPhone, DateTimeOffset AccountRetryAt,
     DateTimeOffset? AccountWindowStartedAt, int AccountSendCount, int ResendPacingSeconds);
 
-public sealed record PhoneSmsReservation(bool Accepted, PhoneRetryMetadata Retry);
+public sealed record PhoneSmsReservation(bool Accepted, PhoneRetryMetadata Retry, bool ShouldDispatch = true);
 
 public static class PhoneSmsPolicy
 {
@@ -20,14 +20,14 @@ public static class PhoneSmsPolicy
     public static bool IsNewCorrection(SmsSendBudget account, string? phone) =>
         phone is not null && account.PhoneAttempts is { Length: < 3 } attempts && !attempts.Contains(phone, StringComparer.Ordinal);
 
-    public static DateTimeOffset Deadline(IEnumerable<SmsSendBudget> rows, DateTimeOffset now, bool correction, bool includePhone = true)
+    public static DateTimeOffset Deadline(IEnumerable<SmsSendBudget> rows, DateTimeOffset now, bool correction, bool includePhone = true, int maxGlobalSendsPerDay = 40)
     {
         var deadline = now;
         foreach (var row in rows)
         {
             var isPhone = row.ScopeKey.StartsWith("phone:", StringComparison.Ordinal);
             if (isPhone && !includePhone) continue;
-            var limit = row.ScopeKey == SmsSendBudget.GlobalDayKey() ? 40 : 8;
+            var limit = row.ScopeKey == SmsSendBudget.GlobalDayKey() ? maxGlobalSendsPerDay : 8;
             if (row.SendCount >= limit) deadline = Max(deadline, row.WindowStartedAt + Window(row.ScopeKey));
             if (row.LastSentAt is { } sent && (isPhone || (!correction && row.ScopeKey.StartsWith("account:", StringComparison.Ordinal))))
             {
@@ -42,13 +42,13 @@ public static class PhoneSmsPolicy
         return deadline;
     }
 
-    public static PhoneRetryMetadata Metadata(IReadOnlyList<SmsSendBudget> rows, string? phone, DateTimeOffset now, DateTimeOffset retryAt)
+    public static PhoneRetryMetadata Metadata(IReadOnlyList<SmsSendBudget> rows, string? phone, DateTimeOffset now, DateTimeOffset retryAt, int maxGlobalSendsPerDay = 40)
     {
         var account = rows.FirstOrDefault(row => row.ScopeKey.StartsWith("account:", StringComparison.Ordinal));
         var remaining = account?.PhoneAttempts is { } attempts ? Math.Max(0, 3 - attempts.Length) : 0;
         return new(now, retryAt, Math.Max(0, (int)Math.Ceiling((retryAt - now).TotalSeconds)),
-            Deadline(rows, now, false), Deadline(rows, now, remaining > 0, includePhone: false), remaining, phone,
-            Deadline(rows, now, false, includePhone: false), account?.WindowStartedAt, account?.SendCount ?? 0,
+            Deadline(rows, now, false, maxGlobalSendsPerDay: maxGlobalSendsPerDay), Deadline(rows, now, remaining > 0, includePhone: false, maxGlobalSendsPerDay: maxGlobalSendsPerDay), remaining, phone,
+            Deadline(rows, now, false, includePhone: false, maxGlobalSendsPerDay: maxGlobalSendsPerDay), account?.WindowStartedAt, account?.SendCount ?? 0,
             Math.Max(Backoff(account?.SendCount ?? 0), Backoff(rows.FirstOrDefault(row => row.ScopeKey.StartsWith("phone:", StringComparison.Ordinal))?.SendCount ?? 0)));
     }
 

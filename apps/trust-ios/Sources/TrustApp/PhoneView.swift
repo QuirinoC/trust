@@ -5,8 +5,14 @@ import TrustCore
 struct PhoneView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.trustPalette) private var palette
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dismiss) private var dismiss
     @FocusState private var focused: Field?
     @State private var showingCountryPicker = false
+    @State private var showingAccountHelp = false
+    @State private var showingDeleteAccount = false
+    @State private var showingSignOutOptions = false
     @State private var countrySearch = ""
 
     private enum Field { case phone, code }
@@ -29,7 +35,7 @@ struct PhoneView: View {
                         phoneEntry(now: now)
                     }
 
-                    Button(TrustCopy.signOut) { model.signOut() }
+                    Button(TrustCopy.accountHelp) { showingAccountHelp = true }
                         .buttonStyle(TrustTextButtonStyle())
                         .frame(maxWidth: .infinity)
                         .padding(.top, 12)
@@ -45,12 +51,51 @@ struct PhoneView: View {
             legalLinks
         }
         .background(palette.canvas.ignoresSafeArea())
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if let toast = model.toast {
+                TrustToastView(toast: toast) { model.toast = nil }
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 8)
+                    .background(palette.canvas)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.22), value: model.toast?.id)
         .onChange(of: model.phoneCodeSent) { _, sent in
             if sent { focused = .code }
         }
         .onAppear { model.synchronizePhoneEditorFromDraft() }
-        .task { await seedPhoneRegion() }
+        .task {
+            await model.refreshPhoneVerificationState()
+            await seedPhoneRegion()
+        }
+        .onChange(of: model.phoneReplacementMode) { _, active in
+            if !active { dismiss() }
+        }
         .sheet(isPresented: $showingCountryPicker) { countryPicker }
+        .sheet(isPresented: $showingAccountHelp) {
+            AccountHelpSheet(onSignOut: {
+                if model.outboundActiveCount > 0 { showingSignOutOptions = true }
+                else { model.signOut() }
+            }, onDelete: { showingDeleteAccount = true })
+                .presentationDetents(dynamicTypeSize.isAccessibilitySize ? [.large] : [.medium, .large])
+                .presentationDragIndicator(.visible)
+        }
+        .alert(TrustCopy.deleteAccountConfirm, isPresented: $showingDeleteAccount) {
+            Button(TrustCopy.deleteAccount, role: .destructive) { Task { await model.deleteAccount() } }
+            Button(TrustCopy.cancel, role: .cancel) {}
+        } message: {
+            Text(TrustCopy.accountHelpBody)
+        }
+        .confirmationDialog(TrustCopy.signOut, isPresented: $showingSignOutOptions, titleVisibility: .visible) {
+            if model.canStopAllBeforeSignOut {
+                Button(TrustCopy.stopAllAndSignOut, role: .destructive) { Task { await model.stopAllAndSignOut() } }
+            }
+            Button(TrustCopy.signOut) { model.signOut() }
+            Button(TrustCopy.cancel, role: .cancel) {}
+        } message: {
+            Text(TrustCopy.signOutSharingWarning)
+        }
 #if TRUST_STAGING
         .task(id: model.phoneDraft) {
             let draft = model.phoneDraft
@@ -262,6 +307,7 @@ struct PhoneView: View {
                     model.phoneCountry = country
                     model.phoneCountryWasChosen = true
                     model.phoneDraft = TrustPhoneCountry.canonicalNumber(model.phoneLocalDraft, countryCode: country.code)
+                    model.persistEditedPhoneDraft()
                     showingCountryPicker = false
                 } label: {
                     HStack {
@@ -288,23 +334,43 @@ struct PhoneView: View {
                 model.phoneCountryWasChosen = true
                 model.phoneLocalDraft = split.nationalNumber
                 model.phoneDraft = TrustPhoneCountry.canonicalNumber(input, countryCode: country.code)
+                model.persistEditedPhoneDraft()
                 return
             }
         }
         model.phoneDraft = TrustPhoneCountry.canonicalNumber(input, countryCode: model.phoneCountry.code)
+        model.persistEditedPhoneDraft()
     }
 
     private func seedPhoneRegion() async {
+        let url: URL
+        let injectedForUITest: Bool
 #if DEBUG
-        guard ProcessInfo.processInfo.environment["TRUST_UI_TEST"] != "1" else { return }
+        let environment = ProcessInfo.processInfo.environment
+        if environment["TRUST_UI_TEST"] == "1" {
+            guard let raw = environment["TRUST_UI_TEST_REGION_URL"],
+                  let candidate = URL(string: raw),
+                  candidate.scheme == "http",
+                  candidate.host == "127.0.0.1",
+                  candidate.port == 5089,
+                  candidate.path == "/api/region" else { return }
+            url = candidate
+            injectedForUITest = true
+        } else {
+            guard let candidate = URL(string: "https://\(AppConfiguration.universalLinkHost)/api/region") else { return }
+            url = candidate
+            injectedForUITest = false
+        }
+#else
+        guard let candidate = URL(string: "https://\(AppConfiguration.universalLinkHost)/api/region") else { return }
+        url = candidate
+        injectedForUITest = false
 #endif
         guard !model.phoneCountryWasChosen, model.phoneDraft.isEmpty else { return }
-        let host = AppConfiguration.universalLinkHost
-        guard let url = URL(string: "https://\(host)/api/region") else { return }
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.cachePolicy = .reloadIgnoringLocalCacheData
-        request.timeoutInterval = 4
+        request.timeoutInterval = injectedForUITest ? 30 : 4
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
             guard !Task.isCancelled,
@@ -324,11 +390,16 @@ struct PhoneView: View {
     @ViewBuilder
     private var phoneNotice: some View {
         if let notice = model.phoneNotice, !notice.isEmpty {
-            Text(notice)
-                .trustFont(13)
-                .foregroundStyle(model.phoneNoticeIsConflict ? palette.danger : palette.accent)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityIdentifier("phone-notice")
+            VStack(alignment: .leading, spacing: 6) {
+                Text(notice)
+                    .trustFont(13)
+                    .foregroundStyle(model.phoneNoticeIsConflict ? palette.danger : palette.accent)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("phone-notice")
+                if model.phoneNoticeIsConflict {
+                    RecoverySupportActions(kind: .phoneConflict)
+                }
+            }
         }
     }
 

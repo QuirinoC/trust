@@ -26,7 +26,16 @@ struct HandleAvailabilityPayload: Decodable {
     var code: String?
 }
 
+struct RecoveryRequestPayload: Decodable {
+    var requestId: UUID
+    var status: String
+    var createdAt: Date
+}
+
 struct SendPhoneCodePayload: Decodable {
+    var requestId: UUID?
+    var challengeId: UUID?
+    var deliveryState: String?
     var expiresAt: Date
     var resendAfterSeconds: Int
     var developmentCode: String?
@@ -38,6 +47,41 @@ struct SendPhoneCodePayload: Decodable {
     var accountRetryAt: Date?
     var accountWindowStartedAt: Date?
     var accountSendCount: Int?
+}
+
+struct PhoneVerificationOperationDTO: Decodable {
+    var requestId: UUID?
+    var challengeId: UUID
+    var purpose: String
+    var verificationState: String
+    var deliveryState: String
+    var expiresAt: Date
+    var targetPhoneMasked: String?
+}
+
+struct PhoneVerificationRetryDTO: Decodable {
+    var serverTime: Date?
+    var resendRetryAt: Date?
+    var correctionRetryAt: Date?
+    var immediateNumberAttemptsRemaining: Int?
+    var accountRetryAt: Date?
+    var accountWindowStartedAt: Date?
+    var accountSendCount: Int?
+}
+
+struct PhoneVerificationStatePayload: Decodable {
+    var phoneMasked: String?
+    var region: String?
+    var phoneVerified: Bool
+    var operation: PhoneVerificationOperationDTO?
+    var retry: PhoneVerificationRetryDTO?
+}
+
+struct PhoneVerificationResultPayload: Decodable {
+    var verified: Bool
+    var requestId: UUID?
+    var challengeId: UUID?
+    var you: PersonDTO
 }
 
 struct AddPersonByPhonePayload: Decodable {
@@ -139,6 +183,9 @@ struct MemberDTO: Decodable {
     var presence: PresenceDTO?
     var share: ShareDTO
     var inboundLive: Bool
+    var receiveAuthorizationVersion: Int?
+    var liveAccessExpiresAt: Date?
+    var liveUnavailableReason: String?
     var live: LocationDTO?
     var outboundPresenceGranted: Bool?
     var outboundPresenceRevision: Int64?
@@ -328,9 +375,12 @@ enum CircleCache {
         return directory.appendingPathComponent("circle.json")
     }
 
-    static func save(_ data: Data) {
+    static func save(_ data: Data, preservingSavedAt savedAt: Date? = nil) {
         guard let fileURL else { return }
         try? data.write(to: fileURL, options: [.atomic, .completeFileProtection])
+        if let savedAt {
+            try? FileManager.default.setAttributes([.modificationDate: savedAt], ofItemAtPath: fileURL.path)
+        }
     }
 
     static func load() -> (data: Data, savedAt: Date)? {
@@ -343,6 +393,16 @@ enum CircleCache {
     static func clear() {
         guard let fileURL else { return }
         try? FileManager.default.removeItem(at: fileURL)
+    }
+
+    static func scrubUnauthorizedLiveData(forAccountID accountID: UUID, now: Date = Date()) {
+        guard let cached = load(),
+              let scrubbed = TrustCircleCacheMutation.scrubbingUnauthorizedLiveData(
+                in: cached.data,
+                accountID: accountID,
+                now: now
+              ), scrubbed != cached.data else { return }
+        save(scrubbed, preservingSavedAt: cached.savedAt)
     }
 
     static func updateShare(
@@ -422,6 +482,7 @@ final class TrustClient {
     func appleSession(identityToken: String, displayName: String?, nonce: String? = nil) async throws -> SessionPayload {
 #if DEBUG
         if ProcessInfo.processInfo.environment["TRUST_UI_TEST_FAKE_APPLE_AUTH"] == "1",
+           ProcessInfo.processInfo.environment["TRUST_UI_TEST_SIGNED_APPLE_AUTH"] != "1",
            isLocalAgeAssuranceUITestAPI {
             if ProcessInfo.processInfo.environment["TRUST_UI_TEST_APPLE_EXCHANGE_FAILURE_ONCE"] == "1",
                !didFailAppleExchangeForLocalUITest {
@@ -562,13 +623,18 @@ final class TrustClient {
         currentOperation: @MainActor () -> TrustAccountOperation?
     ) -> Bool {
         operation.commitIfCurrent(currentOperation: currentOperation()) {
-            CircleCache.save(result.responseData)
-            self.snapshot = result.snapshot
+            let accountID = TrustSessionIdentity.accountID(from: operation.token)
+            let cachedData = accountID.flatMap {
+                TrustCircleCacheMutation.scrubbingUnauthorizedLiveData(in: result.responseData, accountID: $0)
+            } ?? result.responseData
+            CircleCache.save(cachedData)
+            self.snapshot = (try? decoder.decode(CirclePayload.self, from: cachedData))?.snapshot ?? result.snapshot
         }
     }
 
     /// Last good circle from disk, for offline launch. It is usable only for its authenticated owner.
     func cachedCircle(forAccountID accountID: UUID) -> CircleSnapshot? {
+        CircleCache.scrubUnauthorizedLiveData(forAccountID: accountID)
         guard let cached = CircleCache.load(),
               TrustCircleCacheMutation.belongsToAccount(cached.data, accountID: accountID),
               let payload = try? decoder.decode(CirclePayload.self, from: cached.data) else {
@@ -845,6 +911,23 @@ final class TrustClient {
         )
     }
 
+    func createRecoveryRequest(
+        kind: String? = nil,
+        signedTransactionInfo: String? = nil,
+        reason: String? = nil
+    ) async throws -> RecoveryRequestPayload {
+        struct Body: Encodable {
+            var kind: String?
+            var signedTransactionInfo: String?
+            var reason: String?
+        }
+        return try await post(
+            path: "/api/v1/me/recovery-requests",
+            body: Body(kind: kind, signedTransactionInfo: signedTransactionInfo, reason: reason),
+            authorized: true
+        )
+    }
+
     func storeKitAccountToken() async throws -> UUID {
         struct Payload: Decodable { var appAccountToken: UUID }
         let payload: Payload = try await get(path: "/api/v1/storekit/account-token")
@@ -859,12 +942,13 @@ final class TrustClient {
         )
     }
 
-    func registerPushDevice(installationId: UUID, token: String, environment: String, authorizedToken: String? = nil) async throws {
+    func registerPushDevice(installationId: UUID, token: String, environment: String, appLanguage: String, authorizedToken: String? = nil) async throws {
         struct Body: Encodable {
             var installationId: UUID
             var token: String
             var environment: String
             var bundleId: String
+            var appLanguage: String
         }
         try await postEmpty(
             path: "/api/v1/push/devices",
@@ -872,7 +956,8 @@ final class TrustClient {
                 installationId: installationId,
                 token: token,
                 environment: environment,
-                bundleId: AppConfiguration.bundleIdentifier
+                bundleId: AppConfiguration.bundleIdentifier,
+                appLanguage: appLanguage
             ),
             authorizedToken: authorizedToken
         )
@@ -921,29 +1006,67 @@ final class TrustClient {
 
     func sendPhoneCode(
         phone: String,
-        consentAction: PhoneConsentAction
+        consentAction: PhoneConsentAction,
+        requestId: UUID = UUID(),
+        intent: String = "onboarding",
+        replacementIdentityToken: String? = nil,
+        replacementNonce: String? = nil
     ) async throws -> SendPhoneCodePayload {
         struct Body: Encodable {
             var phone: String
             var consentVersion: Int
             var consentAction: String
+            var requestId: UUID
+            var intent: String
+            var identityToken: String?
+            var nonce: String?
         }
         return try await post(
             path: "/api/v1/me/phone/send",
             body: Body(
                 phone: phone,
                 consentVersion: TrustCopy.phoneConsentDetailsVersion,
-                consentAction: consentAction.rawValue),
+                consentAction: consentAction.rawValue,
+                requestId: requestId,
+                intent: intent,
+                identityToken: replacementIdentityToken,
+                nonce: replacementNonce),
             authorized: true
         )
     }
 
-    func verifyPhoneCode(phone: String, code: String) async throws {
+    func phoneVerificationState(requestId: UUID? = nil) async throws -> PhoneVerificationStatePayload {
+        var path = "/api/v1/me/phone/verification-state"
+        if let requestId { path += "?requestId=\(requestId.uuidString)" }
+        return try await get(path: path)
+    }
+
+    func verifyPhoneCode(
+        phone: String,
+        code: String,
+        requestId: UUID? = nil,
+        challengeId: UUID? = nil,
+        returnAccountState: Bool = false
+    ) async throws -> PhoneVerificationResultPayload? {
         struct Body: Encodable {
             var phone: String
             var code: String
+            var requestId: UUID?
+            var challengeId: UUID?
+            var returnAccountState: Bool
         }
-        try await postEmpty(path: "/api/v1/me/phone/verify", body: Body(phone: phone, code: code))
+        var request = try makeRequest(path: "/api/v1/me/phone/verify", method: "POST", authorized: true)
+        request.httpBody = try encoder.encode(Body(phone: phone, code: code, requestId: requestId, challengeId: challengeId, returnAccountState: returnAccountState))
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let data = try await sendRaw(request)
+        guard !data.isEmpty else { return nil }
+        do { return try decoder.decode(PhoneVerificationResultPayload.self, from: data) }
+        catch { throw TrustClientError.decoding }
+    }
+
+    func completeOnboarding() async throws -> PersonDTO {
+        struct Body: Encodable {}
+        return try await post(path: "/api/v1/me/onboarding/complete", body: Body(), authorized: true)
     }
 
     func addPersonByPhone(_ phone: String) async throws -> AddPersonByPhonePayload {
@@ -1353,7 +1476,7 @@ extension CirclePayload {
     var snapshot: CircleSnapshot {
         CircleSnapshot(
             you: you.model,
-            members: members.map(\.model),
+            members: members.map { $0.model(viewerHasPlus: coverage.isCovered) },
             coverage: CircleCoverage(
                 isCovered: coverage.isCovered,
                 sponsorName: coverage.sponsorName,
@@ -1447,28 +1570,43 @@ extension ShareDTO {
 }
 
 extension MemberDTO {
-    var model: TrustedPerson {
-        TrustedPerson(
+    func model(viewerHasPlus: Bool) -> TrustedPerson {
+        let configuredAvailable = inboundShare?.presentationModel.isAvailable == true
+        let effectiveInboundLive: Bool
+        if (receiveAuthorizationVersion ?? 0) >= 1 {
+            effectiveInboundLive = inboundLive
+        } else {
+            // Legacy responses did not distinguish a configured Always choice from
+            // current receive authorization. Require both local Plus and an explicit
+            // active Always presentation before trusting their point.
+            effectiveInboundLive = viewerHasPlus && inboundLive && configuredAvailable
+        }
+        let unexpired = liveAccessExpiresAt.map { $0 > Date() } ?? true
+        let permittedPoint = effectiveInboundLive && unexpired ? live?.model : nil
+        return TrustedPerson(
             person: person.model,
             connectionID: connectionId,
             presence: presence?.model ?? .sealed,
             share: share.model,
-            inboundLive: inboundLive,
-            livePoint: inboundLive ? live?.model : nil,
+            inboundLive: effectiveInboundLive,
+            livePoint: permittedPoint,
             outboundPresenceGranted: outboundPresenceGranted ?? false,
             outboundPresenceRevision: outboundPresenceRevision,
             inboundPresenceGranted: inboundPresenceGranted ?? false,
             homePresence: homePresence?.model,
             promise: promise?.model,
             inboundPresentation: inboundShare?.presentationModel,
-            locationHistory: locationHistory
+            locationHistory: locationHistory(effectiveInboundLive: effectiveInboundLive, unexpired: unexpired),
+            liveAccessExpiresAt: liveAccessExpiresAt,
+            liveUnavailableReason: liveUnavailableReason
         )
     }
 
     /// Newest first. Uses `trail` when the server sends one, otherwise the single live fix.
-    var locationHistory: [LocationVisit] {
+    private func locationHistory(effectiveInboundLive: Bool, unexpired: Bool) -> [LocationVisit] {
+        guard effectiveInboundLive, unexpired else { return [] }
         var points = trail?.map(\.model) ?? []
-        if inboundLive, let live = live?.model, !points.contains(where: { $0.timestamp == live.timestamp && $0.latitude == live.latitude }) {
+        if let live = live?.model, !points.contains(where: { $0.timestamp == live.timestamp && $0.latitude == live.latitude }) {
             points.append(live)
         }
         return points
