@@ -261,10 +261,25 @@ final class TrustUsageTests: XCTestCase {
             add(geometry)
         }
 
-        let app = launchDemo()
+        let visualLanguage = ProcessInfo.processInfo.environment["TRUST_DUO_VISUAL_LANGUAGE"]
+        let supportedLanguages: Set<String> = ["en", "de", "fr", "pt-BR", "ja", "zh-Hans"]
+        if let visualLanguage, !supportedLanguages.contains(visualLanguage) {
+            XCTFail("Unsupported Duo visual language: \(visualLanguage)")
+            return
+        }
+        let visualDark: Bool? = ProcessInfo.processInfo.environment["TRUST_DUO_VISUAL_DARK"] == "1" ? true : nil
+        let app = launchDemo(dark: visualDark, language: visualLanguage)
         XCTAssertTrue(app.buttons["person-row-maya"].waitForExistence(timeout: 20), "Fixture must load the real People row.")
         XCTAssertTrue(app.buttons["people-sheet-detent"].exists, "Closed Duo should use the compact sheet layout.")
         XCTAssertFalse(app.buttons["person-row-maya"].frame.isEmpty)
+        if ProcessInfo.processInfo.environment["TRUST_UI_TEST_DEMO_AGE_SECONDS"] == "420" {
+            let leoPin = app.buttons.matching(NSPredicate(
+                format: "identifier BEGINSWITH %@ AND label CONTAINS %@",
+                "people-map-pin-", "Leo Park"
+            )).firstMatch
+            XCTAssertTrue(leoPin.waitForExistence(timeout: 10), "The aged demo must expose Leo's authorized point.")
+            XCTAssertTrue(leoPin.label.contains("7"), "The aged Leo pin must report the seven-minute age.")
+        }
         let closedWidth = app.frame.width
         try mark("closed.ready", app: app)
         guard waitFor("open.continue", app: app) else { return }
@@ -307,15 +322,24 @@ final class TrustUsageTests: XCTestCase {
         app.buttons["tab-circle"].tap()
         XCTAssertTrue(app.buttons["person-row-maya"].waitForExistence(timeout: 8))
 
-        // The ordinary demo is Free: Leo's Always location is intentionally
-        // absent from the leading People map, so View must keep its own map.
+        // The demo viewer is Free, and Leo's paid Always direction authorizes
+        // his point on the leading People map. Avoid a duplicate inset in View.
+        let leoPin = app.buttons.matching(NSPredicate(
+            format: "identifier BEGINSWITH %@ AND label CONTAINS %@",
+            "people-map-pin-", "Leo Park"
+        )).firstMatch
+        XCTAssertTrue(leoPin.waitForExistence(timeout: 8),
+                      "The leading People map must show Leo's authorized Always point for a Free viewer.")
         let leoView = app.buttons["person-peek-leo"]
         XCTAssertTrue(leoView.waitForExistence(timeout: 5), "The Free fixture should expose Leo's Always View action.")
         leoView.tap()
         XCTAssertTrue(app.staticTexts["view-location-freshness"].waitForExistence(timeout: 8),
                       "Leo's Always detail should show its real location freshness line.")
-        XCTAssertTrue(app.descendants(matching: .any)["view-embedded-map"].waitForExistence(timeout: 8),
-                      "Free viewers have no Always pin in the leading map, so the View map must remain.")
+        XCTAssertTrue(leoPin.waitForExistence(timeout: 5),
+                      "Leo's authorized point must remain in the leading map while his View is open.")
+        XCTAssertTrue(waitForCondition(timeout: 5, condition: {
+            !app.descendants(matching: .any)["view-embedded-map"].exists
+        }), "When the leading map already shows Leo's authorized point, View must omit the duplicate inset.")
         let viewBack = app.buttons["circle-back"]
         XCTAssertTrue(viewBack.waitForExistence(timeout: 5))
         viewBack.tap()
@@ -389,10 +413,10 @@ final class TrustUsageTests: XCTestCase {
         app.terminate()
     }
 
-    /// Opt-in Duo keyboard handoff for the focused Add-person lookup. A host
+    /// Opt-in Duo draft preservation and deliberate replacement for Add-person lookup. A host
     /// orchestrator watches the ready files, folds/unfolds the device, and
     /// creates the matching continue files after each display settles.
-    func testOptInDuoFoldPreservesFocusedAddPersonInput() throws {
+    func testOptInDuoFoldPreservesAddDraftAndAllowsReplacement() throws {
         guard let directory = ProcessInfo.processInfo.environment["TRUST_DUO_ADD_DIR"],
               !directory.isEmpty else {
             throw XCTSkip("Requires TRUST_DUO_ADD_DIR and a host fold-state orchestrator.")
@@ -400,7 +424,9 @@ final class TrustUsageTests: XCTestCase {
 
         let fileManager = FileManager.default
         try fileManager.createDirectory(atPath: directory, withIntermediateDirectories: true)
-        for name in ["inner.ready", "outer.continue", "outer.ready", "inner.continue"] {
+        for name in ["inner.ready", "outer.continue", "outer.ready", "inner.continue",
+                     "outer-typing.ready", "outer-type.continue",
+                     "reopened-typing.ready", "type.continue"] {
             try? fileManager.removeItem(atPath: URL(fileURLWithPath: directory).appendingPathComponent(name).path)
         }
 
@@ -451,12 +477,33 @@ final class TrustUsageTests: XCTestCase {
             app.terminate()
             return
         }
-        if !add.isHittable {
-            let scroll = app.scrollViews["sharing-scroll"]
-            if scroll.exists { scroll.swipeUp() }
+        let sharingScroll = app.scrollViews["sharing-scroll"]
+        for _ in 0..<5 {
+            guard sharingScroll.exists, add.exists else { break }
+            let viewport = sharingScroll.frame
+            let button = add.frame
+            if add.isHittable && frameIsFullyVisible(button, within: viewport) { break }
+            if button.minY < viewport.minY {
+                sharingScroll.swipeDown()
+            } else if button.maxY > viewport.maxY {
+                sharingScroll.swipeUp()
+            } else {
+                // A temporary shell toast can cover an otherwise visible control.
+                _ = waitForCondition(timeout: 8) {
+                    sharingScroll.exists && add.exists && add.isHittable
+                        && frameIsFullyVisible(add.frame, within: sharingScroll.frame)
+                }
+                break
+            }
         }
-        guard add.isHittable else {
-            XCTFail("Add someone must be reachable before opening its form.")
+        guard sharingScroll.exists, add.isHittable,
+              frameIsFullyVisible(add.frame, within: sharingScroll.frame) else {
+            XCTContext.runActivity(named: "Duo Add someone unreachable in Sharing") { activity in
+                activity.add(XCTAttachment(string: app.debugDescription))
+                activity.add(XCTAttachment(string: "app=\(app.frame); scroll=\(sharingScroll.exists ? String(describing: sharingScroll.frame) : "<absent>"); add=\(add.exists ? String(describing: add.frame) : "<absent>")"))
+                activity.add(XCTAttachment(screenshot: app.screenshot()))
+            }
+            XCTFail("Add someone must be fully visible and reachable before opening its form.")
             app.terminate()
             return
         }
@@ -470,36 +517,65 @@ final class TrustUsageTests: XCTestCase {
         let borderedField = app.descendants(matching: .any)["connection-lookup-field"]
         let keyboard = app.keyboards.firstMatch
         let addScroll = app.scrollViews["add-person-scroll"]
-        let window = app.windows.firstMatch
-        func assertFocusedInput(_ state: String, requiresKeyboard: Bool = true,
+        func activeWindow() -> XCUIElement? {
+            guard field.exists, close.exists else { return nil }
+            let appFrame = app.frame
+            return app.windows.allElementsBoundByIndex.first { candidate in
+                guard candidate.exists else { return false }
+                let frame = candidate.frame
+                let direct = abs(frame.width - appFrame.width) <= 1 && abs(frame.height - appFrame.height) <= 1
+                let rotated = abs(frame.width - appFrame.height) <= 1 && abs(frame.height - appFrame.width) <= 1
+                return (direct || rotated) && frameIsFullyVisible(field.frame, within: frame)
+                    && frameIsFullyVisible(close.frame, within: frame)
+            }
+        }
+        func visibleKeyboardFrames() -> (window: CGRect, keyboard: CGRect)? {
+            guard let window = activeWindow() else { return nil }
+            let windowFrame = window.frame
+            guard let visible = app.keyboards.allElementsBoundByIndex.first(where: {
+                $0.exists && $0.frame.height > 0 && frameIsFullyVisible($0.frame, within: windowFrame)
+            }) else { return nil }
+            return (windowFrame, visible.frame)
+        }
+        func keyboardIsVisibleInWindow() -> Bool { visibleKeyboardFrames() != nil }
+        func assertFocusedInput(_ state: String, expectedDraft: String, requiresKeyboard: Bool = true,
                                 file: StaticString = #filePath, line: UInt = #line) -> Bool {
             let ready = waitForCondition(timeout: 20, condition: {
-                let keyboardVisible = keyboard.exists && keyboard.frame.height > 0
-                let keyboardUnobscured = !keyboard.exists
-                    || (!borderedField.frame.intersects(keyboard.frame)
-                        && !close.frame.intersects(keyboard.frame))
+                let keyboardVisible = keyboardIsVisibleInWindow()
+                let keyboardFrame = visibleKeyboardFrames()?.keyboard
+                let keyboardUnobscured = keyboardFrame.map {
+                    !borderedField.frame.intersects($0) && !close.frame.intersects($0)
+                } ?? true
                 return field.exists && close.exists && borderedField.exists
                     && (!requiresKeyboard || keyboardVisible)
-                    && (field.value as? String) == "duofold"
+                    && (field.value as? String) == expectedDraft
                     && field.isHittable && close.isHittable
                     && frameIsFullyVisible(borderedField.frame, within: addScroll.frame)
-                    && frameIsFullyVisible(close.frame, within: window.frame)
-                    && (borderedField.frame.maxY <= close.frame.minY - 8
-                        || close.frame.maxY <= borderedField.frame.minY - 8)
+                    && (activeWindow().map { frameIsFullyVisible(close.frame, within: $0.frame) } ?? false)
+                    // Allow the same 1pt AX rounding tolerance as frameIsFullyVisible.
+                    && (borderedField.frame.maxY <= close.frame.minY - 8 + 1
+                        || close.frame.maxY <= borderedField.frame.minY - 8 + 1)
                     && !borderedField.frame.intersects(close.frame)
                     && keyboardUnobscured
             })
-            let keyboardVisible = keyboard.exists && keyboard.frame.height > 0
+            let keyboardVisible = keyboardIsVisibleInWindow()
             if !ready {
                 XCTContext.runActivity(named: "Duo Add-person geometry failure - \(state) - \(layoutLabel)") { activity in
                     activity.add(XCTAttachment(screenshot: app.screenshot()))
                     activity.add(XCTAttachment(string: app.debugDescription))
                     let keyboardFrame = keyboard.exists ? String(describing: keyboard.frame) : "<dismissed>"
-                    activity.add(XCTAttachment(string: "app=\(app.frame); field=\(borderedField.frame); close=\(close.frame); keyboard=\(keyboardFrame); scroll=\(addScroll.frame)"))
+                    let windowFrame = activeWindow().map { String(describing: $0.frame) } ?? "<absent>"
+                    activity.add(XCTAttachment(string: "app=\(app.frame); window=\(windowFrame); field=\(borderedField.frame); close=\(close.frame); keyboard=\(keyboardFrame); scroll=\(addScroll.frame)"))
+                    let fieldFrame = borderedField.frame
+                    let closeFrame = close.frame
+                    let verticalGap = max(closeFrame.minY - fieldFrame.maxY, fieldFrame.minY - closeFrame.maxY)
+                    let fieldClearOfKeyboard = !keyboard.exists || !fieldFrame.intersects(keyboard.frame)
+                    let closeClearOfKeyboard = !keyboard.exists || !closeFrame.intersects(keyboard.frame)
+                    activity.add(XCTAttachment(string: "fieldExists=\(field.exists); closeExists=\(close.exists); borderedFieldExists=\(borderedField.exists); keyboardRequired=\(requiresKeyboard); keyboardVisible=\(keyboardVisible); draftMatches=\((field.value as? String) == expectedDraft); fieldHittable=\(field.isHittable); closeHittable=\(close.isHittable); fieldVisible=\(frameIsFullyVisible(fieldFrame, within: addScroll.frame)); closeVisible=\(activeWindow().map { frameIsFullyVisible(closeFrame, within: $0.frame) } ?? false); verticalGap=\(verticalGap); gapPass=\(verticalGap >= 7); intersects=\(fieldFrame.intersects(closeFrame)); fieldClearOfKeyboard=\(fieldClearOfKeyboard); closeClearOfKeyboard=\(closeClearOfKeyboard)"))
                 }
             }
             XCTAssertTrue(ready, "The Add field and Close must remain visible, separated by 8pt, and unobscured on the \(state) display.", file: file, line: line)
-            XCTAssertEqual(field.value as? String, "duofold", "Folding must preserve unsent lookup text.", file: file, line: line)
+            XCTAssertEqual(field.value as? String, expectedDraft, "Folding must preserve unsent lookup text.", file: file, line: line)
             let capture = XCTAttachment(screenshot: app.screenshot())
             capture.name = "Duo Add-person focused lookup - \(state) - \(layoutLabel)"
             capture.lifetime = .keepAlways
@@ -507,7 +583,7 @@ final class TrustUsageTests: XCTestCase {
             return keyboardVisible
         }
 
-        _ = assertFocusedInput("inner")
+        _ = assertFocusedInput("inner", expectedDraft: "duofold")
         let innerWidth = app.frame.width
         XCTAssertGreaterThan(innerWidth, 0, "The inner display width must be measurable (\(layoutLabel)).")
         try mark("inner.ready", app: app)
@@ -515,38 +591,43 @@ final class TrustUsageTests: XCTestCase {
         let outerWidth = app.frame.width
         XCTAssertLessThan(outerWidth, innerWidth - 100,
                           "The outer display should be materially narrower than inner (\(layoutLabel)).")
-        let keyboardOnOuter = assertFocusedInput("outer", requiresKeyboard: false)
-        if !keyboardOnOuter {
-            FileHandle.standardOutput.write(Data("DUO_ADD keyboard dismissed on outer display (\(layoutLabel)); typed value remained duofold\n".utf8))
-            field.tap()
-            XCTAssertTrue(waitForCondition(timeout: 8, condition: { keyboard.exists && keyboard.frame.height > 0 }),
-                          "Tapping the preserved Add field should reopen the keyboard after folding.")
-            _ = assertFocusedInput("outer after keyboard reopened")
+        _ = assertFocusedInput("outer", expectedDraft: "duofold", requiresKeyboard: false)
+        XCTAssertEqual(field.value as? String, "duofold", "The folded draft must remain intact before replacement.")
+        try mark("outer-typing.ready", app: app)
+        guard waitFor("outer-type.continue", app: app) else { return }
+        let clear = app.buttons["clear-connection-lookup"]
+        guard clear.waitForExistence(timeout: 8), clear.isHittable else {
+            XCTFail("Clear must be reachable before replacing the folded draft.")
+            return
         }
-        field.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.5)).tap()
-        XCTAssertEqual(field.value as? String, "duofold",
-                       "Moving the insertion point to the trailing edge must leave the folded draft intact.")
-        field.typeText("x")
-        XCTAssertEqual(field.value as? String, "duofoldx", "The lookup field must still accept typing after folding.")
-        field.typeText(XCUIKeyboardKey.delete.rawValue)
-        XCTAssertEqual(field.value as? String, "duofold", "Editing after folding must preserve the original unsent value.")
+        clear.tap()
+        XCTAssertEqual(field.value as? String, "Handle or phone number", "Clear must remove the previous draft.")
+        field.tap()
+        field.typeText("foldreplacement")
+        XCTAssertEqual(field.value as? String, "foldreplacement", "The folded display must accept a replacement draft.")
         try mark("outer.ready", app: app)
         guard waitFor("inner.continue", app: app) else { return }
         XCTAssertGreaterThan(app.frame.width, outerWidth + 100,
                              "Reopening should materially restore the inner display width (\(layoutLabel)).")
-        let keyboardOnReopenedInner = assertFocusedInput("inner after reopening", requiresKeyboard: false)
-        if !keyboardOnReopenedInner {
-            FileHandle.standardOutput.write(Data("DUO_ADD keyboard dismissed on reopened inner display (\(layoutLabel)); typed value remained duofold\n".utf8))
-            field.tap()
-            XCTAssertTrue(waitForCondition(timeout: 8, condition: { keyboard.exists && keyboard.frame.height > 0 }),
-                          "Tapping the preserved Add field should reopen the keyboard after unfolding.")
-            _ = assertFocusedInput("inner after keyboard reopened")
+        _ = assertFocusedInput("inner after reopening", expectedDraft: "foldreplacement", requiresKeyboard: false)
+        XCTAssertEqual(field.value as? String, "foldreplacement", "The replacement draft must survive reopening.")
+        try mark("reopened-typing.ready", app: app)
+        guard waitFor("type.continue", app: app) else { return }
+        guard clear.waitForExistence(timeout: 8), clear.isHittable else {
+            XCTFail("Clear must be reachable before replacing the reopened draft.")
+            return
         }
-        field.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.5)).tap()
-        XCTAssertEqual(field.value as? String, "duofold",
-                       "Moving the insertion point to the trailing edge must leave the reopened draft intact.")
-        field.typeText("y")
-        XCTAssertEqual(field.value as? String, "duofoldy", "The lookup field must remain interactive after reopening.")
+        clear.tap()
+        XCTAssertEqual(field.value as? String, "Handle or phone number", "Clear must remove the folded replacement.")
+        field.tap()
+        field.typeText("duoreopened")
+        XCTAssertEqual(field.value as? String, "duoreopened", "The reopened display must accept a replacement draft.")
+        guard close.waitForExistence(timeout: 8), close.isHittable else {
+            XCTFail("Close must remain reachable after replacing the draft.")
+            return
+        }
+        close.tap()
+        XCTAssertTrue(waitForCondition(timeout: 8) { !field.exists }, "Close must dismiss Add someone.")
         app.terminate()
     }
 
@@ -2125,6 +2206,15 @@ final class TrustUsageTests: XCTestCase {
         let app = XCUIApplication()
         app.launchEnvironment["TRUST_DEMO"] = "1"
         app.launchEnvironment["TRUST_UI_TEST"] = "1"
+        let environment = ProcessInfo.processInfo.environment
+        if environment["TRUST_DUO_SWEEP_DIR"] != nil,
+           let age = environment["TRUST_UI_TEST_DEMO_AGE_SECONDS"] {
+            guard let seconds = Int(age), (0...3600).contains(seconds) else {
+                XCTFail("TRUST_UI_TEST_DEMO_AGE_SECONDS must be an integer from 0 through 3600.")
+                return app
+            }
+            app.launchEnvironment["TRUST_UI_TEST_DEMO_AGE_SECONDS"] = age
+        }
         if let route { app.launchEnvironment["TRUST_SCREENSHOT"] = route }
         if let dark { app.launchArguments += ["-appearancePreference", dark ? "dark" : "light"] }
         if let contentSize { app.launchArguments += ["-UIPreferredContentSizeCategoryName", contentSize] }

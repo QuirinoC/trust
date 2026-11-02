@@ -449,13 +449,34 @@ public enum TrustCopy {
     public static func snapshotAt(_ time: String) -> String { format("snapshot_at", defaultValue: "Snapshot · %@", time) }
     public static func updatedAt(_ time: String) -> String { format("updated_at", defaultValue: "Updated %@", time) }
     public static var locationUnavailable: String { value("location_unavailable", defaultValue: "Location unavailable") }
+    public static func relativeDate(_ date: Date, relativeTo now: Date) -> String {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.locale = TrustAppLanguage.currentLocale
+        formatter.calendar = .autoupdatingCurrent
+        formatter.dateTimeStyle = .named
+        formatter.unitsStyle = .full
+        return formatter.localizedString(for: date, relativeTo: now)
+    }
+    public static func formattedDateTime(
+        _ date: Date,
+        dateStyle: Date.FormatStyle.DateStyle,
+        timeStyle: Date.FormatStyle.TimeStyle
+    ) -> String {
+        date.formatted(Date.FormatStyle(
+            date: dateStyle,
+            time: timeStyle,
+            locale: TrustAppLanguage.currentLocale,
+            calendar: .autoupdatingCurrent,
+            timeZone: .autoupdatingCurrent
+        ))
+    }
     public static func locationFreshness(timestamp: Date, now: Date) -> String {
-        let updated = updatedAt(timestamp.formatted(.relative(presentation: .named)))
+        let updated = updatedAt(relativeDate(timestamp, relativeTo: now))
         guard LocationFreshness.status(timestamp: timestamp, now: now) == .stale else { return updated }
         return format("location_may_be_stale", defaultValue: "May be out of date · %@", updated)
     }
     public static func locationAgeCaption(timestamp: Date, now: Date) -> String {
-        timestamp.formatted(.relative(presentation: .named))
+        relativeDate(timestamp, relativeTo: now)
     }
     public static func authorizedLiveLocationStatus(timestamp: Date?, now: Date, presence: String? = nil) -> String {
         let location = timestamp.map { locationFreshness(timestamp: $0, now: now) } ?? locationUnavailable
@@ -463,7 +484,9 @@ public enum TrustCopy {
     }
     public static func pinAccessibility(name: String, live: Bool, timestamp: Date?, now: Date) -> String {
         guard let timestamp else { return "\(name), \(locationUnavailable)" }
-        let status = live ? locationFreshness(timestamp: timestamp, now: now) : snapshotAt(timestamp.formatted(date: .abbreviated, time: .shortened))
+        let status = live
+            ? locationFreshness(timestamp: timestamp, now: now)
+            : snapshotAt(formattedDateTime(timestamp, dateStyle: .abbreviated, timeStyle: .shortened))
         return "\(name), \(status)"
     }
     public static func distanceFromYou(_ distance: String) -> String {

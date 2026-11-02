@@ -290,7 +290,11 @@ struct PhoneView: View {
     @ViewBuilder
     private func retryNotice(now: Date) -> some View {
         if model.phoneRetrySeconds(at: now) > 0, let deadline = model.phoneRetryDeadline {
-            Text(TrustCopy.phoneRetryExplanation(deadline.formatted(date: Calendar.current.isDateInToday(deadline) ? .omitted : .abbreviated, time: .standard)))
+            Text(TrustCopy.phoneRetryExplanation(TrustCopy.formattedDateTime(
+                deadline,
+                dateStyle: Calendar.current.isDateInToday(deadline) ? .omitted : .abbreviated,
+                timeStyle: .standard
+            )))
                 .trustFont(13)
                 .foregroundStyle(palette.muted)
                 .fixedSize(horizontal: false, vertical: true)

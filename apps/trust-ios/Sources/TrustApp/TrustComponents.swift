@@ -418,7 +418,7 @@ struct TrustOfflineBanner: View {
             Image(systemName: "wifi.slash")
                 .font(.system(size: 12, weight: .semibold))
                 .accessibilityHidden(true)
-            Text(TrustCopy.offlineBanner(since: since.formatted(date: .omitted, time: .shortened)))
+            Text(TrustCopy.offlineBanner(since: TrustCopy.formattedDateTime(since, dateStyle: .omitted, timeStyle: .shortened)))
                 .trustFont(12, weight: .medium)
                 .lineLimit(1)
             Spacer(minLength: 8)

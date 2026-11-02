@@ -238,7 +238,7 @@ struct ViewScreen: View {
             parts.append(TrustCopy.distanceFromYou(distance))
         }
         if let point {
-            let time = point.timestamp.formatted(date: .abbreviated, time: .shortened)
+            let time = TrustCopy.formattedDateTime(point.timestamp, dateStyle: .abbreviated, timeStyle: .shortened)
             parts.append(isAvailable
                 ? "\(TrustCopy.locationFreshness(timestamp: point.timestamp, now: now)) · \(time)"
                 : TrustCopy.snapshotAt(time))
@@ -354,39 +354,69 @@ struct TrustMapPin: View {
     var selected = false
     var stale = false
     var ageCaption: String?
+    var pinLayout: TrustMapPinGeometryLayout?
+    var onCaptionSizeChange: ((CGSize) -> Void)?
     @Environment(\.trustPalette) private var palette
+    @State private var measuredCaptionSize: CGSize = .zero
 
     var body: some View {
-        VStack(spacing: 2) {
-            Text(initials)
-                .font(TrustTheme.chrome(13, weight: .bold))
-                .foregroundStyle(palette.accentOn)
-                .frame(width: 40, height: 40)
-                .background(live ? palette.pinLive : palette.pinLook)
-                .clipShape(Circle())
-                .overlay(Circle().stroke(selected ? palette.accent : palette.chrome, lineWidth: 3))
-                .overlay(alignment: .topTrailing) {
-                    if stale {
-                        Image(systemName: "clock.fill")
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundStyle(palette.danger)
-                            .frame(width: 16, height: 16)
-                            .background(palette.chrome, in: Circle())
-                            .offset(x: 3, y: -2)
-                            .accessibilityHidden(true)
+        Group {
+            if let pinLayout {
+                ZStack(alignment: .topLeading) {
+                    disc
+                        .position(x: pinLayout.discFrameInContent.midX, y: pinLayout.discFrameInContent.midY)
+                    if let ageCaption, let captionFrame = pinLayout.captionFrameInContent {
+                        caption(ageCaption)
+                            .position(x: captionFrame.midX, y: captionFrame.midY)
                     }
                 }
-                .shadow(color: .black.opacity(0.22), radius: 5, y: 2)
-            if let ageCaption {
-                Text(ageCaption)
-                    .font(TrustTheme.chrome(9, weight: .semibold))
-                    .foregroundStyle(palette.ink)
-                    .padding(.horizontal, 4)
-                    .padding(.vertical, 2)
-                    .background(palette.paper.opacity(0.94), in: Capsule())
-                    .lineLimit(1)
+                .frame(width: pinLayout.contentSize.width, height: pinLayout.contentSize.height, alignment: .topLeading)
+                .contentShape(Rectangle())
+            } else {
+                VStack(spacing: 2) {
+                    disc
+                    if let ageCaption { caption(ageCaption) }
+                }
             }
         }
+    }
+
+    private var disc: some View {
+        Text(initials)
+            .font(TrustTheme.chrome(13, weight: .bold))
+            .foregroundStyle(palette.accentOn)
+            .frame(width: 40, height: 40)
+            .background(live ? palette.pinLive : palette.pinLook)
+            .clipShape(Circle())
+            .overlay(Circle().stroke(selected ? palette.accent : palette.chrome, lineWidth: 3))
+            .overlay(alignment: .topTrailing) {
+                if stale {
+                    Image(systemName: "clock.fill")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(palette.danger)
+                        .frame(width: 16, height: 16)
+                        .background(palette.chrome, in: Circle())
+                        .offset(x: 3, y: -2)
+                        .accessibilityHidden(true)
+                }
+            }
+            .shadow(color: .black.opacity(0.22), radius: 5, y: 2)
+    }
+
+    private func caption(_ text: String) -> some View {
+        Text(text)
+            .font(TrustTheme.chrome(9, weight: .semibold))
+            .foregroundStyle(palette.ink)
+            .padding(.horizontal, 4)
+            .padding(.vertical, 2)
+            .background(palette.paper.opacity(0.94), in: Capsule())
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
+            .onGeometryChange(for: CGSize.self) { $0.size } action: { size in
+                guard size.width > 0, size.height > 0, size != measuredCaptionSize else { return }
+                measuredCaptionSize = size
+                onCaptionSizeChange?(size)
+            }
     }
 }
 

@@ -35,6 +35,8 @@ Prefer ordinary language about who can see what and when. Never imply that the p
 
 The closed Duo keeps the compact phone experience. At 650 pt of available content width and above, People places the map on the left with a 320 pt minimum canvas and people/detail navigation on the right with a 330 pt minimum panel. The dedicated Map route uses the full navigation stack width and owns one map beside its selected-person panel; do not keep a second parent People map visible there. Preserve the same navigation path, selected person, and map state across folding and unfolding. Keep profile and sharing controls legible in both appearances and at larger text sizes; device-specific test evidence belongs in `FEATURE-E2E-PLAN.md`.
 
+Keep the full localized freshness capsule readable at map edges and around nearby markers. Center it below the marker when there is room; move only the capsule inward or above its own marker when needed. Keep the marker at its geographic position and preserve deliberate map pans. Folding and unfolding must preserve the selected person and unsent Add-person text. Date, time and freshness labels follow the selected app language, including map captions and accessibility descriptions; retain the person’s current calendar and time zone.
+
 ## Product language
 
 Sharing is a per-person choice. Avoid implying that Trust guarantees delivery of push notifications or SMS beyond the verification flow. Describe map, presence, and activity only as implemented; distinguish a one-time snapshot from live sharing.

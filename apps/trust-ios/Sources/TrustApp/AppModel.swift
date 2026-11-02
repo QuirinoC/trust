@@ -1424,9 +1424,19 @@ final class AppModel: ObservableObject {
     private func publishDemoSnapshot() {
         guard let demo else { return }
         let pack = demo.makeCircleSnapshot()
+        let demoAgeOffset = uiTestDemoAgeOffset
+        let members = demoAgeOffset.map { seconds in
+            pack.members.map { original -> TrustedPerson in
+                guard var point = original.livePoint else { return original }
+                point.timestamp = Date().addingTimeInterval(-seconds)
+                var aged = original
+                aged.livePoint = point
+                return aged
+            }
+        } ?? pack.members
         snapshot = CircleSnapshot(
             you: pack.you,
-            members: pack.members,
+            members: members,
             coverage: pack.coverage,
             pendingInviteCode: pack.invite,
             lookLog: pack.log,
@@ -1443,6 +1453,18 @@ final class AppModel: ObservableObject {
         if !isScreenshotLaunch {
             syncLocationSharing()
         }
+    }
+
+    private var uiTestDemoAgeOffset: TimeInterval? {
+        #if DEBUG
+        guard isUITestLaunch, isDemoMode,
+              let value = ProcessInfo.processInfo.environment["TRUST_UI_TEST_DEMO_AGE_SECONDS"],
+              let seconds = TimeInterval(value), seconds >= LocationFreshness.staleAfter + 1,
+              seconds <= 86_400 else { return nil }
+        return seconds
+        #else
+        return nil
+        #endif
     }
 
     private func startDemoTicks() {

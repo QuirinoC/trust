@@ -460,7 +460,7 @@ class ResultValidationTests(unittest.TestCase):
     def test_standard_lane_allows_only_explicit_setup_skip_names_and_rechecks_existing_result(self) -> None:
         expected = set(runner.ALL_REAL_CASES) | {
             "testOptInDuoFoldTransitionPreservesPeopleNavigation",
-            "testOptInDuoFoldPreservesFocusedAddPersonInput",
+            "testOptInDuoFoldPreservesAddDraftAndAllowsReplacement",
         }
         self.assertEqual(set(runner.EXPECTED_STANDARD_SKIP_CASES), expected)
 

@@ -69,7 +69,7 @@ FAULT_CASE_CANDIDATES = (
 ALL_REAL_CASES = tuple(re.findall(r"^\s+func\s+(test[A-Za-z0-9_]+)\s*\(", TEST_SOURCE.read_text(encoding="utf-8"), re.MULTILINE))
 STANDARD_OPT_IN_SETUP_SKIP_CASES = frozenset({
     "testOptInDuoFoldTransitionPreservesPeopleNavigation",
-    "testOptInDuoFoldPreservesFocusedAddPersonInput",
+    "testOptInDuoFoldPreservesAddDraftAndAllowsReplacement",
 })
 EXPECTED_STANDARD_SKIP_CASES = frozenset(ALL_REAL_CASES) | STANDARD_OPT_IN_SETUP_SKIP_CASES
 FAULT_CASES = tuple(FAULT_CASE_CANDIDATES)
