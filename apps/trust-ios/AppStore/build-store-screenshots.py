@@ -10,17 +10,17 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 
 ROOT = Path(__file__).resolve().parent
-SET = ROOT / "Screenshots" / "2026-10"
+SET = ROOT / "Screenshots" / "2026-11-02"
 FONT_BOLD = "/System/Library/Fonts/Avenir Next.ttc"
 FONT_REGULAR = "/System/Library/Fonts/HelveticaNeue.ttc"
 
 STORY = [
     ("map", "Share your location.\nSee who checks.", "Review location checks recorded in Trust."),
-    ("look", "One check. One snapshot.", "Confirm a check to request the latest available location."),
-    ("share", "Choose what they can see.", "Sharing starts Off. Choose a mode for each person."),
-    ("view", "Live sharing is optional.", "Trust Plus includes Always live sharing."),
-    ("log", "Review location activity.", "Activity records confirmed checks and live views."),
-    ("lookup", "Adding someone doesn’t start\nsharing.", "Accepting a connection leaves sharing Off both ways."),
+    ("share", "Choose for each person.", "Sharing starts Off. Choose a mode when you’re ready."),
+    ("look", "One check. One snapshot.", "With Sealed, confirm a Look for their latest available location."),
+    ("log", "See checks made in Trust.", "Review recorded location checks and views in Activity."),
+    ("view", "Live sharing, by choice.", "Share Always with Plus. Recipients can view for free."),
+    ("lookup", "Connect first. Share when ready.", "Find someone by handle or an opted-in phone number."),
 ]
 
 
@@ -84,25 +84,17 @@ def make_panel(source: Path, output: Path, index: int, story: tuple[str, str, st
     if screen.size != expected:
         raise ValueError(f"{source} is {screen.width}×{screen.height}, expected {expected[0]}×{expected[1]}")
 
-    if expected == (2064, 2752):
-        # iPad Simulator captures an OS window-resize affordance over this blank
-        # corner. It is outside the app UI and must not appear in store artwork.
-        corner_color = screen.getpixel((screen.width - 81, screen.height - 81))
-        ImageDraw.Draw(screen).rectangle(
-            (screen.width - 80, screen.height - 80, screen.width - 1, screen.height - 1),
-            fill=corner_color,
-        )
-
     width, height = expected
     factor = min(width / 1320, 1.25)
-    pad = int(88 * factor)
+    is_duo_outer = expected == (1398, 2034)
+    pad = 64 if is_duo_outer else int(88 * factor)
     canvas = vertical_background(expected, factor)
     draw = ImageDraw.Draw(canvas)
 
-    bold = font(FONT_BOLD, int(31 * factor), index=0)
-    title_font = font(FONT_BOLD, int(78 * factor), index=0)
-    body_font = font(FONT_REGULAR, int(31 * factor), index=0)
-    page_font = font(FONT_BOLD, int(20 * factor), index=2)
+    bold = font(FONT_BOLD, 25 if is_duo_outer else int(31 * factor), index=0)
+    title_font = font(FONT_BOLD, 74 if is_duo_outer else int(78 * factor), index=0)
+    body_font = font(FONT_REGULAR, 33 if is_duo_outer else int(31 * factor), index=0)
+    page_font = font(FONT_BOLD, 18 if is_duo_outer else int(20 * factor), index=2)
 
     # Keep these light-mode annotation tokens aligned with TrustPalette.paper.
     ink = (20, 35, 60)
@@ -110,13 +102,13 @@ def make_panel(source: Path, output: Path, index: int, story: tuple[str, str, st
     accent = (36, 92, 231)
     line = (220, 227, 239)
 
-    top = int(58 * factor)
+    top = 26 if is_duo_outer else int(58 * factor)
     draw.text((pad, top), "TRUST", font=bold, fill=ink)
     page_label = f"{index:02d} / {len(STORY):02d}"
     page_box = draw.textbbox((0, 0), page_label, font=page_font)
     draw.text((width - pad - (page_box[2] - page_box[0]), top + int(5 * factor)), page_label, font=page_font, fill=muted)
 
-    y = int(132 * factor)
+    y = 88 if is_duo_outer else int(132 * factor)
     max_text_width = width - pad * 2
     title_lines = wrap_text(draw, headline, title_font, max_text_width)
     title_bbox = title_font.getbbox("Ag")
@@ -133,8 +125,8 @@ def make_panel(source: Path, output: Path, index: int, story: tuple[str, str, st
         draw.text((pad, y), line_text, font=body_font, fill=muted)
         y += body_line_height
 
-    screen_top = max(int(420 * factor), y + int(26 * factor))
-    bottom = int(28 * factor)
+    screen_top = max(330, y + 8) if is_duo_outer else max(int(420 * factor), y + int(26 * factor))
+    bottom = 32 if is_duo_outer else int(28 * factor)
     max_screen_height = height - screen_top - bottom
     max_screen_width = width - pad * 2
     ratio = screen.width / screen.height
@@ -154,28 +146,80 @@ def make_panel(source: Path, output: Path, index: int, story: tuple[str, str, st
     draw = ImageDraw.Draw(canvas)
     draw.rounded_rectangle(frame, radius=int(56 * factor), fill=(255, 255, 255), outline=line, width=max(1, int(2 * factor)))
     resized = screen.resize((screen_width, screen_height), Image.Resampling.LANCZOS)
-    mask = Image.new("L", (screen_width, screen_height), 0)
-    ImageDraw.Draw(mask).rounded_rectangle((0, 0, screen_width - 1, screen_height - 1), radius=int(48 * factor), fill=255)
-    canvas.paste(resized, (x, screen_top), mask)
+    if is_duo_outer:
+        canvas.paste(resized, (x, screen_top))
+    else:
+        mask = Image.new("L", (screen_width, screen_height), 0)
+        ImageDraw.Draw(mask).rounded_rectangle((0, 0, screen_width - 1, screen_height - 1), radius=int(48 * factor), fill=255)
+        canvas.paste(resized, (x, screen_top), mask)
 
     output.parent.mkdir(parents=True, exist_ok=True)
     canvas.convert("RGB").save(output, format="PNG", optimize=True)
     print(f"{output}: {width}×{height}, RGB")
 
 
-def make_iphone_65_panels() -> None:
-    """Create the accepted 6.5-inch listing size from the finished 6.9-inch panels."""
-    source_dir = SET / "iphone-69"
-    output_dir = SET / "iphone-65"
-    output_dir.mkdir(parents=True, exist_ok=True)
-    for stale_panel in output_dir.glob("*.png"):
-        stale_panel.unlink()
-    for source in sorted(source_dir.glob("*.png")):
-        image = Image.open(source).convert("RGB")
-        image = image.resize((1242, 2688), Image.Resampling.LANCZOS)
-        output = output_dir / source.name
-        image.save(output, format="PNG", optimize=True)
-        print(f"{output}: 1242×2688, RGB")
+def make_duo_inner_panel(source: Path, output: Path, index: int, story: tuple[str, str, str]) -> None:
+    """Compose landscape Duo art with a compact caption band and full native capture."""
+    expected = (2853, 2007)
+    screen = Image.open(source).convert("RGB")
+    if screen.size != expected:
+        raise ValueError(f"{source} is {screen.width}×{screen.height}, expected {expected[0]}×{expected[1]}")
+
+    width, height = expected
+    factor = 1.0
+    pad = 96
+    canvas = vertical_background(expected, factor)
+    draw = ImageDraw.Draw(canvas)
+    ink = (20, 35, 60)
+    muted = (97, 112, 137)
+    line = (220, 227, 239)
+    brand_font = font(FONT_BOLD, 30, index=0)
+    title_font = font(FONT_BOLD, 88, index=0)
+    body_font = font(FONT_REGULAR, 38, index=0)
+    page_font = font(FONT_BOLD, 20, index=2)
+
+    draw.text((pad, 36), "TRUST", font=brand_font, fill=ink)
+    page_label = f"{index:02d} / {len(STORY):02d}"
+    page_box = draw.textbbox((0, 0), page_label, font=page_font)
+    draw.text((width - pad - (page_box[2] - page_box[0]), 42), page_label, font=page_font, fill=muted)
+
+    title_lines = wrap_text(draw, story[1].replace("\n", " "), title_font, width - pad * 2)
+    body_lines = wrap_text(draw, story[2], body_font, width - pad * 2)
+    if len(title_lines) > 2 or len(body_lines) > 2:
+        raise ValueError(f"Duo caption exceeds two lines for {source.name}")
+    y = 100
+    title_box = title_font.getbbox("Ag")
+    title_height = title_box[3] - title_box[1] + 4
+    for line_text in title_lines:
+        draw.text((pad, y), line_text, font=title_font, fill=ink)
+        y += title_height
+    y += 12
+    body_box = body_font.getbbox("Ag")
+    body_height = body_box[3] - body_box[1] + 4
+    for line_text in body_lines:
+        draw.text((pad, y), line_text, font=body_font, fill=muted)
+        y += body_height
+
+    image_top = y + 24
+    max_image_height = height - image_top - 32
+    max_image_width = width - pad * 2
+    scale = min(max_image_width / screen.width, max_image_height / screen.height)
+    image_size = (round(screen.width * scale), round(screen.height * scale))
+    image_x = (width - image_size[0]) // 2
+    image_y = image_top + (max_image_height - image_size[1]) // 2
+    frame_padding = 8
+    frame = (image_x - frame_padding, image_y - frame_padding,
+             image_x + image_size[0] + frame_padding, image_y + image_size[1] + frame_padding)
+    shadow = Image.new("RGBA", expected, (0, 0, 0, 0))
+    ImageDraw.Draw(shadow).rounded_rectangle(frame, radius=28, fill=(15, 31, 62, 38))
+    shadow = shadow.filter(ImageFilter.GaussianBlur(18))
+    canvas = Image.alpha_composite(canvas.convert("RGBA"), shadow).convert("RGB")
+    ImageDraw.Draw(canvas).rounded_rectangle(frame, radius=28, fill=(255, 255, 255), outline=line, width=2)
+    # Resize proportionally to fit; preserve every captured screen edge and pixel region.
+    canvas.paste(screen.resize(image_size, Image.Resampling.LANCZOS), (image_x, image_y))
+    output.parent.mkdir(parents=True, exist_ok=True)
+    canvas.convert("RGB").save(output, format="PNG", optimize=True)
+    print(f"{output}: {width}×{height}, RGB")
 
 
 def export_website_screenshots() -> None:
@@ -208,7 +252,7 @@ def validate_sources(
         for route, _, _ in STORY
     ]
     if include_website:
-        required.append((SET / "raw" / "iphone-69" / "phone.png", devices["iphone"][1]))
+        required.append((SET / "raw" / "iphone-69" / "phone.png", devices["iphone-69"][1]))
 
     problems: list[str] = []
     for source, expected in required:
@@ -234,14 +278,22 @@ def validate_sources(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--device", choices=("iphone", "ipad", "all"), default="all")
+    parser.add_argument("--device", choices=("iphone-69", "iphone-65", "iphone-medium", "ipad", "duo-outer", "duo-inner", "all"), default="all")
+    parser.add_argument("--set-dir", type=Path, help="Dated set directory (defaults to the current approved work date)")
     parser.add_argument("--website", action="store_true", help="Export optimized screenshots to jointrust-web/public after the iPhone panels are built")
     args = parser.parse_args()
-    if args.website and args.device == "ipad":
-        parser.error("--website requires --device iphone or --device all")
+    if args.website and args.device in ("ipad", "iphone-medium", "iphone-65", "duo-outer", "duo-inner"):
+        parser.error("--website requires --device iphone-69 or --device all")
+    global SET
+    if args.set_dir:
+        SET = args.set_dir if args.set_dir.is_absolute() else ROOT / "Screenshots" / args.set_dir
     devices = {
-        "iphone": ("iphone-69", (1320, 2868)),
+        "iphone-69": ("iphone-69", (1320, 2868)),
+        "iphone-65": ("iphone-65", (1242, 2688)),
+        "iphone-medium": ("iphone-medium", (1206, 2622)),
         "ipad": ("ipad-13", (2064, 2752)),
+        "duo-outer": ("duo-outer", (1398, 2034)),
+        "duo-inner": ("duo-inner", (2853, 2007)),
     }
     selected = list(devices) if args.device == "all" else [args.device]
     validate_sources(selected, devices, args.website)
@@ -250,13 +302,14 @@ def main() -> None:
         raw = SET / "raw" / folder
         out = SET / folder
         out.mkdir(parents=True, exist_ok=True)
-        for stale_panel in out.glob("*.png"):
-            stale_panel.unlink()
         for index, story in enumerate(STORY, 1):
             route = story[0]
-            make_panel(raw / f"{route}.png", out / f"{index:02d}-{route}.png", index, story, expected)
-    if "iphone" in selected:
-        make_iphone_65_panels()
+            source = raw / f"{route}.png"
+            output = out / f"{index:02d}-{route}.png"
+            if device == "duo-inner":
+                make_duo_inner_panel(source, output, index, story)
+            else:
+                make_panel(source, output, index, story, expected)
     if args.website:
         export_website_screenshots()
 

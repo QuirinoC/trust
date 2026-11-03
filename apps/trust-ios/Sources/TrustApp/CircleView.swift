@@ -26,6 +26,11 @@ struct CircleView: View {
     @State private var lastSettledCamera: MapCamera?
     @State private var cameraCorrectionAttempts = 0
     @State private var pendingCameraCorrectionOverflow: CGFloat?
+    @State private var cameraZoomOutWasClamped = false
+    @State private var fallbackCameraTargetID: UUID?
+    @State private var fallbackViewportAtFocus: CGSize?
+    @State private var isAutomaticPeopleFit = false
+    @State private var isExplicitRecenterFit = false
     @State private var cameraSettledRevision = 0
     @State private var cameraCorrectionAppliedRevision = -1
     @State private var cameraFitGeneration = 0
@@ -96,10 +101,29 @@ struct CircleView: View {
             fitOrFocusSelectedView()
         }
         .onChange(of: pinLocations) { _, _ in
+            if let fallbackCameraTargetID,
+               !pins.contains(where: { $0.id == fallbackCameraTargetID }) {
+                self.fallbackCameraTargetID = nil
+                fallbackViewportAtFocus = nil
+                cameraZoomOutWasClamped = false
+            }
             resetCameraBoundsCorrection(preservingSettledCamera: usesNativeAutomaticFit)
-            fitOrFocusSelectedView()
+            fitOrFocusSelectedView(animated: false)
         }
         .onChange(of: mapViewportLocalBounds) { _, bounds in
+            let viewportSize = bounds.size
+            let viewportChangedMeaningfully = fallbackViewportAtFocus.map { originalSize in
+                abs(viewportSize.width - originalSize.width) >= 32
+                    || abs(viewportSize.height - originalSize.height) >= 32
+            } ?? false
+            if fallbackCameraTargetID != nil,
+               viewportChangedMeaningfully,
+               !userMovedMap,
+               !isShowingSpecificPersonView {
+                fallbackCameraTargetID = nil
+                fallbackViewportAtFocus = nil
+                cameraZoomOutWasClamped = false
+            }
             resetCameraBoundsCorrection(preservingSettledCamera: usesNativeAutomaticFit)
             guard bounds.width > 0, bounds.height > 0 else { return }
             if usesNativeAutomaticFit, lastSettledCamera != nil {
@@ -120,16 +144,40 @@ struct CircleView: View {
                 fitOrFocusSelectedView()
             }
         }
-        .onChange(of: model.location.lastFix) { _, fix in
-            guard fix != nil, !didFitInitialCamera, !userMovedMap else { return }
-            didFitInitialCamera = true
-            fitOrFocusSelectedView()
+        .onChange(of: model.location.lastFix) { previousFix, fix in
+            guard fix != nil, !userMovedMap else { return }
+            if previousFix == nil {
+                fallbackCameraTargetID = nil
+                fallbackViewportAtFocus = nil
+                cameraZoomOutWasClamped = false
+                didFitInitialCamera = true
+                fitOrFocusSelectedView()
+            } else if !didFitInitialCamera {
+                didFitInitialCamera = true
+                fitOrFocusSelectedView()
+            } else if fallbackCameraTargetID != nil,
+                      !isShowingSpecificPersonView,
+                      let fix,
+                      hasNearbyAuthorizedPinCluster(around: fix.coordinate),
+                      let previousFix,
+                      !hasNearbyAuthorizedPinCluster(around: previousFix.coordinate) {
+                // A later GPS fix can turn a formerly far-away People map into a
+                // normal nearby fit. Refit only on that transition, never for
+                // every location update, and preserve a selected-person view/pan.
+                fallbackCameraTargetID = nil
+                fallbackViewportAtFocus = nil
+                cameraZoomOutWasClamped = false
+                fitOrFocusSelectedView()
+            }
         }
         .onChange(of: position.positionedByUser) { _, movedByUser in
             model.traceUIInteraction("people map user moved=\(movedByUser)")
             if movedByUser {
                 userMovedMap = true
                 usesNativeAutomaticFit = false
+                fallbackCameraTargetID = nil
+                fallbackViewportAtFocus = nil
+                cameraZoomOutWasClamped = false
                 resetCameraBoundsCorrection()
             }
         }
@@ -243,29 +291,33 @@ struct CircleView: View {
                     } ?? .bottom
                     Annotation(pin.name, coordinate: pin.point.coordinate, anchor: annotationAnchor) {
                         TimelineView(.periodic(from: .now, by: 60)) { context in
-                            TrustMapPin(
-                                initials: pin.name.trustInitials,
-                                live: pin.live,
-                                stale: pin.live && LocationFreshness.status(timestamp: pin.point.timestamp, now: context.date) == .stale,
-                                ageCaption: pin.live ? TrustCopy.locationAgeCaption(timestamp: pin.point.timestamp, now: context.date) : nil,
-                                pinLayout: pinLayout,
-                                onCaptionSizeChange: { size in
-                                    guard mapCaptionSizes[pin.id] != size else { return }
-                                    mapCaptionSizes[pin.id] = size
+                            Button {
+                                activateMapPin(pin.id)
+                            } label: {
+                                TrustMapPin(
+                                    initials: pin.name.trustInitials,
+                                    live: pin.live,
+                                    stale: pin.live && LocationFreshness.status(timestamp: pin.point.timestamp, now: context.date) == .stale,
+                                    ageCaption: pin.live ? TrustCopy.locationAgeCaption(timestamp: pin.point.timestamp, now: context.date) : nil,
+                                    pinLayout: pinLayout,
+                                    onCaptionSizeChange: { size in
+                                        guard mapCaptionSizes[pin.id] != size else { return }
+                                        mapCaptionSizes[pin.id] = size
+                                    }
+                                )
+                                .frame(minWidth: 44, minHeight: 44)
+                                .onGeometryChange(for: CGSize.self) { $0.size } action: { size in
+                                    guard size.width > 0, size.height > 0,
+                                          mapAnnotationSizes[pin.id] != size else { return }
+                                    mapAnnotationSizes[pin.id] = size
                                 }
-                            )
-                            .frame(minWidth: 44, minHeight: 44)
-                            .onGeometryChange(for: CGSize.self) { $0.size } action: { size in
-                                guard size.width > 0, size.height > 0,
-                                      mapAnnotationSizes[pin.id] != size else { return }
-                                mapAnnotationSizes[pin.id] = size
+                                .contentShape(Rectangle())
                             }
-                            .contentShape(Rectangle())
+                            .buttonStyle(.plain)
                             .accessibilityElement(children: .ignore)
                             .accessibilityLabel(TrustCopy.pinAccessibility(name: pin.name, live: pin.live, timestamp: pin.point.timestamp, now: context.date))
                             .accessibilityHint(TrustCopy.viewLocation(name: pin.name.trustFirstName))
                             .accessibilityAddTraits(.isButton)
-                            .accessibilityAction(.default) { activateMapPin(pin.id) }
                             .accessibilityIdentifier("people-map-pin-\(pin.id.uuidString.lowercased())")
                         }
                     }
@@ -322,6 +374,9 @@ struct CircleView: View {
                 }
                 let distanceComparison: String
                 if let requestedCameraDistance, requestedCameraDistance.isFinite, requestedCameraDistance > 0 {
+                    if context.camera.distance < requestedCameraDistance * 0.98 {
+                        cameraZoomOutWasClamped = true
+                    }
                     distanceComparison = String(
                         format: "distance-request=%.1f distance-applied=%.1f ratio=%.3f",
                         requestedCameraDistance,
@@ -374,9 +429,6 @@ struct CircleView: View {
             .onChange(of: cameraCorrectionRequestToken) { _, _ in
                 scheduleCameraBoundsCorrection(using: proxy)
             }
-            .simultaneousGesture(SpatialTapGesture().onEnded { event in
-                activateMapPin(at: event.location, using: proxy)
-            })
             .onAppear { scheduleCaptionLayoutRefresh(using: proxy) }
             .onDisappear {
                 captionLayoutTask?.cancel()
@@ -385,34 +437,6 @@ struct CircleView: View {
                 resetCameraBoundsCorrection()
             }
         }
-    }
-
-    private func activateMapPin(at location: CGPoint, using proxy: MapProxy) {
-        let projectedPins = pins.compactMap { pin -> (pin: AppModel.MapPin, bounds: CGRect)? in
-            guard let anchor = proxy.convert(pin.point.coordinate, to: .local) else { return nil }
-            let captionSize = pin.live ? mapCaptionSizes[pin.id] : nil
-            let placement = displayedCaptionPlacements[pin.id] ?? .centeredBelow
-            let stale = pin.live && LocationFreshness.status(timestamp: pin.point.timestamp, now: .now) == .stale
-            let layout = TrustMapCaptionLayout.pinGeometry(
-                anchor: .bottom,
-                captionSize: captionSize,
-                placement: placement,
-                stale: stale,
-                minimumFrame: CGSize(width: 44, height: 44)
-            )
-            return (pin, layout.hitBoundsToGeographicAnchor.offsetBy(dx: anchor.x, dy: anchor.y))
-        }
-        let exactMatches = projectedPins.filter { $0.bounds.contains(location) }
-        let candidates = exactMatches.isEmpty
-            ? projectedPins.filter { $0.bounds.insetBy(dx: -3, dy: -3).contains(location) }
-            : exactMatches
-        let hit = candidates.min { lhs, rhs in
-            let left = hypot(lhs.bounds.midX - location.x, lhs.bounds.midY - location.y)
-            let right = hypot(rhs.bounds.midX - location.x, rhs.bounds.midY - location.y)
-            return left < right
-        }
-        model.traceUIInteraction("people map spatial tap matched pin=\(hit != nil)")
-        if let hit { activateMapPin(hit.pin.id) }
     }
 
     private func activateMapPin(_ personID: UUID) {
@@ -468,6 +492,9 @@ struct CircleView: View {
 
     private var recenterButton: some View {
         Button {
+            fallbackCameraTargetID = nil
+            fallbackViewportAtFocus = nil
+            cameraZoomOutWasClamped = false
             model.requestMapRecenter {
                 fitAll(includeUser: true)
             }
@@ -669,8 +696,29 @@ struct CircleView: View {
     }
 
     private var cameraTargetPins: [AppModel.MapPin] {
-        guard case let .view(personID)? = model.circlePath.last else { return pins }
-        return pins.filter { $0.id == personID }
+        if case let .view(personID)? = model.circlePath.last {
+            return pins.filter { $0.id == personID }
+        }
+        if let fallbackCameraTargetID {
+            return pins.filter { $0.id == fallbackCameraTargetID }
+        }
+        if let fix = model.location.lastFix {
+            let nearbyPins = pins.filter {
+                isAuthorizedPin($0, near: fix.coordinate)
+            }
+            if !nearbyPins.isEmpty { return nearbyPins }
+            if isExplicitRecenterFit { return [] }
+        }
+        return pins
+    }
+
+    private func isAuthorizedPin(_ pin: AppModel.MapPin, near coordinate: CLLocationCoordinate2D) -> Bool {
+        abs(pin.point.coordinate.latitude - coordinate.latitude) < 0.35
+            && abs(pin.point.coordinate.longitude - coordinate.longitude) < 0.45
+    }
+
+    private func hasNearbyAuthorizedPinCluster(around coordinate: CLLocationCoordinate2D) -> Bool {
+        pins.contains { isAuthorizedPin($0, near: coordinate) }
     }
 
     private func cameraFootprints(using proxy: MapProxy) -> [TrustMapAnnotationFootprint] {
@@ -686,6 +734,23 @@ struct CircleView: View {
                 placement: placement,
                 stale: stale
             )
+        }
+    }
+
+    private func hasAuthorizedPinFootprint(in viewport: CGRect, using proxy: MapProxy) -> Bool {
+        pins.contains { pin in
+            guard let point = proxy.convert(pin.point.coordinate, to: .local) else { return false }
+            let captionSize = pin.live ? mapCaptionSizes[pin.id] : nil
+            let placement = displayedCaptionPlacements[pin.id] ?? .centeredBelow
+            let stale = pin.live && LocationFreshness.status(timestamp: pin.point.timestamp, now: .now) == .stale
+            let footprint = TrustMapCaptionLayout.footprint(
+                point: point,
+                anchor: .bottom,
+                captionSize: captionSize,
+                placement: placement,
+                stale: stale
+            )
+            return footprint.frame(at: point).intersects(viewport)
         }
     }
 
@@ -772,6 +837,21 @@ struct CircleView: View {
             guard correction.overflow < pendingCameraCorrectionOverflow - 0.5 else {
                 self.pendingCameraCorrectionOverflow = nil
                 cameraCorrectionAttempts = 3
+                if isAutomaticPeopleFit,
+                   cameraZoomOutWasClamped,
+                   mapViewportLocalBounds.width > 1,
+                   mapViewportLocalBounds.height > 1,
+                   !hasAuthorizedPinFootprint(in: mapViewportLocalBounds, using: proxy),
+                   model.location.lastFix.map({ !hasNearbyAuthorizedPinCluster(around: $0.coordinate) }) ?? true,
+                   let target = pins.first {
+                    fallbackCameraTargetID = target.id
+                    fallbackViewportAtFocus = mapViewportSize
+                    model.traceUIInteraction(
+                        "people map bounded fallback focus=first-authorized reason=native-zoom-cap-and-no-visible-pin"
+                    )
+                    focusMap(on: target.id)
+                    return
+                }
                 model.traceUIInteraction("people map annotation correction stopped without improvement")
                 return
             }
@@ -829,16 +909,21 @@ struct CircleView: View {
         cameraCorrectionAttempts = 0
         pendingCameraCorrectionOverflow = nil
         cameraCorrectionAppliedRevision = cameraSettledRevision
+        if !preservingSettledCamera { cameraZoomOutWasClamped = false }
         if !preservingSettledCamera { lastSettledCamera = nil }
     }
 
-    private func fitAll(includeUser: Bool = false) {
+    private func fitAll(includeUser: Bool = false, animated: Bool = true) {
+        // GPS-backed Recenter includes this device and excludes the bounded People
+        // fallback. If no own fix exists to include, retain the ordinary fit fallback.
+        isAutomaticPeopleFit = !includeUser || model.location.lastFix == nil
+        isExplicitRecenterFit = includeUser && model.location.lastFix != nil
         var coordinates = pins.map(\.point.coordinate)
         if includeUser, let fix = model.location.lastFix {
             coordinates.append(fix.coordinate)
         }
-        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.35)) {
-            if !includeUser, model.location.lastFix == nil {
+        withAnimation(animated && !reduceMotion ? .easeInOut(duration: 0.35) : nil) {
+            if model.location.lastFix == nil {
                 let alreadyAutomatic = usesNativeAutomaticFit
                 resetCameraBoundsCorrection(preservingSettledCamera: alreadyAutomatic)
                 requestedMapRect = nil
@@ -861,13 +946,15 @@ struct CircleView: View {
         }
     }
 
-    private func focusMap(on personID: UUID) {
+    private func focusMap(on personID: UUID, animated: Bool = true) {
+        isAutomaticPeopleFit = false
+        isExplicitRecenterFit = false
         guard let point = pins.first(where: { $0.id == personID })?.point else { return }
         let region = MKCoordinateRegion(
             center: point.coordinate,
             span: MKCoordinateSpan(latitudeDelta: 0.12, longitudeDelta: 0.12)
         )
-        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.35)) {
+        withAnimation(animated && !reduceMotion ? .easeInOut(duration: 0.35) : nil) {
             setCamera(to: region)
         }
     }
@@ -932,14 +1019,23 @@ struct CircleView: View {
         )
     }
 
-    private func fitOrFocusSelectedView() {
+    private func fitOrFocusSelectedView(animated: Bool = true) {
         guard !userMovedMap else { return }
         if case let .view(personID)? = model.circlePath.last,
            pins.contains(where: { $0.id == personID }) {
-            focusMap(on: personID)
+            focusMap(on: personID, animated: animated)
+        } else if let fallbackCameraTargetID,
+                  pins.contains(where: { $0.id == fallbackCameraTargetID }) {
+            focusMap(on: fallbackCameraTargetID, animated: animated)
         } else {
-            fitAll()
+            fitAll(animated: animated)
         }
+    }
+
+    private var isShowingSpecificPersonView: Bool {
+        guard let route = model.circlePath.last else { return false }
+        if case .view = route { return true }
+        return false
     }
 
     /// Street-level camera. Pins spread across cities must not zoom the home map out to a globe.
