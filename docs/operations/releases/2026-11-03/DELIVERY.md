@@ -19,6 +19,10 @@ The current real-Apple-catalog [paywall review image](../../../../apps/trust-ios
 
 Developer and Paid Apps agreements are active following owner review and authentication. App Privacy has 12 published categories; the three corrected types are linked for functionality and not tracking. Normal listing metadata and subscription review notes were read back. The owner's intended launch is worldwide wherever Apple allows; actual territory configuration and provider/carrier coverage remain unchanged and unverified.
 
+## Backend compatibility follow-up
+
+The reviewed phone-challenge migration default/030 repair passed targeted 1/1 and full API 258/258 tests on disposable local PostgreSQL. Existing Staging API deployment `dep-dbl6afou01pc73a03i60` serves exact source `b3817229bdfa0c66810fb6afb5354b1b7739deab`; health checks returned 200 and invalid Apple authentication returned 401. App source and both iOS artifacts remain unchanged. See [production preflight](PRODUCTION-PREFLIGHT.md) for verified provider resources, recovery gaps, live web mismatches and test-evidence limits. Production rollout remains unperformed.
+
 ## Verification and remaining release gates
 
 R12 GPS recovery, denied-location Recenter and phone pin cases each passed 1/0/0; phone variants included light/dark, maximum accessibility text and three map detents. Nine earlier native map cases, including five verified Duo postures, are a separate checkpoint. Earlier package checks passed 133/133 and localization covered 599 keys across five translations. This is scoped evidence, **not a new complete current-source standard UI all-pass claim**.
