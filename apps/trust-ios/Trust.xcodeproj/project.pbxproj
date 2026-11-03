@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		B102030405060708090A0B0D /* AppStoreNativeCaptureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B102030405060708090A0B0B /* AppStoreNativeCaptureTests.swift */; };
 		A102030405060708090A0B0C /* SimulatorAppleServiceProbeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A102030405060708090A0B0B /* SimulatorAppleServiceProbeTests.swift */; };
 		00585D58BD36F3EFA822DA36 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 63242874F15C117B93D74C2D /* InfoPlist.strings */; };
 		01A53691B52FF4373F7E12C4 /* AccountHelpSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 828AE558DCB8F024B5255767 /* AccountHelpSheet.swift */; };
@@ -199,6 +200,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		B102030405060708090A0B0B /* AppStoreNativeCaptureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStoreNativeCaptureTests.swift; sourceTree = "<group>"; };
 		A102030405060708090A0B0B /* SimulatorAppleServiceProbeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SimulatorAppleServiceProbeTests.swift; sourceTree = "<group>"; };
 		057F2F9B693A9E0A942980E1 /* TrustSignInFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrustSignInFlowTests.swift; sourceTree = "<group>"; };
 		08790634D294CA76972CD49E /* TrustInternal.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = TrustInternal.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -354,6 +356,7 @@
 		32684315B9D6E187EA13538B /* TrustServiceUITests */ = {
 			isa = PBXGroup;
 			children = (
+				B102030405060708090A0B0B /* AppStoreNativeCaptureTests.swift */,
 				A102030405060708090A0B0B /* SimulatorAppleServiceProbeTests.swift */,
 				4302226952571B448B50AAFB /* RealPushAPNSE2ETests.swift */,
 			);
@@ -747,6 +750,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B102030405060708090A0B0D /* AppStoreNativeCaptureTests.swift in Sources */,
 				A102030405060708090A0B0C /* SimulatorAppleServiceProbeTests.swift in Sources */,
 				FA3CFD102051BDDE97FBCCA0 /* RealPushAPNSE2ETests.swift in Sources */,
 			);
@@ -913,7 +917,7 @@
 				CODE_SIGN_ENTITLEMENTS = Trust.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 49;
+				CURRENT_PROJECT_VERSION = 52;
 				DEVELOPMENT_TEAM = 3S529795M9;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				INFOPLIST_FILE = "Internal-Info.plist";
@@ -938,7 +942,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = "Trust-Staging.entitlements";
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 51;
+				CURRENT_PROJECT_VERSION = 52;
 				DEVELOPMENT_TEAM = 3S529795M9;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				INFOPLIST_FILE = "Staging-Info.plist";
@@ -1031,7 +1035,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = Trust.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 49;
+				CURRENT_PROJECT_VERSION = 52;
 				DEVELOPMENT_TEAM = 3S529795M9;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				INFOPLIST_FILE = Info.plist;
@@ -1126,7 +1130,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = Trust.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 49;
+				CURRENT_PROJECT_VERSION = 52;
 				DEVELOPMENT_TEAM = 3S529795M9;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				INFOPLIST_FILE = Info.plist;
@@ -1151,7 +1155,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = "Trust-Staging.entitlements";
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 51;
+				CURRENT_PROJECT_VERSION = 52;
 				DEVELOPMENT_TEAM = 3S529795M9;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				INFOPLIST_FILE = "Staging-Info.plist";
@@ -1178,7 +1182,7 @@
 				CODE_SIGN_ENTITLEMENTS = Trust.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 49;
+				CURRENT_PROJECT_VERSION = 52;
 				DEVELOPMENT_TEAM = 3S529795M9;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				INFOPLIST_FILE = "Internal-Info.plist";
