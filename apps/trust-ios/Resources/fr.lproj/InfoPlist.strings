@@ -1,6 +1,6 @@
 "CFBundleDisplayName" = "Trust";
 "NSCameraUsageDescription" = "Trust utilise l’appareil photo uniquement lorsque vous choisissez « Prendre une photo » pour définir votre photo de profil.";
-"NSLocationAlwaysAndWhenInUseUsageDescription" = "Trust utilise votre position en arrière-plan afin qu'un Look fonctionne toujours lorsque l'application est fermée. Un Look confirmé est enregistré et demande une notification. Trust ne vend pas votre emplacement.";
-"NSLocationAlwaysUsageDescription" = "Trust utilise votre position en arrière-plan afin qu'un Look fonctionne toujours lorsque l'application est fermée. Un Look confirmé est enregistré et demande une notification. Trust ne vend pas votre emplacement.";
-"NSLocationWhenInUseUsageDescription" = "Trust utilise votre position lorsque l'application est ouverte afin que vous puissiez vous voir sur la carte et voir les personnes qui partagent avec vous. Trust ne vend pas votre emplacement.";
-"PreciseEscrow" = "La confiance a besoin d'un emplacement précis, donc un look montre l'endroit actuel. Une localisation approximative ne suffit pas.";
+"NSLocationAlwaysAndWhenInUseUsageDescription" = "Trust utilise votre position en arrière-plan pour mettre à jour la position que vous avez choisi de partager et détecter votre arrivée ou votre départ du domicile lorsque vous activez cette fonction. iOS peut retarder les mises à jour.";
+"NSLocationAlwaysUsageDescription" = "Trust utilise votre position en arrière-plan pour mettre à jour la position que vous avez choisi de partager et détecter votre arrivée ou votre départ du domicile lorsque vous activez cette fonction. iOS peut retarder les mises à jour.";
+"NSLocationWhenInUseUsageDescription" = "Trust utilise votre position pour la partager avec les personnes que vous choisissez et définir votre domicile sur cet appareil. Votre position n'est pas nécessaire simplement pour consulter celle d'une personne qui la partage avec vous.";
+"PreciseEscrow" = "La position précise aide Trust à partager une position plus exacte avec les personnes que vous choisissez. Vous pouvez conserver la position approximative.";

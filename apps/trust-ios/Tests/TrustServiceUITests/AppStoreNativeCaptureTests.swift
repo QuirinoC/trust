@@ -33,6 +33,12 @@ final class AppStoreNativeCaptureTests: XCTestCase {
         peopleTab.tap()
         XCTAssertTrue(peopleTab.isSelected)
         let header = app.descendants(matching: .any)["people-map-header"]
+        if !header.waitForExistence(timeout: 10) {
+            let sharingTab = app.buttons["tab-sharing"]
+            if !header.exists && sharingTab.exists && sharingTab.isSelected && peopleTab.isHittable {
+                peopleTab.tap()
+            }
+        }
         XCTAssertTrue(header.waitForExistence(timeout: 10), app.debugDescription)
         let leo = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label CONTAINS[c] %@", "people-map-pin-", "Leo Park")).firstMatch
         let eli = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label CONTAINS[c] %@", "people-map-pin-", "Eli Brooks")).firstMatch

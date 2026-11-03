@@ -1061,19 +1061,19 @@ public enum TrustCopy {
     public static var locationWhenInUsePurpose: String {
         value(
             "location_when_in_use",
-            defaultValue: "Trust uses your location while the app is open so you can see yourself on the map and look at people who share with you. Trust does not sell your location."
+            defaultValue: "Trust uses your location to share it with the people you choose and to set Home on this device. Your location is not required just to view someone who shares with you."
         )
     }
     public static var locationAlwaysPurpose: String {
         value(
             "location_always",
-            defaultValue: "Trust uses your location in the background so a Look still works when the app is closed. A confirmed Look is recorded and requests a notification. Trust does not sell your location."
+            defaultValue: "Trust uses background location to update the location you chose to share and detect Home or Away when you enable it. iOS may delay updates."
         )
     }
     public static var locationPrecisePurpose: String {
         value(
             "location_precise",
-            defaultValue: "Trust needs precise location so a Look shows the current place. Approximate location is not enough."
+            defaultValue: "Precise location helps Trust share a more accurate location point with the people you choose. You can keep approximate location."
         )
     }
 

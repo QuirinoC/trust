@@ -26,6 +26,8 @@ struct CircleView: View {
     @State private var lastSettledCamera: MapCamera?
     @State private var cameraCorrectionAttempts = 0
     @State private var pendingCameraCorrectionOverflow: CGFloat?
+    @State private var cameraSettledRevision = 0
+    @State private var cameraCorrectionAppliedRevision = -1
     @State private var cameraFitGeneration = 0
     @State private var cameraCorrectionTask: Task<Void, Never>?
     @State private var cameraCorrectionRequestToken = 0
@@ -296,6 +298,7 @@ struct CircleView: View {
                 )
             }
             .onMapCameraChange(frequency: .onEnd) { context in
+                cameraSettledRevision &+= 1
                 lastSettledCamera = context.camera
                 let footprints = cameraFootprints(using: proxy)
                 let projectedBounds = footprints.map { $0.frame(at: $0.point) }
@@ -379,6 +382,7 @@ struct CircleView: View {
                 captionLayoutTask?.cancel()
                 captionLayoutTask = nil
                 captionLayoutGeneration &+= 1
+                resetCameraBoundsCorrection()
             }
         }
     }
@@ -714,6 +718,10 @@ struct CircleView: View {
         captionLayoutTask?.cancel()
         captionLayoutGeneration &+= 1
         let generation = captionLayoutGeneration
+        // MapProxy is a SwiftUI environment value whose lifetime is scoped to
+        // this MapReader update. Resolve it before suspending; retaining it in a
+        // Task can outlive a map re-layout (notably when Stage Manager resizes).
+        let updated = computeCaptionPlacements(using: proxy)
         captionLayoutTask = Task { @MainActor in
             do {
                 try await Task.sleep(for: .milliseconds(120))
@@ -721,7 +729,6 @@ struct CircleView: View {
                 return
             }
             guard !Task.isCancelled, generation == captionLayoutGeneration else { return }
-            let updated = computeCaptionPlacements(using: proxy)
             guard updated != displayedCaptionPlacements else { return }
             displayedCaptionPlacements = updated
             let measuredCount = pins.filter { $0.live && mapCaptionSizes[$0.id] != nil }.count
@@ -745,22 +752,7 @@ struct CircleView: View {
         guard !userMovedMap, !position.positionedByUser, lastSettledCamera != nil else { return }
         cameraCorrectionTask?.cancel()
         let generation = cameraFitGeneration
-        cameraCorrectionTask = Task { @MainActor in
-            do {
-                try await Task.sleep(for: .milliseconds(120))
-            } catch {
-                return
-            }
-            guard !Task.isCancelled,
-                  generation == cameraFitGeneration,
-                  !userMovedMap, !position.positionedByUser,
-                  let camera = lastSettledCamera else { return }
-            applyCameraBoundsCorrection(camera, using: proxy)
-        }
-    }
-
-    private func applyCameraBoundsCorrection(_ camera: MapCamera, using proxy: MapProxy) {
-        guard !userMovedMap, !position.positionedByUser,
+        guard let camera = lastSettledCamera,
               let cameraCenter = proxy.convert(camera.centerCoordinate, to: .local),
               let correction = TrustMapCameraBounds.correction(
                 footprints: cameraFootprints(using: proxy),
@@ -768,6 +760,10 @@ struct CircleView: View {
                 usableViewport: mapViewportLocalBounds
               ) else { return }
         if let pendingCameraCorrectionOverflow {
+            // Only judge whether a correction helped after MapKit reports a
+            // newer settled camera. Measurement callbacks can run against the
+            // pre-correction camera while the 120ms update is still pending.
+            guard cameraSettledRevision > cameraCorrectionAppliedRevision else { return }
             if correction.overflow <= 0.5 {
                 self.pendingCameraCorrectionOverflow = nil
                 model.traceUIInteraction("people map annotation bounds contained")
@@ -791,19 +787,39 @@ struct CircleView: View {
               camera.distance.isFinite, camera.heading.isFinite, camera.pitch.isFinite else { return }
         let distance = camera.distance * Double(correction.scale)
         guard distance.isFinite, distance > 0 else { return }
-        pendingCameraCorrectionOverflow = correction.overflow
-        cameraCorrectionAttempts += 1
-        requestedCameraDistance = distance
-        position = .camera(MapCamera(
+        // Capture only value types for the delayed task. Never retain `proxy`
+        // across Task.sleep: MapReader can be replaced before the task resumes.
+        let correctedCamera = MapCamera(
             centerCoordinate: adjustedCenter,
             distance: distance,
             heading: camera.heading,
             pitch: camera.pitch
-        ))
-        model.traceUIInteraction(
-            "people map annotation correction scale=\(String(format: "%.3f", correction.scale)) "
-                + "translation=\(Int(correction.translation.x.rounded())),\(Int(correction.translation.y.rounded())) attempt=\(cameraCorrectionAttempts)"
         )
+        let overflow = correction.overflow
+        let scale = correction.scale
+        let translation = correction.translation
+        let scheduledCameraRevision = cameraSettledRevision
+        cameraCorrectionTask = Task { @MainActor in
+            do {
+                try await Task.sleep(for: .milliseconds(120))
+            } catch {
+                return
+            }
+            guard !Task.isCancelled,
+                  generation == cameraFitGeneration,
+                  !userMovedMap, !position.positionedByUser,
+                  lastSettledCamera != nil,
+                  cameraSettledRevision == scheduledCameraRevision else { return }
+            pendingCameraCorrectionOverflow = overflow
+            cameraCorrectionAttempts += 1
+            cameraCorrectionAppliedRevision = scheduledCameraRevision
+            requestedCameraDistance = distance
+            position = .camera(correctedCamera)
+            model.traceUIInteraction(
+                "people map annotation correction scale=\(String(format: "%.3f", scale)) "
+                    + "translation=\(Int(translation.x.rounded())),\(Int(translation.y.rounded())) attempt=\(cameraCorrectionAttempts)"
+            )
+        }
     }
 
     private func resetCameraBoundsCorrection(preservingSettledCamera: Bool = false) {
@@ -812,6 +828,7 @@ struct CircleView: View {
         cameraFitGeneration &+= 1
         cameraCorrectionAttempts = 0
         pendingCameraCorrectionOverflow = nil
+        cameraCorrectionAppliedRevision = cameraSettledRevision
         if !preservingSettledCamera { lastSettledCamera = nil }
     }
 

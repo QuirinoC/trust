@@ -922,7 +922,7 @@
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				INFOPLIST_FILE = "Internal-Info.plist";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Trust uses the camera only when you choose Take Photo to set your profile picture.";
-				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Trust uses your location while the app is open so you can see yourself on the map and look at people who share with you. Trust does not sell your location.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Trust uses your location to share it with the people you choose and to set Home on this device. Your location is not required just to view someone who shares with you.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -947,7 +947,7 @@
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				INFOPLIST_FILE = "Staging-Info.plist";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Trust uses the camera only when you choose Take Photo to set your profile picture.";
-				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Trust uses your location while the app is open so you can see yourself on the map and look at people who share with you. Trust does not sell your location.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Trust uses your location to share it with the people you choose and to set Home on this device. Your location is not required just to view someone who shares with you.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -1040,7 +1040,7 @@
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				INFOPLIST_FILE = Info.plist;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Trust uses the camera only when you choose Take Photo to set your profile picture.";
-				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Trust uses your location while the app is open so you can see yourself on the map and look at people who share with you. Trust does not sell your location.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Trust uses your location to share it with the people you choose and to set Home on this device. Your location is not required just to view someone who shares with you.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -1135,7 +1135,7 @@
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				INFOPLIST_FILE = Info.plist;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Trust uses the camera only when you choose Take Photo to set your profile picture.";
-				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Trust uses your location while the app is open so you can see yourself on the map and look at people who share with you. Trust does not sell your location.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Trust uses your location to share it with the people you choose and to set Home on this device. Your location is not required just to view someone who shares with you.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -1160,7 +1160,7 @@
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				INFOPLIST_FILE = "Staging-Info.plist";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Trust uses the camera only when you choose Take Photo to set your profile picture.";
-				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Trust uses your location while the app is open so you can see yourself on the map and look at people who share with you. Trust does not sell your location.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Trust uses your location to share it with the people you choose and to set Home on this device. Your location is not required just to view someone who shares with you.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -1187,7 +1187,7 @@
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				INFOPLIST_FILE = "Internal-Info.plist";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Trust uses the camera only when you choose Take Photo to set your profile picture.";
-				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Trust uses your location while the app is open so you can see yourself on the map and look at people who share with you. Trust does not sell your location.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Trust uses your location to share it with the people you choose and to set Home on this device. Your location is not required just to view someone who shares with you.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",

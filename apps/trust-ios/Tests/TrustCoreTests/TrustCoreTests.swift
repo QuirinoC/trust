@@ -1891,19 +1891,33 @@ final class LocationSharingTests: XCTestCase {
         XCTAssertEqual(service.locationTier, .available)
     }
 
-    func testLocationPurposeStringsAreEscrowVoice() {
-        XCTAssertTrue(TrustCopy.locationWhenInUsePurpose.contains("while the app is open"))
-        XCTAssertTrue(TrustCopy.locationWhenInUsePurpose.contains("does not sell"))
-        XCTAssertFalse(TrustCopy.locationWhenInUsePurpose.lowercased().contains("emergency"))
-        XCTAssertFalse(TrustCopy.locationWhenInUsePurpose.lowercased().contains("adult"))
-        XCTAssertTrue(TrustCopy.locationAlwaysPurpose.contains("Look"))
-        XCTAssertFalse(TrustCopy.locationAlwaysPurpose.lowercased().contains("escrow"))
-        XCTAssertTrue(TrustCopy.locationAlwaysPurpose.contains("background"))
-        XCTAssertTrue(TrustCopy.locationAlwaysPurpose.contains("does not sell"))
-        XCTAssertFalse(TrustCopy.locationAlwaysPurpose.lowercased().contains("emergency"))
-        XCTAssertFalse(TrustCopy.locationAlwaysPurpose.lowercased().contains("adult"))
-        XCTAssertFalse(TrustCopy.locationPrecisePurpose.lowercased().contains("adult"))
-        XCTAssertTrue(TrustCopy.locationPrecisePurpose.contains("precise"))
+    func testLocationPurposeStringsDescribeConsentAndPurposeAccurately() {
+        let whenInUse = TrustCopy.locationWhenInUsePurpose
+        let always = TrustCopy.locationAlwaysPurpose
+        let precise = TrustCopy.locationPrecisePurpose
+
+        XCTAssertTrue(whenInUse.hasPrefix("Trust"))
+        XCTAssertTrue(whenInUse.contains("people you choose"))
+        XCTAssertTrue(whenInUse.contains("set Home"))
+        XCTAssertTrue(whenInUse.contains("not required just to view"))
+        XCTAssertFalse(whenInUse.lowercased().contains("emergency"))
+        XCTAssertFalse(whenInUse.lowercased().contains("adult"))
+
+        XCTAssertTrue(always.hasPrefix("Trust"))
+        XCTAssertTrue(always.contains("background location"))
+        XCTAssertTrue(always.contains("location you chose to share"))
+        XCTAssertTrue(always.contains("when you enable it"))
+        XCTAssertTrue(always.contains("iOS may delay updates"))
+        XCTAssertFalse(always.lowercased().contains("notification"))
+        XCTAssertFalse(always.lowercased().contains("guarantee"))
+        XCTAssertFalse(always.lowercased().contains("when the app is closed"))
+        XCTAssertFalse(always.lowercased().contains("emergency"))
+        XCTAssertFalse(always.lowercased().contains("adult"))
+
+        XCTAssertTrue(precise.hasPrefix("Precise location"))
+        XCTAssertTrue(precise.contains("more accurate location point"))
+        XCTAssertTrue(precise.contains("keep approximate location"))
+        XCTAssertFalse(precise.lowercased().contains("adult"))
     }
 }
 

@@ -67,16 +67,16 @@
 	<key>NSCameraUsageDescription</key>
 	<string>Trust uses the camera only when you choose Take Photo to set your profile picture.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>Trust uses your location in the background so a Look still works when the app is closed. A confirmed Look is recorded and requests a notification. Trust does not sell your location.</string>
+	<string>Trust uses background location to update the location you chose to share and detect Home or Away when you enable it. iOS may delay updates.</string>
 	<key>NSLocationAlwaysUsageDescription</key>
-	<string>Trust uses your location in the background so a Look still works when the app is closed. A confirmed Look is recorded and requests a notification. Trust does not sell your location.</string>
+	<string>Trust uses background location to update the location you chose to share and detect Home or Away when you enable it. iOS may delay updates.</string>
 	<key>NSLocationTemporaryUsageDescriptionDictionary</key>
 	<dict>
 		<key>PreciseEscrow</key>
-		<string>Trust needs precise location so a Look shows the current place. Approximate location is not enough.</string>
+		<string>Precise location helps Trust share a more accurate location point with the people you choose. You can keep approximate location.</string>
 	</dict>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Trust uses your location while the app is open so you can see yourself on the map and look at people who share with you. Trust does not sell your location.</string>
+	<string>Trust uses your location to share it with the people you choose and to set Home on this device. Your location is not required just to view someone who shares with you.</string>
 	<key>TRUST_BASE_URL</key>
 	<string>https://staging-api.jointrust.app</string>
 	<key>TRUST_SKIP_PHONE_VERIFICATION</key>

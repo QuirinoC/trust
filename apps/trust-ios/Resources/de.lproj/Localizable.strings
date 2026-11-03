@@ -281,14 +281,14 @@
 "loading_requests" = "Anfragen werden geladen";
 "location" = "Standort";
 "location_access_status" = "Standortzugriff: %@";
-"location_always" = "Trust verwendet Ihren Standort im Hintergrund, sodass ein Look auch dann funktioniert, wenn die App geschlossen ist. Ein bestätigter Blick wird aufgezeichnet und fordert eine Benachrichtigung. Vertrauen verkauft Ihren Standort nicht.";
+"location_always" = "Trust verwendet deinen Standort im Hintergrund, um den von dir zum Teilen ausgewählten Standort zu aktualisieren und Zuhause oder Unterwegs zu erkennen, wenn du das aktivierst. iOS kann Aktualisierungen verzögern.";
 "location_denied_body" = "Der Standort ist deaktiviert. Sie können immer noch schauen. Ihr Standort wird erst weitergegeben, wenn Sie dies zulassen.";
 "location_may_be_stale" = "Möglicherweise nicht aktuell · %@";
 "location_permission_heading" = "Standortberechtigung";
-"location_precise" = "Vertrauen benötigt einen genauen Standort, damit ein Blick den aktuellen Standort anzeigt. Der ungefähre Standort reicht nicht aus.";
+"location_precise" = "Mit genauer Standortbestimmung kann Trust einen genaueren Standortpunkt mit den Personen teilen, die du auswählst. Du kannst die ungefähre Standortbestimmung beibehalten.";
 "location_reduced_accuracy" = "Der ungefähre Standort ist aktiviert. Das Teilen erfordert einen genauen Standort.";
 "location_unavailable" = "Standort nicht verfügbar";
-"location_when_in_use" = "Trust verwendet Ihren Standort, während die App geöffnet ist, sodass Sie sich selbst auf der Karte sehen und Personen sehen können, die etwas mit Ihnen teilen. Vertrauen verkauft Ihren Standort nicht.";
+"location_when_in_use" = "Trust verwendet deinen Standort, um ihn mit den Personen zu teilen, die du auswählst, und um Zuhause auf diesem Gerät festzulegen. Dein Standort ist nicht erforderlich, nur um den Standort einer Person anzusehen, die ihn mit dir teilt.";
 "log" = "Aktivität";
 "log_they_looked" = "%@ sah dich an.";
 "log_they_removed" = "%@ hat Sie entfernt.";
