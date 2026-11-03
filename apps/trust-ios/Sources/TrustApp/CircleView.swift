@@ -31,6 +31,8 @@ struct CircleView: View {
     @State private var fallbackViewportAtFocus: CGSize?
     @State private var isAutomaticPeopleFit = false
     @State private var isExplicitRecenterFit = false
+    @State private var recenterIntentGeneration = 0
+    @State private var pendingRecenterGeneration: Int?
     @State private var cameraSettledRevision = 0
     @State private var cameraCorrectionAppliedRevision = -1
     @State private var cameraFitGeneration = 0
@@ -133,6 +135,7 @@ struct CircleView: View {
             }
         }
         .onChange(of: model.circlePath) { _, path in
+            invalidatePendingRecenter(reason: "navigation")
             resetCameraBoundsCorrection(preservingSettledCamera: usesNativeAutomaticFit)
             if case let .view(personID)? = path.last {
                 // Entering a specific person's view should reveal their pin,
@@ -173,6 +176,7 @@ struct CircleView: View {
         .onChange(of: position.positionedByUser) { _, movedByUser in
             model.traceUIInteraction("people map user moved=\(movedByUser)")
             if movedByUser {
+                invalidatePendingRecenter(reason: "user-map-gesture")
                 userMovedMap = true
                 usesNativeAutomaticFit = false
                 fallbackCameraTargetID = nil
@@ -182,6 +186,7 @@ struct CircleView: View {
             }
         }
         .onDisappear {
+            invalidatePendingRecenter(reason: "map-disappeared")
             mapViewportFitTask?.cancel()
             mapViewportFitTask = nil
             captionLayoutTask?.cancel()
@@ -349,7 +354,17 @@ struct CircleView: View {
                         + "safe=\(mapViewportSafeInsets.map { Int($0.rounded()) })"
                 )
             }
+            .onMapCameraChange(frequency: .continuous) { _ in
+                guard position.positionedByUser else { return }
+                invalidatePendingRecenter(reason: "user-map-gesture")
+            }
             .onMapCameraChange(frequency: .onEnd) { context in
+                // positionedByUser remains true after the first pan. Check each
+                // settled gesture so a later pan also invalidates a pending
+                // Recenter request without affecting a new explicit Recenter.
+                if position.positionedByUser {
+                    invalidatePendingRecenter(reason: "user-map-gesture")
+                }
                 cameraSettledRevision &+= 1
                 lastSettledCamera = context.camera
                 let footprints = cameraFootprints(using: proxy)
@@ -495,7 +510,19 @@ struct CircleView: View {
             fallbackCameraTargetID = nil
             fallbackViewportAtFocus = nil
             cameraZoomOutWasClamped = false
+            recenterIntentGeneration &+= 1
+            let requestedGeneration = recenterIntentGeneration
+            pendingRecenterGeneration = requestedGeneration
             model.requestMapRecenter {
+                guard requestedGeneration == recenterIntentGeneration,
+                      pendingRecenterGeneration == requestedGeneration else {
+                    model.traceUIInteraction("people map recenter ignored after newer map intent")
+                    return
+                }
+                // Consume this request before changing the camera so subsequent
+                // map events cannot invalidate or replay the same completion.
+                pendingRecenterGeneration = nil
+                userMovedMap = false
                 fitAll(includeUser: true)
             }
         } label: {
@@ -944,6 +971,13 @@ struct CircleView: View {
                 position = .automatic
             }
         }
+    }
+
+    private func invalidatePendingRecenter(reason: String) {
+        guard pendingRecenterGeneration != nil else { return }
+        recenterIntentGeneration &+= 1
+        pendingRecenterGeneration = nil
+        model.traceUIInteraction("people map recenter intent invalidated reason=\(reason)")
     }
 
     private func focusMap(on personID: UUID, animated: Bool = true) {

@@ -14,7 +14,7 @@ final class AppStoreNativeCaptureTests: XCTestCase {
         guard let dir = env["TRUST_STORE_CAPTURE_DIR"], !dir.isEmpty,
               let selected = env["TRUST_STORE_CAPTURE_SCENARIO"],
               ["hero-live", "look-expanded", "paywall-real-catalog", "tall-map-fallback",
-               "gps-map-camera", "denied-map-recenter"].contains(selected) else {
+               "gps-map-camera", "denied-map-recenter", "diagnostic-recenter-touch"].contains(selected) else {
             throw XCTSkip("Set TRUST_STORE_CAPTURE_DIR and TRUST_STORE_CAPTURE_SCENARIO to an approved capture scenario.")
         }
         scenario = selected
@@ -190,11 +190,9 @@ final class AppStoreNativeCaptureTests: XCTestCase {
         XCTAssertTrue(waitUntil(10) { isFullyVisible(leo.frame, in: mapCanvas.frame) && leo.isHittable }, app.debugDescription)
         assertPin(leo, fullyInside: mapCanvas, description: "Leo's full live pin and freshness label must fit the 660×1288 map.")
         XCTAssertEqual(pinMatches(in: app, named: "Leo Park").count, 1, "There must be one Leo pin before the native pin tap.")
-        attachMapEvidence("GPS map camera - initial San Francisco fix", app: app, mapCanvas: mapCanvas, pins: [leo, eli])
-        var initialPayload: [String: Any] = ["scene": "GPS People map", "window": rect(window.frame),
-            "mapCanvas": rect(mapCanvas.frame), "leo": element(leo)]
-        if eli.exists { initialPayload["eli"] = element(eli) }
-        try publishAndWait(app, payload: initialPayload)
+        attachMapEvidence("GPS map camera - initial San Francisco fix", app: app, mapCanvas: mapCanvas, pins: [leo])
+        try publishAndWait(app, payload: ["scene": "GPS People map", "window": rect(window.frame),
+            "mapCanvas": rect(mapCanvas.frame), "leo": element(leo)])
 
         // A single native pin tap must open the actual selected person's View.
         leo.tap()
@@ -206,7 +204,7 @@ final class AppStoreNativeCaptureTests: XCTestCase {
         let leoFreshness = freshnessPhrase(in: leo.label)
         XCTAssertNotNil(leoFreshness)
         XCTAssertTrue(freshnessPhraseMatches(freshness.label, expected: leoFreshness), "Leo's View must retain the live freshness shown on his pin.")
-        attachMapEvidence("GPS map camera - Leo View", app: app, mapCanvas: mapCanvas, pins: [leo, eli])
+        attachMapEvidence("GPS map camera - Leo View", app: app, mapCanvas: mapCanvas, pins: [leo])
         app.buttons["circle-back"].tap()
 
         let eliRow = app.buttons["person-row-eli"]
@@ -224,11 +222,11 @@ final class AppStoreNativeCaptureTests: XCTestCase {
         let eliFreshness = freshnessPhrase(in: eli.label)
         XCTAssertNotNil(eliFreshness)
         XCTAssertTrue(freshnessPhraseMatches(freshness.label, expected: eliFreshness), "Eli's View must retain the live freshness shown on his pin.")
-        attachMapEvidence("GPS map camera - Eli View", app: app, mapCanvas: mapCanvas, pins: [leo, eli])
+        attachMapEvidence("GPS map camera - Eli View", app: app, mapCanvas: mapCanvas, pins: [eli])
         app.buttons["circle-back"].tap()
 
         let myLocation = nativeUserLocation(in: mapCanvas)
-        try hostGPSStage("gps-nearby", app: app, mapCanvas: mapCanvas, pins: [leo, eli], myLocation: myLocation)
+        try hostGPSStage("gps-nearby", app: app, mapCanvas: mapCanvas)
         XCTAssertTrue(waitUntil(12) {
             myLocation.exists && isFullyVisible(myLocation.frame, in: mapCanvas.frame)
                 && isFullyVisible(leo.frame, in: mapCanvas.frame) && leo.isHittable
@@ -236,16 +234,12 @@ final class AppStoreNativeCaptureTests: XCTestCase {
         assertLivePinMetadata(leo, person: "Leo Park")
         assertPin(leo, fullyInside: mapCanvas, description: "Leo must remain complete and hittable after the host moves this iPad's simulated fix to Seattle.")
 
-        let recenter = app.buttons.matching(NSPredicate(format: "label == %@", "Recenter map")).firstMatch
-        XCTAssertTrue(recenter.waitForExistence(timeout: 5), "The map's current Recenter map control must be available.\n\(app.debugDescription)")
-        XCTAssertTrue(waitForRecenterHittable(recenter, app: app, mapCanvas: mapCanvas,
-                                               checkpoint: "Seattle nearby recovery"), app.debugDescription)
-        recenter.tap()
+        tapNativeRecenterCenter(app, mapCanvas: mapCanvas, checkpoint: "Seattle nearby recovery")
         XCTAssertTrue(waitForStableVisibleFrame(leo, within: mapCanvas, timeout: 12, stableDuration: 0.6) {
             myLocation.exists && self.isFullyVisible(myLocation.frame, in: mapCanvas.frame)
         }, "Recenter with the nearby Seattle fix must retain both MapKit's own-location marker and Leo's complete pin, with Leo's frame settled.\n\(app.debugDescription)")
         assertPin(leo, fullyInside: mapCanvas, description: "Recenter with the nearby Seattle fix must keep Leo's complete live pin visible.")
-        attachMapEvidence("GPS map camera - Seattle fix and public Recenter", app: app, mapCanvas: mapCanvas, pins: [leo, eli, myLocation])
+        attachMapEvidence("GPS map camera - Seattle fix and public Recenter", app: app, mapCanvas: mapCanvas, pins: [leo, myLocation])
 
         let leoBeforePan = leo.frame
         let panStart = mapCanvas.coordinate(withNormalizedOffset: CGVector(dx: 0.24, dy: 0.32))
@@ -274,23 +268,24 @@ final class AppStoreNativeCaptureTests: XCTestCase {
         let leoAfterPan = leo.frame
         XCTAssertGreaterThan(frameDistance(leoAfterPan, before: leoBeforePan), 8,
                              "A native map pan must move Leo's screen position before testing pan preservation.")
-        attachMapEvidence("GPS map camera - after manual pan", app: app, mapCanvas: mapCanvas, pins: [leo, eli, myLocation])
+        attachMapEvidence("GPS map camera - after manual pan", app: app, mapCanvas: mapCanvas, pins: [leo, myLocation])
 
         let locationBeforePanStage = myLocation.frame
-        try hostGPSStage("gps-far", app: app, mapCanvas: mapCanvas, pins: [leo, eli], myLocation: myLocation)
+        try hostGPSStage("gps-far", app: app, mapCanvas: mapCanvas)
         XCTAssertTrue(waitUntil(12) {
             (!myLocation.exists || frameDistance(myLocation.frame, before: locationBeforePanStage) >= 12)
-                && isFullyVisible(leo.frame, in: mapCanvas.frame)
+                && leo.exists && isFullyVisible(leo.frame, in: mapCanvas.frame)
                 && frameDistance(leo.frame, before: leoAfterPan) <= 5
         }, "After the host restores the far San Francisco fix, the manually panned map must keep Leo at the same screen position while MapKit moves or removes its off-screen native location marker.\n\(app.debugDescription)")
         XCTAssertTrue(leo.isHittable)
-        attachMapEvidence("GPS map camera - manual pan retained after far fix", app: app, mapCanvas: mapCanvas, pins: [leo, eli, myLocation])
+        attachMapEvidence("GPS map camera - manual pan retained after far fix", app: app, mapCanvas: mapCanvas, pins: [leo])
 
-        recenter.tap()
+        tapNativeRecenterCenter(app, mapCanvas: mapCanvas, checkpoint: "Far fix recovery")
+        try hostGPSStage("gps-recenter", app: app, mapCanvas: mapCanvas)
         XCTAssertTrue(waitUntil(12) {
             myLocation.exists && isFullyVisible(myLocation.frame, in: mapCanvas.frame)
         }, "Public Recenter must bring MapKit's actual My Location annotation into the People map after the far fix.\n\(app.debugDescription)")
-        attachMapEvidence("GPS map camera - native My Location after far Recenter", app: app, mapCanvas: mapCanvas, pins: [leo, eli, myLocation])
+        attachMapEvidence("GPS map camera - native My Location after far Recenter", app: app, mapCanvas: mapCanvas, pins: [myLocation])
     }
 
     func testDeniedMapRecenterPreservesPeoplePinNavigation() throws {
@@ -312,11 +307,7 @@ final class AppStoreNativeCaptureTests: XCTestCase {
         XCTAssertTrue(waitUntil(10) { isFullyVisible(leo.frame, in: mapCanvas.frame) && leo.isHittable }, app.debugDescription)
         XCTAssertEqual(pinMatches(in: app, named: "Leo Park").count, 1, "There must be one Leo pin before Recenter.")
 
-        let recenter = app.buttons.matching(NSPredicate(format: "label == %@", "Recenter map")).firstMatch
-        XCTAssertTrue(recenter.waitForExistence(timeout: 5), "The map's current Recenter map control must be available.\n\(app.debugDescription)")
-        XCTAssertTrue(waitForRecenterHittable(recenter, app: app, mapCanvas: mapCanvas,
-                                               checkpoint: "Denied location"), app.debugDescription)
-        recenter.tap()
+        tapNativeRecenterCenter(app, mapCanvas: mapCanvas, checkpoint: "Denied location")
         XCTAssertTrue(waitForStableVisibleFrame(leo, within: mapCanvas, timeout: 10, stableDuration: 0.6),
                       "Denied location must not displace the authorized Leo pin after Recenter, and Leo's frame must settle before the pin tap.\n\(app.debugDescription)")
         assertPin(leo, fullyInside: mapCanvas, description: "The complete Leo pin must remain on the People map when own location is denied.")
@@ -327,6 +318,44 @@ final class AppStoreNativeCaptureTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Leo"].waitForExistence(timeout: 5), "One native pin tap must open Leo's real View.\n\(app.debugDescription)")
         try publishAndWait(app, payload: ["scene": "Denied location Recenter preserves People navigation",
             "window": rect(window.frame), "mapCanvas": rect(mapCanvas.frame)])
+    }
+
+    func testDiagnosticWideRecenterNativeTouch() throws {
+        guard scenario == "diagnostic-recenter-touch" else { throw XCTSkip("Selected capture scenario is not diagnostic-recenter-touch.") }
+        let app = launch(route: "share")
+        navigateToPeople(app)
+        let window = app.windows.firstMatch
+        let mapCanvas = app.descendants(matching: .any)["people-map-canvas"]
+        XCTAssertTrue(mapCanvas.waitForExistence(timeout: 10), app.debugDescription)
+        XCTAssertTrue(waitUntil(8) { mapCanvas.frame.width > 0 && mapCanvas.frame.height > 0 })
+
+        let leo = livePin(in: app, named: "Leo Park")
+        XCTAssertTrue(leo.waitForExistence(timeout: 10), app.debugDescription)
+        XCTAssertTrue(waitForStableVisibleFrame(leo, within: mapCanvas, timeout: 10, stableDuration: 0.6),
+                      "Leo must be fully visible and settled before the Recenter touch diagnostic.\n\(app.debugDescription)")
+        try publishAndWait(app, payload: ["scene": "Diagnostic native Recenter coordinate touch",
+            "window": rect(window.frame), "mapCanvas": rect(mapCanvas.frame), "leo": element(leo)])
+
+        let recenter = app.buttons.matching(NSPredicate(format: "label == %@", "Recenter map")).firstMatch
+        XCTAssertTrue(recenter.waitForExistence(timeout: 5), "The map's current Recenter map control must exist.\n\(app.debugDescription)")
+        XCTAssertTrue(waitUntil(5) {
+            recenter.isEnabled && isFullyVisible(recenter.frame, in: mapCanvas.frame)
+        }, "The diagnostic requires an enabled, fully visible Recenter control.\n\(app.debugDescription)")
+        attachRecenterDiagnostic("Before one native center touch", app: app, mapCanvas: mapCanvas)
+
+        let controlFrame = recenter.frame
+        let center = recenter.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        let touchEvidence: [String: Any] = ["epoch": Date().timeIntervalSince1970,
+            "controlFrame": rect(controlFrame)]
+        let touchMarker = captureURL.deletingLastPathComponent().appendingPathComponent("native-recenter-touch.json")
+        try JSONSerialization.data(withJSONObject: touchEvidence, options: [.sortedKeys])
+            .write(to: touchMarker, options: .atomic)
+        center.tap()
+        XCTAssertTrue(waitForStableVisibleFrame(leo, within: mapCanvas, timeout: 12, stableDuration: 0.6),
+                      "After the single native center touch, Leo must settle back into the People map.\n\(app.debugDescription)")
+        attachMapEvidence("Diagnostic Recenter - after one native center touch", app: app,
+                          mapCanvas: mapCanvas, pins: [leo])
+        attachRecenterDiagnostic("After one native center touch", app: app, mapCanvas: mapCanvas)
     }
 
     func testLookExpandedConsentSheet() throws {
@@ -465,16 +494,14 @@ final class AppStoreNativeCaptureTests: XCTestCase {
         mapCanvas.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "My Location")).firstMatch
     }
 
-    private func hostGPSStage(_ name: String, app: XCUIApplication, mapCanvas: XCUIElement,
-                              pins: [XCUIElement], myLocation: XCUIElement? = nil) throws {
+    private func hostGPSStage(_ name: String, app: XCUIApplication, mapCanvas: XCUIElement) throws {
         let markerDirectory = captureURL.deletingLastPathComponent()
         let ready = markerDirectory.appendingPathComponent("\(name).ready")
         let proceed = markerDirectory.appendingPathComponent("\(name).continue")
         try? FileManager.default.removeItem(at: ready)
         try? FileManager.default.removeItem(at: proceed)
-        var payload: [String: Any] = ["stage": name, "window": rect(app.windows.firstMatch.frame),
-            "mapCanvas": rect(mapCanvas.frame), "pins": pins.filter { $0.exists }.map { element($0) }]
-        if let myLocation, myLocation.exists { payload["nativeUserLocation"] = element(myLocation) }
+        let payload: [String: Any] = ["stage": name, "window": rect(app.windows.firstMatch.frame),
+            "mapCanvas": rect(mapCanvas.frame)]
         let data = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
         try data.write(to: ready, options: .atomic)
         XCTAssertTrue(waitUntil(35) { FileManager.default.fileExists(atPath: proceed.path) },
@@ -497,27 +524,37 @@ final class AppStoreNativeCaptureTests: XCTestCase {
         add(geometry)
     }
 
-    private func waitForRecenterHittable(_ recenter: XCUIElement, app: XCUIApplication,
-                                         mapCanvas: XCUIElement, checkpoint: String) -> Bool {
-        guard waitUntil(5, { recenter.exists && recenter.isHittable }) else {
-            let screenshot = XCTAttachment(screenshot: app.screenshot())
-            screenshot.name = "\(checkpoint) - Recenter not hittable"
-            screenshot.lifetime = .keepAlways
-            add(screenshot)
-            let controls = app.buttons.matching(NSPredicate(format: "label == %@", "Recenter map"))
-            var lines = ["checkpoint=\(checkpoint)", "window=\(rect(app.windows.firstMatch.frame))",
-                         "mapCanvas=\(rect(mapCanvas.frame))"]
-            for (index, control) in controls.allElementsBoundByIndex.enumerated() {
-                lines.append("recenter[\(index)] exists=\(control.exists) enabled=\(control.isEnabled) hittable=\(control.isHittable) frame=\(rect(control.frame)) label=\(control.label) identifier=\(control.identifier)")
-            }
-            lines.append("matchingRecenterCount=\(controls.count)")
-            let geometry = XCTAttachment(string: lines.joined(separator: "\n"))
-            geometry.name = "\(checkpoint) - Recenter control geometry"
-            geometry.lifetime = .keepAlways
-            add(geometry)
-            return false
+    private func tapNativeRecenterCenter(_ app: XCUIApplication, mapCanvas: XCUIElement,
+                                         checkpoint: String) {
+        let controls = app.buttons.matching(NSPredicate(format: "label == %@", "Recenter map"))
+        XCTAssertEqual(controls.count, 1, "\(checkpoint) requires exactly one native Recenter button.\n\(app.debugDescription)")
+        let recenter = controls.firstMatch
+        XCTAssertTrue(waitUntil(5) { recenter.exists && recenter.isEnabled },
+                      "\(checkpoint) requires the Recenter button to exist and be enabled.\n\(app.debugDescription)")
+        attachRecenterDiagnostic("\(checkpoint) - before native center touch", app: app, mapCanvas: mapCanvas)
+        let frame = recenter.frame
+        XCTAssertGreaterThanOrEqual(frame.width, 44, "\(checkpoint) Recenter button must be at least 44 points wide.")
+        XCTAssertGreaterThanOrEqual(frame.height, 44, "\(checkpoint) Recenter button must be at least 44 points tall.")
+        XCTAssertTrue(isFullyVisible(frame, in: mapCanvas.frame), "\(checkpoint) Recenter button must fit inside the People map.\n\(app.debugDescription)")
+        XCTAssertTrue(isFullyVisible(frame, in: app.windows.firstMatch.frame), "\(checkpoint) Recenter button must fit inside the app window.\n\(app.debugDescription)")
+        recenter.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+    }
+
+    private func attachRecenterDiagnostic(_ name: String, app: XCUIApplication, mapCanvas: XCUIElement) {
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = name
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        let controls = app.buttons.matching(NSPredicate(format: "label == %@", "Recenter map"))
+        var lines = ["window=\(rect(app.windows.firstMatch.frame))", "mapCanvas=\(rect(mapCanvas.frame))"]
+        for (index, control) in controls.allElementsBoundByIndex.enumerated() {
+            lines.append("recenter[\(index)] exists=\(control.exists) enabled=\(control.isEnabled) hittable=\(control.isHittable) frame=\(rect(control.frame)) label=\(control.label) identifier=\(control.identifier)")
         }
-        return true
+        lines.append("matchingRecenterCount=\(controls.count)")
+        let geometry = XCTAttachment(string: lines.joined(separator: "\n"))
+        geometry.name = "\(name) geometry"
+        geometry.lifetime = .keepAlways
+        add(geometry)
     }
 
     private func waitForStableVisibleFrame(_ element: XCUIElement, within container: XCUIElement,
