@@ -356,6 +356,17 @@ def inject_capture_environment(spec: Any, marker_dir: Path, scenario: str, orien
             inject_capture_environment(value, marker_dir, scenario, orientation)
 
 
+def rebase_xctestrun_testroot(value: Any, source_root: Path) -> Any:
+    """Keep Xcode source-tree references anchored after copying the spec."""
+    if isinstance(value, str):
+        return value.replace("__TESTROOT__", str(source_root))
+    if isinstance(value, list):
+        return [rebase_xctestrun_testroot(item, source_root) for item in value]
+    if isinstance(value, dict):
+        return {key: rebase_xctestrun_testroot(item, source_root) for key, item in value.items()}
+    return value
+
+
 def export_test_diagnostics(result_bundle: Path, case_dir: Path, method: str) -> dict[str, Any]:
     info: dict[str, Any] = {"resultBundle": str(result_bundle), "activities": "not available"}
     if not result_bundle.exists():
@@ -414,6 +425,7 @@ def capture_native_case(device: str, fmt: str, scenario: str, method: str,
     proceed = marker_dir / "continue"
     spec = plistlib.loads(xctestrun.read_bytes())
     inject_capture_environment(spec, marker_dir, scenario, orientation)
+    spec = rebase_xctestrun_testroot(spec, xctestrun.resolve().parent)
     case_xctestrun = case_dir / (case_name + ".xctestrun")
     case_xctestrun.write_bytes(plistlib.dumps(spec))
     os.chmod(case_xctestrun, 0o600)

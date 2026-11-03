@@ -1,6 +1,12 @@
 # Staging operational status
 
-## Customer-experience overhaul — build 51 available internally, 1 November 2026
+## Build 52 delivery checkpoint — 3 November 2026
+
+**Trust Staging 1.0 (52) is available internally** from source `faa306f85d4a24732f03b8420cf78b1a556846bf`. Upload/build `6a97f245-3c40-4cac-81a6-651676b0cbf8` is `COMPLETE / VALID / INTERNAL_ONLY / IN_BETA_TESTING`; existing group `b03d7b51-49a5-48f4-9899-08c54bf4470b` contains it. The same three approved tester IDs and roles were read back unchanged, and English What to Test was updated and read back. Protected delivery evidence: `/Users/juanquirino/.agents/secrets/trust-staging/apple-staging-build-52-upload.json`. This does not establish physical-device acceptance.
+
+Normal build 52 from the same frozen source was signed, audited and Apple-validated but remains unuploaded, held until a compatible production rollout is explicitly authorized and verified. No public submission, production deployment or PR merge occurred. R12 GPS recovery, denied-location Recenter and phone pin cases each passed 1/0/0; phone variants included light, dark and AXXXL. One unattributed Core Location warning had an unusable zero-address stack with no module attribution. Nine prior focused map cases including five-pose native Duo R5 passed at an earlier checkpoint; these results are not a complete current-suite pass. Astra accepted all 36 composed panels, including all 12 Duo panels individually and critical full-native raws, plus the real-catalog paywall. Both strict Duo Look checks passed 1/0/0. All 24 phone/iPad draft images are now COMPLETE, with exact source checksums, dimensions, sizes and order read back from Apple; the previous 18 images were backed up before replacement. The 12 Duo panels remain prepared locally because upload groups are unavailable. Two-real-iPhone acceptance remains unrun; follow the [physical-device guide](../../PHYSICAL-DEVICE-TEST.md).
+
+## Historical customer-experience overhaul — build 51 available internally, 1 November 2026
 
 Approved scope: Apple sign-in and verified phone remain required. The server automatically assigns a missing handle after verification; Name/Handle editing is optional in You. The Always sharer pays; an authorized free recipient can view that sharing, while sending Always back requires their own Plus. Preserve the compact `Name | Off | Sealed | Always | menu` row, explicit consent, privacy holds, history windows and signing/entitlement settings. Ownership conflicts use guided Support without automatic transfer. Real SMS capacity is 1,000 attempts per 24 hours with existing per-account/destination limits and pacing.
 

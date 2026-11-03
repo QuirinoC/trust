@@ -369,26 +369,32 @@ final class AppStoreNativeCaptureTests: XCTestCase {
         XCTAssertTrue(note.waitForExistence(timeout: 15), app.debugDescription)
         XCTAssertTrue(action.waitForExistence(timeout: 5) && cancel.exists && heading.exists && close.exists, app.debugDescription)
         let windowElement = app.windows.firstMatch
-        let window = windowElement.frame
-        guard let textScrollView = textViewport(in: app, containing: note) else {
-            XCTFail("The consent text must belong to a visible scroll viewport.")
-            return
+        func consentContentIsVisible() -> Bool {
+            fullyAboveActions(note, heading: heading, close: close, action: action, cancel: cancel,
+                              viewport: consentViewportFrame(in: app, note: note, window: windowElement.frame),
+                              window: windowElement.frame)
         }
-        if !fullyAboveActions(note, heading: heading, action: action, cancel: cancel,
-                              viewport: textScrollView.frame, window: window) {
+        if !consentContentIsVisible() {
+            let window = windowElement.frame
             let dy = max(0.05, min(0.95, (close.frame.minY - window.minY - 8) / window.height))
             let start = windowElement.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: dy))
             let top = windowElement.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.03))
             start.press(forDuration: 0.1, thenDragTo: top)
         }
-        XCTAssertTrue(waitUntil(8) { fullyAboveActions(note, heading: heading, action: action, cancel: cancel,
-            viewport: textScrollView.frame, window: windowElement.frame) },
-                      "The consent heading and full note must be visible above the fixed actions.")
+        let settledConsent = waitUntil(8) { consentContentIsVisible() }
+        if !settledConsent {
+            attachLookFailureEvidence(app: app, note: note, heading: heading, close: close, action: action,
+                                      cancel: cancel, window: windowElement,
+                                      viewport: consentViewportFrame(in: app, note: note, window: windowElement.frame))
+        }
+        XCTAssertTrue(settledConsent,
+                      "The consent heading and full note must be visible above the fixed actions.\n\(app.debugDescription)")
         XCTAssertTrue(action.isHittable && cancel.isHittable)
         XCTAssertTrue(action.exists, "Capture must not submit the Look action.")
         try publishAndWait(app, payload: ["scene": "Look confirmation", "window": rect(app.windows.firstMatch.frame),
-            "textViewport": rect(textScrollView.frame),
-            "heading": element(heading), "note": element(note), "confirmAction": element(action), "cancelAction": element(cancel)])
+            "textViewport": rect(consentViewportFrame(in: app, note: note, window: windowElement.frame)),
+            "close": element(close), "heading": element(heading), "note": element(note),
+            "confirmAction": element(action), "cancelAction": element(cancel)])
     }
 
     func testPaywallRealCatalog() throws {
@@ -635,21 +641,68 @@ final class AppStoreNativeCaptureTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: continueURL.path), "Host capture did not signal continue within 40 seconds.")
     }
 
-    private func textViewport(in app: XCUIApplication, containing note: XCUIElement) -> XCUIElement? {
-        app.scrollViews.allElementsBoundByIndex
-            .filter { $0.frame.contains(CGPoint(x: note.frame.midX, y: note.frame.midY)) }
+    private func consentScrollViewport(in app: XCUIApplication, note: XCUIElement) -> XCUIElement? {
+        let notePredicate = NSPredicate(format: "label == %@", note.label)
+        return app.scrollViews.allElementsBoundByIndex
+            .filter { $0.descendants(matching: .staticText).matching(notePredicate).firstMatch.exists }
             .min { $0.frame.width * $0.frame.height < $1.frame.width * $1.frame.height }
     }
 
-    private func fullyAboveActions(_ note: XCUIElement, heading: XCUIElement, action: XCUIElement,
+    private func consentViewportFrame(in app: XCUIApplication, note: XCUIElement, window: CGRect) -> CGRect {
+        // Use a scroll view only when the note is an actual accessibility descendant.
+        // Otherwise the app window is the truthful viewport for this fixed-action sheet.
+        consentScrollViewport(in: app, note: note)?.frame ?? window
+    }
+
+    private func attachLookFailureEvidence(app: XCUIApplication, note: XCUIElement,
+                                           heading: XCUIElement, close: XCUIElement, action: XCUIElement,
+                                           cancel: XCUIElement, window: XCUIElement,
+                                           viewport: CGRect) {
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Look consent visibility failure"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+
+        let tree = XCTAttachment(string: app.debugDescription)
+        tree.name = "Look consent failure accessibility tree"
+        tree.lifetime = .keepAlways
+        add(tree)
+
+        let candidates = app.scrollViews.allElementsBoundByIndex
+        var lines = ["window=\(rect(window.frame))", "consentViewport=\(rect(viewport))"]
+        for (index, candidate) in candidates.enumerated() {
+            let containsNote = candidate.descendants(matching: .staticText)
+                .matching(NSPredicate(format: "label == %@", note.label))
+                .firstMatch.exists
+            lines.append("scrollView[\(index)] identifier=\(candidate.identifier) frame=\(rect(candidate.frame)) containsConsentNote=\(containsNote)")
+        }
+        lines.append("close exists=\(close.exists) hittable=\(close.isHittable) frame=\(rect(close.frame)) label=\(close.label)")
+        lines.append("heading exists=\(heading.exists) hittable=\(heading.isHittable) frame=\(rect(heading.frame)) label=\(heading.label)")
+        lines.append("note exists=\(note.exists) hittable=\(note.isHittable) frame=\(rect(note.frame)) label=\(note.label)")
+        lines.append("confirm exists=\(action.exists) hittable=\(action.isHittable) frame=\(rect(action.frame)) label=\(action.label)")
+        lines.append("cancel exists=\(cancel.exists) hittable=\(cancel.isHittable) frame=\(rect(cancel.frame)) label=\(cancel.label)")
+        let geometry = XCTAttachment(string: lines.joined(separator: "\n"))
+        geometry.name = "Look consent failure geometry"
+        geometry.lifetime = .keepAlways
+        add(geometry)
+    }
+
+    private func fullyAboveActions(_ note: XCUIElement, heading: XCUIElement, close: XCUIElement,
+                                   action: XCUIElement,
                                    cancel: XCUIElement, viewport: CGRect, window: CGRect) -> Bool {
         let visible = viewport.intersection(window)
         func fullyVisible(_ frame: CGRect) -> Bool {
             !visible.isNull && frame.minX >= visible.minX && frame.maxX <= visible.maxX
                 && frame.minY >= visible.minY && frame.maxY <= visible.maxY
         }
-        return note.exists && heading.exists && action.exists && cancel.exists
-            && fullyVisible(heading.frame) && fullyVisible(note.frame) && note.isHittable && heading.isHittable
+        func fullyVisibleInWindow(_ frame: CGRect) -> Bool {
+            frame.minX >= window.minX && frame.maxX <= window.maxX
+                && frame.minY >= window.minY && frame.maxY <= window.maxY
+        }
+        return note.exists && heading.exists && close.exists && action.exists && cancel.exists
+            && fullyVisibleInWindow(close.frame) && close.isHittable
+            && fullyVisible(heading.frame) && heading.isHittable && heading.frame.minY >= close.frame.maxY
+            && fullyVisible(note.frame) && note.isHittable && note.frame.minY >= heading.frame.maxY
             && action.isHittable && cancel.isHittable && note.frame.maxY <= action.frame.minY
             && action.frame.maxY <= cancel.frame.minY
     }

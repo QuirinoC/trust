@@ -1,6 +1,6 @@
 # Trust Staging: two-iPhone acceptance
 
-**Execution status: not run.** Use **Trust Staging 1.0 (51)**, application source `65d9d0528c400161d2f85860b6071f3202b368db`. Apple verified it VALID, INTERNAL_ONLY and IN_BETA_TESTING in the existing three-tester group. Build 50 predates the automatic-handle flow and is not suitable for this procedure. StoreKit purchases, staging APNs delivery and two real-device acceptance remain to be observed. Additional simulator checks passed genuine development APNs, notification Settings recovery, and background CoreLocation with fictional movement. The native Staging catalog loaded, but positive Apple sign-in/purchase/restore still requires an Apple Account login; see [the evidence report](evidence/2026-11-01-customer-experience/DEVICE-ACCOUNT-REPORT.md).
+**Execution status: not run.** Use **Trust Staging 1.0 (52)**, application source `faa306f85d4a24732f03b8420cf78b1a556846bf`. Apple verified it COMPLETE, VALID, INTERNAL_ONLY and IN_BETA_TESTING in the existing three-tester group; tester IDs and roles were unchanged. StoreKit purchases, staging APNs delivery and two-real-device acceptance remain to be observed. Prior simulator evidence is described in [the evidence report](evidence/2026-11-01-customer-experience/DEVICE-ACCOUNT-REPORT.md); it does not establish physical behavior.
 
 Use two adult testers with distinct Apple Accounts and real iPhones. Select two of the three approved testers; these are the only two reserved phone numbers available concurrently for the automatic, no-SMS flow. Do not swap the assigned numbers between accounts during the run. Assign them as follows:
 
@@ -12,6 +12,10 @@ After automatic assignment, optionally edit each handle to the test value if ava
 Record each phone’s model, iOS version, app build, and location and notification permissions. Confirm both apps say **Trust Staging**, show the STAGING badge, and use the same build. [TestFlight purchases automatically use Apple’s sandbox](https://developer.apple.com/help/app-store-connect/test-a-beta-version/testing-subscriptions-and-in-app-purchases-in-testflight/) and are not charged. No extra dedicated Sandbox Apple Account is needed for these baseline purchase checks. If products do not load, record that step as blocked; do not substitute a local purchase fixture.
 
 For every numbered step, record **Pass**, **Fail**, **Blocked**, or **Not run**. Record observed behavior, not an inferred result. Push delivery is not guaranteed.
+
+## Map recovery on a real device
+
+On a phone with location permission granted, open People and use Recenter, then pan the map manually. After a later location fix arrives, check that the manual view remains in place; explicitly tap Recenter again and verify it works. Record the observed result and permission state without recording precise personal location. This is an outstanding physical-device check.
 
 ## Run the checks
 
