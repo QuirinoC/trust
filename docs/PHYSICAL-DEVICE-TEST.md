@@ -1,6 +1,6 @@
 # Trust Staging: two-iPhone acceptance
 
-**Execution status: not run.** Use **Trust Staging 1.0 (52)**, application source `faa306f85d4a24732f03b8420cf78b1a556846bf`. Apple verified it COMPLETE, VALID, INTERNAL_ONLY and IN_BETA_TESTING in the existing three-tester group; tester IDs and roles were unchanged. StoreKit purchases, staging APNs delivery and two-real-device acceptance remain to be observed. Prior simulator evidence is described in [the evidence report](evidence/2026-11-01-customer-experience/DEVICE-ACCOUNT-REPORT.md); it does not establish physical behavior.
+**Execution status: not run; Juan deferred real-phone testing on 3 November and asked to continue preparation.** Use **Trust Staging 1.0 (52)**, application source `faa306f85d4a24732f03b8420cf78b1a556846bf`. Apple verified it COMPLETE, VALID, INTERNAL_ONLY and IN_BETA_TESTING in the existing three-tester group; tester IDs and roles were unchanged. StoreKit purchases, staging APNs delivery and two-real-device acceptance remain to be observed. Prior simulator evidence is described in [the evidence report](evidence/2026-11-01-customer-experience/DEVICE-ACCOUNT-REPORT.md); it does not establish physical behavior.
 
 Use two adult testers with distinct Apple Accounts and real iPhones. Select two of the three approved testers; these are the only two reserved phone numbers available concurrently for the automatic, no-SMS flow. Do not swap the assigned numbers between accounts during the run. Assign them as follows:
 
