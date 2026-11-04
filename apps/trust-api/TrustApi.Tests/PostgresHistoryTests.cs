@@ -281,7 +281,10 @@ public sealed class PostgresHistoryTests
             var invite = await engine.CreateInviteAsync(owner.Id, CancellationToken.None);
             await engine.AcceptInviteAsync(viewer.Id, invite.Code, CancellationToken.None);
             var accountToken = await entitlements.GetOrCreateAccountTokenAsync(owner.Id, CancellationToken.None);
+            // PostgreSQL timestamptz stores microseconds; align the fixture clock so
+            // entitlement expiry compares exactly after a database round-trip.
             var now = DateTimeOffset.UtcNow;
+            now = now.AddTicks(-(now.Ticks % TimeSpan.TicksPerMicrosecond));
             var expiry = now.AddDays(2);
             var originalId = $"original-{suffix}";
             var applied = await entitlements.ApplyAsync(owner.Id, new VerifiedStoreKitTransaction(

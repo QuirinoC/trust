@@ -1685,13 +1685,16 @@ final class TrustUsageTests: XCTestCase {
         addTeardownBlock { [self] in
             app.terminate()
             app.launch()
-            XCTAssertTrue(app.buttons["tab-you"].waitForExistence(timeout: 20))
-            app.buttons["tab-you"].tap()
+            XCTAssertTrue(ensureYouTabSelected(in: app, activating: true, context: "language cleanup after relaunch"))
             selectSystemLanguage(in: app)
         }
         func selectLanguage(_ title: String) {
             let picker = app.descendants(matching: .any)["language-preference"]
-            XCTAssertTrue(picker.waitForExistence(timeout: 5))
+            XCTAssertTrue(ensureYouTabSelected(in: app, activating: false, context: "scroll to language option \(title)"))
+            XCTAssertTrue(scrollYouContent(to: picker, direction: .down, in: app),
+                          "The language preference should be reachable inside You before selecting \(title).")
+            XCTAssertTrue(picker.waitForExistence(timeout: 5) && picker.isHittable,
+                          "The language picker should be present and hittable after scrolling to it.")
             picker.tap()
             let option = app.buttons[title]
             XCTAssertTrue(option.waitForExistence(timeout: 5))
@@ -1710,8 +1713,7 @@ final class TrustUsageTests: XCTestCase {
             XCTAssertEqual(XCTWaiter.wait(for: expectations, timeout: 5), .completed,
                            "Changing language should update every tab immediately.")
         }
-        XCTAssertTrue(app.buttons["tab-you"].waitForExistence(timeout: 20))
-        app.buttons["tab-you"].tap()
+        XCTAssertTrue(ensureYouTabSelected(in: app, activating: true, context: "language test startup"))
         selectLanguage("English")
         assertTabLabels(["People", "Sharing", "Activity", "You"])
         selectLanguage("Français")
@@ -1723,9 +1725,11 @@ final class TrustUsageTests: XCTestCase {
 
         app.terminate()
         app.launch()
-        XCTAssertTrue(app.buttons["tab-you"].waitForExistence(timeout: 20))
-        app.buttons["tab-you"].tap()
+        XCTAssertTrue(ensureYouTabSelected(in: app, activating: true, context: "language preference relaunch"))
+        XCTAssertTrue(ensureYouTabSelected(in: app, activating: false, context: "scroll to persisted language preference"))
         let restoredPicker = app.descendants(matching: .any)["language-preference"]
+        XCTAssertTrue(scrollYouContent(to: restoredPicker, direction: .down, in: app),
+                      "The persisted language picker should be reachable after relaunch.")
         XCTAssertTrue(restoredPicker.waitForExistence(timeout: 5))
         XCTAssertEqual(restoredPicker.value as? String, "Français")
         assertTabLabels(["Personnes", "Partage", "Activité", "Toi"])
@@ -2258,7 +2262,11 @@ final class TrustUsageTests: XCTestCase {
 
     private func selectSystemLanguage(in app: XCUIApplication) {
         let picker = app.descendants(matching: .any)["language-preference"]
+        XCTAssertTrue(ensureYouTabSelected(in: app, activating: false, context: "scroll to system language option"))
+        XCTAssertTrue(scrollYouContent(to: picker, direction: .down, in: app),
+                      "The language picker should be reachable before restoring system language.")
         XCTAssertTrue(picker.waitForExistence(timeout: 5))
+        XCTAssertTrue(picker.isHittable)
         picker.tap()
         let systemOption = app.buttons.matching(
             NSPredicate(format: "label CONTAINS[c] %@", "iPhone")
@@ -2270,6 +2278,61 @@ final class TrustUsageTests: XCTestCase {
             object: app.descendants(matching: .any)["language-preference"]
         )
         XCTAssertEqual(XCTWaiter.wait(for: [restored], timeout: 5), .completed)
+    }
+
+    private func ensureYouTabSelected(in app: XCUIApplication, activating: Bool, context: String,
+                                      file: StaticString = #filePath, line: UInt = #line) -> Bool {
+        let tab = app.buttons["tab-you"]
+        let viewport = app.windows.firstMatch.frame
+        guard tab.waitForExistence(timeout: 20) else {
+            attachYouTabFailure("You tab did not appear: \(context)", tab: tab, in: app)
+            XCTFail("The You tab must appear before the language preference is queried: \(context)", file: file, line: line)
+            return false
+        }
+
+        if activating {
+            guard waitForStableMenuAction(tab, within: viewport, timeout: 5) else {
+                attachYouTabFailure("You tab was not fully visible and hittable before activation: \(context)", tab: tab, in: app)
+                XCTFail("The You tab must be stable and hittable before its single activation: \(context)", file: file, line: line)
+                return false
+            }
+            let contact = tab.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            contact.press(forDuration: 0.1)
+            let selected = XCTNSPredicateExpectation(
+                predicate: NSPredicate(format: "isSelected == true"), object: tab)
+            guard XCTWaiter.wait(for: [selected], timeout: 5) == .completed else {
+                attachYouTabFailure("You tab did not become selected after its single activation: \(context)", tab: tab, in: app)
+                XCTFail("The You tab must report selected before the language preference is queried: \(context)", file: file, line: line)
+                return false
+            }
+        }
+        guard tab.isSelected else {
+            attachYouTabFailure("You tab selection was not established before language scrolling: \(context)", tab: tab, in: app)
+            XCTFail("The language picker may only be scrolled or queried while You is selected: \(context)", file: file, line: line)
+            return false
+        }
+        return true
+    }
+
+    private func attachYouTabFailure(_ reason: String, tab: XCUIElement, in app: XCUIApplication) {
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "You tab selection failure - \(reason)"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        let hierarchy = XCTAttachment(string: "\(reason)\n\(app.debugDescription)")
+        hierarchy.name = "You tab selection hierarchy"
+        hierarchy.lifetime = .keepAlways
+        add(hierarchy)
+        let tabState: String
+        if tab.exists {
+            tabState = "exists=true; selected=\(tab.isSelected); hittable=\(tab.isHittable); frame=\(tab.frame)"
+        } else {
+            tabState = "exists=false; selected/hittable/frame unavailable"
+        }
+        let geometry = XCTAttachment(string: "\(tabState); window=\(app.windows.firstMatch.frame)")
+        geometry.name = "You tab selection geometry"
+        geometry.lifetime = .keepAlways
+        add(geometry)
     }
 
     private func tapConfirmationAction(_ identifier: String, in app: XCUIApplication) {
@@ -2361,7 +2424,7 @@ final class TrustUsageTests: XCTestCase {
 
         for _ in 0..<18 {
             if isFullyVisible(element, within: viewport) { return true }
-            let frame = element.frame
+            let frame = element.exists ? element.frame : .null
             let hasUsableFrame = !frame.isNull && !frame.isInfinite && frame.width > 0 && frame.height > 0
             let targetY = hasUsableFrame ? frame.midY : .nan
             let dragDirection: ScrollDirection
