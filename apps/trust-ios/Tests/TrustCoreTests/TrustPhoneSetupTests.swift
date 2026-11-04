@@ -3,11 +3,42 @@ import XCTest
 @testable import TrustCore
 
 final class TrustPhoneSetupTests: XCTestCase {
-    func testVerifiedPhoneAndHandleAreBothMandatory() {
-        XCTAssertEqual(TrustPhoneSetupRoute.route(handle: nil, phoneVerified: false), .handle)
+    func testCountryPhoneNormalizationAndPastedInternationalNumber() {
+        XCTAssertEqual(TrustPhoneCountry.canonicalNumber("4155550100", countryCode: "US"), "+14155550100")
+        XCTAssertEqual(TrustPhoneCountry.canonicalNumber("+44 20 7031 3000", countryCode: "US"), "+442070313000")
+        XCTAssertEqual(TrustPhoneCountry.canonicalNumber("1 (201) 555-5555", countryCode: "US"), "+12015555555")
+        XCTAssertEqual(TrustPhoneCountry.canonicalNumber("02111961234567", countryCode: "BR"), "+5511961234567")
+        XCTAssertEqual(TrustPhoneCountry.canonicalNumber("011 15 2345 6789", countryCode: "AR"), "+5491123456789")
+        XCTAssertEqual(TrustPhoneCountry.canonicalNumber("06 20 123 4567", countryCode: "HU"), "+36201234567")
+        XCTAssertEqual(TrustPhoneCountry.canonicalNumber("8 916 195 55 58", countryCode: "RU"), "+79161955558")
+        XCTAssertEqual(TrustPhoneCountry.canonicalNumber("02 3661 8300", countryCode: "IT"), "+390236618300")
+        XCTAssertEqual(TrustPhoneCountry.canonicalNumber("491713369876", countryCode: "DE"), "+49491713369876")
+        XCTAssertEqual(TrustPhoneCountry.canonicalNumber("00442070313000", countryCode: "US"), "+442070313000")
+        XCTAssertEqual(TrustPhoneCountry.canonicalNumber("415", countryCode: "US"), "+1415")
+    }
+
+    func testCountriesSharingCallingCodeRemainSelectableAndSearchable() {
+        let northAmerica = TrustPhoneCountry.all.filter { $0.callingCode == "1" }
+        XCTAssertTrue(northAmerica.contains(TrustPhoneCountry.unitedStates))
+        XCTAssertTrue(northAmerica.contains { $0.code == "CA" })
+        XCTAssertTrue(TrustPhoneCountry.matches(TrustPhoneCountry.unitedStates, query: "+1"))
+        XCTAssertFalse(TrustPhoneCountry.matches(TrustPhoneCountry.unitedStates, query: "999"))
+        XCTAssertEqual(TrustPhoneCountry.country(code: "gb")?.callingCode, "44")
+        XCTAssertEqual(TrustPhoneCountry.regionSeed(responseCode: "CA", manualSelection: true, hasDraft: false), nil)
+        XCTAssertEqual(TrustPhoneCountry.regionSeed(responseCode: "CA", manualSelection: false, hasDraft: true), nil)
+        XCTAssertEqual(TrustPhoneCountry.regionSeed(responseCode: "CA", manualSelection: false, hasDraft: false)?.code, "CA")
+        XCTAssertEqual(TrustPhoneCountry.split("+14155550100", preferredCountry: TrustPhoneCountry.country(code: "CA")).country?.code, "CA")
+    }
+    func testVerifiedPhoneWaitsForAutomaticHandleCompletion() {
+        XCTAssertEqual(TrustPhoneSetupRoute.route(handle: nil, phoneVerified: false), .phone)
         XCTAssertEqual(TrustPhoneSetupRoute.route(handle: nil, phoneVerified: true), .handle)
         XCTAssertEqual(TrustPhoneSetupRoute.route(handle: "sam", phoneVerified: false), .phone)
         XCTAssertEqual(TrustPhoneSetupRoute.route(handle: "sam", phoneVerified: true), .home)
+        XCTAssertEqual(TrustPhoneSetupRoute.route(handle: "sam", phoneVerified: true, onboardingComplete: false), .handle)
+        for invalid in ["!", "admin"] {
+            XCTAssertEqual(TrustPhoneSetupRoute.route(handle: invalid, phoneVerified: false), .phone)
+            XCTAssertEqual(TrustPhoneSetupRoute.route(handle: invalid, phoneVerified: true), .handle)
+        }
     }
 
     func testThreeNumbersEditRevisitAndRelaunchPreserveServerDeadlines() throws {
@@ -77,5 +108,29 @@ final class TrustPhoneSetupTests: XCTestCase {
         XCTAssertEqual(state.secondsRemaining(for: "2025550102", now: now), 0)
         let json = String(data: try JSONEncoder().encode(state), encoding: .utf8)!
         XCTAssertFalse(json.contains("phoneCodeDraft"))
+
+        // An upgrade must preserve an older account's budgets even when its
+        // protected metadata predates the explicit number-editing fields.
+        var legacy = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any])
+        for key in ["editingPhoneNumber", "editedPhoneDraft", "phoneEditOriginRequestID"] {
+            legacy.removeValue(forKey: key)
+        }
+        let restoredLegacy = try JSONDecoder().decode(TrustPhoneRetryState.self,
+            from: JSONSerialization.data(withJSONObject: legacy))
+        XCTAssertNotEqual(restoredLegacy.editingPhoneNumber, true)
+        XCTAssertEqual(restoredLegacy.attemptedNumbers, state.attemptedNumbers)
+        XCTAssertEqual(restoredLegacy.secondsRemaining(for: "2025550101", now: now), 45)
+
+        state.editingPhoneNumber = true
+        state.editedPhoneDraft = "+12025550104"
+        state.challengeNumber = "+12025550103"
+        state.showingCode = false
+        state.phoneEditOriginRequestID = UUID()
+        let editing = try JSONDecoder().decode(TrustPhoneRetryState.self, from: JSONEncoder().encode(state))
+        XCTAssertEqual(editing.editedPhoneDraft, "+12025550104")
+        XCTAssertEqual(editing.challengeNumber, "+12025550103")
+        XCTAssertEqual(editing.phoneEditOriginRequestID, state.phoneEditOriginRequestID)
+        XCTAssertEqual(editing.editingPhoneNumber, true)
+        XCTAssertEqual(editing.showingCode, false)
     }
 }

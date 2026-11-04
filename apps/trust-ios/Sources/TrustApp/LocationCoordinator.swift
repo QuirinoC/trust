@@ -87,7 +87,7 @@ final class LocationCoordinator: NSObject, ObservableObject, CLLocationManagerDe
 
     var needsSystemSettings: Bool {
         if isDenied { return true }
-        return isSharing && authorization == .authorizedWhenInUse && didRequestAlwaysUpgrade
+        return authorization == .authorizedWhenInUse && didRequestAlwaysUpgrade
     }
 
     var statusLabel: String {
@@ -268,6 +268,8 @@ final class LocationCoordinator: NSObject, ObservableObject, CLLocationManagerDe
             pendingAlwaysAfterWhenInUse = true
             manager.requestWhenInUseAuthorization()
         case .authorizedWhenInUse:
+            didRequestAlwaysUpgrade = true
+            objectWillChange.send()
             awaitingAlwaysAnswer = true
             manager.requestAlwaysAuthorization()
         case .authorizedAlways:

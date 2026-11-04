@@ -63,11 +63,20 @@ struct AddPersonSheet: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.trustPalette) private var palette
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @FocusState private var handleFocused: Bool
+    @State private var addScrollViewportHeight: CGFloat = 0
+    @State private var showingCountryPicker = false
+    @State private var countrySearch = ""
+    private let addFieldScrollAnchor = "add-person-field-scroll-anchor"
+    private let addLookupRecoveryScrollAnchor = "add-person-recovery-scroll-anchor"
+    private let addLookupResultScrollAnchor = "add-person-result-scroll-anchor"
 
     var body: some View {
         NavigationStack {
-            ScrollView {
+            VStack(spacing: 0) {
+                ScrollViewReader { scrollProxy in
+                    ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(TrustCopy.findYourPerson)
@@ -81,66 +90,131 @@ struct AddPersonSheet: View {
                             .accessibilityIdentifier("add-person-explanation")
                     }
 
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack(spacing: 9) {
-                            Image(systemName: "magnifyingglass")
-                                .font(.system(size: 18, weight: .medium))
-                                .foregroundStyle(palette.accent)
-                                .accessibilityHidden(true)
-                            TextField(TrustCopy.addPersonLookupPlaceholder, text: Binding(
-                                get: { model.connectionHandleDraft },
-                                set: { model.setConnectionHandleDraft($0) }
-                            ))
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                            .keyboardType(.default)
-                            .submitLabel(.done)
-                            .onSubmit {
-                                model.submitConnectionLookup()
-                                handleFocused = false
-                            }
-                            .focused($handleFocused)
-                            .accessibilityIdentifier("connection-handle")
-                            if model.isLookingUpConnection {
-                                ProgressView()
-                                    .tint(palette.accent)
-                                    .accessibilityHidden(true)
-                            }
-                            if !model.connectionHandleDraft.isEmpty {
-                                Button {
-                                    model.setConnectionHandleDraft("")
-                                    handleFocused = true
-                                } label: {
-                                    Image(systemName: "xmark.circle.fill")
-                                        .foregroundStyle(palette.muted)
-                                        .frame(width: 44, height: 44)
-                                        .contentShape(Rectangle())
-                                }
-                                .buttonStyle(.plain)
-                                .accessibilityLabel(TrustCopy.clearField)
-                                .accessibilityIdentifier("clear-connection-lookup")
-                            }
+                    Button { model.prepareShareInviteLink() } label: {
+                        HStack(spacing: 8) {
+                            if model.isPreparingConnectionInvite { ProgressView().tint(palette.accent) }
+                            Text(TrustCopy.shareInviteLink)
+                            Spacer(minLength: 0)
+                            Image(systemName: "square.and.arrow.up").accessibilityHidden(true)
                         }
-                        .padding(.horizontal, 18)
-                        .frame(height: 56)
-                        .background(palette.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(palette.line, lineWidth: 1))
-                        if let hint = model.connectionLookupHint {
-                            Text(hint)
-                                .trustFont(13)
-                                .foregroundStyle(palette.muted)
-                                .fixedSize(horizontal: false, vertical: true)
-                                .padding(.horizontal, 4)
-                                .accessibilityIdentifier("connection-lookup-hint")
-                        }
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                     }
+                    .buttonStyle(TrustOutlineButtonStyle(compact: true))
+                    .disabled(model.isPreparingConnectionInvite)
+                    .accessibilityIdentifier("share-invite-link")
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        if isPhoneDraft {
+                            Button { showingCountryPicker = true } label: {
+                                HStack(spacing: 8) {
+                                    Text(model.connectionPhoneCountry.name)
+                                        .lineLimit(1)
+                                        .minimumScaleFactor(0.75)
+                                    Text(model.connectionPhoneCountry.displayCallingCode)
+                                    Spacer(minLength: 8)
+                                    Image(systemName: "chevron.down")
+                                        .font(.system(size: 11, weight: .semibold))
+                                        .accessibilityHidden(true)
+                                }
+                                .trustFont(14, weight: .semibold)
+                                .foregroundStyle(palette.ink)
+                                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(TrustCopy.phoneCountryAccessibilityLabel(model.connectionPhoneCountry.name, callingCode: model.connectionPhoneCountry.displayCallingCode))
+                            .accessibilityIdentifier("connection-phone-country")
+                        }
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack(spacing: 9) {
+                                Image(systemName: "magnifyingglass")
+                                    .font(.system(size: 18, weight: .medium))
+                                    .foregroundStyle(palette.accent)
+                                    .accessibilityHidden(true)
+                                TextField(TrustCopy.addPersonLookupPlaceholder, text: Binding(
+                                    get: { model.connectionHandleDraft },
+                                    set: { model.setConnectionHandleDraft($0) }
+                                ))
+                                .textInputAutocapitalization(.never)
+                                .autocorrectionDisabled()
+                                .keyboardType(.default)
+                                .submitLabel(.done)
+                                .onSubmit {
+                                    model.submitConnectionLookup()
+                                }
+                                .focused($handleFocused)
+                                .accessibilityIdentifier("connection-handle")
+                                if model.isLookingUpConnection {
+                                    ProgressView()
+                                        .tint(palette.accent)
+                                        .accessibilityHidden(true)
+                                }
+                                if !model.connectionHandleDraft.isEmpty {
+                                    Button {
+                                        model.setConnectionHandleDraft("")
+                                        handleFocused = true
+                                        scrollFocusedFieldToBottom(using: scrollProxy)
+                                    } label: {
+                                        Image(systemName: "xmark.circle.fill")
+                                            .foregroundStyle(palette.muted)
+                                            .frame(width: 45, height: 45)
+                                            .contentShape(Rectangle())
+                                    }
+                                    .buttonStyle(.plain)
+                                    .accessibilityLabel(TrustCopy.clearField)
+                                    .accessibilityIdentifier("clear-connection-lookup")
+                                }
+                            }
+                            .padding(.horizontal, 18)
+                            .frame(minHeight: 56)
+                            .background(palette.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(palette.line, lineWidth: 1))
+                            .accessibilityElement(children: .contain)
+                            .accessibilityIdentifier("connection-lookup-field")
+                            if let hint = model.connectionLookupHint {
+                                Text(hint)
+                                    .trustFont(13)
+                                    .foregroundStyle(palette.muted)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .padding(.horizontal, 4)
+                                    .accessibilityIdentifier("connection-lookup-hint")
+                            }
+                            if let phonePreview {
+                                Text(phonePreview)
+                                    .trustFont(12)
+                                    .foregroundStyle(palette.muted)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .padding(.horizontal, 4)
+                                    .accessibilityIdentifier("connection-phone-preview")
+                            }
+                        }
+                        Color.clear
+                            // The measured scroll-to-bottom inset settles about 4pt short of
+                            // the anchor on Duo, so reserve extra space to preserve the
+                            // required 8pt visible clearance below the bordered field.
+                            .frame(height: dynamicTypeSize.isAccessibilitySize ? 16 : 8)
+                            .accessibilityHidden(true)
+                    }
+                    .id(addFieldScrollAnchor)
 
                     if let notice = model.connectionLookupNotice {
-                        Text(notice)
-                            .trustFont(13)
-                            .foregroundStyle(palette.danger)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .accessibilityIdentifier("connection-lookup-notice")
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(notice)
+                                .trustFont(13)
+                                .foregroundStyle(palette.danger)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .accessibilityIdentifier("connection-lookup-notice")
+                            if model.connectionLookupCanRetry {
+                                Button { model.retryConnectionLookup() } label: {
+                                    Text(TrustCopy.retry)
+                                        .frame(minWidth: 44, minHeight: 44, alignment: .leading)
+                                        .contentShape(Rectangle())
+                                }
+                                    .buttonStyle(TrustTextButtonStyle(color: palette.accent))
+                                    .accessibilityIdentifier("retry-connection-lookup")
+                            }
+                        }
+                        .id(addLookupRecoveryScrollAnchor)
                     }
 
                     if model.connectionRequiresPhoneVerification {
@@ -151,6 +225,7 @@ struct AddPersonSheet: View {
 
                     if let result = model.connectionLookup {
                         lookupResult(result)
+                            .id(addLookupResultScrollAnchor)
                             .transition(.opacity)
                     }
                     if model.connectionLookupIsNoMatch {
@@ -173,7 +248,7 @@ struct AddPersonSheet: View {
                                         if model.isPreparingConnectionInvite {
                                             ProgressView().tint(palette.accentOn)
                                         }
-                                        Text(TrustCopy.inviteToTrust)
+                                        Text(TrustCopy.shareInviteLink)
                                     }
                                     .frame(maxWidth: .infinity)
                                 }
@@ -191,32 +266,58 @@ struct AddPersonSheet: View {
                 .frame(maxWidth: TrustTheme.readableWidth, alignment: .leading)
                 .frame(maxWidth: .infinity, alignment: .center)
                 .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: model.connectionLookup?.relationship)
+                    }
+                    .accessibilityIdentifier("add-person-scroll")
+                    .background(palette.paper)
+                    .clipShape(Rectangle())
+                    .onGeometryChange(for: CGFloat.self) { proxy in
+                        proxy.size.height
+                    } action: { height in
+                        let previousHeight = addScrollViewportHeight
+                        addScrollViewportHeight = height
+                        if dynamicTypeSize.isAccessibilitySize,
+                           handleFocused,
+                           previousHeight > 0,
+                           height < previousHeight - 1 {
+                            scrollFocusedFieldToBottom(using: scrollProxy)
+                        }
+                    }
+                    .onChange(of: model.connectionLookupNotice) { _, notice in
+                        guard notice != nil else { return }
+                        revealLookupFeedback(using: scrollProxy)
+                    }
+                    .onChange(of: model.connectionLookup?.relationship) { _, relationship in
+                        guard relationship == "sent" else { return }
+                        scrollToLookupResult(using: scrollProxy)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+                if dynamicTypeSize.isAccessibilitySize {
+                    HStack {
+                        Spacer(minLength: 0)
+                        cancelButton
+                    }
+                    .padding(.horizontal, TrustTheme.gutter)
+                    .frame(maxWidth: .infinity)
+                    // Keep at least 8pt between the focused lookup field and
+                    // the 44pt Close target after Duo resizes the keyboard viewport.
+                    .frame(height: 60)
+                    .background(palette.paper)
+                }
             }
             .background(palette.paper.ignoresSafeArea())
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button { model.showingAddPersonSheet = false } label: {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(palette.ink)
-                            .frame(width: 36, height: 36)
-                            .background(palette.surface, in: Circle())
-                            .frame(width: 44, height: 44)
-                            .contentShape(Rectangle())
+                if !dynamicTypeSize.isAccessibilitySize {
+                    ToolbarItem(placement: .cancellationAction) {
+                        cancelButton
                     }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel(TrustCopy.cancel)
-                        .accessibilityIdentifier("cancel-add-person")
                 }
             }
         }
         .task {
             guard !model.isScreenshotLaunch else { return }
             model.setConnectionHandleDraft("")
-            try? await Task.sleep(for: .milliseconds(350))
-            guard !Task.isCancelled else { return }
-            handleFocused = true
             Task { await model.refreshConnectionRequests() }
         }
         .sheet(isPresented: Binding(
@@ -229,6 +330,108 @@ struct AddPersonSheet: View {
                 }
             }
         }
+        .sheet(isPresented: $showingCountryPicker) { countryPicker }
+    }
+
+    private var isPhoneDraft: Bool {
+        let value = model.connectionHandleDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        return value.isEmpty || value.first?.isNumber == true || value.first == "+"
+    }
+
+    private var phonePreview: String? {
+        let raw = model.connectionHandleDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !raw.isEmpty, raw.first?.isNumber == true || raw.first == "+",
+              let query = PersonLookupQuery.parse(raw, region: model.connectionPhoneCountry.code),
+              case .phone(let phone, _) = query else { return nil }
+        if phone.hasPrefix("+") { return phone }
+        return "\(model.connectionPhoneCountry.displayCallingCode) \(phone.filter(\.isNumber))"
+    }
+
+    private var countryPicker: some View {
+        NavigationStack {
+            List(TrustPhoneCountry.all
+                .filter { TrustPhoneCountry.matches($0, query: countrySearch) }
+                .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }) { country in
+                    Button {
+                        model.setConnectionPhoneCountry(country)
+                        showingCountryPicker = false
+                    } label: {
+                        HStack {
+                            Text(country.name)
+                            Spacer()
+                            Text(country.displayCallingCode).foregroundStyle(palette.muted)
+                            if country == model.connectionPhoneCountry {
+                                Image(systemName: "checkmark").foregroundStyle(palette.accent)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+                .searchable(text: $countrySearch, prompt: TrustCopy.phoneCountrySearch)
+                .navigationTitle(TrustCopy.phoneCountryCodeTitle)
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button(TrustCopy.done) { showingCountryPicker = false }
+                    }
+                }
+        }
+    }
+
+    private func scrollFocusedFieldToBottom(using proxy: ScrollViewProxy) {
+        guard dynamicTypeSize.isAccessibilitySize else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
+            guard handleFocused else { return }
+            proxy.scrollTo(addFieldScrollAnchor, anchor: .bottom)
+        }
+    }
+
+    private func revealLookupFeedback(using proxy: ScrollViewProxy) {
+        if model.connectionLookup?.relationship == "sent" {
+            scrollToLookupResult(using: proxy)
+            return
+        }
+        // Keep the error and its Retry target above the keyboard after SwiftUI
+        // finishes both the keyboard resize and the pending lookup transition.
+        // The later passes are scroll-only and leave the lookup field focused.
+        for delay in [0.18, 0.45, 0.8] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                guard model.showingAddPersonSheet,
+                      model.connectionLookupNotice != nil else { return }
+                withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) {
+                    proxy.scrollTo(addLookupRecoveryScrollAnchor, anchor: .bottom)
+                }
+            }
+        }
+    }
+
+    private func scrollToLookupResult(using proxy: ScrollViewProxy) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
+            guard model.showingAddPersonSheet else { return }
+            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) {
+                proxy.scrollTo(addLookupResultScrollAnchor, anchor: .bottom)
+            }
+        }
+    }
+
+    private var cancelButton: some View {
+        Button {
+            handleFocused = false
+            model.showingAddPersonSheet = false
+        } label: {
+            Image(systemName: "xmark")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(palette.ink)
+                .frame(width: 36, height: 36)
+                .background(palette.surface, in: Circle())
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(TrustCopy.cancel)
+        .accessibilityIdentifier("cancel-add-person")
     }
 
     @ViewBuilder
@@ -424,44 +627,49 @@ struct ConnectionRequestsSection: View {
                         .trustFont(13)
                         .foregroundStyle(palette.danger)
                         .fixedSize(horizontal: false, vertical: true)
-                    Button(TrustCopy.retry) { Task { await model.refreshConnectionRequests() } }
+                    Button { Task { await model.refreshConnectionRequests() } } label: {
+                        Text(TrustCopy.retry)
+                            .frame(minWidth: 44, minHeight: 44, alignment: .leading)
+                            .contentShape(Rectangle())
+                    }
                         .buttonStyle(TrustTextButtonStyle(color: palette.accent))
                         .accessibilityIdentifier("retry-connection-requests")
                 }
                 .padding(.vertical, 10)
                 .accessibilityIdentifier("connection-requests-error")
-            } else {
-                if !model.connectionRequests.incoming.isEmpty {
-                    Text(TrustCopy.incomingRequests)
-                        .trustFont(12, weight: .semibold)
-                        .foregroundStyle(palette.muted)
-                        .padding(.top, 10)
-                        .padding(.bottom, 2)
-                    ForEach(model.connectionRequests.incoming) { request in
-                        requestRow(request, incoming: true)
-                        TrustRowDivider()
-                    }
-                }
+            }
 
-                if !model.connectionRequests.sent.isEmpty {
-                    Text(TrustCopy.sentRequests)
-                        .trustFont(12, weight: .semibold)
-                        .foregroundStyle(palette.muted)
-                        .padding(.top, 10)
-                        .padding(.bottom, 2)
-                    ForEach(model.connectionRequests.sent) { request in
-                        requestRow(request, incoming: false)
-                        TrustRowDivider()
-                    }
+            if !model.connectionRequests.incoming.isEmpty {
+                Text(TrustCopy.incomingRequests)
+                    .trustFont(12, weight: .semibold)
+                    .foregroundStyle(palette.muted)
+                    .padding(.top, 10)
+                    .padding(.bottom, 2)
+                ForEach(model.connectionRequests.incoming) { request in
+                    requestRow(request, incoming: true)
+                    TrustRowDivider()
                 }
+            }
 
-                if model.connectionRequests.incoming.isEmpty && model.connectionRequests.sent.isEmpty && !model.isLoadingConnectionRequests {
-                    Text(TrustCopy.noConnectionRequests)
-                        .trustFont(13)
-                        .foregroundStyle(palette.muted)
-                        .frame(minHeight: 42, alignment: .leading)
-                        .accessibilityIdentifier("no-connection-requests")
+            if !model.connectionRequests.sent.isEmpty {
+                Text(TrustCopy.sentRequests)
+                    .trustFont(12, weight: .semibold)
+                    .foregroundStyle(palette.muted)
+                    .padding(.top, 10)
+                    .padding(.bottom, 2)
+                ForEach(model.connectionRequests.sent) { request in
+                    requestRow(request, incoming: false)
+                    TrustRowDivider()
                 }
+            }
+
+            if model.connectionRequests.incoming.isEmpty && model.connectionRequests.sent.isEmpty
+                && !model.isLoadingConnectionRequests && model.connectionRequestsNotice == nil {
+                Text(TrustCopy.noConnectionRequests)
+                    .trustFont(13)
+                    .foregroundStyle(palette.muted)
+                    .frame(minHeight: 42, alignment: .leading)
+                    .accessibilityIdentifier("no-connection-requests")
             }
 
             if model.connectionRequiresPhoneVerification {
@@ -516,6 +724,23 @@ struct ConnectionRequestsSection: View {
                         .buttonStyle(TrustTextButtonStyle(color: palette.muted))
                         .disabled(model.actingOnConnectionRequestIDs.contains(request.id))
                         .accessibilityIdentifier("cancel-connection-request-\(request.otherParty.handle)")
+                }
+            }
+
+            if let error = model.connectionRequestActionErrors[request.id] {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(error)
+                        .trustFont(12)
+                        .foregroundStyle(palette.danger)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("connection-request-error-\(request.otherParty.handle)")
+                    Button { model.retryConnectionRequestAction(id: request.id) } label: {
+                        Text(TrustCopy.retry)
+                            .frame(minWidth: 44, minHeight: 44, alignment: .leading)
+                            .contentShape(Rectangle())
+                    }
+                        .buttonStyle(TrustTextButtonStyle(color: palette.accent))
+                        .accessibilityIdentifier("retry-connection-request-\(request.otherParty.handle)")
                 }
             }
         }

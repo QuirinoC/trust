@@ -26,7 +26,16 @@ struct HandleAvailabilityPayload: Decodable {
     var code: String?
 }
 
+struct RecoveryRequestPayload: Decodable {
+    var requestId: UUID
+    var status: String
+    var createdAt: Date
+}
+
 struct SendPhoneCodePayload: Decodable {
+    var requestId: UUID?
+    var challengeId: UUID?
+    var deliveryState: String?
     var expiresAt: Date
     var resendAfterSeconds: Int
     var developmentCode: String?
@@ -38,6 +47,41 @@ struct SendPhoneCodePayload: Decodable {
     var accountRetryAt: Date?
     var accountWindowStartedAt: Date?
     var accountSendCount: Int?
+}
+
+struct PhoneVerificationOperationDTO: Decodable {
+    var requestId: UUID?
+    var challengeId: UUID
+    var purpose: String
+    var verificationState: String
+    var deliveryState: String
+    var expiresAt: Date
+    var targetPhoneMasked: String?
+}
+
+struct PhoneVerificationRetryDTO: Decodable {
+    var serverTime: Date?
+    var resendRetryAt: Date?
+    var correctionRetryAt: Date?
+    var immediateNumberAttemptsRemaining: Int?
+    var accountRetryAt: Date?
+    var accountWindowStartedAt: Date?
+    var accountSendCount: Int?
+}
+
+struct PhoneVerificationStatePayload: Decodable {
+    var phoneMasked: String?
+    var region: String?
+    var phoneVerified: Bool
+    var operation: PhoneVerificationOperationDTO?
+    var retry: PhoneVerificationRetryDTO?
+}
+
+struct PhoneVerificationResultPayload: Decodable {
+    var verified: Bool
+    var requestId: UUID?
+    var challengeId: UUID?
+    var you: PersonDTO
 }
 
 struct AddPersonByPhonePayload: Decodable {
@@ -139,6 +183,9 @@ struct MemberDTO: Decodable {
     var presence: PresenceDTO?
     var share: ShareDTO
     var inboundLive: Bool
+    var receiveAuthorizationVersion: Int?
+    var liveAccessExpiresAt: Date?
+    var liveUnavailableReason: String?
     var live: LocationDTO?
     var outboundPresenceGranted: Bool?
     var outboundPresenceRevision: Int64?
@@ -249,6 +296,8 @@ enum TrustClientError: LocalizedError {
     case unreachable
     case timeout
     case serverUnavailable(Int)
+    case appleUnavailable(statusCode: Int, message: String)
+    case structuredUnavailable(statusCode: Int, code: String, message: String)
     /// A known API error code (`pro_required`, `share_off`, …) with plain copy already mapped.
     case api(code: String, message: String)
     case phoneRetry(code: String, message: String, details: APIErrorPayload)
@@ -262,7 +311,7 @@ enum TrustClientError: LocalizedError {
     /// fallback (disk-cached circle) responds to.
     var isConnectivity: Bool {
         switch self {
-        case .unreachable, .timeout, .serverUnavailable: return true
+        case .unreachable, .timeout, .serverUnavailable, .structuredUnavailable: return true
         default: return false
         }
     }
@@ -270,6 +319,8 @@ enum TrustClientError: LocalizedError {
     var apiCode: String? {
         if case .api(let code, _) = self { return code }
         if case .phoneRetry(let code, _, _) = self { return code }
+        if case .structuredUnavailable(_, let code, _) = self { return code }
+        if case .appleUnavailable = self { return "apple_unavailable" }
         return nil
     }
 
@@ -295,6 +346,10 @@ enum TrustClientError: LocalizedError {
             #else
             return TrustCopy.serverUnavailable
             #endif
+        case .appleUnavailable(_, let message):
+            return message
+        case .structuredUnavailable(_, _, let message):
+            return message
         case .api(_, let message), .phoneRetry(_, let message, _):
             return message
         case .server(let message):
@@ -320,9 +375,12 @@ enum CircleCache {
         return directory.appendingPathComponent("circle.json")
     }
 
-    static func save(_ data: Data) {
+    static func save(_ data: Data, preservingSavedAt savedAt: Date? = nil) {
         guard let fileURL else { return }
         try? data.write(to: fileURL, options: [.atomic, .completeFileProtection])
+        if let savedAt {
+            try? FileManager.default.setAttributes([.modificationDate: savedAt], ofItemAtPath: fileURL.path)
+        }
     }
 
     static func load() -> (data: Data, savedAt: Date)? {
@@ -335,6 +393,16 @@ enum CircleCache {
     static func clear() {
         guard let fileURL else { return }
         try? FileManager.default.removeItem(at: fileURL)
+    }
+
+    static func scrubUnauthorizedLiveData(forAccountID accountID: UUID, now: Date = Date()) {
+        guard let cached = load(),
+              let scrubbed = TrustCircleCacheMutation.scrubbingUnauthorizedLiveData(
+                in: cached.data,
+                accountID: accountID,
+                now: now
+              ), scrubbed != cached.data else { return }
+        save(scrubbed, preservingSavedAt: cached.savedAt)
     }
 
     static func updateShare(
@@ -391,6 +459,7 @@ final class TrustClient {
         let version: UUID
     }
     private var avatarImages: [AvatarCacheKey: UIImage] = [:]
+    private var avatarImageCacheGeneration: UInt64 = 0
 
     func prepare() async {
         let preferred = AppConfiguration.apiBaseURL
@@ -413,6 +482,7 @@ final class TrustClient {
     func appleSession(identityToken: String, displayName: String?, nonce: String? = nil) async throws -> SessionPayload {
 #if DEBUG
         if ProcessInfo.processInfo.environment["TRUST_UI_TEST_FAKE_APPLE_AUTH"] == "1",
+           ProcessInfo.processInfo.environment["TRUST_UI_TEST_SIGNED_APPLE_AUTH"] != "1",
            isLocalAgeAssuranceUITestAPI {
             if ProcessInfo.processInfo.environment["TRUST_UI_TEST_APPLE_EXCHANGE_FAILURE_ONCE"] == "1",
                !didFailAppleExchangeForLocalUITest {
@@ -444,11 +514,37 @@ final class TrustClient {
             var displayName: String
             var nonce: String?
         }
-        let payload: SessionPayload = try await post(
-            path: "/api/v1/session/apple",
-            body: Body(identityToken: identityToken, displayName: displayName ?? "You", nonce: nonce),
-            authorized: false
-        )
+        let body = Body(identityToken: identityToken, displayName: displayName ?? "You", nonce: nonce)
+        let payload: SessionPayload
+        do {
+            payload = try await post(path: "/api/v1/session/apple", body: body, authorized: false)
+        } catch let error as TrustClientError {
+            let statusCode: Int
+            let apiCode: String?
+            switch error {
+            case .serverUnavailable(let status):
+                statusCode = status
+                apiCode = nil
+            case .appleUnavailable(let status, _):
+                statusCode = status
+                apiCode = "apple_unavailable"
+            case .structuredUnavailable(let status, let code, _):
+                statusCode = status
+                apiCode = code
+            default:
+                throw error
+            }
+            guard TrustAPIErrorPolicy.shouldRetryAppleSession(
+                statusCode: statusCode,
+                apiErrorCode: apiCode
+            ) else {
+                throw error
+            }
+            try await Task.sleep(nanoseconds: TrustAPIErrorPolicy.appleSessionRetryDelayNanoseconds)
+            try Task.checkCancellation()
+            payload = try await post(path: "/api/v1/session/apple", body: body, authorized: false)
+        }
+        try Task.checkCancellation()
         token = payload.token
         return payload
     }
@@ -527,13 +623,18 @@ final class TrustClient {
         currentOperation: @MainActor () -> TrustAccountOperation?
     ) -> Bool {
         operation.commitIfCurrent(currentOperation: currentOperation()) {
-            CircleCache.save(result.responseData)
-            self.snapshot = result.snapshot
+            let accountID = TrustSessionIdentity.accountID(from: operation.token)
+            let cachedData = accountID.flatMap {
+                TrustCircleCacheMutation.scrubbingUnauthorizedLiveData(in: result.responseData, accountID: $0)
+            } ?? result.responseData
+            CircleCache.save(cachedData)
+            self.snapshot = (try? decoder.decode(CirclePayload.self, from: cachedData))?.snapshot ?? result.snapshot
         }
     }
 
     /// Last good circle from disk, for offline launch. It is usable only for its authenticated owner.
     func cachedCircle(forAccountID accountID: UUID) -> CircleSnapshot? {
+        CircleCache.scrubUnauthorizedLiveData(forAccountID: accountID)
         guard let cached = CircleCache.load(),
               TrustCircleCacheMutation.belongsToAccount(cached.data, accountID: accountID),
               let payload = try? decoder.decode(CirclePayload.self, from: cached.data) else {
@@ -547,6 +648,7 @@ final class TrustClient {
     func clearCache() {
         CircleCache.clear()
         avatarImages.removeAll()
+        avatarImageCacheGeneration &+= 1
         snapshot = nil
     }
 
@@ -558,41 +660,68 @@ final class TrustClient {
         CircleCache.removeMember(accountID: accountID, personID: personID, connectionID: connectionID)
     }
 
-    func setAvatarPreset(_ presetID: String) async throws -> AvatarDescriptor {
+    func setAvatarPreset(
+        _ presetID: String,
+        operation: TrustAccountOperation,
+        currentOperation: @MainActor () -> TrustAccountOperation?
+    ) async throws -> AvatarDescriptor {
+        guard currentOperation() == operation, token == operation.token else { throw CancellationError() }
         struct Body: Encodable { var presetId: String }
-        var request = try makeRequest(path: "/api/v1/me/avatar/preset", method: "PUT", authorized: true)
+        var request = try makeRequest(path: "/api/v1/me/avatar/preset", method: "PUT", authorized: true, tokenOverride: operation.token)
         request.httpBody = try encoder.encode(Body(presetId: presetID))
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        return try await send(request)
+        let avatar: AvatarDescriptor = try await send(request)
+        guard currentOperation() == operation, token == operation.token else { throw CancellationError() }
+        return avatar
     }
 
-    func setAvatarPhoto(_ jpeg: Data) async throws -> AvatarDescriptor {
-        var request = try makeRequest(path: "/api/v1/me/avatar/photo", method: "PUT", authorized: true)
+    func setAvatarPhoto(
+        _ jpeg: Data,
+        operation: TrustAccountOperation,
+        currentOperation: @MainActor () -> TrustAccountOperation?
+    ) async throws -> AvatarDescriptor {
+        guard currentOperation() == operation, token == operation.token,
+              let accountID = snapshot?.you.id,
+              TrustSessionIdentity.accountID(from: operation.token) == accountID else { throw CancellationError() }
+        var request = try makeRequest(path: "/api/v1/me/avatar/photo", method: "PUT", authorized: true, tokenOverride: operation.token)
         request.httpBody = jpeg
         request.setValue("image/jpeg", forHTTPHeaderField: "Content-Type")
         let avatar: AvatarDescriptor = try await send(request)
+        guard currentOperation() == operation, token == operation.token,
+              snapshot?.you.id == accountID else { throw CancellationError() }
         if let version = avatar.photoVersion,
-           let accountID = snapshot?.you.id,
            let image = UIImage(data: jpeg) {
             avatarImages[AvatarCacheKey(accountID: accountID, personID: accountID, version: version)] = image
         }
         return avatar
     }
 
-    func removeAvatar() async throws {
-        try await deleteEmpty(path: "/api/v1/me/avatar")
+    func removeAvatar(
+        operation: TrustAccountOperation,
+        currentOperation: @MainActor () -> TrustAccountOperation?
+    ) async throws {
+        guard currentOperation() == operation, token == operation.token else { throw CancellationError() }
+        try await deleteEmpty(path: "/api/v1/me/avatar", authorizedToken: operation.token)
+        guard currentOperation() == operation, token == operation.token else { throw CancellationError() }
     }
 
     /// Photo bytes stay in memory only. The version in the descriptor is immutable, so
     /// changing a photo naturally gets a fresh cache entry.
     func avatarImage(personID: UUID, descriptor: AvatarDescriptor?) async throws -> UIImage? {
         guard let version = descriptor?.photoVersion else { return nil }
-        let key = AvatarCacheKey(accountID: snapshot?.you.id ?? personID, personID: personID, version: version)
+        guard let requestToken = token, !requestToken.isEmpty else { throw TrustClientError.unauthorized }
+        let accountID = snapshot?.you.id ?? personID
+        let cacheGeneration = avatarImageCacheGeneration
+        let key = AvatarCacheKey(accountID: accountID, personID: personID, version: version)
         if let image = avatarImages[key] { return image }
         let path = "/api/v1/people/\(personID.uuidString)/avatar/\(version.uuidString)"
-        var request = try makeRequest(path: path, method: "GET", authorized: true)
+        var request = try makeRequest(path: path, method: "GET", authorized: true, tokenOverride: requestToken)
         request.setValue("image/jpeg", forHTTPHeaderField: "Accept")
         let data = try await sendRaw(request)
+        guard !Task.isCancelled,
+              avatarImageCacheGeneration == cacheGeneration,
+              token == requestToken,
+              (snapshot?.you.id ?? personID) == accountID else { throw CancellationError() }
         guard let image = UIImage(data: data) else { throw TrustClientError.decoding }
         avatarImages[key] = image
         return image
@@ -782,6 +911,23 @@ final class TrustClient {
         )
     }
 
+    func createRecoveryRequest(
+        kind: String? = nil,
+        signedTransactionInfo: String? = nil,
+        reason: String? = nil
+    ) async throws -> RecoveryRequestPayload {
+        struct Body: Encodable {
+            var kind: String?
+            var signedTransactionInfo: String?
+            var reason: String?
+        }
+        return try await post(
+            path: "/api/v1/me/recovery-requests",
+            body: Body(kind: kind, signedTransactionInfo: signedTransactionInfo, reason: reason),
+            authorized: true
+        )
+    }
+
     func storeKitAccountToken() async throws -> UUID {
         struct Payload: Decodable { var appAccountToken: UUID }
         let payload: Payload = try await get(path: "/api/v1/storekit/account-token")
@@ -796,12 +942,13 @@ final class TrustClient {
         )
     }
 
-    func registerPushDevice(installationId: UUID, token: String, environment: String, authorizedToken: String? = nil) async throws {
+    func registerPushDevice(installationId: UUID, token: String, environment: String, appLanguage: String, authorizedToken: String? = nil) async throws {
         struct Body: Encodable {
             var installationId: UUID
             var token: String
             var environment: String
             var bundleId: String
+            var appLanguage: String
         }
         try await postEmpty(
             path: "/api/v1/push/devices",
@@ -809,7 +956,8 @@ final class TrustClient {
                 installationId: installationId,
                 token: token,
                 environment: environment,
-                bundleId: AppConfiguration.bundleIdentifier
+                bundleId: AppConfiguration.bundleIdentifier,
+                appLanguage: appLanguage
             ),
             authorizedToken: authorizedToken
         )
@@ -858,29 +1006,67 @@ final class TrustClient {
 
     func sendPhoneCode(
         phone: String,
-        consentAction: PhoneConsentAction
+        consentAction: PhoneConsentAction,
+        requestId: UUID = UUID(),
+        intent: String = "onboarding",
+        replacementIdentityToken: String? = nil,
+        replacementNonce: String? = nil
     ) async throws -> SendPhoneCodePayload {
         struct Body: Encodable {
             var phone: String
             var consentVersion: Int
             var consentAction: String
+            var requestId: UUID
+            var intent: String
+            var identityToken: String?
+            var nonce: String?
         }
         return try await post(
             path: "/api/v1/me/phone/send",
             body: Body(
                 phone: phone,
                 consentVersion: TrustCopy.phoneConsentDetailsVersion,
-                consentAction: consentAction.rawValue),
+                consentAction: consentAction.rawValue,
+                requestId: requestId,
+                intent: intent,
+                identityToken: replacementIdentityToken,
+                nonce: replacementNonce),
             authorized: true
         )
     }
 
-    func verifyPhoneCode(phone: String, code: String) async throws {
+    func phoneVerificationState(requestId: UUID? = nil) async throws -> PhoneVerificationStatePayload {
+        var path = "/api/v1/me/phone/verification-state"
+        if let requestId { path += "?requestId=\(requestId.uuidString)" }
+        return try await get(path: path)
+    }
+
+    func verifyPhoneCode(
+        phone: String,
+        code: String,
+        requestId: UUID? = nil,
+        challengeId: UUID? = nil,
+        returnAccountState: Bool = false
+    ) async throws -> PhoneVerificationResultPayload? {
         struct Body: Encodable {
             var phone: String
             var code: String
+            var requestId: UUID?
+            var challengeId: UUID?
+            var returnAccountState: Bool
         }
-        try await postEmpty(path: "/api/v1/me/phone/verify", body: Body(phone: phone, code: code))
+        var request = try makeRequest(path: "/api/v1/me/phone/verify", method: "POST", authorized: true)
+        request.httpBody = try encoder.encode(Body(phone: phone, code: code, requestId: requestId, challengeId: challengeId, returnAccountState: returnAccountState))
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let data = try await sendRaw(request)
+        guard !data.isEmpty else { return nil }
+        do { return try decoder.decode(PhoneVerificationResultPayload.self, from: data) }
+        catch { throw TrustClientError.decoding }
+    }
+
+    func completeOnboarding() async throws -> PersonDTO {
+        struct Body: Encodable {}
+        return try await post(path: "/api/v1/me/onboarding/complete", body: Body(), authorized: true)
     }
 
     func addPersonByPhone(_ phone: String) async throws -> AddPersonByPhonePayload {
@@ -1149,15 +1335,17 @@ final class TrustClient {
         if isCircleRequest {
             Self.networkLogger.info("GET /api/v1/circle received HTTP \(http.statusCode, privacy: .public) elapsedMs=\(Self.elapsedMilliseconds(since: startedAt), privacy: .public)")
         }
-        if [502, 503, 504].contains(http.statusCode),
-           (try? decoder.decode(APIErrorPayload.self, from: data))?.retryAt == nil {
-            throw TrustClientError.serverUnavailable(http.statusCode)
-        }
         if http.statusCode == 401 {
             if let error = try? decoder.decode(APIErrorPayload.self, from: data),
                let code = error.code, code != "unauthorized" {
                 notifyCurrentAccountIfConsentWasRevoked(code: code, request: request)
                 notifyCurrentAccountIfPrivacyHold(code: code, request: request)
+                if code == "apple_unavailable" {
+                    throw TrustClientError.appleUnavailable(
+                        statusCode: http.statusCode,
+                        message: TrustCopy.apiError(code: code, fallback: error.message)
+                    )
+                }
                 throw TrustClientError.api(code: code, message: TrustCopy.apiError(code: code, fallback: error.message))
             }
             throw TrustClientError.unauthorized
@@ -1165,7 +1353,17 @@ final class TrustClient {
         if (200..<300).contains(http.statusCode) {
             return data
         }
-        if let error = try? decoder.decode(APIErrorPayload.self, from: data) {
+        let apiError = try? decoder.decode(APIErrorPayload.self, from: data)
+        let disposition = TrustAPIErrorPolicy.disposition(
+            statusCode: http.statusCode,
+            apiErrorCode: apiError?.code,
+            hasRetryMetadata: apiError?.retryAt != nil || apiError?.retryAfterSeconds != nil
+        )
+        switch disposition {
+        case .structuredPayload:
+            guard let error = apiError else {
+                throw TrustClientError.server(TrustCopy.requestFailedStatus(http.statusCode))
+            }
             notifyCurrentAccountIfConsentWasRevoked(code: error.code, request: request)
             notifyCurrentAccountIfPrivacyHold(code: error.code, request: request)
             let message = TrustCopy.apiError(code: error.code, fallback: error.message)
@@ -1173,11 +1371,31 @@ final class TrustClient {
                 if error.retryAt != nil || error.retryAfterSeconds != nil {
                     throw TrustClientError.phoneRetry(code: code, message: message, details: error)
                 }
+                if code == "apple_unavailable" {
+                    throw TrustClientError.appleUnavailable(statusCode: http.statusCode, message: message)
+                }
                 throw TrustClientError.api(code: code, message: message)
             }
             throw TrustClientError.server(message)
+        case .gatewayUnavailable:
+            throw TrustClientError.serverUnavailable(http.statusCode)
+        case .structuredUnavailable:
+            guard let error = apiError, let code = error.code, !code.isEmpty else {
+                throw TrustClientError.serverUnavailable(http.statusCode)
+            }
+            notifyCurrentAccountIfConsentWasRevoked(code: code, request: request)
+            notifyCurrentAccountIfPrivacyHold(code: code, request: request)
+            throw TrustClientError.structuredUnavailable(
+                statusCode: http.statusCode,
+                code: code,
+                message: TrustCopy.apiError(code: code, fallback: error.message)
+            )
+        case .genericServerError:
+            if let apiError {
+                throw TrustClientError.server(TrustCopy.apiError(code: apiError.code, fallback: apiError.message))
+            }
+            throw TrustClientError.server(TrustCopy.requestFailedStatus(http.statusCode))
         }
-        throw TrustClientError.server(TrustCopy.requestFailedStatus(http.statusCode))
     }
 
     private func notifyCurrentAccountIfConsentWasRevoked(code: String?, request: URLRequest) {
@@ -1258,7 +1476,7 @@ extension CirclePayload {
     var snapshot: CircleSnapshot {
         CircleSnapshot(
             you: you.model,
-            members: members.map(\.model),
+            members: members.map { $0.model(viewerHasPlus: coverage.isCovered) },
             coverage: CircleCoverage(
                 isCovered: coverage.isCovered,
                 sponsorName: coverage.sponsorName,
@@ -1352,28 +1570,43 @@ extension ShareDTO {
 }
 
 extension MemberDTO {
-    var model: TrustedPerson {
-        TrustedPerson(
+    func model(viewerHasPlus: Bool) -> TrustedPerson {
+        let configuredAvailable = inboundShare?.presentationModel.isAvailable == true
+        let effectiveInboundLive: Bool
+        if (receiveAuthorizationVersion ?? 0) >= 1 {
+            effectiveInboundLive = inboundLive
+        } else {
+            // Legacy responses did not distinguish a configured Always choice from
+            // current receive authorization. Require both local Plus and an explicit
+            // active Always presentation before trusting their point.
+            effectiveInboundLive = viewerHasPlus && inboundLive && configuredAvailable
+        }
+        let unexpired = liveAccessExpiresAt.map { $0 > Date() } ?? true
+        let permittedPoint = effectiveInboundLive && unexpired ? live?.model : nil
+        return TrustedPerson(
             person: person.model,
             connectionID: connectionId,
             presence: presence?.model ?? .sealed,
             share: share.model,
-            inboundLive: inboundLive,
-            livePoint: inboundLive ? live?.model : nil,
+            inboundLive: effectiveInboundLive,
+            livePoint: permittedPoint,
             outboundPresenceGranted: outboundPresenceGranted ?? false,
             outboundPresenceRevision: outboundPresenceRevision,
             inboundPresenceGranted: inboundPresenceGranted ?? false,
             homePresence: homePresence?.model,
             promise: promise?.model,
             inboundPresentation: inboundShare?.presentationModel,
-            locationHistory: locationHistory
+            locationHistory: locationHistory(effectiveInboundLive: effectiveInboundLive, unexpired: unexpired),
+            liveAccessExpiresAt: liveAccessExpiresAt,
+            liveUnavailableReason: liveUnavailableReason
         )
     }
 
     /// Newest first. Uses `trail` when the server sends one, otherwise the single live fix.
-    var locationHistory: [LocationVisit] {
+    private func locationHistory(effectiveInboundLive: Bool, unexpired: Bool) -> [LocationVisit] {
+        guard effectiveInboundLive, unexpired else { return [] }
         var points = trail?.map(\.model) ?? []
-        if inboundLive, let live = live?.model, !points.contains(where: { $0.timestamp == live.timestamp && $0.latitude == live.latitude }) {
+        if let live = live?.model, !points.contains(where: { $0.timestamp == live.timestamp && $0.latitude == live.latitude }) {
             points.append(live)
         }
         return points

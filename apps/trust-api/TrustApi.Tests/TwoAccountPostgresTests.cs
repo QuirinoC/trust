@@ -132,7 +132,7 @@ public sealed class TwoAccountPostgresTests
         Assert.False(adaAlways.Coverage.IsCovered);
         var adaLive = adaAlways.Members.Single(member => member.Person.Id == sam.Id);
         Assert.True(adaLive.InboundLive);
-        Assert.Null(adaLive.Live);
+        Assert.NotNull(adaLive.Live);
 
         await engine.SetShareAsync(sam.Id, ada.Id, ShareResting.Off, null, CancellationToken.None);
         var stopped = await engine.GetCircleAsync(ada.Id, CancellationToken.None);

@@ -45,13 +45,13 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.collapsetechnologies.trust
         PRODUCT_NAME: Trust
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        CURRENT_PROJECT_VERSION: 46
+        CURRENT_PROJECT_VERSION: 52
         MARKETING_VERSION: 1.0
         ENABLE_USER_SCRIPT_SANDBOXING: YES
         SWIFT_STRICT_CONCURRENCY: targeted
         CODE_SIGN_ENTITLEMENTS: Trust.entitlements
         DEVELOPMENT_TEAM: 3S529795M9
-        INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: Trust uses your location while the app is open so you can see yourself on the map and look at people who share with you. Trust does not sell your location.
+        INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: Trust uses your location to share it with the people you choose and to set Home on this device. Your location is not required just to view someone who shares with you.
         INFOPLIST_KEY_NSCameraUsageDescription: Trust uses the camera only when you choose Take Photo to set your profile picture.
     info:
       path: Info.plist
@@ -95,12 +95,12 @@ targets:
         UIBackgroundModes:
           - location
         ITSAppUsesNonExemptEncryption: false
-        NSLocationWhenInUseUsageDescription: Trust uses your location while the app is open so you can see yourself on the map and look at people who share with you. Trust does not sell your location.
+        NSLocationWhenInUseUsageDescription: Trust uses your location to share it with the people you choose and to set Home on this device. Your location is not required just to view someone who shares with you.
         NSCameraUsageDescription: Trust uses the camera only when you choose Take Photo to set your profile picture.
-        NSLocationAlwaysAndWhenInUseUsageDescription: Trust uses your location in the background so a Look still works when the app is closed. A confirmed Look is recorded and requests a notification. Trust does not sell your location.
-        NSLocationAlwaysUsageDescription: Trust uses your location in the background so a Look still works when the app is closed. A confirmed Look is recorded and requests a notification. Trust does not sell your location.
+        NSLocationAlwaysAndWhenInUseUsageDescription: Trust uses background location to update the location you chose to share and detect Home or Away when you enable it. iOS may delay updates.
+        NSLocationAlwaysUsageDescription: Trust uses background location to update the location you chose to share and detect Home or Away when you enable it. iOS may delay updates.
         NSLocationTemporaryUsageDescriptionDictionary:
-          PreciseEscrow: Trust needs precise location so a Look shows the current place. Approximate location is not enough.
+          PreciseEscrow: Precise location helps Trust share a more accurate location point with the people you choose. You can keep approximate location.
         CFBundleURLTypes:
           - CFBundleTypeRole: Editor
             CFBundleURLSchemes:
@@ -110,6 +110,96 @@ targets:
       testTargets:
         - TrustCoreTests
         - TrustUITests
+  TrustStaging:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources/TrustApp
+      - path: Resources
+        buildPhase: resources
+        excludes:
+          - Trust.storekit
+          - Fonts/*.txt
+    dependencies:
+      - package: TrustCore
+        product: TrustCore
+      - sdk: AuthenticationServices.framework
+      - sdk: MapKit.framework
+      - sdk: DeclaredAgeRange.framework
+        weak: true
+      - sdk: PermissionKit.framework
+        weak: true
+      - sdk: _PermissionKit_SwiftUI.framework
+        weak: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.collapsetechnologies.trust.staging
+        PRODUCT_NAME: Trust Staging
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        CURRENT_PROJECT_VERSION: 52
+        MARKETING_VERSION: 1.0
+        ENABLE_USER_SCRIPT_SANDBOXING: YES
+        SWIFT_STRICT_CONCURRENCY: targeted
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) TRUST_STAGING"
+        CODE_SIGN_ENTITLEMENTS: Trust-Staging.entitlements
+        DEVELOPMENT_TEAM: 3S529795M9
+        INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: Trust uses your location to share it with the people you choose and to set Home on this device. Your location is not required just to view someone who shares with you.
+        INFOPLIST_KEY_NSCameraUsageDescription: Trust uses the camera only when you choose Take Photo to set your profile picture.
+    info:
+      path: Staging-Info.plist
+      properties:
+        CFBundleDisplayName: Trust Staging
+        CFBundleDevelopmentRegion: en
+        # In-app localization supported by the current release.
+        CFBundleLocalizations:
+          - en
+          - zh-Hans
+          - ja
+          - de
+          - fr
+          - pt-BR
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        TRUST_SKIP_PHONE_VERIFICATION: false
+        LSApplicationCategoryType: public.app-category.lifestyle
+        UIApplicationSupportsIndirectInputEvents: true
+        UILaunchScreen:
+          UIColorName: Paper
+        UIAppFonts:
+          - SpaceGrotesk-Variable.ttf
+          - IBMPlexMono-Medium.ttf
+        TRUST_BASE_URL: https://staging-api.jointrust.app
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+          NSExceptionDomains:
+            localhost:
+              NSExceptionAllowsInsecureHTTPLoads: true
+              NSIncludesSubdomains: true
+            "127.0.0.1":
+              NSExceptionAllowsInsecureHTTPLoads: true
+        # iPhone: portrait only. iPad: all orientations (required for Split View / Stage Manager).
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        "UISupportedInterfaceOrientations~ipad":
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UIBackgroundModes:
+          - location
+        ITSAppUsesNonExemptEncryption: false
+        NSLocationWhenInUseUsageDescription: Trust uses your location to share it with the people you choose and to set Home on this device. Your location is not required just to view someone who shares with you.
+        NSCameraUsageDescription: Trust uses the camera only when you choose Take Photo to set your profile picture.
+        NSLocationAlwaysAndWhenInUseUsageDescription: Trust uses background location to update the location you chose to share and detect Home or Away when you enable it. iOS may delay updates.
+        NSLocationAlwaysUsageDescription: Trust uses background location to update the location you chose to share and detect Home or Away when you enable it. iOS may delay updates.
+        NSLocationTemporaryUsageDescriptionDictionary:
+          PreciseEscrow: Precise location helps Trust share a more accurate location point with the people you choose. You can keep approximate location.
+        CFBundleURLTypes:
+          - CFBundleTypeRole: Editor
+            CFBundleURLSchemes:
+              - trust-staging
+    scheme:
+      testTargets:
+        - TrustCoreTests
   # This internal-only TestFlight artifact retains the required phone-verification flow.
   # Always export it with testFlightInternalTestingOnly=true.
   TrustInternal:
@@ -138,14 +228,14 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.collapsetechnologies.trust
         PRODUCT_NAME: Trust
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        CURRENT_PROJECT_VERSION: 46
+        CURRENT_PROJECT_VERSION: 52
         MARKETING_VERSION: 1.0
         ENABLE_USER_SCRIPT_SANDBOXING: YES
         SWIFT_STRICT_CONCURRENCY: targeted
         CODE_SIGN_ENTITLEMENTS: Trust.entitlements
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: 3S529795M9
-        INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: Trust uses your location while the app is open so you can see yourself on the map and look at people who share with you. Trust does not sell your location.
+        INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: Trust uses your location to share it with the people you choose and to set Home on this device. Your location is not required just to view someone who shares with you.
         INFOPLIST_KEY_NSCameraUsageDescription: Trust uses the camera only when you choose Take Photo to set your profile picture.
     info:
       path: Internal-Info.plist
@@ -179,12 +269,12 @@ targets:
           - UIInterfaceOrientationPortraitUpsideDown
         UIBackgroundModes: [location]
         ITSAppUsesNonExemptEncryption: false
-        NSLocationWhenInUseUsageDescription: Trust uses your location while the app is open so you can see yourself on the map and look at people who share with you. Trust does not sell your location.
+        NSLocationWhenInUseUsageDescription: Trust uses your location to share it with the people you choose and to set Home on this device. Your location is not required just to view someone who shares with you.
         NSCameraUsageDescription: Trust uses the camera only when you choose Take Photo to set your profile picture.
-        NSLocationAlwaysAndWhenInUseUsageDescription: Trust uses your location in the background so a Look still works when the app is closed. A confirmed Look is recorded and requests a notification. Trust does not sell your location.
-        NSLocationAlwaysUsageDescription: Trust uses your location in the background so a Look still works when the app is closed. A confirmed Look is recorded and requests a notification. Trust does not sell your location.
+        NSLocationAlwaysAndWhenInUseUsageDescription: Trust uses background location to update the location you chose to share and detect Home or Away when you enable it. iOS may delay updates.
+        NSLocationAlwaysUsageDescription: Trust uses background location to update the location you chose to share and detect Home or Away when you enable it. iOS may delay updates.
         NSLocationTemporaryUsageDescriptionDictionary:
-          PreciseEscrow: Trust needs precise location so a Look shows the current place. Approximate location is not enough.
+          PreciseEscrow: Precise location helps Trust share a more accurate location point with the people you choose. You can keep approximate location.
         CFBundleURLTypes:
           - CFBundleTypeRole: Editor
             CFBundleURLSchemes: [trust]
@@ -217,7 +307,84 @@ targets:
         TEST_TARGET_NAME: Trust
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: 3S529795M9
+  TrustServiceUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: Tests/TrustServiceUITests
+    dependencies:
+      - target: Trust
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.collapsetechnologies.trust.service.uitests
+        TEST_TARGET_NAME: Trust
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: 3S529795M9
 schemes:
+  Trust.LocalE2E:
+    build:
+      targets:
+        Trust: all
+    run:
+      config: Debug
+      storeKitConfiguration: Resources/Trust.storekit
+    test:
+      config: Debug
+      macroExpansion: Trust
+      targets:
+        - name: TrustCoreTests
+          parallelizable: false
+        - name: TrustUITests
+          parallelizable: false
+      testPlans:
+        - path: Trust.LocalE2E.xctestplan
+          defaultPlan: true
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release
+    management:
+      shared: true
+  Trust.RealServices:
+    build:
+      targets:
+        Trust: all
+        TrustServiceUITests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - TrustServiceUITests
+    profile:
+      config: Debug
+    analyze:
+      config: Debug
+    archive:
+      config: Release
+    management:
+      shared: true
+  Trust-Staging:
+    build:
+      targets:
+        TrustStaging: all
+    run:
+      config: Release
+    test:
+      config: Release
+      targets:
+        - TrustCoreTests
+    profile:
+      config: Release
+    analyze:
+      config: Release
+    archive:
+      config: Release
+    management:
+      shared: true
   Trust-Internal:
     build:
       targets:

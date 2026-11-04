@@ -1,6 +1,9 @@
 # Trust age assurance
 
-Updated 2 October 2026. This is the current implementation record and open product gate. It is not legal advice or a claim of compliance in every jurisdiction.
+**Current direction — 1 November 2026:** Age-range/parent-update prompts and mandatory App Store app-transaction registration remain paused. Current setup is genuine Apple sign-in → server-verified phone → automatic server-assigned handle/account completion → People. Choosing a handle is optional later in You; restored verified accounts finish without another text. Follow `docs/DESIGN.md` and `docs/operations/staging/STATUS.md`. Existing privacy holds and consent revocations, explicit sharing consent, Apple authentication and purchase verification remain effective. New unlinked accounts cannot be matched to Apple app-transaction consent-withdrawal notices; this verification limit remains for public-release assessment. Build 50 is still the available staging build; build 51 delivery is in progress. Production services are unchanged.
+
+
+Historical record from 2 October 2026. The implementation and old gate expectations below describe the earlier age-assurance flow; they are not instructions to restore paused prompts. It is not legal advice or a claim of compliance in every jurisdiction.
 
 ## Product rule
 
@@ -12,7 +15,7 @@ The distinction affects whether Trust's current under-13 outcome is suitable. FT
 
 The FTC's 2025 COPPA amendments were published on 22 April 2025 and generally required covered operators to comply within one year (22 April 2026). They include separate verifiable parental consent for specified third-party disclosures, limits against indefinite retention, and expanded security/data-governance duties. If counsel determines COPPA applies, review the current system against the amended rule, including Trust's telephone numbers, account identifiers, precise location, optional photos, retention, deletion, vendors, and any analytics or advertising disclosures. Trust should keep child-directed ad SDKs and targeted advertising out of the launch design. Before expanding beyond the U.S., review each market's laws and Apple's regional age-assurance requirements, then ensure App Store territories match that review. See the [FTC COPPA FAQ](https://www.ftc.gov/business-guidance/resources/complying-coppa-frequently-asked-questions), [FTC 2025 amendments](https://www.ftc.gov/news-events/news/press-releases/2025/01/ftc-finalizes-changes-childrens-privacy-rule-limiting-companies-ability-monetize-kids-data), and [Apple's age-assurance guidance](https://developer.apple.com/support/age-assurance/).
 
-## Current implementation
+## Historical implementation before the pause
 
 - On iOS 26.2 and later, Trust checks Apple's `isEligibleForAgeFeatures` before requesting an age range. On iOS 26.4 and later, it reads `requiredRegulatoryFeatures` only after Apple reports eligibility. This ordering follows [Apple's current Declared Age Range guide](https://developer.apple.com/documentation/declaredagerange/requesting-people-share-their-age-range-with-your-app) and was corrected after earlier TestFlight startup feedback.
 - When Apple indicates a required age flow, Trust requests Apple's shared age range and uses it on-device. A returned range below the lowest applicable gate blocks setup. An authenticated person who declines can still explicitly confirm Stop sharing with everyone; success leaves account access restricted and does not grant age authorization. A declined response stays distinct from a below-gate result; missing or overlapping bounds remain indeterminate and restricted. If Apple's required service cannot complete, Trust fails closed for that flow instead of silently falling back to a global birth-date check.

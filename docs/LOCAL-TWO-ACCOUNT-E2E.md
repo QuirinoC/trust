@@ -1,151 +1,63 @@
-# Local two-account E2E evidence
+# Local iOS E2E guide and evidence
 
-This document records completed local interaction evidence and the safe way to rerun the simulator lane. The latest evidence includes current-source paired account lifecycle tests on 1 October 2026 and a current-branch Stop All failure/retry run on 30 September. Production service evidence is tracked separately in [STATUS.md](STATUS.md). This document does not describe production behavior.
+This guide covers the loopback-only iOS E2E runner and the current evidence snapshot. Local simulator runs validate the checked-in app against a disposable Development API; they are not production-service or physical-device acceptance.
 
-On 30 September 2026 (PDT), the current sleepy-animal profile preview passed a new dark/light appearance UI check, **1/1 with zero skips or failures** on the booted iPhone 17 Pro/iOS 26.5: `/tmp/Trust-avatar-dark-appearance-20261001.xcresult`. The test selected Fox in the actual profile picker and sampled its transparent margin against the expected light `#FCFAF2` and dark `#334055` backing colors. This confirms the current 11-preset catalog; it does not exercise user-uploaded photo backgrounds or physical-device rendering. The API notification suite also passed **14/14** locally (`dotnet test ... --filter FullyQualifiedName~PushDeviceApiTests`), covering registration scoping, notification recipient/consent gates, delayed Home transitions, and mock APNs request behavior. These tests do not prove delivery by Apple's APNs service or iOS banner presentation/taps. CI run [`36812181956`](https://github.com/QuirinoC/trust/actions/runs/36812181956) on `c39bb81` also passed all jobs: TrustCore 82/82, API/Postgres 202/202, web passed, and iOS UI 20 passed with 9 real-API UI tests skipped because no isolated API URL was configured. The new avatar appearance test passed in CI. The later workflow run [36820784316](https://github.com/QuirinoC/trust/actions/runs/36820784316), on docs/test handoff commit `06d7263`, passed API/Postgres 202/202, web, TrustCore 82/82, and 20 iOS UI tests with 9 real-API UI tests skipped because no isolated API URL was configured. Its first iOS attempt missed one language Picker tap; retry attempt 2 passed.
+## Current evidence snapshot — 26 October 2026
 
-## Latest completed simulator evidence
+The source snapshot is release build 49, from source archive `2561ba8`.
 
-On 30 September 2026, the current branch's atomic Stop All retry flow passed **1/1 with no skips or failures** on iPhone 17 Pro/iOS 26.5: `/tmp/Trust-StopAll-UI-20260930-corrected.xcresult`. The app connected to two API-created fictional peers through the loopback-only fault proxy and isolated Development + Memory API. The proxy returned a 503 for the first atomic Stop All request; the app kept both peers Sealed in the UI and server after relaunch. A retry succeeded, both peers became Off, and the Off state remained after a second relaunch. Reserved fictional 555-01xx values and Development OTP were used; no SMS or StoreKit/review bypass was used. The proxy and API were stopped after the run.
+| Lane | Result | Evidence |
+| --- | --- | --- |
+| Standard iOS UI | 135 passed, 27 named setup skips, 0 failed | `/tmp/trust-e2e-20261025/standard-final-49/standard-ui.xcresult` |
+| Paired two-account UI | Alice 1/1 and Bob 1/1, no skips or failures; wrapper exit 0; controller completed | `/tmp/trust-e2e-20261025/paired-handshake-49/paired-two-account/{alice,bob}/paired-{alice,bob}.xcresult`; controller log alongside results |
+| APNs notification Settings recovery | 1 passed, 0 skipped, 0 failed | `/tmp/trust-e2e-20261025/real-apns-switch-recovery-49/RealPushAPNS.xcresult` |
+| APNs foreground/background delivery | 1 passed, 0 skipped, 0 failed; two viewer accounts produced distinct Look receipts and matching Activity routes | `/tmp/trust-e2e-20261025/real-apns-48-final/RealPushAPNS.xcresult` |
 
-On 1 October 2026, release HEAD `637b809` passed the paired role test **1/1 on each device, with zero skips or failures**: Alice `/tmp/Trust-Pair-Alice-20261001-controlled.xcresult` on iPhone 17 Pro/iOS 26.5 and Bob `/tmp/Trust-Pair-Bob-20261001-controlled.xcresult` on iPhone Duo/iOS 27.1. Both people completed onboarding with fictional Development OTP, enabled phone discovery, and used the UI to request, accept, remove, and re-add a connection. The test verified default-Off after reconnection; Sealed sharing and reciprocal Home/Away grants; a live Sealed Look that rendered a map snapshot and matching Activity receipt; Home set, Away after simulated movement, an in-place Home update, Away again, and Clear; Hidden suppression; and Stop. It used loopback-only Development + Memory on port 5089 with fictional NANP 555-01xx values. No real SMS, physical device, StoreKit purchase, push token, or APNs delivery was involved. Each `.xcresult` summary reports one pass and zero skipped tests.
+The paired controller uses explicit stages rather than short-lived UI polling. Bob acknowledges `first-home-ready`; the controller moves to Away and records `first-away-held`; Bob updates Home and acknowledges `second-home-ready`; after the second Away is observed by both accounts, the controller records `complete` and releases its route. The test clears Home only after that final stage.
 
-At the 2026-09-29 source checkpoint, the paired run passed **1/1 with no skips on each device**: Alice `/tmp/trust-pair-alice34-20260929.xcresult` on iPhone 17 Pro/iOS 26.5 and Bob `/tmp/trust-pair-bob34-20260929.xcresult` on Duo/iOS 27.1. Both apps performed the reciprocal Home/Away presence grants through their native UIs, including Bob's grant through Duo. The run also covered Development OTP onboarding, phone discovery/request/acceptance, removal and re-invite, Sealed Look with map and Activity receipt, Home/Away consent and movement, Home update/clear, Hidden suppression and its visible label on Duo, Stop, and fresh default-Off after re-add.
+The APNs recovery case uses the native Settings route and asserts that the actual **Allow Notifications** switch is on, the API acknowledges registration, and a real APNs Look appears and opens the matching Activity receipt. On this simulator, the switch’s native accessibility tap did not change its value, so the test used one bounded tap at the visible switch thumb after capturing the native UI state. This is an interaction recovery through the native Settings UI, not an injected permission grant.
 
-A separate History UI run, `/tmp/trust-history-current-source-20260929.xcresult`, passed **1/1** on iPhone 17 Pro/iOS 26.5. It displayed three synthetic visits for an Always-sharing peer, then removed the History view after the peer stopped sharing and the viewer refreshed. It used one app UI and an API-driven peer, not two simultaneous app UIs.
+Build 49 is available through TestFlight. That availability does not establish TestFlight push delivery, Apple In-App Purchase purchase/restore, or physical-device behavior. The APNs runs above use the development APNs environment on a simulator.
 
-The paired and History lanes used an isolated ASP.NET Development API backed by Memory on `127.0.0.1:5089`, with the review seed disabled. The fixtures use reserved fictional 555-01xx numbers and Development OTP; no SMS was sent. No push devices were registered, so these runs do not establish APNs delivery, OS presentation, or tap behavior. They also do not establish physical-device SMS, background location, or StoreKit behavior.
+## Running the local E2E matrix
 
-At that 2026-09-29 source checkpoint, Swift package tests passed **77/77** and the API suite passed **183/183**. On release HEAD `637b809`, TrustCore passed **82/82**, API/Postgres passed **202/202**, and the full local iOS simulator suite passed **101** tests with nine real-API UI tests skipped because no isolated API URL was configured. CI run [`36793168979`](https://github.com/QuirinoC/trust/actions/runs/36793168979) passed all jobs; its UI target ran 28 tests, with 19 passing and the same 9 real-API cases skipped. The current-source paired iPhone 17 Pro + Duo run also passed 1/1 on each device, with no skips, as recorded above. These automated checks do not prove physical-device SMS, APNs, background location, or StoreKit behavior. The focused Stop/Remove/partial Stop All/delayed Look evidence below adds deterministic fault coverage; delayed History remains open.
+`apps/trust-ios/Scripts/run_release_e2e.py` builds the standard Trust scheme once, copies its `.xctestrun`, injects runner settings under the test target environment, then runs the requested lane. It supports `standard`, `real-api`, `fault-matrix`, `paired`, `handoff`, and `all`. `--lane real-api` requires `--case`; the paired and same-account handoff cases use their dedicated orchestrators.
 
-The unsigned simulator `TrustAgeGateTests` suite passed **6/6** after DEBUG-only `TrustKeychain` test storage was enabled for `TRUST_AGE_TEST_MODE=1`; result: `/tmp/trust-agegate-keychain-fix-20260929.xcresult`. The release keychain path remains unchanged. That grant assertion was synchronized with the enabled UI action. Earlier failed harness attempts and the rate-limited five-case run are not counted as completed evidence.
+API-backed lanes start a fresh Development API on `127.0.0.1:5090` and the race proxy on `127.0.0.1:5089`. They use Memory by default. PostgreSQL mode creates a unique disposable database for each API session; native `psql` mode is intended for a caller-supplied, isolated loopback PostgreSQL instance. The runner refuses remote hosts and fails if either service port is already occupied. It stops only its own child processes, clears only locations it set on the selected devices, and drops only databases it created.
 
-## Completed focused fault cases
-
-Sol independently verified each final xcresult: **1/1 passed, zero skips/failures** on iPhone 17 Pro/iOS 26.5 with Xcode 27.1 beta:
-
-- Stop: `/tmp/trust-race-stop-final-20260929.xcresult`.
-- Remove: `/tmp/trust-race-remove-final-20260929.xcresult`.
-- Partial Stop All: `/tmp/trust-race-stopall-final5-20260929.xcresult`.
-- Delayed Look: `/tmp/trust-race-look-guarded-20260929.xcresult`.
-
-Each case used a fresh Development + Memory API with review seed disabled, fictional phones, and no StoreKit/review bypass. Stop/Remove wait for the app-applied mutation before releasing the captured old circle, inject a failed reconciliation read, and check independent server state plus same-account relaunch. Stop All arms its second-write failure before returning the first acknowledgement and verifies successful Off versus failed Sealed after relaunch. Look waits for response processing/sheet dismissal and the delayed-navigation interval before checking that the replaced relationship cannot restore a map.
-
-The delayed-History case was removed from this patch: its available synthetic unlock fixture returns 503 with bypass disabled. It remains pending a legitimate paid entitlement. Earlier synthetic History UI evidence is not real StoreKit validation.
-
-## Safe simulator setup
-
-`TrustRealAPIFeatureTests` requires an explicit `TRUST_UI_TEST_BASE_URL` with HTTP loopback port 5089. Before creating an account or requesting a phone code, setup checks `/api/v1/local-test-capabilities` for `developmentOtpWithoutSms: true`, then validates the returned OTP. Single-UI test accounts are deleted in test cleanup; paired accounts are discarded when the isolated Memory API is stopped.
-
-The local API plan is opt-in through the separate `Trust.LocalE2E` scheme. The standard `Trust` scheme has no test plan and continues to run both `TrustCoreTests` and `TrustUITests`; this separation preserves CI test discovery. Run the feature tests with the dedicated scheme and exclude the three phases that must run serially against a shared Home marker:
+Example full matrix with two already-created simulator UDIDs and a local PostgreSQL server:
 
 ```sh
 cd apps/trust-ios
-DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
-xcodebuild test -project Trust.xcodeproj -scheme Trust.LocalE2E \
-  -testPlan Trust.LocalE2E \
-  -destination 'platform=iOS Simulator,id=<simulator-udid>' \
-  -skip-testing:TrustUITests/TrustRealAPIFeatureTests/testSameAccountHomeHandoffOwnerSetsHome \
-  -skip-testing:TrustUITests/TrustRealAPIFeatureTests/testSameAccountHomeHandoffFirstUseDeviceTakesOver \
-  -skip-testing:TrustUITests/TrustRealAPIFeatureTests/testSameAccountHomeHandoffPreviousOwnerDetectsTakeoverAndClear
+export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
+export TRUST_E2E_POSTGRES_CONNECTION='Host=127.0.0.1;Port=5433;Database=postgres;Username=<local-role>;Password=<local-password>'
+python3 Scripts/run_release_e2e.py \
+  --lane all \
+  --alice-device '<alice-simulator-udid>' \
+  --bob-device '<bob-simulator-udid>' \
+  --store postgres \
+  --postgres-direct \
+  --allow-review-fixture
 ```
 
-The plan injects `TRUST_UI_TEST_BASE_URL=http://127.0.0.1:5089` into the UI-test runner. App launches use `TRUST_BASE_URL` with `TRUST_STRICT_API=1`, so they cannot fall back to port 5088 or a remote API. On 1 October, the initial direct run recorded **1 passed, 5 skipped, 3 failed**: the Always-history case passed; five fault-proxy/pair-role cases skipped because their required proxy/role setup was absent; Privacy Hold, onboarding, and Sharing refresh failed while the app remained on `Before you join / Checking age requirements…` (the Sharing failure was the initial tab assertion). Those three results identify a startup/harness problem and are not passing evidence. After adding an explicit DEBUG-only age fixture and reset-safe relaunch setup, the focused local API suite passed **4, skipped 5, failed 0** in `/tmp/trust-real-api-ui-final.xcresult`. Passed: Always history, Privacy Hold/relaunch, onboarding, and Sharing refresh. Skipped due to missing fault proxy or paired role setup: `testDelayedLookResponseIsDiscardedAfterReplacementRelationship`, `testPairedRequestAcceptAndPresenceGrantRole`, `testRemoveStaysAbsentAfterStaleCircleResponseAndRelaunch`, `testStopAllFailureDoesNotPartiallyStopAndRetryPersistsAfterRelaunch`, and `testStopRemainsOffAcrossStaleCircleResponseAndRelaunch`. When the plan was first run through the dedicated scheme without `-only-testing`, Xcode reported success but executed 0 tests; the selected-tests value redundantly included the target prefix. After correcting it to the class identifier `TrustRealAPIFeatureTests`, the no-`-only-testing` command shown above discovered and ran the intended suite: **4 passed, 5 setup-dependent skips, 0 failed** in `/tmp/trust-locale2e-plan-correct-selector.xcresult`. Separately, the standard `Trust` scheme with no API URL executed **119 tests: 107 passed, 12 real-API UI tests skipped, 0 failed** in `/tmp/trust-standard-scheme-after-plan-split.xcresult` (87 TrustCore and 20 UI tests passed). Save each run's `.xcresult`; do not describe skipped cases as passed.
+The PostgreSQL connection string must point to a dedicated local instance with permission to create and drop databases. The generated database is per runner-owned API session. Omit `--postgres-direct` only when explicitly using a local Docker container with `--postgres-container <container-name>` and a loopback port mapping validated by the runner.
 
-### Same-account Home handoff simulator acceptance
+The runner creates a unique output directory under `/tmp` by default. To keep evidence in a chosen location, pass a new or empty `--output` directory. To rerun a case without rebuilding, provide the saved run specification with `--skip-build --xctestrun <path>`. One-case reruns use `--lane real-api --case <case-name> --device <udid>`; paired and handoff lanes accept `--alice-device` and `--bob-device`.
 
-Run these cases serially against one fresh Development + Memory API. The opt-in test plan injects the local-only `TRUST_UI_HOME_HANDOFF_DEVICE_ID=trust-local-home-handoff-e2e`; the API maps it to one server identity, while the two simulators hold distinct local Home coordinates. Use the existing iPhone 17 Pro (A) and iPhone Duo (B), and give them different synthetic fixes before setting Home:
+`--allow-review-fixture` opts into a Development-only synthetic review entitlement for cases that need it. It is labeled in the run evidence and does not create an App Store transaction. Leave it off when running cases that do not need the fixture.
 
-```sh
-DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun simctl location 61DC2501-3A93-4123-A6D5-D3512AF07464 set 47.600000,-122.330000
-DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun simctl location C6495E9A-B165-46E1-97F9-0B92ABBDDC0D set 47.620000,-122.330000
-```
+## Paired location behavior
 
-Do not run these phases in parallel: they share one account-wide Home marker. This path uses the real UI and server marker, so a server-side rejection alone cannot count as success.
+The `paired` lane creates a fresh pair ID and launches Alice and Bob on separate simulators. The runner starts `trust_pair_location_controller.py`; it sets only the selected Bob simulator’s synthetic route and waits for the paired test’s acknowledged stages. The UI tests still verify both accounts’ Home/Away state and visible-sharing responses before each acknowledgement. Do not start a second controller for a runner-managed paired lane.
 
-```sh
-cd apps/trust-ios
-DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
-xcodebuild test -project Trust.xcodeproj -scheme Trust.LocalE2E -testPlan Trust.LocalE2E \
-  -destination 'platform=iOS Simulator,id=61DC2501-3A93-4123-A6D5-D3512AF07464' \
-  -only-testing:TrustUITests/TrustRealAPIFeatureTests/testSameAccountHomeHandoffOwnerSetsHome
-DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
-xcodebuild test -project Trust.xcodeproj -scheme Trust.LocalE2E -testPlan Trust.LocalE2E \
-  -destination 'platform=iOS Simulator,id=C6495E9A-B165-46E1-97F9-0B92ABBDDC0D' \
-  -only-testing:TrustUITests/TrustRealAPIFeatureTests/testSameAccountHomeHandoffFirstUseDeviceTakesOver
-DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
-xcodebuild test -project Trust.xcodeproj -scheme Trust.LocalE2E -testPlan Trust.LocalE2E \
-  -destination 'platform=iOS Simulator,id=61DC2501-3A93-4123-A6D5-D3512AF07464' \
-  -only-testing:TrustUITests/TrustRealAPIFeatureTests/testSameAccountHomeHandoffPreviousOwnerDetectsTakeoverAndClear
-```
+The `handoff` lane runs its three same-account phases serially against one local API identity and gives the two simulators distinct local Home coordinates. The runner restores/clears only locations it changed. For both lanes, use disposable or explicitly selected simulators and retain each `.xcresult` and controller log.
 
-The phases assert that A's UI sets Home and shows Always permission, then publishes a marker; B sees the “another device” UI before taking over, also shows Always permission, and publishes a different marker; and A shows both the handoff UI and retained Always permission before clearing the marker. After a successful clear, A relaunches, reopens My Location, and confirms the local no-Home status, absence of remote ownership UI, and retained Always permission. After adding the explicit permission assertions, all three phases passed serially against the same live Development + Memory API on 1 October 2026: A owner (`/tmp/trust-home-handoff-A7.xcresult`), B takeover (`/tmp/trust-home-handoff-B7.xcresult`), and A detects takeover, clears, and reconnects (`/tmp/trust-home-handoff-A8.xcresult`). An earlier final-A run confirmed the server marker was cleared but failed because the test checked status before navigating back to My Location; the test now reopens that screen and asserts the cleared state. A preceding A setup attempt also showed no Home because the simulator synthetic location had not been restored; with the documented coordinates reapplied, all three phases passed. Clear both synthetic locations and stop the isolated API afterward.
+## Evidence boundaries
 
-Start the isolated API with local-only settings:
+- Local `.storekit` files exercise Xcode’s StoreKit test configuration; they are not Apple Sandbox transactions.
+- Development OTP and reserved fictional phone numbers bypass delivery for local tests. Twilio test credentials simulate supported API responses but do not deliver SMS to phones.
+- `--allow-review-fixture` is a synthetic Development entitlement path, not StoreKit or App Review validation.
+- The APNs simulator cases exercise Apple’s development APNs environment. TestFlight uses production APNs; the simulator results do not prove TestFlight or production push delivery.
+- These runs do not establish Apple Sign In, carrier SMS, IAP purchase or restore, background location on a physical device, or end-to-end production readiness.
 
-```sh
-ASPNETCORE_ENVIRONMENT=Development \
-ASPNETCORE_URLS=http://127.0.0.1:5089 \
-Trust__Store=memory \
-Trust__SeedReviewCircle=false \
-Auth__AllowDevelopmentSignIn=true \
-Auth__SigningKey=development-signing-key-32bytes-min!! \
-dotnet run --no-launch-profile --project apps/trust-api/TrustApi.csproj
-```
-
-Set `TRUST_UI_TEST_BASE_URL=http://127.0.0.1:5089` for the runner and each simulator. For paired runs, also set `TRUST_UI_PAIR_ROLE=alice` or `bob` and the same eight-hex `TRUST_UI_PAIR_ID` on the corresponding simulator. After reboot, reapply and verify simulator launchd variables with `launchctl getenv`. Stop the isolated API and clear every `TRUST_UI_*` simulator variable after the run. Never point these tests at a remote service or the existing local service on port 5088.
-
-The paired scenario needs live Core Simulator location updates for Sealed Look and Home/Away transitions. A continuous built-in route can move a person away before the app has acknowledged the first Home state. Start both simulators at the fixed synthetic location before the test:
-
-```sh
-DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun simctl location <alice-device-udid> set 47.600000,-122.330000
-DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun simctl location <bob-device-udid> set 47.600000,-122.330000
-```
-
-Start the route controller in a separate terminal before launching either XCTest process. It reuses Bob's disposable Development identity, watches only `/api/v1/circle`, and starts each movement after the API acknowledges the corresponding Home state:
-
-```sh
-python3 apps/trust-ios/Scripts/trust_pair_location_controller.py \
-  --pair-id <same-eight-hex-pair-id> \
-  --device-udid <bob-device-udid>
-```
-
-After both XCTest processes and the controller finish, clear each location with `xcrun simctl location <device-udid> clear`, clear the `TRUST_UI_*` launchd variables, and stop the Development + Memory API. Do not use a continuous route for this test unless it has an explicit Home-state barrier.
-
-The deterministic stale-read UI regression uses the loopback-only proxy in `apps/trust-api/scripts/trust_ui_race_proxy.py`. From the repository root, start the Development + Memory API in the first process:
-
-```sh
-ASPNETCORE_ENVIRONMENT=Development \
-ASPNETCORE_URLS=http://127.0.0.1:5090 \
-Trust__Store=memory \
-Trust__SeedReviewCircle=false \
-Auth__AllowDevelopmentSignIn=true \
-Auth__SigningKey=development-signing-key-32bytes-min!! \
-dotnet run --no-launch-profile --project apps/trust-api/TrustApi.csproj
-```
-
-Start the proxy in a second process:
-
-```sh
-python3 apps/trust-api/scripts/trust_ui_race_proxy.py
-```
-
-The proxy listens only on `127.0.0.1:5089`, forwards only to its fixed `127.0.0.1:5090` upstream, and does not log request paths or bodies. Set `TRUST_UI_TEST_BASE_URL=http://127.0.0.1:5089` on the simulator and in the `TrustUITests.EnvironmentVariables` section of the `.xctestrun` file; do not put it in `TestingEnvironmentVariables`. Do not also bind the API directly to port 5089 in this mode. Run one focused case per fresh API/proxy process to isolate rate limits and faults. Keep StoreKit/review bypass flags off. Teardown releases held reads and resets fault state; still stop both processes after each case and clear simulator `TRUST_UI_*` launchd variables.
-
-## PostgreSQL migration rehearsal
-
-At the 2026-09-29 source checkpoint, the full API suite passed **183/183** against an isolated local PostgreSQL 16 server. Its `PostgresMigrationUpgradeTests` rehearsal initialized the exact embedded migrations 001–013 and ledger, inserted synthetic pre-upgrade accounts, accepted memberships, Sealed/Always/live-Pause shares, presence grant and Home state, a pending request, location, and StoreKit subscription, then ran the actual migrator twice. It verified preserved rows, zero-default share and presence revisions, the complete 001–020 ledger, and a generated Home transition ID that is nonempty and stable across the second application. It then used `PostgresTrustStore` to Stop a share and Revoke the membership. The test creates and drops only its own temporary database and refuses non-loopback hosts or ports outside 5433–5435; the configured role needs `CREATEDB`. Migration 021 is covered by the later current-suite and deployment evidence in [STATUS.md](STATUS.md).
-
-This synthetic rehearsal verifies the populated local schema path and rerunnable migrations through 020 at the 2026-09-29 checkpoint. Separately, a Render backup export completed at 15:35 PDT on 29 September was downloaded and privately retained outside the repository, then restored into isolated local PostgreSQL 16 at `127.0.0.1:5435` as `trust_production_restore_20260929`. Against that restored copy, the actual `PostgresMigrator.ApplyAsync` completed twice. The ledger contained all 20 migrations, the row counts of all 20 pre-existing business tables were unchanged, and `public` still had zero tables. No customer row values were inspected or printed and no live production database was written. This gives production-backup migration evidence without creating a new staging platform. It does not test rollback. Migration 021 is covered by the later current-suite and deployment evidence in [STATUS.md](STATUS.md). Build 32's exact privacy-reducing HTTP compatibility (Off, Remove, Delete) has test evidence, but there is no build-32 UI proof; all older App Store builds have expired, so retrieving an old build for a new UI run is not a release gate.
-
-## Separate TestFlight and live-service evidence — 2026-09-29
-
-The paired simulator results above came from local current-source UI tests and the isolated Development + Memory API, not from a TestFlight installation. At the App Store Connect observation recorded during this test run, version 1.0 was `PREPARE_FOR_SUBMISSION` with manual release and build 35 selected. Build 35 was `VALID`, `APP_STORE_ELIGIBLE`, and `IN_BETA_TESTING` in the sole internal Trust Family Auto group with all three testers; automatic notification and all-build access were enabled. Build 35 validation/upload had completed, and older builds were expired at that point. Physical feedback at `2026-09-30T00:39:03Z` confirms installation on iOS 27.0 but shows a blocking required-check error; normal Apple access remains unverified. That snapshot is historical: a later 2026-09-30 check confirmed build 40 as `Testing` in `Trust Family Auto`, and the 6:30 PM PDT check confirmed build 41 processed, assigned to that group, and selected in version 1.0. Subsequent 1 October feedback on build 42 and the build 43 local fix are recorded in [STATUS.md](STATUS.md) and [AGE-ASSURANCE.md](AGE-ASSURANCE.md); this two-account simulator evidence does not verify either physical age-assurance report.
-
-At the Render observation recorded during this test run, API commit `f5e235d148fcf5068ec25a583af5231fbf209516` was live in deployment `dep-dau5sgm0tbcc738oskug` at `2026-09-30T00:57:31Z`. It corrected App Transaction validation to use Apple's `receiptType` and `receiptCreationDate`; the focused verifier suite passed 14/14 and the historical full API suite passed 189/189 with isolated PostgreSQL. `/health/live` and `/health/ready` returned 200; an unauthenticated App Transaction registration request returned 401. At that time the service startup awaited migrations 001–020 and the production ledger was not queried directly. This deployment was superseded by `c7c57b6481ade20c214e0ae40dcebab22829ab38`, which includes migration 021; current deploy evidence is in [STATUS.md](STATUS.md). These observations do not prove an authenticated production transaction or resolve the reported screen without physical retry, and do not change the local-only scope of the interaction tests.
-
-## Remaining verification
-
-- Delay History with a legitimate paid entitlement across Stop/remove/re-add; cover offline/reconnect and Home-monitoring recovery across interruption; and test concurrent History screens. The focused Look replacement race and same-account Home A→B→A simulator handoff are completed above. Simulator GPS and visible Always permission do not establish physical background execution.
-- On physical TestFlight devices, verify same-account second-device behavior and background location/permission recovery, along with carrier SMS, APNs permission/token/presentation/tap, StoreKit purchase/restore/expiry/refund, and account deletion.
-- Build-32 app-UI compatibility remains unverified because the build has expired. Existing HTTP tests cover its privacy-reducing Off, Remove, and Delete operations; they do not establish old-client UI behavior, and a new expired-build download is not a release gate.
+Older September and early-October run totals are historical snapshots and are superseded for current release validation by the table above.

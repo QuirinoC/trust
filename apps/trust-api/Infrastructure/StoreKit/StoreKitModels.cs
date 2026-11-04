@@ -45,6 +45,13 @@ public enum StoreKitApplyOutcome
     NotApplied
 }
 
+public sealed record StoreKitRecoveryRequest(Guid Id, Guid TargetAccountId, string OriginalTransactionId,
+    Guid OldAppAccountToken, string TransactionId, string ProductId, string? Environment, DateTimeOffset ExpiresAt,
+    DateTimeOffset? RevokedAt, string Status, DateTimeOffset CreatedAt, string? BlockedReason = null);
+
+public sealed record PhoneOwnershipRecoveryRequest(Guid Id, Guid TargetAccountId, string Status,
+    DateTimeOffset CreatedAt, string? Reason);
+
 public interface IStoreKitTransactionVerifier
 {
     StoreKitVerificationResult Verify(string signedTransaction);
@@ -74,5 +81,20 @@ public interface IStoreKitEntitlementStore
 
     /// Same expiry check for one account — call on circle / share reads so Plus
     /// does not stick until the next sweep.
-    Task RefreshAccountCoverageAsync(Guid accountId, CancellationToken cancellationToken);
+    Task RefreshAccountCoverageAsync(Guid accountId, DateTimeOffset now, CancellationToken cancellationToken);
+    Task<DateTimeOffset?> GetActiveEntitlementExpiryAsync(Guid accountId, CancellationToken cancellationToken);
+    Task<Guid> CreateRecoveryRequestAsync(Guid targetAccountId, VerifiedStoreKitTransaction transaction,
+        string? reason, DateTimeOffset createdAt, CancellationToken cancellationToken);
+    Task<Guid> CreatePhoneOwnershipRecoveryRequestAsync(Guid targetAccountId, string? reason,
+        DateTimeOffset createdAt, CancellationToken cancellationToken);
+    Task<bool> HasApprovedAliasAsync(string originalTransactionId, Guid oldAppAccountToken,
+        Guid targetAccountId, CancellationToken cancellationToken);
+    Task<StoreKitRecoveryRequest?> FindRecoveryRequestAsync(string originalTransactionId, Guid oldAppAccountToken,
+        Guid targetAccountId, CancellationToken cancellationToken);
+    Task<Guid> ApproveRecoveryAsync(string originalTransactionId, Guid oldAppAccountToken,
+        Guid targetAccountId,
+        Func<StoreKitRecoveryRequest, CancellationToken, Task<VerifiedStoreKitTransaction>> getAuthoritativeCurrentTransaction,
+        DateTimeOffset approvedAt, CancellationToken cancellationToken);
+    Task BlockRecoveryAsync(string originalTransactionId, Guid oldAppAccountToken, Guid targetAccountId,
+        string reason, DateTimeOffset updatedAt, CancellationToken cancellationToken);
 }

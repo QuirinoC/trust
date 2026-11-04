@@ -9,12 +9,26 @@ namespace TrustApi.Tests;
 public sealed class PostgresMigrationUpgradeTests
 {
     private const string MigrationMarker = ".Migrations.";
+    // Preserved verbatim from the pre-023 PostgresTrustStore.UpsertPhoneChallengeAsync at 96813cf.
+    private const string LegacyPhoneChallengeUpsertSql = """
+        INSERT INTO trust.phone_challenges (
+            account_id, phone_e164, code_hash, expires_at, attempts, sent_at, send_count, window_started_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        ON CONFLICT (account_id) DO UPDATE SET
+            phone_e164 = EXCLUDED.phone_e164,
+            code_hash = EXCLUDED.code_hash,
+            expires_at = EXCLUDED.expires_at,
+            attempts = EXCLUDED.attempts,
+            sent_at = EXCLUDED.sent_at,
+            send_count = EXCLUDED.send_count,
+            window_started_at = EXCLUDED.window_started_at;
+        """;
     private static readonly string SourceConnection =
         Environment.GetEnvironmentVariable("ConnectionStrings__Postgres")
         ?? "Host=127.0.0.1;Port=5433;Database=trust;Username=trust;Password=trust";
 
     [Fact]
-    public async Task PopulatedSchemaAt013UpgradesTo022AndRemainsRepeatable()
+    public async Task PopulatedSchemaAt013UpgradesTo025AndRemainsRepeatable()
     {
         var source = new NpgsqlConnectionStringBuilder(SourceConnection);
         if (!IPAddress.TryParse(source.Host, out var address) || !IPAddress.IsLoopback(address) || source.Port is not (5433 or 5434 or 5435))
@@ -74,7 +88,7 @@ public sealed class PostgresMigrationUpgradeTests
             await PostgresMigrator.ApplyAsync(target);
 
             await AssertUpgradedDataAsync(target, ids, membershipAB, membershipAC, requestBC, placeId, originalTransaction, transactionId, pauseUntil);
-            await AssertMigrationLedger022Async(target);
+            await AssertMigrationLedger030Async(target);
             Assert.Equal(transitionAfterFirstApply, await ReadTransitionIdAsync(target, ids[0]));
 
             var store = new PostgresTrustStore(target);
@@ -103,7 +117,113 @@ public sealed class PostgresMigrationUpgradeTests
         }
     }
 
-    private static async Task ApplyEmbeddedMigrationsThrough013Async(string connectionString)
+    [Fact]
+    public async Task PhoneChallengeLegacyWriterWorksAt023AndAfterHistorical029Upgrade()
+    {
+        var source = new NpgsqlConnectionStringBuilder(SourceConnection);
+        if (!IPAddress.TryParse(source.Host, out var address) || !IPAddress.IsLoopback(address) || source.Port is not (5433 or 5434 or 5435))
+        {
+            throw new InvalidOperationException(
+                $"Migration compatibility rehearsal only runs against PostgreSQL on loopback port 5433, 5434, or 5435; configured host/port was {source.Host}:{source.Port}.");
+        }
+
+        var database = $"trust_phone_compat_{Guid.NewGuid():N}";
+        var admin = new NpgsqlConnectionStringBuilder(source.ConnectionString)
+        {
+            Database = "postgres",
+            Pooling = false
+        }.ConnectionString;
+        var databaseCreated = false;
+        try
+        {
+            await using (var adminConnection = new NpgsqlConnection(admin))
+            {
+                await adminConnection.OpenAsync();
+                await using var create = new NpgsqlCommand($"CREATE DATABASE \"{database}\";", adminConnection);
+                await create.ExecuteNonQueryAsync();
+                databaseCreated = true;
+            }
+
+            var target = new NpgsqlConnectionStringBuilder(source.ConnectionString)
+            {
+                Database = database,
+                Pooling = false
+            }.ConnectionString;
+            var boundaryAccount = Guid.NewGuid();
+            await ApplyEmbeddedMigrationsThroughAsync(target, "022_phone_correction_attempts.sql");
+            await InsertSyntheticAccountAsync(target, boundaryAccount);
+            await ApplyEmbeddedMigrationAsync(target, "023_phone_operations.sql");
+
+            var now = DateTimeOffset.UtcNow;
+            await ExecuteLegacyPhoneChallengeUpsertAsync(target, boundaryAccount, "+15555550101", "boundary-hash", now);
+            var boundaryChallengeId = await ReadChallengeIdAsync(target, boundaryAccount);
+            Assert.NotEqual(Guid.Empty, boundaryChallengeId);
+            await ExecuteLegacyPhoneChallengeUpsertAsync(target, boundaryAccount, "+15555550102", "boundary-updated-hash", now.AddSeconds(1));
+            Assert.Equal(boundaryChallengeId, await ReadChallengeIdAsync(target, boundaryAccount));
+
+            await PostgresMigrator.ApplyAsync(target);
+            await AssertMigrationLedgerCountAsync(target, 30);
+
+            var historicalAccount = Guid.NewGuid();
+            var explicitWriterAccount = Guid.NewGuid();
+            await InsertSyntheticAccountAsync(target, historicalAccount);
+            await InsertSyntheticAccountAsync(target, explicitWriterAccount);
+            await ExecuteLegacyPhoneChallengeUpsertAsync(target, historicalAccount, "+15555550103", "full-schema-hash", now);
+            var fullSchemaChallengeId = await ReadChallengeIdAsync(target, historicalAccount);
+            Assert.NotEqual(Guid.Empty, fullSchemaChallengeId);
+            await ExecuteLegacyPhoneChallengeUpsertAsync(target, historicalAccount, "+15555550104", "full-schema-updated-hash", now.AddSeconds(1));
+            Assert.Equal(fullSchemaChallengeId, await ReadChallengeIdAsync(target, historicalAccount));
+
+            var explicitChallengeId = Guid.NewGuid();
+            await new PostgresTrustStore(target).UpsertPhoneChallengeAsync(
+                new PhoneChallenge(explicitWriterAccount, "+15555550105", "explicit-writer-hash",
+                    now.AddMinutes(10), 0, now, 1, now, ChallengeId: explicitChallengeId),
+                CancellationToken.None);
+            Assert.Equal(explicitChallengeId, await ReadChallengeIdAsync(target, explicitWriterAccount));
+
+            // Simulate a database already marked through 029 whose 023 column lacks the
+            // default. The append-only 030 migration must repair it without changing rows.
+            await ExecuteAsync(target,
+                "ALTER TABLE trust.phone_challenges ALTER COLUMN challenge_id DROP DEFAULT; " +
+                "DELETE FROM trust.schema_migrations WHERE name = '030_phone_challenge_legacy_insert_default.sql';");
+            await AssertMigrationLedgerCountAsync(target, 29);
+            Assert.Null(await ReadChallengeIdDefaultAsync(target));
+            await PostgresMigrator.ApplyAsync(target);
+            await AssertMigrationLedgerCountAsync(target, 30);
+            Assert.Contains("gen_random_uuid", (await ReadChallengeIdDefaultAsync(target)) ?? "", StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(boundaryChallengeId, await ReadChallengeIdAsync(target, boundaryAccount));
+            Assert.Equal(fullSchemaChallengeId, await ReadChallengeIdAsync(target, historicalAccount));
+            Assert.Equal(explicitChallengeId, await ReadChallengeIdAsync(target, explicitWriterAccount));
+
+            var repairedLegacyAccount = Guid.NewGuid();
+            await InsertSyntheticAccountAsync(target, repairedLegacyAccount);
+            await ExecuteLegacyPhoneChallengeUpsertAsync(target, repairedLegacyAccount, "+15555550106", "repaired-hash", now);
+            var repairedChallengeId = await ReadChallengeIdAsync(target, repairedLegacyAccount);
+            Assert.NotEqual(Guid.Empty, repairedChallengeId);
+            await ExecuteLegacyPhoneChallengeUpsertAsync(target, repairedLegacyAccount, "+15555550107", "repaired-updated-hash", now.AddSeconds(1));
+            Assert.Equal(repairedChallengeId, await ReadChallengeIdAsync(target, repairedLegacyAccount));
+        }
+        finally
+        {
+            if (databaseCreated)
+            {
+                await using var adminConnection = new NpgsqlConnection(admin);
+                await adminConnection.OpenAsync();
+                await using var terminate = new NpgsqlCommand(
+                    "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1 AND pid <> pg_backend_pid();",
+                    adminConnection);
+                terminate.Parameters.AddWithValue(database);
+                await terminate.ExecuteNonQueryAsync();
+                await using var drop = new NpgsqlCommand($"DROP DATABASE IF EXISTS \"{database}\";", adminConnection);
+                await drop.ExecuteNonQueryAsync();
+            }
+        }
+    }
+
+    private static async Task ApplyEmbeddedMigrationsThrough013Async(string connectionString) =>
+        await ApplyEmbeddedMigrationsThroughAsync(connectionString, "013_discovery_consent.sql");
+
+    private static async Task ApplyEmbeddedMigrationsThroughAsync(string connectionString, string throughMigration)
     {
         var migrations = typeof(PostgresMigrator).Assembly.GetManifestResourceNames()
             .Where(name => name.Contains(MigrationMarker, StringComparison.Ordinal) && name.EndsWith(".sql", StringComparison.Ordinal))
@@ -115,11 +235,11 @@ public sealed class PostgresMigrationUpgradeTests
                 using var reader = new StreamReader(stream);
                 return (Name: file, Sql: reader.ReadToEnd());
             })
-            .Where(item => string.CompareOrdinal(item.Name, "013_discovery_consent.sql") <= 0)
+            .Where(item => string.CompareOrdinal(item.Name, throughMigration) <= 0)
             .OrderBy(item => item.Name, StringComparer.Ordinal)
             .ToArray();
 
-        Assert.Equal(13, migrations.Length);
+        Assert.Equal(int.Parse(throughMigration.AsSpan(0, 3)), migrations.Length);
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
         await using (var initialize = new NpgsqlCommand(
@@ -146,6 +266,96 @@ public sealed class PostgresMigrationUpgradeTests
             }
             await transaction.CommitAsync();
         }
+    }
+
+    private static async Task ApplyEmbeddedMigrationAsync(string connectionString, string migrationName)
+    {
+        var resourceName = typeof(PostgresMigrator).Assembly.GetManifestResourceNames()
+            .Single(name => name.Contains(MigrationMarker, StringComparison.Ordinal)
+                && name.EndsWith(migrationName, StringComparison.Ordinal));
+        using var stream = typeof(PostgresMigrator).Assembly.GetManifestResourceStream(resourceName)
+            ?? throw new InvalidOperationException($"Missing embedded migration {resourceName}.");
+        using var reader = new StreamReader(stream);
+        var sql = await reader.ReadToEndAsync();
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var transaction = await connection.BeginTransactionAsync();
+        await using (var apply = new NpgsqlCommand(sql, connection, transaction))
+            await apply.ExecuteNonQueryAsync();
+        await using (var record = new NpgsqlCommand(
+            "INSERT INTO trust.schema_migrations(name, applied_at) VALUES ($1, now());",
+            connection, transaction))
+        {
+            record.Parameters.AddWithValue(migrationName);
+            await record.ExecuteNonQueryAsync();
+        }
+        await transaction.CommitAsync();
+    }
+
+    private static async Task InsertSyntheticAccountAsync(string connectionString, Guid accountId)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            "INSERT INTO trust.accounts(account_id, provider, provider_subject, display_name, has_circle, circle_source, created_at) VALUES ($1, 'synthetic-phone-migration', $2, 'Synthetic Test', true, 'test', now());",
+            connection);
+        command.Parameters.AddWithValue(accountId);
+        command.Parameters.AddWithValue($"phone-migration-{Guid.NewGuid():N}");
+        await command.ExecuteNonQueryAsync();
+    }
+
+    private static async Task ExecuteLegacyPhoneChallengeUpsertAsync(
+        string connectionString, Guid accountId, string phone, string codeHash, DateTimeOffset timestamp)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(LegacyPhoneChallengeUpsertSql, connection);
+        command.Parameters.AddWithValue(accountId);
+        command.Parameters.AddWithValue(phone);
+        command.Parameters.AddWithValue(codeHash);
+        command.Parameters.AddWithValue(timestamp.AddMinutes(10));
+        command.Parameters.AddWithValue(0);
+        command.Parameters.AddWithValue(timestamp);
+        command.Parameters.AddWithValue(1);
+        command.Parameters.AddWithValue(timestamp);
+        await command.ExecuteNonQueryAsync();
+    }
+
+    private static async Task<Guid> ReadChallengeIdAsync(string connectionString, Guid accountId)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            "SELECT challenge_id FROM trust.phone_challenges WHERE account_id = $1;", connection);
+        command.Parameters.AddWithValue(accountId);
+        return (Guid)(await command.ExecuteScalarAsync())!;
+    }
+
+    private static async Task<string?> ReadChallengeIdDefaultAsync(string connectionString)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            "SELECT column_default FROM information_schema.columns WHERE table_schema = 'trust' AND table_name = 'phone_challenges' AND column_name = 'challenge_id';",
+            connection);
+        var value = await command.ExecuteScalarAsync();
+        return value is null or DBNull ? null : (string)value;
+    }
+
+    private static async Task AssertMigrationLedgerCountAsync(string connectionString, int expected)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand("SELECT count(*) FROM trust.schema_migrations;", connection);
+        Assert.Equal(expected, Convert.ToInt32(await command.ExecuteScalarAsync()));
+    }
+
+    private static async Task ExecuteAsync(string connectionString, string sql)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(sql, connection);
+        await command.ExecuteNonQueryAsync();
     }
 
     private static async Task SeedPre014DataAsync(
@@ -428,7 +638,7 @@ public sealed class PostgresMigrationUpgradeTests
         return (Guid)(await command.ExecuteScalarAsync())!;
     }
 
-    private static async Task AssertMigrationLedger022Async(string connectionString)
+    private static async Task AssertMigrationLedger030Async(string connectionString)
     {
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
@@ -436,8 +646,8 @@ public sealed class PostgresMigrationUpgradeTests
         await using var reader = await command.ExecuteReaderAsync();
         var names = new List<string>();
         while (await reader.ReadAsync()) names.Add(reader.GetString(0));
-        Assert.Equal(22, names.Count);
+        Assert.Equal(30, names.Count);
         Assert.Equal("001_initial.sql", names[0]);
-        Assert.Equal("022_phone_correction_attempts.sql", names[^1]);
+        Assert.Equal("030_phone_challenge_legacy_insert_default.sql", names[^1]);
     }
 }

@@ -21,8 +21,11 @@
 
   <ItemGroup>
     <Compile Remove="TrustApi.Tests/**/*.cs" />
+    <Compile Remove="TrustApi.Operations/**/*.cs" />
     <Content Remove="TrustApi.Tests/**" />
+    <Content Remove="TrustApi.Operations/**" />
     <None Remove="TrustApi.Tests/**" />
+    <None Remove="TrustApi.Operations/**" />
   </ItemGroup>
 
   <ItemGroup>

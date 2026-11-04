@@ -15,6 +15,7 @@ using TrustApi.Contracts.V1;
 using TrustApi.Configuration;
 using TrustApi.Domain;
 using TrustApi.Infrastructure;
+using TrustApi.Infrastructure.AgeAssurance;
 using TrustApi.Infrastructure.Identity;
 
 namespace TrustApi.Tests;
@@ -42,7 +43,7 @@ public sealed class TrustEngineTests
 
         Assert.False(alex.InboundLive);
         Assert.Null(alex.Live);
-        Assert.True(jordan.InboundLive);
+        Assert.False(jordan.InboundLive); // Seeded Always consent is not active without owner Plus.
         Assert.Null(jordan.Live);
 
         await Assert.ThrowsAsync<TrustException>(() =>
@@ -142,7 +143,8 @@ public sealed class TrustEngineTests
         Assert.False(free.Coverage.IsCovered);
         Assert.True((await engine.GetCircleAsync(sam.Id, CancellationToken.None)).Coverage.IsCovered);
         Assert.True(freeSam.InboundLive);
-        Assert.Null(freeSam.Live);
+        Assert.NotNull(freeSam.Live);
+        Assert.Equal(37.77, freeSam.Live!.Latitude, 3);
 
         await engine.GrantCircleAsync(jordan.Id, "test", CancellationToken.None);
         var plus = await engine.GetCircleAsync(jordan.Id, CancellationToken.None);
@@ -895,6 +897,7 @@ public sealed class TrustEngineTests
             new ViewRequest(sam.Id),
             jordanPrincipal,
             engine,
+            TimeProvider.System,
             CancellationToken.None);
         Assert.Equal(beforeView, receipts.Looks.Count);
         Assert.NotNull(look);
@@ -1199,6 +1202,71 @@ public sealed class TrustApiTests : IClassFixture<TrustApiFactory>
     }
 
     [Fact]
+    public async Task ReviewGrantedOwnerCanSendLiveLocationToFreeViewerThroughHttpWithEntitlementStore()
+    {
+        using var factory = new TrustApiFactory();
+        using var client = factory.CreateClient();
+        async Task<(string Token, Guid Id)> CreateAccount(string name)
+        {
+            var response = await client.PostAsJsonAsync("/api/v1/session/development", new
+            {
+                displayName = name,
+                deviceId = Guid.NewGuid().ToString("N")
+            });
+            response.EnsureSuccessStatusCode();
+            using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            return (json.RootElement.GetProperty("token").GetString()!,
+                json.RootElement.GetProperty("you").GetProperty("id").GetGuid());
+        }
+
+        var owner = await CreateAccount("Review Owner");
+        var viewer = await CreateAccount("Free Viewer");
+        using (var entitlement = new HttpRequestMessage(HttpMethod.Post, "/api/v1/circle/entitlement"))
+        {
+            entitlement.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", owner.Token);
+            entitlement.Content = JsonContent.Create(new { reviewUnlock = true });
+            (await client.SendAsync(entitlement)).EnsureSuccessStatusCode();
+        }
+
+        using var createInvite = new HttpRequestMessage(HttpMethod.Post, "/api/v1/invites");
+        createInvite.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", owner.Token);
+        using var inviteResponse = await client.SendAsync(createInvite);
+        inviteResponse.EnsureSuccessStatusCode();
+        using var invite = JsonDocument.Parse(await inviteResponse.Content.ReadAsStringAsync());
+        using var acceptInvite = new HttpRequestMessage(HttpMethod.Post, "/api/v1/invites/accept");
+        acceptInvite.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", viewer.Token);
+        acceptInvite.Content = JsonContent.Create(new { code = invite.RootElement.GetProperty("code").GetString() });
+        (await client.SendAsync(acceptInvite)).EnsureSuccessStatusCode();
+
+        var store = factory.Services.GetRequiredService<ITrustStore>();
+        var connectionId = Assert.IsType<Guid>(await store.GetActiveMembershipIdAsync(owner.Id, viewer.Id, CancellationToken.None));
+        var revision = (await store.GetShareAsync(owner.Id, viewer.Id, CancellationToken.None)).Revision;
+        using var setShare = new HttpRequestMessage(HttpMethod.Patch, $"/api/v1/people/{viewer.Id}/share");
+        setShare.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", owner.Token);
+        setShare.Content = JsonContent.Create(new { connectionId, revision, resting = "always" });
+        (await client.SendAsync(setShare)).EnsureSuccessStatusCode();
+
+        var now = DateTimeOffset.UtcNow;
+        using var ingest = new HttpRequestMessage(HttpMethod.Post, "/api/v1/location");
+        ingest.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", owner.Token);
+        ingest.Content = JsonContent.Create(new { timestamp = now, latitude = 37.77, longitude = -122.42 });
+        (await client.SendAsync(ingest)).EnsureSuccessStatusCode();
+
+        using var circleRequest = new HttpRequestMessage(HttpMethod.Get, "/api/v1/circle");
+        circleRequest.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", viewer.Token);
+        using var circleResponse = await client.SendAsync(circleRequest);
+        circleResponse.EnsureSuccessStatusCode();
+        using var circle = JsonDocument.Parse(await circleResponse.Content.ReadAsStringAsync());
+        var ownerMember = circle.RootElement.GetProperty("members").EnumerateArray()
+            .Single(member => member.GetProperty("person").GetProperty("id").GetGuid() == owner.Id);
+        Assert.True(ownerMember.GetProperty("inboundLive").GetBoolean());
+        Assert.Equal(1, ownerMember.GetProperty("receiveAuthorizationVersion").GetInt32());
+        Assert.Equal(JsonValueKind.Null, ownerMember.GetProperty("liveAccessExpiresAt").ValueKind);
+        Assert.Equal(37.77, ownerMember.GetProperty("live").GetProperty("latitude").GetDouble(), 3);
+        Assert.False(circle.RootElement.GetProperty("coverage").GetProperty("isCovered").GetBoolean());
+    }
+
+    [Fact]
     public async Task SealedHttpFlowDeniesHistoryAndReturnsSingleConfirmedSnapshot()
     {
         using var factory = new TrustApiFactory();
@@ -1310,7 +1378,7 @@ public sealed class TrustApiTests : IClassFixture<TrustApiFactory>
         Assert.False(alex.InboundLive);
         Assert.Null(alex.Live);
         Assert.Equal("untilTheyLook", alex.InboundShare!.Presentation);
-        Assert.True(jordan.InboundLive);
+        Assert.False(jordan.InboundLive);
         Assert.Null(jordan.Live);
         Assert.Equal("always", jordan.InboundShare!.Presentation);
 
@@ -1474,6 +1542,8 @@ public sealed class TrustApiTests : IClassFixture<TrustApiFactory>
         var payload = await response.Content.ReadFromJsonAsync<SessionWire>(Json);
         Assert.False(string.IsNullOrWhiteSpace(payload?.Token));
         Assert.Equal("Juan", payload!.You.DisplayName);
+        var ageAssurance = factory.Services.GetRequiredService<IAgeAssuranceAccountStore>();
+        Assert.False(await ageAssurance.HasAppTransactionLinkAsync(payload.You.Id, CancellationToken.None));
     }
 
     [Fact]

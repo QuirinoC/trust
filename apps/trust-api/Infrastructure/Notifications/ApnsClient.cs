@@ -24,7 +24,8 @@ public sealed record PushDevice(
     string Token,
     string Environment,
     string BundleId,
-    bool Enabled);
+    bool Enabled,
+    string Language = "en");
 
 public interface IPushDeviceStore
 {
@@ -34,7 +35,8 @@ public interface IPushDeviceStore
         string token,
         string environment,
         string bundleId,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken,
+        string? language = null);
 
     Task RemoveAsync(Guid accountId, Guid installationId, CancellationToken cancellationToken);
 
@@ -63,7 +65,8 @@ public sealed class ApnsClient(HttpClient httpClient, IOptions<ApnsOptions> opti
         string title,
         string body,
         string kind,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        DateTimeOffset? eventAt = null)
     {
         if (!IsConfigured)
         {
@@ -89,7 +92,11 @@ public sealed class ApnsClient(HttpClient httpClient, IOptions<ApnsOptions> opti
                         ["interruption-level"] = "active",
                         ["thread-id"] = "trust." + kind
                     },
-                    trust = new { kind }
+                    trust = new
+                    {
+                        kind,
+                        eventInstant = eventAt?.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", System.Globalization.CultureInfo.InvariantCulture)
+                    }
                 }),
                 Encoding.UTF8,
                 "application/json")

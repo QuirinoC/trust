@@ -5,7 +5,15 @@ import TrustCore
 struct PhoneView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.trustPalette) private var palette
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dismiss) private var dismiss
     @FocusState private var focused: Field?
+    @State private var showingCountryPicker = false
+    @State private var showingAccountHelp = false
+    @State private var showingDeleteAccount = false
+    @State private var showingSignOutOptions = false
+    @State private var countrySearch = ""
 
     private enum Field { case phone, code }
 
@@ -27,7 +35,7 @@ struct PhoneView: View {
                         phoneEntry(now: now)
                     }
 
-                    Button(TrustCopy.signOut) { model.signOut() }
+                    Button(TrustCopy.accountHelp) { showingAccountHelp = true }
                         .buttonStyle(TrustTextButtonStyle())
                         .frame(maxWidth: .infinity)
                         .padding(.top, 12)
@@ -43,9 +51,60 @@ struct PhoneView: View {
             legalLinks
         }
         .background(palette.canvas.ignoresSafeArea())
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if let toast = model.toast {
+                TrustToastView(toast: toast) { model.toast = nil }
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 8)
+                    .background(palette.canvas)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.22), value: model.toast?.id)
         .onChange(of: model.phoneCodeSent) { _, sent in
             if sent { focused = .code }
         }
+        .onAppear { model.synchronizePhoneEditorFromDraft() }
+        .task {
+            await model.refreshPhoneVerificationState()
+            await seedPhoneRegion()
+        }
+        .onChange(of: model.phoneReplacementMode) { _, active in
+            if !active { dismiss() }
+        }
+        .sheet(isPresented: $showingCountryPicker) { countryPicker }
+        .sheet(isPresented: $showingAccountHelp) {
+            AccountHelpSheet(onSignOut: {
+                if model.outboundActiveCount > 0 { showingSignOutOptions = true }
+                else { model.signOut() }
+            }, onDelete: { showingDeleteAccount = true })
+                .presentationDetents(dynamicTypeSize.isAccessibilitySize ? [.large] : [.medium, .large])
+                .presentationDragIndicator(.visible)
+        }
+        .alert(TrustCopy.deleteAccountConfirm, isPresented: $showingDeleteAccount) {
+            Button(TrustCopy.deleteAccount, role: .destructive) { Task { await model.deleteAccount() } }
+            Button(TrustCopy.cancel, role: .cancel) {}
+        } message: {
+            Text(TrustCopy.accountHelpBody)
+        }
+        .confirmationDialog(TrustCopy.signOut, isPresented: $showingSignOutOptions, titleVisibility: .visible) {
+            if model.canStopAllBeforeSignOut {
+                Button(TrustCopy.stopAllAndSignOut, role: .destructive) { Task { await model.stopAllAndSignOut() } }
+            }
+            Button(TrustCopy.signOut) { model.signOut() }
+            Button(TrustCopy.cancel, role: .cancel) {}
+        } message: {
+            Text(TrustCopy.signOutSharingWarning)
+        }
+#if TRUST_STAGING
+        .task(id: model.phoneDraft) {
+            let draft = model.phoneDraft
+            while !Task.isCancelled {
+                if await model.autoVerifyStagingTestNumberIfReady(draft) { return }
+                try? await Task.sleep(for: .seconds(1))
+            }
+        }
+#endif
     }
 
     private func phoneEntry(now: Date) -> some View {
@@ -61,9 +120,49 @@ struct PhoneView: View {
                 .padding(.top, 8)
                 .padding(.bottom, 22)
 
+#if TRUST_STAGING
+            Text("Staging automatically verifies only the test numbers +1 202 555 0101 and +1 202 555 0102 after you finish entering one. No SMS is sent to these reserved test numbers.")
+                .trustFont(13)
+                .foregroundStyle(palette.muted)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.bottom, 14)
+                .accessibilityIdentifier("staging-phone-test-notice")
+#endif
+
             TrustCard(padding: 20) {
                 VStack(alignment: .leading, spacing: 18) {
-                    phoneNumberField
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(TrustCopy.phoneNumber).trustFont(14, weight: .medium).foregroundStyle(palette.ink)
+                        HStack(spacing: 8) {
+                            Button { showingCountryPicker = true } label: {
+                                HStack(spacing: 5) {
+                                    Text(model.phoneCountry.code)
+                                    Text(model.phoneCountry.displayCallingCode)
+                                    Image(systemName: "chevron.down").font(.system(size: 10, weight: .semibold))
+                                }
+                                .trustFont(15, weight: .semibold).foregroundStyle(palette.ink)
+                                .padding(.horizontal, 12).frame(minHeight: 52)
+                                .background(palette.paper, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(palette.line, lineWidth: 1))
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(TrustCopy.phoneCountryAccessibilityLabel(model.phoneCountry.name, callingCode: model.phoneCountry.displayCallingCode))
+                            .accessibilityIdentifier("phone-country-picker")
+                            TextField(TrustCopy.phonePlaceholder, text: Binding(
+                                get: { model.phoneLocalDraft },
+                                set: { model.phoneLocalDraft = $0; localNumberChanged() }
+                            ))
+                                .textContentType(.telephoneNumber).keyboardType(.phonePad)
+                                .textInputAutocapitalization(.never).autocorrectionDisabled().submitLabel(.send)
+                                .trustFont(17).foregroundStyle(palette.ink).focused($focused, equals: .phone)
+                                .onSubmit { focused = nil }
+                                .padding(14).frame(minHeight: 52)
+                                .background(palette.canvas, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(palette.line, lineWidth: 1))
+                                .accessibilityLabel(TrustCopy.phoneNumber)
+                                .accessibilityIdentifier("phone-number")
+                        }
+                    }
 
                     Button {
                         focused = nil
@@ -191,7 +290,11 @@ struct PhoneView: View {
     @ViewBuilder
     private func retryNotice(now: Date) -> some View {
         if model.phoneRetrySeconds(at: now) > 0, let deadline = model.phoneRetryDeadline {
-            Text(TrustCopy.phoneRetryExplanation(deadline.formatted(date: Calendar.current.isDateInToday(deadline) ? .omitted : .abbreviated, time: .standard)))
+            Text(TrustCopy.phoneRetryExplanation(TrustCopy.formattedDateTime(
+                deadline,
+                dateStyle: Calendar.current.isDateInToday(deadline) ? .omitted : .abbreviated,
+                timeStyle: .standard
+            )))
                 .trustFont(13)
                 .foregroundStyle(palette.muted)
                 .fixedSize(horizontal: false, vertical: true)
@@ -199,35 +302,110 @@ struct PhoneView: View {
         }
     }
 
-    private var phoneNumberField: some View {
-        TrustFieldLabel(title: TrustCopy.phoneNumber, hint: nil) {
-            TextField(TrustCopy.phonePlaceholder, text: $model.phoneDraft)
-                .textContentType(.telephoneNumber)
-                .keyboardType(.phonePad)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .submitLabel(.send)
-                .trustFont(17)
-                .foregroundStyle(palette.ink)
-                .focused($focused, equals: .phone)
-                .onSubmit { focused = nil }
-                .padding(14)
-                .frame(minHeight: 52)
-                .background(palette.canvas, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(palette.line, lineWidth: 1))
-                .accessibilityLabel(TrustCopy.phoneNumber)
-                .accessibilityIdentifier("phone-number")
+    private var countryPicker: some View {
+        NavigationStack {
+            List(TrustPhoneCountry.all
+                .filter { TrustPhoneCountry.matches($0, query: countrySearch) }
+                .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }) { country in
+                Button {
+                    model.phoneCountry = country
+                    model.phoneCountryWasChosen = true
+                    model.phoneDraft = TrustPhoneCountry.canonicalNumber(model.phoneLocalDraft, countryCode: country.code)
+                    model.persistEditedPhoneDraft()
+                    showingCountryPicker = false
+                } label: {
+                    HStack {
+                        Text(country.name).foregroundStyle(palette.ink)
+                        Spacer()
+                        Text(country.displayCallingCode).foregroundStyle(palette.muted)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                    .contentShape(Rectangle())
+                }
+                .accessibilityIdentifier("phone-country-\(country.code.lowercased())")
+            }
+            .searchable(text: $countrySearch, prompt: TrustCopy.phoneCountrySearch)
+            .navigationTitle(TrustCopy.phoneCountryCodeTitle)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button(TrustCopy.done) { showingCountryPicker = false }.frame(minHeight: 44) } }
         }
     }
+
+    private func localNumberChanged() {
+        let input = model.phoneLocalDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        if input.hasPrefix("+") || input.hasPrefix("00") {
+            let split = TrustPhoneCountry.split(input, preferredCountry: model.phoneCountry)
+            if let country = split.country {
+                model.phoneCountry = country
+                model.phoneCountryWasChosen = true
+                model.phoneLocalDraft = split.nationalNumber
+                model.phoneDraft = TrustPhoneCountry.canonicalNumber(input, countryCode: country.code)
+                model.persistEditedPhoneDraft()
+                return
+            }
+        }
+        model.phoneDraft = TrustPhoneCountry.canonicalNumber(input, countryCode: model.phoneCountry.code)
+        model.persistEditedPhoneDraft()
+    }
+
+    private func seedPhoneRegion() async {
+        let url: URL
+        let injectedForUITest: Bool
+#if DEBUG
+        let environment = ProcessInfo.processInfo.environment
+        if environment["TRUST_UI_TEST"] == "1" {
+            guard let raw = environment["TRUST_UI_TEST_REGION_URL"],
+                  let candidate = URL(string: raw),
+                  candidate.scheme == "http",
+                  candidate.host == "127.0.0.1",
+                  candidate.port == 5089,
+                  candidate.path == "/api/region" else { return }
+            url = candidate
+            injectedForUITest = true
+        } else {
+            guard let candidate = URL(string: "https://\(AppConfiguration.universalLinkHost)/api/region") else { return }
+            url = candidate
+            injectedForUITest = false
+        }
+#else
+        guard let candidate = URL(string: "https://\(AppConfiguration.universalLinkHost)/api/region") else { return }
+        url = candidate
+        injectedForUITest = false
+#endif
+        guard !model.phoneCountryWasChosen, model.phoneDraft.isEmpty else { return }
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.timeoutInterval = injectedForUITest ? 30 : 4
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard !Task.isCancelled,
+                  let httpResponse = response as? HTTPURLResponse,
+                  (200..<300).contains(httpResponse.statusCode) else { return }
+            let region = try JSONDecoder().decode(RegionResponse.self, from: data)
+            guard !Task.isCancelled else { return }
+            guard let country = TrustPhoneCountry.regionSeed(responseCode: region.countryCode,
+                                                              manualSelection: model.phoneCountryWasChosen,
+                                                              hasDraft: !model.phoneDraft.isEmpty || !model.phoneLocalDraft.isEmpty) else { return }
+            model.phoneCountry = country
+        } catch { /* Region is optional; the default stays United States. */ }
+    }
+
+    private struct RegionResponse: Decodable { let countryCode: String? }
 
     @ViewBuilder
     private var phoneNotice: some View {
         if let notice = model.phoneNotice, !notice.isEmpty {
-            Text(notice)
-                .trustFont(13)
-                .foregroundStyle(model.phoneNoticeIsConflict ? palette.danger : palette.accent)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityIdentifier("phone-notice")
+            VStack(alignment: .leading, spacing: 6) {
+                Text(notice)
+                    .trustFont(13)
+                    .foregroundStyle(model.phoneNoticeIsConflict ? palette.danger : palette.accent)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("phone-notice")
+                if model.phoneNoticeIsConflict {
+                    RecoverySupportActions(kind: .phoneConflict)
+                }
+            }
         }
     }
 

@@ -1,6 +1,7 @@
 using TrustApi.Application;
 using TrustApi.Domain;
 using TrustApi.Infrastructure.Postgres;
+using TrustApi.Infrastructure.StoreKit;
 using Npgsql;
 
 namespace TrustApi.Tests;
@@ -263,5 +264,119 @@ public sealed class PostgresHistoryTests
         Assert.Equal(7, failures.Count(value => value is null));
         Assert.Null(await store.GetPhoneChallengeAsync(account.Id, CancellationToken.None));
         await store.DeleteAccountAsync(account.Id, CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task OwnerEntitlementExpiryImmediatelyRevokesFreeRecipientsLiveViewAndHistory()
+    {
+        await PostgresMigrator.ApplyAsync(Connection);
+        var store = new PostgresTrustStore(Connection);
+        var entitlements = new PostgresStoreKitEntitlementStore(Connection);
+        var engine = new TrustEngine(store, TimeProvider.System, entitlements: entitlements);
+        var suffix = Guid.NewGuid().ToString("N");
+        var owner = await engine.SignInAsync("development", $"owner-expiry-{suffix}", "Owner", CancellationToken.None);
+        var viewer = await engine.SignInAsync("development", $"viewer-expiry-{suffix}", "Viewer", CancellationToken.None);
+        try
+        {
+            var invite = await engine.CreateInviteAsync(owner.Id, CancellationToken.None);
+            await engine.AcceptInviteAsync(viewer.Id, invite.Code, CancellationToken.None);
+            var accountToken = await entitlements.GetOrCreateAccountTokenAsync(owner.Id, CancellationToken.None);
+            // PostgreSQL timestamptz stores microseconds; align the fixture clock so
+            // entitlement expiry compares exactly after a database round-trip.
+            var now = DateTimeOffset.UtcNow;
+            now = now.AddTicks(-(now.Ticks % TimeSpan.TicksPerMicrosecond));
+            var expiry = now.AddDays(2);
+            var originalId = $"original-{suffix}";
+            var applied = await entitlements.ApplyAsync(owner.Id, new VerifiedStoreKitTransaction(
+                $"transaction-{suffix}", originalId, "com.collapsetechnologies.trust.circle.monthly",
+                accountToken, "Sandbox", now, expiry, null), CancellationToken.None);
+            Assert.Equal(StoreKitApplyOutcome.Applied, applied);
+            await engine.SetShareAsync(owner.Id, viewer.Id, ShareResting.Always, null, CancellationToken.None);
+            await engine.IngestAsync(owner.Id, new LocationFix(now, 37.76, -122.42), 80, false, CancellationToken.None);
+
+            var authorized = await engine.GetCircleAsync(viewer.Id, CancellationToken.None);
+            var ownerMember = Assert.Single(authorized.Members, member => member.Person.Id == owner.Id);
+            Assert.False(authorized.You.HasCircle);
+            Assert.True(ownerMember.InboundLive);
+            Assert.Equal(expiry, ownerMember.LiveAccessExpiresAt);
+            Assert.NotNull(ownerMember.Live);
+
+            await using (var connection = new NpgsqlConnection(Connection))
+            {
+                await connection.OpenAsync();
+                await using var expire = new NpgsqlCommand(
+                    "UPDATE trust.storekit_transactions SET expires_at=now()-interval '1 second' WHERE original_transaction_id=$1;",
+                    connection);
+                expire.Parameters.AddWithValue(originalId);
+                await expire.ExecuteNonQueryAsync();
+            }
+
+            var expired = await engine.GetCircleAsync(viewer.Id, CancellationToken.None);
+            var expiredOwner = Assert.Single(expired.Members, member => member.Person.Id == owner.Id);
+            Assert.False(expiredOwner.InboundLive);
+            Assert.Null(expiredOwner.Live);
+            Assert.Equal(ShareResting.Always, expiredOwner.InboundShare.Effective(DateTimeOffset.UtcNow));
+            Assert.NotNull(expiredOwner.LiveAccessExpiresAt);
+            Assert.True(expiredOwner.LiveAccessExpiresAt <= DateTimeOffset.UtcNow);
+            Assert.Equal("unavailable", expiredOwner.LiveUnavailableReason);
+            Assert.Equal("view_requires_available", (await Assert.ThrowsAsync<TrustException>(() =>
+                engine.ViewAsync(viewer.Id, owner.Id, CancellationToken.None))).Code);
+            Assert.Equal("share_off", (await Assert.ThrowsAsync<TrustException>(() =>
+                engine.HistoryAsync(viewer.Id, owner.Id, CancellationToken.None))).Code);
+        }
+        finally
+        {
+            await store.DeleteAccountAsync(viewer.Id, CancellationToken.None);
+            await store.DeleteAccountAsync(owner.Id, CancellationToken.None);
+        }
+    }
+
+    [Fact]
+    public async Task RevocationNotificationWaitsForRecoveryApprovalOwnerCreationAndWinsAgainstStaleReplay()
+    {
+        await PostgresMigrator.ApplyAsync(Connection);
+        var store = new PostgresTrustStore(Connection);
+        var entitlements = new PostgresStoreKitEntitlementStore(Connection);
+        var target = await new TrustEngine(store, TimeProvider.System).SignInAsync(
+            "development", $"recovery-revocation-{Guid.NewGuid():N}", "Target", CancellationToken.None);
+        try
+        {
+            _ = await entitlements.GetOrCreateAccountTokenAsync(target.Id, CancellationToken.None);
+            var now = DateTimeOffset.UtcNow;
+            var originalId = $"recovery-original-{Guid.NewGuid():N}";
+            var oldToken = Guid.NewGuid();
+            var active = new VerifiedStoreKitTransaction("recovery-transaction", originalId,
+                "com.collapsetechnologies.trust.circle.monthly", oldToken, "Sandbox", now,
+                now.AddDays(30), null);
+            var requestId = await entitlements.CreateRecoveryRequestAsync(target.Id, active, null, now, CancellationToken.None);
+            var lookupStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var releaseLookup = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var approval = entitlements.ApproveRecoveryAsync(originalId, oldToken, target.Id, async (_, token) =>
+            {
+                lookupStarted.TrySetResult();
+                await releaseLookup.Task.WaitAsync(token);
+                return active;
+            }, now.AddSeconds(1), CancellationToken.None);
+            await lookupStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+            var revoked = active with { SignedAt = now.AddSeconds(2), RevokedAt = now.AddSeconds(2) };
+            var notification = entitlements.ApplyNotificationAsync(revoked, CancellationToken.None);
+            await Task.Delay(100);
+            Assert.False(notification.IsCompleted);
+
+            releaseLookup.TrySetResult();
+            Assert.Equal(requestId, await approval.WaitAsync(TimeSpan.FromSeconds(5)));
+            Assert.True(await notification.WaitAsync(TimeSpan.FromSeconds(5)));
+            Assert.True(await entitlements.HasApprovedAliasAsync(originalId, oldToken, target.Id, CancellationToken.None));
+            Assert.False((await store.FindAccountAsync(target.Id, CancellationToken.None))!.HasCircle);
+
+            var staleReplay = active with { SignedAt = now };
+            Assert.Equal(StoreKitApplyOutcome.Applied, await entitlements.ApplyAsync(target.Id, staleReplay, CancellationToken.None));
+            Assert.False((await store.FindAccountAsync(target.Id, CancellationToken.None))!.HasCircle);
+        }
+        finally
+        {
+            await store.DeleteAccountAsync(target.Id, CancellationToken.None);
+        }
     }
 }

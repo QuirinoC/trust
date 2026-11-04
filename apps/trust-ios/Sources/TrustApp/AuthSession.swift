@@ -62,12 +62,18 @@ final class AuthSession: ObservableObject {
     private static let appleUserKey = "trust.appleUserID"
     private static let tokenKey = "trust.sessionToken"
     private static let privacyHoldSessionKey = "trust.age.privacy-hold-session"
+    private static let consentRevokedSessionKey = "trust.age.consent-revoked-session"
 
     var isAuthenticated: Bool { sessionToken != nil && account != nil }
 
     var isCurrentSessionPrivacyHeld: Bool {
         guard let sessionToken else { return false }
         return TrustKeychain.get(account: Self.privacyHoldSessionKey) == Self.fingerprint(sessionToken)
+    }
+
+    var isCurrentSessionConsentRevoked: Bool {
+        guard let sessionToken else { return false }
+        return TrustKeychain.get(account: Self.consentRevokedSessionKey) == Self.fingerprint(sessionToken)
     }
 
     init() {
@@ -82,6 +88,42 @@ final class AuthSession: ObservableObject {
 #if DEBUG
         let testEnvironment = ProcessInfo.processInfo.environment
         let testAPI = AppConfiguration.apiBaseURL
+        if testEnvironment["TRUST_UI_TEST"] == "1",
+           testEnvironment["TRUST_UI_TEST_SIGNED_APPLE_AUTH"] == "1",
+           testAPI.scheme == "http",
+           testAPI.host == "127.0.0.1",
+           testAPI.port == 5089 {
+            let subject = testEnvironment["TRUST_UI_TEST_DEVICE_ID"] ?? "trust-ui-test-account"
+            guard subject.range(of: "^[A-Za-z0-9_-]{8,100}$", options: .regularExpression) != nil else {
+                throw TrustAuthenticationError.invalidAppleCredential
+            }
+            var bytes = [UInt8](repeating: 0, count: 32)
+            _ = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+            let hashedNonce = SHA256.hash(data: Data(bytes)).map { String(format: "%02x", $0) }.joined()
+            var components = URLComponents(url: testAPI.appendingPathComponent("__test/apple-identity"), resolvingAgainstBaseURL: false)
+            components?.queryItems = [
+                URLQueryItem(name: "subject", value: subject),
+                URLQueryItem(name: "nonce", value: hashedNonce),
+                URLQueryItem(name: "displayName", value: testEnvironment["TRUST_UI_TEST_DISPLAY_NAME"] ?? "Trust UI Test")
+            ]
+            guard let url = components?.url else { throw TrustAuthenticationError.invalidAppleCredential }
+            var request = URLRequest(url: url)
+            request.httpMethod = "GET"
+            request.cachePolicy = .reloadIgnoringLocalCacheData
+            request.timeoutInterval = 15
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                throw TrustAuthenticationError.invalidAppleCredential
+            }
+            struct SignedIdentityResponse: Decodable { var identityToken: String }
+            let identity = try JSONDecoder().decode(SignedIdentityResponse.self, from: data)
+            return AppleIdentity(
+                identityToken: identity.identityToken,
+                userID: subject,
+                displayName: testEnvironment["TRUST_UI_TEST_DISPLAY_NAME"] ?? "Trust UI Test",
+                nonce: hashedNonce
+            )
+        }
         if testEnvironment["TRUST_UI_TEST_FAKE_APPLE_AUTH"] == "1",
            testEnvironment["TRUST_UI_TEST"] == "1",
            AppConfiguration.isLoopback(testAPI),
@@ -120,6 +162,9 @@ final class AuthSession: ObservableObject {
         if TrustKeychain.get(account: Self.privacyHoldSessionKey) != Self.fingerprint(token) {
             TrustKeychain.delete(account: Self.privacyHoldSessionKey)
         }
+        if TrustKeychain.get(account: Self.consentRevokedSessionKey) != Self.fingerprint(token) {
+            TrustKeychain.delete(account: Self.consentRevokedSessionKey)
+        }
         let defaults = UserDefaults.standard
         defaults.set(true, forKey: Self.authenticatedKey)
         defaults.set(account.provider.rawValue, forKey: Self.providerKey)
@@ -156,6 +201,7 @@ final class AuthSession: ObservableObject {
         defaults.removeObject(forKey: Self.tokenKey)
         TrustKeychain.delete(account: Self.tokenKey)
         TrustKeychain.delete(account: Self.privacyHoldSessionKey)
+        TrustKeychain.delete(account: Self.consentRevokedSessionKey)
     }
 
     func markCurrentSessionPrivacyHeld() {
@@ -163,8 +209,15 @@ final class AuthSession: ObservableObject {
         TrustKeychain.set(Self.fingerprint(sessionToken), account: Self.privacyHoldSessionKey)
     }
 
+    func markCurrentSessionConsentRevoked() {
+        guard let sessionToken else { return }
+        TrustKeychain.set(Self.fingerprint(sessionToken), account: Self.consentRevokedSessionKey)
+    }
+
     func validateRestoredAppleCredential() async -> Bool {
-        guard account?.provider == .apple, let userID = account?.appleUserID else { return false }
+        guard account?.provider == .apple,
+              let userID = account?.appleUserID,
+              let token = sessionToken else { return false }
         let provider = ASAuthorizationAppleIDProvider()
         do {
             let state: ASAuthorizationAppleIDProvider.CredentialState = try await withCheckedThrowingContinuation { continuation in
@@ -176,6 +229,11 @@ final class AuthSession: ObservableObject {
                     }
                 }
             }
+            // The system callback can arrive after another account has signed in.
+            // Only invalidate the restored session that initiated this check.
+            guard account?.provider == .apple,
+                  account?.appleUserID == userID,
+                  sessionToken == token else { return false }
             switch state {
             case .revoked, .notFound:
                 signOut()

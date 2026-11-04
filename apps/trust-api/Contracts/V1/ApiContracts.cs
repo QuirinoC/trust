@@ -90,7 +90,10 @@ public sealed record MemberDto(
     long OutboundPresenceRevision,
     bool InboundPresenceGranted,
     HomePresenceDto? HomePresence,
-    PromiseDto? Promise);
+    PromiseDto? Promise,
+    DateTimeOffset? LiveAccessExpiresAt = null,
+    string? LiveUnavailableReason = null,
+    int? ReceiveAuthorizationVersion = 1);
 
 public sealed record CoverageDto(
     bool IsCovered,
@@ -146,7 +149,7 @@ public sealed record LookRequest(Guid SubjectId, bool Confirmed);
 
 public sealed record ViewRequest(Guid SubjectId);
 
-public sealed record ViewResponse(bool Logged, LookEventDto? Event);
+public sealed record ViewResponse(bool Logged, LookEventDto? Event, DateTimeOffset? RecordedAt = null);
 
 public sealed record ShareRequest(Guid? ConnectionId, long? Revision, string? Resting, string? Pause);
 
@@ -178,9 +181,13 @@ public sealed record HandleAvailabilityResponse(
 public sealed record SendPhoneCodeRequest(
     string Phone,
     int? ConsentVersion = null,
-    string? ConsentAction = null);
+    string? ConsentAction = null,
+    Guid? RequestId = null,
+    string? Intent = null,
+    string? IdentityToken = null,
+    string? Nonce = null);
 
-public sealed record VerifyPhoneCodeRequest(string Phone, string Code);
+public sealed record VerifyPhoneCodeRequest(string Phone, string Code, Guid? RequestId = null, Guid? ChallengeId = null, bool ReturnAccountState = false);
 
 public sealed record AddPersonByPhoneRequest(string Phone);
 
@@ -218,13 +225,28 @@ public sealed record SendPhoneCodeResponse(
     string? NormalizedPhone,
     DateTimeOffset AccountRetryAt,
     DateTimeOffset? AccountWindowStartedAt,
-    int AccountSendCount);
+    int AccountSendCount,
+    Guid? RequestId = null,
+    Guid? ChallengeId = null,
+    string DeliveryState = "sent");
+
+public sealed record VerifiedPhoneResponse(bool Verified, Guid? RequestId, Guid? ChallengeId, PersonDto You);
+public sealed record PhoneVerificationStateResponse(string? PhoneMasked, string? Region, bool PhoneVerified,
+    PhoneOperationDto? Operation, PhoneRetryStateDto Retry);
+public sealed record PhoneOperationDto(Guid? RequestId, Guid ChallengeId, string Purpose, string VerificationState,
+    string DeliveryState, DateTimeOffset ExpiresAt, string TargetPhoneMasked);
+public sealed record PhoneRetryStateDto(DateTimeOffset ServerTime, DateTimeOffset ResendRetryAt,
+    DateTimeOffset CorrectionRetryAt, int ImmediateNumberAttemptsRemaining, DateTimeOffset AccountRetryAt,
+    DateTimeOffset? AccountWindowStartedAt, int AccountSendCount);
 
 public sealed record EntitlementRequest(string? ProductId, bool ReviewUnlock, string? SignedTransactionInfo);
 
 public sealed record StoreKitAccountTokenResponse(Guid AppAccountToken);
 
 public sealed record VerifyStoreKitTransactionRequest(string SignedTransactionInfo);
+public sealed record CreateStoreKitRecoveryRequest(string SignedTransactionInfo, string? Reason = null);
+public sealed record CreateAccountRecoveryRequest(string? Kind = null, string? SignedTransactionInfo = null, string? Reason = null);
+public sealed record StoreKitRecoveryResponse(Guid RequestId, string Status, DateTimeOffset CreatedAt);
 
 public sealed record StoreKitNotificationRequest(string SignedPayload);
 public sealed record RegisterAgeAssuranceAppTransactionRequest(string SignedAppTransactionInfo);
@@ -233,7 +255,8 @@ public sealed record PushDeviceRequest(
     Guid InstallationId,
     string Token,
     string Environment,
-    string BundleId);
+    string BundleId,
+    string? AppLanguage = null);
 
 public sealed record CheckoutRequest(string Interval);
 
@@ -377,7 +400,10 @@ public static class ContractMap
                 member.OutboundPresenceGrantRevision,
                 member.InboundPresenceGranted,
                 HomePresence(member.HomePresence),
-                Promise(member.Promise))).ToList(),
+                Promise(member.Promise),
+                member.LiveAccessExpiresAt,
+                member.LiveUnavailableReason,
+                member.ReceiveAuthorizationVersion)).ToList(),
             Coverage(snapshot.Coverage),
             snapshot.PendingInvite?.Code,
             snapshot.ActiveSession is null ? null : Session(snapshot.ActiveSession),

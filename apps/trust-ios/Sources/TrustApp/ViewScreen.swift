@@ -7,6 +7,9 @@ import TrustCore
 /// what just happened; the map is muted and secondary.
 struct ViewScreen: View {
     let personID: UUID
+    /// Pins already visible in the leading People map for a split layout.
+    /// Pass an empty list when the map is not on screen.
+    let leadingMapPins: [AppModel.MapPin]
     @EnvironmentObject private var model: AppModel
     @Environment(\.trustPalette) private var palette
     @State private var placeName: PlaceName?
@@ -18,7 +21,7 @@ struct ViewScreen: View {
     private var isAvailable: Bool { member?.isAvailable ?? false }
 
     private var point: LocationPoint? {
-        if isAvailable { return member?.livePoint }
+        if isAvailable { return member?.currentLivePoint }
         return snapshot?.live
     }
 
@@ -64,7 +67,6 @@ struct ViewScreen: View {
                 .accessibilityIdentifier("circle-back")
             }
         }
-        .onAppear { model.prepareMapLocation() }
         .task(id: point) {
             await geocodeIfNeeded()
         }
@@ -121,26 +123,16 @@ struct ViewScreen: View {
                 }
                 .padding(.bottom, 8)
 
-                if let point {
+                if let point, !leadingMapShowsCurrentPoint(point) {
                     pinMap(point, name: member.person.displayName)
                         .padding(.bottom, 14)
                 }
 
-                HStack(spacing: 8) {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(palette.positive)
-                        .accessibilityHidden(true)
-                    Text(isAvailable
-                        ? TrustCopy.receiptViewLogged(name: member.firstName)
-                        : TrustCopy.receiptNotified(name: member.firstName))
-                        .foregroundStyle(palette.ink)
-                }
-                .font(TrustTheme.ui(12, weight: .medium))
+                receiptState(member)
                 .padding(.bottom, 18)
 
                 Button {
-                    model.circlePath = [.map]
+                    model.openMap(focusing: personID)
                 } label: {
                     Label(TrustCopy.circleMap, systemImage: "map")
                 }
@@ -168,6 +160,60 @@ struct ViewScreen: View {
         }
     }
 
+    @ViewBuilder
+    private func receiptState(_ member: TrustedPerson) -> some View {
+        let state = model.viewReceiptState(for: member)
+        HStack(spacing: 8) {
+            switch state {
+            case .confirmed:
+                Image(systemName: "checkmark")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(palette.positive)
+                    .accessibilityHidden(true)
+                Text(isAvailable
+                    ? TrustCopy.receiptViewLogged(name: member.firstName)
+                    : TrustCopy.receiptNotified(name: member.firstName))
+                    .foregroundStyle(palette.ink)
+            case .pending:
+                ProgressView().controlSize(.small).tint(palette.accent)
+                Text(TrustCopy.viewReceiptPending).foregroundStyle(palette.muted)
+            case .failed:
+                Image(systemName: "exclamationmark.circle")
+                    .foregroundStyle(palette.danger)
+                    .accessibilityHidden(true)
+                Text(TrustCopy.viewReceiptFailed).foregroundStyle(palette.muted)
+            case .offline:
+                Image(systemName: "wifi.slash")
+                    .foregroundStyle(palette.muted)
+                    .accessibilityHidden(true)
+                Text(TrustCopy.viewReceiptOffline).foregroundStyle(palette.muted)
+            case .none:
+                Text(TrustCopy.viewReceiptUnknown).foregroundStyle(palette.muted)
+            }
+        }
+        .font(TrustTheme.ui(12, weight: .medium))
+        .accessibilityIdentifier("view-receipt-\(receiptStateIdentifier(state))")
+        if state == .failed || state == .offline {
+            Button(TrustCopy.retry) {
+                if member.isAvailable { model.openView(member) }
+                else { model.openLook(member) }
+            }
+            .buttonStyle(TrustTextButtonStyle(color: palette.accent))
+            .frame(minHeight: 44, alignment: .leading)
+            .accessibilityIdentifier("view-receipt-retry")
+        }
+    }
+
+    private func receiptStateIdentifier(_ state: ViewReceiptState?) -> String {
+        switch state {
+        case .pending: "pending"
+        case .confirmed: "confirmed"
+        case .failed: "failed"
+        case .offline: "offline"
+        case .none: "unknown"
+        }
+    }
+
     private func sealed(_ member: TrustedPerson) -> some View {
         TrustEmptyState(
             glyph: "lock",
@@ -183,8 +229,6 @@ struct ViewScreen: View {
     private func presenceBadge(_ member: TrustedPerson) -> some View {
         if let presence = member.visiblePresence {
             TrustBadge(glyph: presence == .home ? "house" : "figure.walk", text: presence.label)
-        } else {
-            TrustBadge(glyph: "lock", text: TrustCopy.presenceHiddenBadge)
         }
     }
 
@@ -194,12 +238,21 @@ struct ViewScreen: View {
             parts.append(TrustCopy.distanceFromYou(distance))
         }
         if let point {
-            let time = point.timestamp.formatted(date: .abbreviated, time: .shortened)
+            let time = TrustCopy.formattedDateTime(point.timestamp, dateStyle: .abbreviated, timeStyle: .shortened)
             parts.append(isAvailable
                 ? "\(TrustCopy.locationFreshness(timestamp: point.timestamp, now: now)) · \(time)"
                 : TrustCopy.snapshotAt(time))
         }
         return parts.joined(separator: " · ")
+    }
+
+    /// Hide the small duplicate map only when the leading People map already
+    /// shows this exact point with the same live or snapshot meaning. A newer
+    /// live point, a different snapshot, or an omitted pin keeps the detail map.
+    private func leadingMapShowsCurrentPoint(_ point: LocationPoint) -> Bool {
+        leadingMapPins.contains { pin in
+            pin.id == personID && pin.point == point && pin.live == isAvailable
+        }
     }
 
     private func directionSummary(_ member: TrustedPerson) -> some View {
@@ -253,6 +306,7 @@ struct ViewScreen: View {
         .onAppear { position = .region(Self.region(for: point)) }
         .onChange(of: point) { _, next in position = .region(Self.region(for: next)) }
         .accessibilityLabel(TrustCopy.pinAccessibility(name: name, live: isAvailable))
+        .accessibilityIdentifier("view-embedded-map")
     }
 
     private static func region(for point: LocationPoint) -> MKCoordinateRegion {
@@ -300,39 +354,69 @@ struct TrustMapPin: View {
     var selected = false
     var stale = false
     var ageCaption: String?
+    var pinLayout: TrustMapPinGeometryLayout?
+    var onCaptionSizeChange: ((CGSize) -> Void)?
     @Environment(\.trustPalette) private var palette
+    @State private var measuredCaptionSize: CGSize = .zero
 
     var body: some View {
-        VStack(spacing: 2) {
-            Text(initials)
-                .font(TrustTheme.chrome(13, weight: .bold))
-                .foregroundStyle(palette.accentOn)
-                .frame(width: 40, height: 40)
-                .background(live ? palette.pinLive : palette.pinLook)
-                .clipShape(Circle())
-                .overlay(Circle().stroke(selected ? palette.accent : palette.chrome, lineWidth: 3))
-                .overlay(alignment: .topTrailing) {
-                    if stale {
-                        Image(systemName: "clock.fill")
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundStyle(palette.danger)
-                            .frame(width: 16, height: 16)
-                            .background(palette.chrome, in: Circle())
-                            .offset(x: 3, y: -2)
-                            .accessibilityHidden(true)
+        Group {
+            if let pinLayout {
+                ZStack(alignment: .topLeading) {
+                    disc
+                        .position(x: pinLayout.discFrameInContent.midX, y: pinLayout.discFrameInContent.midY)
+                    if let ageCaption, let captionFrame = pinLayout.captionFrameInContent {
+                        caption(ageCaption)
+                            .position(x: captionFrame.midX, y: captionFrame.midY)
                     }
                 }
-                .shadow(color: .black.opacity(0.22), radius: 5, y: 2)
-            if let ageCaption {
-                Text(ageCaption)
-                    .font(TrustTheme.chrome(9, weight: .semibold))
-                    .foregroundStyle(palette.ink)
-                    .padding(.horizontal, 4)
-                    .padding(.vertical, 2)
-                    .background(palette.paper.opacity(0.94), in: Capsule())
-                    .lineLimit(1)
+                .frame(width: pinLayout.contentSize.width, height: pinLayout.contentSize.height, alignment: .topLeading)
+                .contentShape(Rectangle())
+            } else {
+                VStack(spacing: 2) {
+                    disc
+                    if let ageCaption { caption(ageCaption) }
+                }
             }
         }
+    }
+
+    private var disc: some View {
+        Text(initials)
+            .font(TrustTheme.chrome(13, weight: .bold))
+            .foregroundStyle(palette.accentOn)
+            .frame(width: 40, height: 40)
+            .background(live ? palette.pinLive : palette.pinLook)
+            .clipShape(Circle())
+            .overlay(Circle().stroke(selected ? palette.accent : palette.chrome, lineWidth: 3))
+            .overlay(alignment: .topTrailing) {
+                if stale {
+                    Image(systemName: "clock.fill")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(palette.danger)
+                        .frame(width: 16, height: 16)
+                        .background(palette.chrome, in: Circle())
+                        .offset(x: 3, y: -2)
+                        .accessibilityHidden(true)
+                }
+            }
+            .shadow(color: .black.opacity(0.22), radius: 5, y: 2)
+    }
+
+    private func caption(_ text: String) -> some View {
+        Text(text)
+            .font(TrustTheme.chrome(9, weight: .semibold))
+            .foregroundStyle(palette.ink)
+            .padding(.horizontal, 4)
+            .padding(.vertical, 2)
+            .background(palette.paper.opacity(0.94), in: Capsule())
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
+            .onGeometryChange(for: CGSize.self) { $0.size } action: { size in
+                guard size.width > 0, size.height > 0, size != measuredCaptionSize else { return }
+                measuredCaptionSize = size
+                onCaptionSizeChange?(size)
+            }
     }
 }
 

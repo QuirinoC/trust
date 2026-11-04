@@ -12,12 +12,14 @@ public sealed class MemoryPushDeviceStore : IPushDeviceStore
         string token,
         string environment,
         string bundleId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? language = null)
     {
         var env = string.Equals(environment, "sandbox", StringComparison.OrdinalIgnoreCase)
             ? "sandbox"
             : "production";
-        _devices[installationId] = new PushDevice(installationId, accountId, token, env, bundleId, true);
+        _devices[installationId] = new PushDevice(installationId, accountId, token, env, bundleId, true,
+            NotificationLanguage.Normalize(language));
         return Task.CompletedTask;
     }
 

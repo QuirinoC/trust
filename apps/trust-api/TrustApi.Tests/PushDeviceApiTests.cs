@@ -62,7 +62,7 @@ public sealed class PushDeviceApiTests : IClassFixture<TrustApiFactory>
             new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", first.Token);
         var create = await client.PostAsJsonAsync(
             "/api/v1/push/devices",
-            new PushDeviceRequest(installationId, "  token-first  ", "sandbox", BundleId));
+            new PushDeviceRequest(installationId, "  token-first  ", "sandbox", BundleId, "fr-CA"));
         Assert.Equal(HttpStatusCode.NoContent, create.StatusCode);
 
         var created = Assert.Single(await store.ListActiveAsync(first.AccountId, CancellationToken.None));
@@ -70,15 +70,17 @@ public sealed class PushDeviceApiTests : IClassFixture<TrustApiFactory>
         Assert.Equal("token-first", created.Token);
         Assert.Equal("sandbox", created.Environment);
         Assert.Equal(BundleId, created.BundleId);
+        Assert.Equal("fr", created.Language);
 
         var update = await client.PostAsJsonAsync(
             "/api/v1/push/devices",
-            new PushDeviceRequest(installationId, "token-updated", "production", BundleId));
+            new PushDeviceRequest(installationId, "token-updated", "production", BundleId, "ja"));
         Assert.Equal(HttpStatusCode.NoContent, update.StatusCode);
 
         var updated = Assert.Single(await store.ListActiveAsync(first.AccountId, CancellationToken.None));
         Assert.Equal("token-updated", updated.Token);
         Assert.Equal("production", updated.Environment);
+        Assert.Equal("ja", updated.Language);
 
         client.DefaultRequestHeaders.Authorization =
             new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", second.Token);
@@ -114,7 +116,7 @@ public sealed class PushDeviceApiTests : IClassFixture<TrustApiFactory>
     }
 
     [Fact]
-    public async Task LookPushDescribesTheLatestAvailableLocationWithoutClaimingItIsCurrent()
+    public async Task LookPushUsesDeviceLanguageAndCarriesTheEventInstant()
     {
         var accountId = Guid.NewGuid();
         using var ecdsa = ECDsa.Create(ECCurve.NamedCurves.nistP256);
@@ -129,20 +131,34 @@ public sealed class PushDeviceApiTests : IClassFixture<TrustApiFactory>
             BundleId = BundleId
         }));
         var publisher = new LookReceiptPublisher(
-            new SinglePushDeviceStore(accountId),
+            new SinglePushDeviceStore(accountId, "fr"),
             new MemoryTrustStore(),
             apns,
             NullLogger<LookReceiptPublisher>.Instance);
 
+        var eventAt = new DateTimeOffset(2026, 10, 30, 12, 34, 56, TimeSpan.Zero);
         await publisher.NotifyLookAsync(new LookEvent(
-            Guid.NewGuid(), Guid.NewGuid(), "Viewer", accountId, "Subject",
-            DateTimeOffset.UtcNow, 0, true), CancellationToken.None);
+            Guid.NewGuid(), Guid.NewGuid(), "Amélie", accountId, "Subject",
+            eventAt, 0, true), CancellationToken.None);
 
         Assert.NotNull(handler.Body);
         using var payload = JsonDocument.Parse(handler.Body);
         Assert.Equal(
-            "One snapshot of the latest location available to Trust.",
+            "Un instantané de la dernière position disponible dans Trust.",
             payload.RootElement.GetProperty("aps").GetProperty("alert").GetProperty("body").GetString());
+        Assert.Equal("Amélie a consulté ta position",
+            payload.RootElement.GetProperty("aps").GetProperty("alert").GetProperty("title").GetString());
+        Assert.Equal("2026-10-30T12:34:56Z",
+            payload.RootElement.GetProperty("trust").GetProperty("eventInstant").GetString());
+    }
+
+    [Fact]
+    public void NotificationLanguageFallsBackToSupportedLocalesWithoutCollectingTimeZone()
+    {
+        Assert.Equal("pt-BR", NotificationLanguage.Normalize("pt_BR"));
+        Assert.Equal("zh-Hans", NotificationLanguage.Normalize("zh"));
+        Assert.Equal("en", NotificationLanguage.Normalize("xx-Invalid"));
+        Assert.Equal("{name} is home.", NotificationLanguage.Localize("en", "home_arrival", "{name}").Item2);
     }
 
     [Fact]
@@ -292,6 +308,40 @@ public sealed class PushDeviceApiTests : IClassFixture<TrustApiFactory>
         await engine.PostHomePresenceAsync(subject.Id, HomePresenceState.Hidden, null, CancellationToken.None);
         await publisher.NotifyHomeArrivalAsync(subject.Id, CancellationToken.None);
         Assert.Equal(new[] { viewer.Id }, devices.LookupAccountIds); // Hidden is not an arrival signal.
+    }
+
+    [Fact]
+    public async Task HomeNotificationIsLocalizedAndOmitsClockTimeButPreservesEventInstant()
+    {
+        var store = new MemoryTrustStore();
+        var engine = new TrustEngine(store, TimeProvider.System);
+        var subject = await engine.SignInAsync("development", Guid.NewGuid().ToString(), "Subject", CancellationToken.None);
+        var viewer = await engine.SignInAsync("development", Guid.NewGuid().ToString(), "Viewer", CancellationToken.None);
+        var invite = await engine.CreateInviteAsync(subject.Id, CancellationToken.None);
+        await engine.AcceptInviteAsync(viewer.Id, invite.Code, CancellationToken.None);
+        await engine.SetShareAsync(subject.Id, viewer.Id, ShareResting.UntilTheyLook, null, CancellationToken.None);
+        await SetGrantAsync(engine, store, subject.Id, viewer.Id, true);
+        var arrival = await engine.PostHomePresenceAsync(subject.Id, HomePresenceState.Home, null, CancellationToken.None);
+        var current = await store.GetCurrentHomePresenceAsync(subject.Id, CancellationToken.None);
+
+        using var ecdsa = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var handler = new RecordingPushHandler();
+        var publisher = new LookReceiptPublisher(
+            new SinglePushDeviceStore(viewer.Id, "de"), store,
+            new ApnsClient(new HttpClient(handler), Options.Create(new ApnsOptions
+            {
+                Enabled = true, KeyId = "unit-test-key", TeamId = "unit-test-team",
+                PrivateKey = Convert.ToBase64String(ecdsa.ExportPkcs8PrivateKey()), BundleId = BundleId
+            })), NullLogger<LookReceiptPublisher>.Instance);
+
+        await publisher.NotifyHomeArrivalAsync(subject.Id, arrival.TransitionId, CancellationToken.None);
+
+        using var payload = JsonDocument.Parse(handler.Body!);
+        var alert = payload.RootElement.GetProperty("aps").GetProperty("alert");
+        Assert.Equal("Subject ist zu Hause", alert.GetProperty("title").GetString());
+        Assert.DoesNotContain(":", alert.GetProperty("body").GetString());
+        Assert.Equal(current!.LastChangedAt.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'"),
+            payload.RootElement.GetProperty("trust").GetProperty("eventInstant").GetString());
     }
 
     [Fact]
@@ -468,7 +518,7 @@ public sealed class PushDeviceApiTests : IClassFixture<TrustApiFactory>
 
     private sealed class FailingPushDeviceStore : IPushDeviceStore
     {
-        public Task RegisterAsync(Guid accountId, Guid installationId, string token, string environment, string bundleId, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task RegisterAsync(Guid accountId, Guid installationId, string token, string environment, string bundleId, CancellationToken cancellationToken, string? language = null) => Task.CompletedTask;
         public Task RemoveAsync(Guid accountId, Guid installationId, CancellationToken cancellationToken) => Task.CompletedTask;
         public Task RemoveAllAsync(Guid accountId, CancellationToken cancellationToken) => Task.CompletedTask;
         public Task InvalidateTokenAsync(string token, CancellationToken cancellationToken) => Task.CompletedTask;
@@ -479,7 +529,7 @@ public sealed class PushDeviceApiTests : IClassFixture<TrustApiFactory>
     private sealed class CountingPushDeviceStore : IPushDeviceStore
     {
         public List<Guid> LookupAccountIds { get; } = [];
-        public Task RegisterAsync(Guid accountId, Guid installationId, string token, string environment, string bundleId, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task RegisterAsync(Guid accountId, Guid installationId, string token, string environment, string bundleId, CancellationToken cancellationToken, string? language = null) => Task.CompletedTask;
         public Task RemoveAsync(Guid accountId, Guid installationId, CancellationToken cancellationToken) => Task.CompletedTask;
         public Task RemoveAllAsync(Guid accountId, CancellationToken cancellationToken) => Task.CompletedTask;
         public Task InvalidateTokenAsync(string token, CancellationToken cancellationToken) => Task.CompletedTask;
@@ -490,15 +540,15 @@ public sealed class PushDeviceApiTests : IClassFixture<TrustApiFactory>
         }
     }
 
-    private sealed class SinglePushDeviceStore(Guid accountId) : IPushDeviceStore
+    private sealed class SinglePushDeviceStore(Guid accountId, string language = "en") : IPushDeviceStore
     {
-        public Task RegisterAsync(Guid accountId, Guid installationId, string token, string environment, string bundleId, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task RegisterAsync(Guid accountId, Guid installationId, string token, string environment, string bundleId, CancellationToken cancellationToken, string? language = null) => Task.CompletedTask;
         public Task RemoveAsync(Guid accountId, Guid installationId, CancellationToken cancellationToken) => Task.CompletedTask;
         public Task RemoveAllAsync(Guid accountId, CancellationToken cancellationToken) => Task.CompletedTask;
         public Task InvalidateTokenAsync(string token, CancellationToken cancellationToken) => Task.CompletedTask;
         public Task<IReadOnlyList<PushDevice>> ListActiveAsync(Guid requestedAccountId, CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<PushDevice>>([
-                new PushDevice(Guid.NewGuid(), accountId, "test-device-token", "sandbox", BundleId, true)
+                new PushDevice(Guid.NewGuid(), accountId, "test-device-token", "sandbox", BundleId, true, language)
             ]);
     }
 
@@ -507,7 +557,7 @@ public sealed class PushDeviceApiTests : IClassFixture<TrustApiFactory>
         Func<Guid, CancellationToken, Task> revokeConsent) : IPushDeviceStore
     {
         public List<Guid> LookupAccountIds { get; } = [];
-        public Task RegisterAsync(Guid accountId, Guid installationId, string token, string environment, string bundleId, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task RegisterAsync(Guid accountId, Guid installationId, string token, string environment, string bundleId, CancellationToken cancellationToken, string? language = null) => Task.CompletedTask;
         public Task RemoveAsync(Guid accountId, Guid installationId, CancellationToken cancellationToken) => Task.CompletedTask;
         public Task RemoveAllAsync(Guid accountId, CancellationToken cancellationToken) => Task.CompletedTask;
         public Task InvalidateTokenAsync(string token, CancellationToken cancellationToken) => Task.CompletedTask;
@@ -540,7 +590,7 @@ public sealed class PushDeviceApiTests : IClassFixture<TrustApiFactory>
     {
         public List<Guid> LookupAccountIds { get; } = [];
 
-        public Task RegisterAsync(Guid accountId, Guid installationId, string token, string environment, string bundleId, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task RegisterAsync(Guid accountId, Guid installationId, string token, string environment, string bundleId, CancellationToken cancellationToken, string? language = null) => Task.CompletedTask;
         public Task RemoveAsync(Guid accountId, Guid installationId, CancellationToken cancellationToken) => Task.CompletedTask;
         public Task RemoveAllAsync(Guid accountId, CancellationToken cancellationToken) => Task.CompletedTask;
         public Task InvalidateTokenAsync(string token, CancellationToken cancellationToken) => Task.CompletedTask;

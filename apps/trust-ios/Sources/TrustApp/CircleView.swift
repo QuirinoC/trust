@@ -7,11 +7,39 @@ struct CircleView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.trustPalette) private var palette
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.displayScale) private var displayScale
     @State private var position: MapCameraPosition = .automatic
     @State private var sheetFraction: CGFloat = PeopleSheetDetent.half.rawValue
     @State private var dragOrigin: CGFloat?
     @State private var userMovedMap = false
     @State private var didFitInitialCamera = false
+    @State private var mapViewportSize: CGSize = .zero
+    @State private var mapViewportLocalBounds: CGRect = .zero
+    @State private var mapViewportSafeInsets: [CGFloat] = [0, 0, 0, 0]
+    @State private var requestedMapRect: MKMapRect?
+    @State private var requestedCameraDistance: Double?
+    @State private var mapAnnotationSizes: [UUID: CGSize] = [:]
+    @State private var mapCaptionSizes: [UUID: CGSize] = [:]
+    @State private var displayedCaptionPlacements: [UUID: TrustMapCaptionPlacement] = [:]
+    @State private var captionLayoutTask: Task<Void, Never>?
+    @State private var captionLayoutGeneration = 0
+    @State private var lastSettledCamera: MapCamera?
+    @State private var cameraCorrectionAttempts = 0
+    @State private var pendingCameraCorrectionOverflow: CGFloat?
+    @State private var cameraZoomOutWasClamped = false
+    @State private var fallbackCameraTargetID: UUID?
+    @State private var fallbackViewportAtFocus: CGSize?
+    @State private var isAutomaticPeopleFit = false
+    @State private var isExplicitRecenterFit = false
+    @State private var recenterIntentGeneration = 0
+    @State private var pendingRecenterGeneration: Int?
+    @State private var cameraSettledRevision = 0
+    @State private var cameraCorrectionAppliedRevision = -1
+    @State private var cameraFitGeneration = 0
+    @State private var cameraCorrectionTask: Task<Void, Never>?
+    @State private var cameraCorrectionRequestToken = 0
+    @State private var usesNativeAutomaticFit = false
+    @State private var mapViewportFitTask: Task<Void, Never>?
     @State private var compactHeaderHeight: CGFloat = 76
     @GestureState private var dragTranslation: CGFloat = 0
 
@@ -33,11 +61,16 @@ struct CircleView: View {
         GeometryReader { geo in
             let width = geo.size.width
             let fullHeight = max(geo.size.height, 1)
-            let isWide = width >= 760
+            // At 650pt the existing 330pt minimum People panel leaves a 320pt map.
+            // This lets the unfolded Duo use the side-by-side layout at its actual
+            // available width while preserving the same NavigationStack and routes.
+            let isWide = width >= 650
             let panelWidth = min(390, max(330, width * 0.36))
+            let mapRouteIsWide = isWide && model.circlePath.last == .map
+            let showsPeopleLeadingMap = isWide && !mapRouteIsWide
 
             ZStack(alignment: .topLeading) {
-                if isWide {
+                if showsPeopleLeadingMap {
                     wideMap
                         .frame(width: width - panelWidth, height: fullHeight)
                         .overlay(alignment: .trailing) { palette.line.frame(width: 1) }
@@ -52,13 +85,15 @@ struct CircleView: View {
                         }
                     }
                     .toolbar(.hidden, for: .navigationBar)
-                    .navigationDestination(for: CircleRoute.self, destination: routeDestination)
+                    .navigationDestination(for: CircleRoute.self) { route in
+                        routeDestination(route, isWide: isWide)
+                    }
                 }
-                .frame(width: isWide ? panelWidth : width, height: fullHeight)
+                .frame(width: showsPeopleLeadingMap ? panelWidth : width, height: fullHeight)
                 .frame(
                     maxWidth: .infinity,
                     maxHeight: .infinity,
-                    alignment: isWide ? .trailing : .leading
+                    alignment: showsPeopleLeadingMap ? .trailing : .leading
                 )
             }
             .frame(width: width, height: fullHeight)
@@ -68,15 +103,40 @@ struct CircleView: View {
             fitOrFocusSelectedView()
         }
         .onChange(of: pinLocations) { _, _ in
-            fitOrFocusSelectedView()
+            if let fallbackCameraTargetID,
+               !pins.contains(where: { $0.id == fallbackCameraTargetID }) {
+                self.fallbackCameraTargetID = nil
+                fallbackViewportAtFocus = nil
+                cameraZoomOutWasClamped = false
+            }
+            resetCameraBoundsCorrection(preservingSettledCamera: usesNativeAutomaticFit)
+            fitOrFocusSelectedView(animated: false)
         }
-        .onChange(of: PeopleSheetDetent.nearest(to: sheetFraction)) { _, _ in
-            // MapKit uses the compact header and the actual panel as safe-area
-            // insets. Refit against that viewport only while we still own camera
-            // placement; an intentional user pan always wins.
-            fitOrFocusSelectedView()
+        .onChange(of: mapViewportLocalBounds) { _, bounds in
+            let viewportSize = bounds.size
+            let viewportChangedMeaningfully = fallbackViewportAtFocus.map { originalSize in
+                abs(viewportSize.width - originalSize.width) >= 32
+                    || abs(viewportSize.height - originalSize.height) >= 32
+            } ?? false
+            if fallbackCameraTargetID != nil,
+               viewportChangedMeaningfully,
+               !userMovedMap,
+               !isShowingSpecificPersonView {
+                fallbackCameraTargetID = nil
+                fallbackViewportAtFocus = nil
+                cameraZoomOutWasClamped = false
+            }
+            resetCameraBoundsCorrection(preservingSettledCamera: usesNativeAutomaticFit)
+            guard bounds.width > 0, bounds.height > 0 else { return }
+            if usesNativeAutomaticFit, lastSettledCamera != nil {
+                cameraCorrectionRequestToken &+= 1
+            } else {
+                scheduleViewportCameraFit()
+            }
         }
         .onChange(of: model.circlePath) { _, path in
+            invalidatePendingRecenter(reason: "navigation")
+            resetCameraBoundsCorrection(preservingSettledCamera: usesNativeAutomaticFit)
             if case let .view(personID)? = path.last {
                 // Entering a specific person's view should reveal their pin,
                 // even when the person previously panned the map manually.
@@ -87,22 +147,61 @@ struct CircleView: View {
                 fitOrFocusSelectedView()
             }
         }
-        .onChange(of: model.location.lastFix) { _, fix in
-            guard fix != nil, !didFitInitialCamera, !userMovedMap else { return }
-            didFitInitialCamera = true
-            fitOrFocusSelectedView()
+        .onChange(of: model.location.lastFix) { previousFix, fix in
+            guard fix != nil, !userMovedMap else { return }
+            if previousFix == nil {
+                fallbackCameraTargetID = nil
+                fallbackViewportAtFocus = nil
+                cameraZoomOutWasClamped = false
+                didFitInitialCamera = true
+                fitOrFocusSelectedView()
+            } else if !didFitInitialCamera {
+                didFitInitialCamera = true
+                fitOrFocusSelectedView()
+            } else if fallbackCameraTargetID != nil,
+                      !isShowingSpecificPersonView,
+                      let fix,
+                      hasNearbyAuthorizedPinCluster(around: fix.coordinate),
+                      let previousFix,
+                      !hasNearbyAuthorizedPinCluster(around: previousFix.coordinate) {
+                // A later GPS fix can turn a formerly far-away People map into a
+                // normal nearby fit. Refit only on that transition, never for
+                // every location update, and preserve a selected-person view/pan.
+                fallbackCameraTargetID = nil
+                fallbackViewportAtFocus = nil
+                cameraZoomOutWasClamped = false
+                fitOrFocusSelectedView()
+            }
         }
         .onChange(of: position.positionedByUser) { _, movedByUser in
-            if movedByUser { userMovedMap = true }
+            model.traceUIInteraction("people map user moved=\(movedByUser)")
+            if movedByUser {
+                invalidatePendingRecenter(reason: "user-map-gesture")
+                userMovedMap = true
+                usesNativeAutomaticFit = false
+                fallbackCameraTargetID = nil
+                fallbackViewportAtFocus = nil
+                cameraZoomOutWasClamped = false
+                resetCameraBoundsCorrection()
+            }
         }
-        .onDisappear { model.releaseMapLocation() }
+        .onDisappear {
+            invalidatePendingRecenter(reason: "map-disappeared")
+            mapViewportFitTask?.cancel()
+            mapViewportFitTask = nil
+            captionLayoutTask?.cancel()
+            captionLayoutTask = nil
+            captionLayoutGeneration &+= 1
+            resetCameraBoundsCorrection()
+            model.releaseMapLocation()
+        }
     }
 
     private func compactRoot(width: CGFloat, height: CGFloat) -> some View {
         let requestedSheetHeight = height * liveSheetFraction(containerHeight: height)
         // Keep enough of the map visible for a complete pin and its age caption,
         // even when Dynamic Type makes the header taller or the device is short.
-        let maximumSheetHeight = max(44, height - compactHeaderHeight - 128)
+        let maximumSheetHeight = max(44, height - compactHeaderHeight - 176)
         let sheetHeight = min(requestedSheetHeight, maximumSheetHeight)
         return VStack(spacing: 0) {
             compactMapHeader
@@ -120,12 +219,12 @@ struct CircleView: View {
     }
 
     @ViewBuilder
-    private func routeDestination(_ route: CircleRoute) -> some View {
+    private func routeDestination(_ route: CircleRoute, isWide: Bool) -> some View {
         switch route {
         case .person(let id):
             PersonScreen(personID: id)
         case .view(let id):
-            ViewScreen(personID: id)
+            ViewScreen(personID: id, leadingMapPins: isWide ? model.homeMapPins : [])
         case .map:
             MapScreen()
         }
@@ -175,33 +274,191 @@ struct CircleView: View {
     }
 
     private var homeMap: some View {
-        Map(position: $position) {
-            UserAnnotation()
-            ForEach(pins) { pin in
-                Annotation(pin.name, coordinate: pin.point.coordinate) {
-                    TimelineView(.periodic(from: .now, by: 60)) { context in
-                        Button {
-                            if let member = model.member(pin.id) { model.openView(member) }
-                        } label: {
-                            TrustMapPin(
-                                initials: pin.name.trustInitials,
-                                live: pin.live,
-                                stale: pin.live && LocationFreshness.status(timestamp: pin.point.timestamp, now: context.date) == .stale,
-                                ageCaption: pin.live ? TrustCopy.locationAgeCaption(timestamp: pin.point.timestamp, now: context.date) : nil
-                            )
+        MapReader { proxy in
+            let captionLayout = displayedCaptionPlacements
+            Map(position: $position) {
+                UserAnnotation()
+                ForEach(pins) { pin in
+                    let captionSize = pin.live ? mapCaptionSizes[pin.id] : nil
+                    let placement = captionLayout[pin.id] ?? .centeredBelow
+                    let stale = pin.live && LocationFreshness.status(timestamp: pin.point.timestamp, now: .now) == .stale
+                    let pinLayout: TrustMapPinGeometryLayout? = pin.live && captionSize == nil
+                        ? nil
+                        : TrustMapCaptionLayout.pinGeometry(
+                            anchor: .bottom,
+                            captionSize: captionSize,
+                            placement: placement,
+                            stale: stale,
+                            minimumFrame: CGSize(width: 44, height: 44)
+                        )
+                    let annotationAnchor = pinLayout.map {
+                        UnitPoint(x: $0.annotationAnchor.x, y: $0.annotationAnchor.y)
+                    } ?? .bottom
+                    Annotation(pin.name, coordinate: pin.point.coordinate, anchor: annotationAnchor) {
+                        TimelineView(.periodic(from: .now, by: 60)) { context in
+                            Button {
+                                activateMapPin(pin.id)
+                            } label: {
+                                TrustMapPin(
+                                    initials: pin.name.trustInitials,
+                                    live: pin.live,
+                                    stale: pin.live && LocationFreshness.status(timestamp: pin.point.timestamp, now: context.date) == .stale,
+                                    ageCaption: pin.live ? TrustCopy.locationAgeCaption(timestamp: pin.point.timestamp, now: context.date) : nil,
+                                    pinLayout: pinLayout,
+                                    onCaptionSizeChange: { size in
+                                        guard mapCaptionSizes[pin.id] != size else { return }
+                                        mapCaptionSizes[pin.id] = size
+                                    }
+                                )
+                                .frame(minWidth: 44, minHeight: 44)
+                                .onGeometryChange(for: CGSize.self) { $0.size } action: { size in
+                                    guard size.width > 0, size.height > 0,
+                                          mapAnnotationSizes[pin.id] != size else { return }
+                                    mapAnnotationSizes[pin.id] = size
+                                }
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityElement(children: .ignore)
+                            .accessibilityLabel(TrustCopy.pinAccessibility(name: pin.name, live: pin.live, timestamp: pin.point.timestamp, now: context.date))
+                            .accessibilityHint(TrustCopy.viewLocation(name: pin.name.trustFirstName))
+                            .accessibilityAddTraits(.isButton)
+                            .accessibilityIdentifier("people-map-pin-\(pin.id.uuidString.lowercased())")
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel(TrustCopy.pinAccessibility(name: pin.name, live: pin.live, timestamp: pin.point.timestamp, now: context.date))
-                        .accessibilityHint(TrustCopy.viewLocation(name: pin.name.trustFirstName))
-                        .accessibilityIdentifier("people-map-pin-\(pin.id.uuidString.lowercased())")
                     }
+                    .annotationTitles(.hidden)
                 }
             }
+            .mapStyle(.standard(elevation: .flat, emphasis: .muted, pointsOfInterest: .excludingAll))
+            .mapControls {}
+            .accessibilityLabel(TrustCopy.mapAccessibility)
+            .accessibilityIdentifier("people-map-canvas")
+            .onGeometryChange(for: [CGFloat].self) { geometry in
+                let frame = geometry.frame(in: .local)
+                return [frame.minX, frame.minY, frame.width, frame.height,
+                 geometry.safeAreaInsets.top, geometry.safeAreaInsets.leading,
+                 geometry.safeAreaInsets.bottom, geometry.safeAreaInsets.trailing]
+            } action: { metrics in
+                guard metrics.count == 8 else { return }
+                let bounds = CGRect(x: metrics[0], y: metrics[1], width: metrics[2], height: metrics[3])
+                mapViewportSafeInsets = Array(metrics[4...7])
+                guard bounds != mapViewportLocalBounds else { return }
+                mapViewportLocalBounds = bounds
+                let size = bounds.size
+                mapViewportSize = size
+                scheduleCaptionLayoutRefresh(using: proxy)
+                model.traceUIInteraction(
+                    "people map local-clip=\(Int(bounds.minX.rounded())),\(Int(bounds.minY.rounded())) "
+                        + "pt=\(Int(size.width.rounded()))x\(Int(size.height.rounded())) "
+                        + "px=\(Int((size.width * displayScale).rounded()))x\(Int((size.height * displayScale).rounded())) "
+                        + "safe=\(mapViewportSafeInsets.map { Int($0.rounded()) })"
+                )
+            }
+            .onMapCameraChange(frequency: .continuous) { _ in
+                guard position.positionedByUser else { return }
+                invalidatePendingRecenter(reason: "user-map-gesture")
+            }
+            .onMapCameraChange(frequency: .onEnd) { context in
+                // positionedByUser remains true after the first pan. Check each
+                // settled gesture so a later pan also invalidates a pending
+                // Recenter request without affecting a new explicit Recenter.
+                if position.positionedByUser {
+                    invalidatePendingRecenter(reason: "user-map-gesture")
+                }
+                cameraSettledRevision &+= 1
+                lastSettledCamera = context.camera
+                let footprints = cameraFootprints(using: proxy)
+                let projectedBounds = footprints.map { $0.frame(at: $0.point) }
+                let targetPins = cameraTargetPins
+                let cameraCenter = proxy.convert(context.camera.centerCoordinate, to: .local)
+                let measuredSizes = targetPins.compactMap { mapAnnotationSizes[$0.id] }
+                let footprintSummary: String
+                if measuredSizes.isEmpty {
+                    footprintSummary = "measured-footprints=0"
+                } else {
+                    let widths = measuredSizes.map(\.width)
+                    let heights = measuredSizes.map(\.height)
+                    footprintSummary = String(
+                        format: "measured-footprints=%d width=%.1f...%.1f height=%.1f...%.1f",
+                        measuredSizes.count,
+                        widths.min() ?? 0,
+                        widths.max() ?? 0,
+                        heights.min() ?? 0,
+                        heights.max() ?? 0
+                    )
+                }
+                let distanceComparison: String
+                if let requestedCameraDistance, requestedCameraDistance.isFinite, requestedCameraDistance > 0 {
+                    if context.camera.distance < requestedCameraDistance * 0.98 {
+                        cameraZoomOutWasClamped = true
+                    }
+                    distanceComparison = String(
+                        format: "distance-request=%.1f distance-applied=%.1f ratio=%.3f",
+                        requestedCameraDistance,
+                        context.camera.distance,
+                        context.camera.distance / requestedCameraDistance
+                    )
+                    self.requestedCameraDistance = nil
+                } else {
+                    distanceComparison = "distance-request=none"
+                }
+                let cameraComparison: String
+                if let requestedMapRect, requestedMapRect.width > 0, requestedMapRect.height > 0 {
+                    let normalizedX = (context.rect.midX - requestedMapRect.midX) / requestedMapRect.width
+                    let normalizedY = (context.rect.midY - requestedMapRect.midY) / requestedMapRect.height
+                    cameraComparison = String(
+                        format: "camera-ratio=%.3f,%.3f center-norm=%.3f,%.3f center-px=%.1f,%.1f",
+                        context.rect.width / requestedMapRect.width,
+                        context.rect.height / requestedMapRect.height,
+                        normalizedX,
+                        normalizedY,
+                        normalizedX * mapViewportSize.width * displayScale,
+                        normalizedY * mapViewportSize.height * displayScale
+                    )
+                } else {
+                    cameraComparison = "camera-request=none"
+                }
+                model.traceUIInteraction(
+                    "people map anchors=\(anchorSummary(footprints)) viewport=\(Int(mapViewportSize.width.rounded()))x\(Int(mapViewportSize.height.rounded())) "
+                        + "center=\(Int(cameraCenter?.x ?? -1)),\(Int(cameraCenter?.y ?? -1)) "
+                        + "projected=\(projectedBounds.count)/\(targetPins.count) \(cameraComparison) \(distanceComparison) \(footprintSummary)"
+                )
+                scheduleCaptionLayoutRefresh(using: proxy)
+                scheduleCameraBoundsCorrection(using: proxy)
+            }
+            .onChange(of: mapAnnotationSizes) { _, _ in
+                scheduleCaptionLayoutRefresh(using: proxy)
+                guard !userMovedMap, !position.positionedByUser else { return }
+                scheduleCameraBoundsCorrection(using: proxy)
+            }
+            .onChange(of: mapCaptionSizes) { _, _ in
+                scheduleCaptionLayoutRefresh(using: proxy)
+                guard !userMovedMap, !position.positionedByUser else { return }
+                resetCameraBoundsCorrection(preservingSettledCamera: true)
+                scheduleCameraBoundsCorrection(using: proxy)
+            }
+            .onChange(of: displayedCaptionPlacements) { _, _ in
+                guard !userMovedMap, !position.positionedByUser else { return }
+                scheduleCameraBoundsCorrection(using: proxy)
+            }
+            .onChange(of: cameraCorrectionRequestToken) { _, _ in
+                scheduleCameraBoundsCorrection(using: proxy)
+            }
+            .onAppear { scheduleCaptionLayoutRefresh(using: proxy) }
+            .onDisappear {
+                captionLayoutTask?.cancel()
+                captionLayoutTask = nil
+                captionLayoutGeneration &+= 1
+                resetCameraBoundsCorrection()
+            }
         }
-        .mapStyle(.standard(elevation: .flat, emphasis: .muted, pointsOfInterest: .excludingAll))
-        .mapControls {}
-        .accessibilityLabel(TrustCopy.mapAccessibility)
-        .accessibilityIdentifier("people-map-canvas")
+    }
+
+    private func activateMapPin(_ personID: UUID) {
+        let member = model.member(personID)
+        model.traceUIInteraction("people map pin activated memberFound=\(member != nil)")
+        guard let member else { return }
+        model.openView(member)
     }
 
     private var compactMapHeader: some View {
@@ -250,7 +507,24 @@ struct CircleView: View {
 
     private var recenterButton: some View {
         Button {
-            fitAll(includeUser: true)
+            fallbackCameraTargetID = nil
+            fallbackViewportAtFocus = nil
+            cameraZoomOutWasClamped = false
+            recenterIntentGeneration &+= 1
+            let requestedGeneration = recenterIntentGeneration
+            pendingRecenterGeneration = requestedGeneration
+            model.requestMapRecenter {
+                guard requestedGeneration == recenterIntentGeneration,
+                      pendingRecenterGeneration == requestedGeneration else {
+                    model.traceUIInteraction("people map recenter ignored after newer map intent")
+                    return
+                }
+                // Consume this request before changing the camera so subsequent
+                // map events cannot invalidate or replay the same completion.
+                pendingRecenterGeneration = nil
+                userMovedMap = false
+                fitAll(includeUser: true)
+            }
         } label: {
             Image(systemName: "location.fill")
                 .font(.system(size: 15, weight: .semibold))
@@ -448,39 +722,354 @@ struct CircleView: View {
         model.circle.firstIndex { $0.id == member.id } ?? 0
     }
 
-    private func fitAll(includeUser: Bool = false) {
+    private var cameraTargetPins: [AppModel.MapPin] {
+        if case let .view(personID)? = model.circlePath.last {
+            return pins.filter { $0.id == personID }
+        }
+        if let fallbackCameraTargetID {
+            return pins.filter { $0.id == fallbackCameraTargetID }
+        }
+        if let fix = model.location.lastFix {
+            let nearbyPins = pins.filter {
+                isAuthorizedPin($0, near: fix.coordinate)
+            }
+            if !nearbyPins.isEmpty { return nearbyPins }
+            if isExplicitRecenterFit { return [] }
+        }
+        return pins
+    }
+
+    private func isAuthorizedPin(_ pin: AppModel.MapPin, near coordinate: CLLocationCoordinate2D) -> Bool {
+        abs(pin.point.coordinate.latitude - coordinate.latitude) < 0.35
+            && abs(pin.point.coordinate.longitude - coordinate.longitude) < 0.45
+    }
+
+    private func hasNearbyAuthorizedPinCluster(around coordinate: CLLocationCoordinate2D) -> Bool {
+        pins.contains { isAuthorizedPin($0, near: coordinate) }
+    }
+
+    private func cameraFootprints(using proxy: MapProxy) -> [TrustMapAnnotationFootprint] {
+        return cameraTargetPins.compactMap { pin in
+            guard let point = proxy.convert(pin.point.coordinate, to: .local) else { return nil }
+            let captionSize = pin.live ? mapCaptionSizes[pin.id] : nil
+            let placement = displayedCaptionPlacements[pin.id] ?? .centeredBelow
+            let stale = pin.live && LocationFreshness.status(timestamp: pin.point.timestamp, now: .now) == .stale
+            return TrustMapCaptionLayout.footprint(
+                point: point,
+                anchor: .bottom,
+                captionSize: captionSize,
+                placement: placement,
+                stale: stale
+            )
+        }
+    }
+
+    private func hasAuthorizedPinFootprint(in viewport: CGRect, using proxy: MapProxy) -> Bool {
+        pins.contains { pin in
+            guard let point = proxy.convert(pin.point.coordinate, to: .local) else { return false }
+            let captionSize = pin.live ? mapCaptionSizes[pin.id] : nil
+            let placement = displayedCaptionPlacements[pin.id] ?? .centeredBelow
+            let stale = pin.live && LocationFreshness.status(timestamp: pin.point.timestamp, now: .now) == .stale
+            let footprint = TrustMapCaptionLayout.footprint(
+                point: point,
+                anchor: .bottom,
+                captionSize: captionSize,
+                placement: placement,
+                stale: stale
+            )
+            return footprint.frame(at: point).intersects(viewport)
+        }
+    }
+
+    private func computeCaptionPlacements(using proxy: MapProxy) -> [UUID: TrustMapCaptionPlacement] {
+        let projectedPins = pins.compactMap { pin -> (AppModel.MapPin, CGPoint)? in
+            guard let point = proxy.convert(pin.point.coordinate, to: .local) else { return nil }
+            return (pin, point)
+        }
+        let candidates = projectedPins.map { pin, point -> TrustMapCaptionCandidate? in
+            guard pin.live, let size = mapCaptionSizes[pin.id] else { return nil }
+            return TrustMapCaptionCandidate(point: point, size: size, anchor: .bottom)
+        }
+        let discs = projectedPins.map { pin, point in
+            let captionSize = pin.live ? mapCaptionSizes[pin.id] : nil
+            let stale = pin.live && LocationFreshness.status(timestamp: pin.point.timestamp, now: .now) == .stale
+            return TrustMapCaptionLayout.discBounds(point: point, anchor: .bottom, captionSize: captionSize, stale: stale)
+        }
+        let placements = TrustMapCaptionLayout.placements(
+            candidates: candidates,
+            discBounds: discs,
+            viewport: mapViewportLocalBounds
+        )
+        return Dictionary(uniqueKeysWithValues: projectedPins.indices.compactMap { index in
+            guard let placement = placements[index] else { return nil }
+            return (projectedPins[index].0.id, placement)
+        })
+    }
+
+    private func scheduleCaptionLayoutRefresh(using proxy: MapProxy) {
+        captionLayoutTask?.cancel()
+        captionLayoutGeneration &+= 1
+        let generation = captionLayoutGeneration
+        // MapProxy is a SwiftUI environment value whose lifetime is scoped to
+        // this MapReader update. Resolve it before suspending; retaining it in a
+        // Task can outlive a map re-layout (notably when Stage Manager resizes).
+        let updated = computeCaptionPlacements(using: proxy)
+        captionLayoutTask = Task { @MainActor in
+            do {
+                try await Task.sleep(for: .milliseconds(120))
+            } catch {
+                return
+            }
+            guard !Task.isCancelled, generation == captionLayoutGeneration else { return }
+            guard updated != displayedCaptionPlacements else { return }
+            displayedCaptionPlacements = updated
+            let measuredCount = pins.filter { $0.live && mapCaptionSizes[$0.id] != nil }.count
+            if measuredCount > updated.count {
+                model.traceUIInteraction("people map caption placement unresolved count=\(measuredCount - updated.count)")
+            }
+            let aboveCount = updated.values.filter { $0.side == .above }.count
+            let offsets = updated.values.map { abs($0.horizontalOffset) }
+            model.traceUIInteraction(
+                "people map caption layout applied count=\(updated.count) above=\(aboveCount) "
+                    + "max-inward-offset=\(Int((offsets.max() ?? 0).rounded()))"
+            )
+        }
+    }
+
+    private func anchorSummary(_ footprints: [TrustMapAnnotationFootprint]) -> String {
+        footprints.map { "\(Int($0.point.x.rounded())),\(Int($0.point.y.rounded()))" }.joined(separator: ";")
+    }
+
+    private func scheduleCameraBoundsCorrection(using proxy: MapProxy) {
+        guard !userMovedMap, !position.positionedByUser, lastSettledCamera != nil else { return }
+        cameraCorrectionTask?.cancel()
+        let generation = cameraFitGeneration
+        guard let camera = lastSettledCamera,
+              let cameraCenter = proxy.convert(camera.centerCoordinate, to: .local),
+              let correction = TrustMapCameraBounds.correction(
+                footprints: cameraFootprints(using: proxy),
+                cameraCenter: cameraCenter,
+                usableViewport: mapViewportLocalBounds
+              ) else { return }
+        if let pendingCameraCorrectionOverflow {
+            // Only judge whether a correction helped after MapKit reports a
+            // newer settled camera. Measurement callbacks can run against the
+            // pre-correction camera while the 120ms update is still pending.
+            guard cameraSettledRevision > cameraCorrectionAppliedRevision else { return }
+            if correction.overflow <= 0.5 {
+                self.pendingCameraCorrectionOverflow = nil
+                model.traceUIInteraction("people map annotation bounds contained")
+                return
+            }
+            guard correction.overflow < pendingCameraCorrectionOverflow - 0.5 else {
+                self.pendingCameraCorrectionOverflow = nil
+                cameraCorrectionAttempts = 3
+                if isAutomaticPeopleFit,
+                   cameraZoomOutWasClamped,
+                   mapViewportLocalBounds.width > 1,
+                   mapViewportLocalBounds.height > 1,
+                   !hasAuthorizedPinFootprint(in: mapViewportLocalBounds, using: proxy),
+                   model.location.lastFix.map({ !hasNearbyAuthorizedPinCluster(around: $0.coordinate) }) ?? true,
+                   let target = pins.first {
+                    fallbackCameraTargetID = target.id
+                    fallbackViewportAtFocus = mapViewportSize
+                    model.traceUIInteraction(
+                        "people map bounded fallback focus=first-authorized reason=native-zoom-cap-and-no-visible-pin"
+                    )
+                    focusMap(on: target.id)
+                    return
+                }
+                model.traceUIInteraction("people map annotation correction stopped without improvement")
+                return
+            }
+            self.pendingCameraCorrectionOverflow = nil
+        }
+        guard correction.isNeeded, cameraCorrectionAttempts < 3 else { return }
+        let adjustedCenterPoint = CGPoint(
+            x: cameraCenter.x - correction.translation.x * correction.scale,
+            y: cameraCenter.y - correction.translation.y * correction.scale
+        )
+        guard let adjustedCenter = proxy.convert(adjustedCenterPoint, from: .local),
+              adjustedCenter.latitude.isFinite, adjustedCenter.longitude.isFinite,
+              camera.distance.isFinite, camera.heading.isFinite, camera.pitch.isFinite else { return }
+        let distance = camera.distance * Double(correction.scale)
+        guard distance.isFinite, distance > 0 else { return }
+        // Capture only value types for the delayed task. Never retain `proxy`
+        // across Task.sleep: MapReader can be replaced before the task resumes.
+        let correctedCamera = MapCamera(
+            centerCoordinate: adjustedCenter,
+            distance: distance,
+            heading: camera.heading,
+            pitch: camera.pitch
+        )
+        let overflow = correction.overflow
+        let scale = correction.scale
+        let translation = correction.translation
+        let scheduledCameraRevision = cameraSettledRevision
+        cameraCorrectionTask = Task { @MainActor in
+            do {
+                try await Task.sleep(for: .milliseconds(120))
+            } catch {
+                return
+            }
+            guard !Task.isCancelled,
+                  generation == cameraFitGeneration,
+                  !userMovedMap, !position.positionedByUser,
+                  lastSettledCamera != nil,
+                  cameraSettledRevision == scheduledCameraRevision else { return }
+            pendingCameraCorrectionOverflow = overflow
+            cameraCorrectionAttempts += 1
+            cameraCorrectionAppliedRevision = scheduledCameraRevision
+            requestedCameraDistance = distance
+            position = .camera(correctedCamera)
+            model.traceUIInteraction(
+                "people map annotation correction scale=\(String(format: "%.3f", scale)) "
+                    + "translation=\(Int(translation.x.rounded())),\(Int(translation.y.rounded())) attempt=\(cameraCorrectionAttempts)"
+            )
+        }
+    }
+
+    private func resetCameraBoundsCorrection(preservingSettledCamera: Bool = false) {
+        cameraCorrectionTask?.cancel()
+        cameraCorrectionTask = nil
+        cameraFitGeneration &+= 1
+        cameraCorrectionAttempts = 0
+        pendingCameraCorrectionOverflow = nil
+        cameraCorrectionAppliedRevision = cameraSettledRevision
+        if !preservingSettledCamera { cameraZoomOutWasClamped = false }
+        if !preservingSettledCamera { lastSettledCamera = nil }
+    }
+
+    private func fitAll(includeUser: Bool = false, animated: Bool = true) {
+        // GPS-backed Recenter includes this device and excludes the bounded People
+        // fallback. If no own fix exists to include, retain the ordinary fit fallback.
+        isAutomaticPeopleFit = !includeUser || model.location.lastFix == nil
+        isExplicitRecenterFit = includeUser && model.location.lastFix != nil
         var coordinates = pins.map(\.point.coordinate)
         if includeUser, let fix = model.location.lastFix {
             coordinates.append(fix.coordinate)
         }
-        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.35)) {
+        withAnimation(animated && !reduceMotion ? .easeInOut(duration: 0.35) : nil) {
+            if model.location.lastFix == nil {
+                let alreadyAutomatic = usesNativeAutomaticFit
+                resetCameraBoundsCorrection(preservingSettledCamera: alreadyAutomatic)
+                requestedMapRect = nil
+                usesNativeAutomaticFit = true
+                position = .automatic
+                model.traceUIInteraction("people map native automatic fit applied")
+                if alreadyAutomatic, lastSettledCamera != nil {
+                    cameraCorrectionRequestToken &+= 1
+                }
+                return
+            }
             if let region = metroRegion(for: coordinates) {
-                position = .region(region)
+                setCamera(to: region)
             } else {
+                resetCameraBoundsCorrection()
+                requestedMapRect = nil
+                usesNativeAutomaticFit = true
                 position = .automatic
             }
         }
     }
 
-    private func focusMap(on personID: UUID) {
+    private func invalidatePendingRecenter(reason: String) {
+        guard pendingRecenterGeneration != nil else { return }
+        recenterIntentGeneration &+= 1
+        pendingRecenterGeneration = nil
+        model.traceUIInteraction("people map recenter intent invalidated reason=\(reason)")
+    }
+
+    private func focusMap(on personID: UUID, animated: Bool = true) {
+        isAutomaticPeopleFit = false
+        isExplicitRecenterFit = false
         guard let point = pins.first(where: { $0.id == personID })?.point else { return }
         let region = MKCoordinateRegion(
             center: point.coordinate,
             span: MKCoordinateSpan(latitudeDelta: 0.12, longitudeDelta: 0.12)
         )
-        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.35)) {
-            position = .region(region)
+        withAnimation(animated && !reduceMotion ? .easeInOut(duration: 0.35) : nil) {
+            setCamera(to: region)
         }
     }
 
-    private func fitOrFocusSelectedView() {
+    private func setCamera(to region: MKCoordinateRegion) {
+        resetCameraBoundsCorrection()
+        usesNativeAutomaticFit = false
+        guard mapViewportSize.width > 1, mapViewportSize.height > 1 else {
+            requestedMapRect = nil
+            position = .region(region)
+            return
+        }
+        let rect = mapRect(for: region, viewport: mapViewportSize)
+        requestedMapRect = rect
+        position = .region(MKCoordinateRegion(rect))
+        model.traceUIInteraction("people map camera fit applied=true")
+    }
+
+    private func scheduleViewportCameraFit() {
+        mapViewportFitTask?.cancel()
+        mapViewportFitTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(120))
+            guard !Task.isCancelled,
+                  mapViewportSize.width > 0,
+                  mapViewportSize.height > 0 else { return }
+            model.traceUIInteraction("people map viewport usable=true")
+            fitOrFocusSelectedView()
+        }
+    }
+
+    private func mapRect(for region: MKCoordinateRegion, viewport: CGSize) -> MKMapRect {
+        let latitudeLimit = 85.05112878
+        let northLatitude = min(latitudeLimit, region.center.latitude + region.span.latitudeDelta / 2)
+        let southLatitude = max(-latitudeLimit, region.center.latitude - region.span.latitudeDelta / 2)
+        let westLongitude = region.center.longitude - region.span.longitudeDelta / 2
+        let eastLongitude = region.center.longitude + region.span.longitudeDelta / 2
+        let north = MKMapPoint(CLLocationCoordinate2D(latitude: northLatitude, longitude: westLongitude))
+        let south = MKMapPoint(CLLocationCoordinate2D(latitude: southLatitude, longitude: eastLongitude))
+        let base = MKMapRect(
+            x: min(north.x, south.x),
+            y: min(north.y, south.y),
+            width: max(1, abs(south.x - north.x)),
+            height: max(1, abs(south.y - north.y))
+        )
+
+        // Live freshness capsules are wider than the 44pt pin target. Reserve room
+        // for their full localized width as well as the marker disc.
+        let sideInset: CGFloat = 64
+        let topInset: CGFloat = 64
+        let bottomInset: CGFloat = 36
+        let availableWidth = max(1, Double(viewport.width - sideInset * 2))
+        let availableHeight = max(1, Double(viewport.height - topInset - bottomInset))
+        let mapPointsPerScreenPoint = max(base.width / availableWidth, base.height / availableHeight)
+        let cameraWidth = Double(viewport.width) * mapPointsPerScreenPoint
+        let cameraHeight = Double(viewport.height) * mapPointsPerScreenPoint
+        let shiftedCenterY = base.midY - mapPointsPerScreenPoint * Double((topInset - bottomInset) / 2)
+        return MKMapRect(
+            x: base.midX - cameraWidth / 2,
+            y: shiftedCenterY - cameraHeight / 2,
+            width: cameraWidth,
+            height: cameraHeight
+        )
+    }
+
+    private func fitOrFocusSelectedView(animated: Bool = true) {
         guard !userMovedMap else { return }
         if case let .view(personID)? = model.circlePath.last,
            pins.contains(where: { $0.id == personID }) {
-            focusMap(on: personID)
+            focusMap(on: personID, animated: animated)
+        } else if let fallbackCameraTargetID,
+                  pins.contains(where: { $0.id == fallbackCameraTargetID }) {
+            focusMap(on: fallbackCameraTargetID, animated: animated)
         } else {
-            fitAll()
+            fitAll(animated: animated)
         }
+    }
+
+    private var isShowingSpecificPersonView: Bool {
+        guard let route = model.circlePath.last else { return false }
+        if case .view = route { return true }
+        return false
     }
 
     /// Street-level camera. Pins spread across cities must not zoom the home map out to a globe.
@@ -510,8 +1099,8 @@ struct CircleView: View {
         let maxLatitudeSpan: CLLocationDegrees = localCluster ? 0.12 : 170
         let maxLongitudeSpan: CLLocationDegrees = localCluster ? 0.12 : 320
         let span = MKCoordinateSpan(
-            latitudeDelta: min(maxLatitudeSpan, max((maxLat - minLat) * 1.6, 0.045)),
-            longitudeDelta: min(maxLongitudeSpan, max((maxLon - minLon) * 1.6, 0.045))
+            latitudeDelta: min(maxLatitudeSpan, max(maxLat - minLat, 0.045)),
+            longitudeDelta: min(maxLongitudeSpan, max(maxLon - minLon, 0.045))
         )
         return MKCoordinateRegion(center: center, span: span)
     }
@@ -594,6 +1183,7 @@ struct CirclePersonRow: View {
 
     private func personButton(multiline: Bool) -> some View {
         TimelineView(.periodic(from: .now, by: 60)) { context in
+            let status = statusText(at: context.date)
             Button {
                 model.openPerson(member)
             } label: {
@@ -605,11 +1195,12 @@ struct CirclePersonRow: View {
                             .foregroundStyle(palette.ink)
                             .lineLimit(multiline ? 2 : 1)
                             .fixedSize(horizontal: false, vertical: multiline)
-                        Text(statusText(at: context.date))
-                            .trustFont(13)
-                            .foregroundStyle(palette.muted)
-                            .lineLimit(multiline ? 2 : 1)
-                            .fixedSize(horizontal: false, vertical: multiline)
+                        if let status {
+                            Text(status)
+                                .trustFont(13)
+                                .foregroundStyle(palette.muted)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                     }
                     Spacer(minLength: 8)
                 }
@@ -617,7 +1208,7 @@ struct CirclePersonRow: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("\(member.person.displayName). \(statusText(at: context.date))")
+            .accessibilityLabel(status.map { "\(member.person.displayName). \($0)" } ?? member.person.displayName)
             .accessibilityIdentifier("person-row-\(member.firstName.lowercased())")
         }
     }
@@ -650,19 +1241,18 @@ struct CirclePersonRow: View {
         .accessibilityIdentifier("person-peek-\(member.firstName.lowercased())")
     }
 
-    private func statusText(at now: Date) -> String {
+    private func statusText(at now: Date) -> String? {
         if member.isAvailable {
-            return TrustCopy.availableLocationStatus(
-                timestamp: member.livePoint?.timestamp,
+            guard member.liveAccessIsCurrent else { return TrustCopy.locationUnavailable }
+            return TrustCopy.authorizedLiveLocationStatus(
+                timestamp: member.currentLivePoint?.timestamp,
                 now: now,
-                viewerHasPlus: model.coverage.isCovered,
                 presence: member.visiblePresence?.label
             )
         }
         if member.isPaused { return TrustCopy.pause }
         if isNotSharing { return TrustCopy.choseOff(name: member.firstName) }
-        if let presence = member.visiblePresence { return presence.label }
-        return TrustCopy.presenceHiddenBadge
+        return member.visiblePresence?.label
     }
 }
 
@@ -778,10 +1368,12 @@ struct PersonScreen: View {
             TrustAvatar(name: member.person.displayName, seed: seed, size: 88, avatar: member.person.avatar, personID: member.id)
             TrustPageTitle(text: member.person.displayName, size: 32)
                 .multilineTextAlignment(.center)
-            Text(statusText(member))
-                .trustFont(17)
-                .foregroundStyle(palette.muted)
-                .accessibilityIdentifier("person-status")
+            if let status = statusText(member) {
+                Text(status)
+                    .trustFont(17)
+                    .foregroundStyle(palette.muted)
+                    .accessibilityIdentifier("person-status")
+            }
             Text(directionText(member))
                 .trustFont(13)
                 .foregroundStyle(palette.muted)
@@ -812,9 +1404,11 @@ struct PersonScreen: View {
                     TrustAvatar(name: member.person.displayName, seed: seed, size: 64, avatar: member.person.avatar, personID: member.id)
                     VStack(alignment: .leading, spacing: 4) {
                         TrustPageTitle(text: member.person.displayName, size: 30)
-                        Text(statusText(member))
-                            .trustFont(15)
-                            .foregroundStyle(palette.muted)
+                        if let status = statusText(member) {
+                            Text(status)
+                                .trustFont(15)
+                                .foregroundStyle(palette.muted)
+                        }
                     }
                 }
                 .padding(.top, 8)
@@ -834,7 +1428,7 @@ struct PersonScreen: View {
                             .foregroundStyle(palette.ink)
                             .lineLimit(1)
                         Spacer(minLength: 8)
-                        Text(visit.at.formatted(date: .abbreviated, time: .shortened))
+                        Text(TrustCopy.formattedDateTime(visit.at, dateStyle: .abbreviated, timeStyle: .shortened))
                             .trustFont(13)
                             .foregroundStyle(palette.muted)
                     }
@@ -871,11 +1465,10 @@ struct PersonScreen: View {
         }
     }
 
-    private func statusText(_ member: TrustedPerson) -> String {
+    private func statusText(_ member: TrustedPerson) -> String? {
         if member.isPaused { return TrustCopy.pause }
         if member.isNotSharingWithYou { return TrustCopy.choseOff(name: member.firstName) }
-        if let presence = member.visiblePresence { return presence.label }
-        return TrustCopy.presenceHiddenBadge
+        return member.visiblePresence?.label
     }
 
     private func directionText(_ member: TrustedPerson) -> String {

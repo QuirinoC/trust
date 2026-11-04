@@ -5,6 +5,7 @@ import TrustCore
 struct MainShellView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.trustPalette) private var palette
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage(TrustAppLanguage.storageKey) private var appLanguage = TrustAppLanguage.system.rawValue
@@ -105,7 +106,7 @@ struct MainShellView: View {
             LookConfirmSheet(subject: subject)
                 .environmentObject(model)
                 .environment(\.trustPalette, palette)
-                .presentationDetents([.medium, .large])
+                .presentationDetents(dynamicTypeSize.isAccessibilitySize ? [.large] : [.medium, .large])
                 .presentationDragIndicator(.visible)
                 .presentationBackground(palette.sheet)
                 .presentationCornerRadius(28)
@@ -139,15 +140,23 @@ struct MainShellView: View {
                 .presentationBackground(palette.sheet)
                 .trustFormSheet()
         }
+        .sheet(item: $model.firstShareApproval, onDismiss: { model.cancelFirstShareApproval() }) { request in
+            FirstShareApprovalSheet(request: request)
+                .environmentObject(model)
+                .environment(\.trustPalette, palette)
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+                .presentationBackground(palette.paper)
+                .trustFormSheet()
+        }
     }
 
     private func routePendingPushDestination() {
         guard let destination = model.consumePendingPushDestination() else { return }
         let tab: MainTab = destination == .activity ? .log : .circle
-        if model.selectedTab == tab {
-            Task { await model.refresh() }
-        } else {
-            model.selectedTab = tab
+        model.selectedTab = tab
+        Task {
+            await model.refresh()
         }
     }
 
@@ -175,10 +184,11 @@ struct MainShellView: View {
                                         .accessibilityHidden(true)
                                 }
                             }
-                        Text(tab.title)
+                        Text(tab == .sharing ? TrustCopy.sharingTabTitle : tab.title)
                             .font(.system(size: 11, weight: selected ? .semibold : .medium))
                             .lineLimit(1)
                             .minimumScaleFactor(0.8)
+                            .padding(.horizontal, 4)
                     }
                     .foregroundStyle(selected ? palette.accent : palette.muted)
                     .frame(maxWidth: .infinity, minHeight: 56)
@@ -195,7 +205,7 @@ struct MainShellView: View {
                 .accessibilityLabel(
                     tab == .sharing && !model.connectionRequests.incoming.isEmpty
                         ? TrustCopy.sharingRequestsAccessibility(model.connectionRequests.incoming.count)
-                        : tab.title
+                        : (tab == .sharing ? TrustCopy.sharingTabTitle : tab.title)
                 )
                 .accessibilityIdentifier("tab-\(tab.rawValue)")
                 .accessibilityAddTraits(selected ? .isSelected : [])

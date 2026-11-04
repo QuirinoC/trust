@@ -1,0 +1,86 @@
+# Trust Staging: two-iPhone acceptance
+
+**Execution status: not run; Juan deferred real-phone testing on 3 November and asked to continue preparation.** Use **Trust Staging 1.0 (52)**, application source `faa306f85d4a24732f03b8420cf78b1a556846bf`. Apple verified it COMPLETE, VALID, INTERNAL_ONLY and IN_BETA_TESTING in the existing three-tester group; tester IDs and roles were unchanged. StoreKit purchases, staging APNs delivery and two-real-device acceptance remain to be observed. Prior simulator evidence is described in [the evidence report](evidence/2026-11-01-customer-experience/DEVICE-ACCOUNT-REPORT.md); it does not establish physical behavior.
+
+Use two adult testers with distinct Apple Accounts and real iPhones. Select two of the three approved testers; these are the only two reserved phone numbers available concurrently for the automatic, no-SMS flow. Do not swap the assigned numbers between accounts during the run. Assign them as follows:
+
+- **A:** `+1 202 555 0101`, handle `trustqatesta`
+- **B:** `+1 202 555 0102`, handle `trustqatestb`
+
+After automatic assignment, optionally edit each handle to the test value if available; otherwise choose and record another unique handle. Use A’s invited Apple Account for both TestFlight and Apple sign-in on A; use B’s different invited Apple Account for both on B. Confirm the build’s actual age and account-verification behavior. Do not enable global phone-verification skips or use demo accounts; only the two reserved numbers use the approved automatic staging flow.
+
+Record each phone’s model, iOS version, app build, and location and notification permissions. Confirm both apps say **Trust Staging**, show the STAGING badge, and use the same build. [TestFlight purchases automatically use Apple’s sandbox](https://developer.apple.com/help/app-store-connect/test-a-beta-version/testing-subscriptions-and-in-app-purchases-in-testflight/) and are not charged. No extra dedicated Sandbox Apple Account is needed for these baseline purchase checks. If products do not load, record that step as blocked; do not substitute a local purchase fixture.
+
+For every numbered step, record **Pass**, **Fail**, **Blocked**, or **Not run**. Record observed behavior, not an inferred result. Push delivery is not guaranteed.
+
+## Map recovery on a real device
+
+On a phone with location permission granted, open People and use Recenter, then pan the map manually. After a later location fix arrives, check that the manual view remains in place; explicitly tap Recenter again and verify it works. Record the observed result and permission state without recording precise personal location. This is an outstanding physical-device check.
+
+## Run the checks
+
+1. **Install and distinguish the app.** Install the processed Trust Staging TestFlight build on both phones while keeping the normal Trust app installed. **Expected:** the staging app is labeled Trust Staging, shows the STAGING badge, and coexists with the production app without replacing it.
+
+2. **Complete real Apple sign-in.** On A and B, sign in with the assigned distinct Apple Accounts. **Expected:** successful Apple authentication leads to phone setup for a fresh account, with no age-range, parent-update approval, or App Store app-verification screen. Cancelled or failed Apple authentication does not open the account.
+
+3. **Verify each phone and try optional profile edits.** For a fresh or unverified account, enter its assigned reserved number and wait for the staging flow. If the account is already verified, record it as a returning account and check that it resumes People without another verification. **Expected for fresh setup:** only these two reserved numbers auto-verify after Apple sign-in; the phone screen says “No SMS is sent”; no SMS-code entry screen appears. A handle is assigned automatically and the account enters People with discovery and sharing Off. A returning account retains its earlier confirmed preferences; the update must not reset them. Relaunch and confirm no new text or handle choice is required. Then optionally edit each display name and handle separately; verify the chosen values persist and no edit enables sharing. Check that the country selector defaults to +1 when no approximate region is available, supports country/name/code search, and preserves a manual selection or pasted international prefix. Record any sign-in, country-selector, or handle failure.
+
+4. **Check phone discovery while B is opted out.** On A, search for B using B's complete phone number. **Expected:** no eligible phone match or unconnected profile-picture preview appears while B's discovery choice is off.
+
+5. **Check discovery consent changes.** On B, explicitly turn on “Help people find me.” Search B's full number again from A, then turn B's discovery off and repeat. **Expected:** with consent on, the eligible handle and opted-in picture may appear; after consent is off, future phone matches and unconnected picture previews are unavailable. An existing connection remains governed by its connection permissions.
+
+6. **Cancel a sent request.** From A, send B a connection request, then cancel it from A's sent requests. **Expected:** the request becomes pending and then disappears after cancellation; no connection is created.
+
+7. **Exercise decline, resend, and acceptance.** A sends a new request; B declines it. A sends again; B accepts. **Expected:** decline creates no connection; acceptance creates one, and both directions remain Off until independently chosen.
+
+8. **Verify sharing directions are independent.** A chooses Sealed for B, reviews the first-share explanation and completes any location readiness steps. B keeps Off for A. **Expected:** A's confirmed direction becomes Sealed while B's remains Off; changing one person's direction does not change the other.
+
+9. **Complete a Sealed Look and receipt.** Keep A's Sealed direction active. If prompted, grant A location access While Using the App. On B, select A and confirm a Look. **Expected:** B sees a one-time snapshot with its timestamp; A sees the corresponding receipt in Trust Activity. A View receipt must be shown as confirmed only after server acknowledgement. The snapshot is the latest available location, not guaranteed-current GPS.
+
+10. **Confirm a snapshot does not become live.** Move A to a different place without changing its sharing mode or performing another Look. Check the existing point from B. **Expected:** the prior snapshot remains until a new authorized Look; movement alone does not turn Sealed into live sharing.
+
+11. **Pause sharing for three days.** On A, open B's sharing actions and choose Pause for three days. Check the row and attempt a Look from B. **Expected:** the pause end date/time is shown, no new Look succeeds during the pause, and the prior confirmed mode is not presented as active.
+
+12. **Resume the prior mode.** On A, resume sharing with B. **Expected:** A's previous Sealed mode returns for B only; B's direction to A is unchanged. Confirm B can make a new Look and A receives its receipt.
+
+13. **Turn A's direction Off with confirmation.** On A, choose Off for B and confirm the named-person prompt. **Expected:** A's sharing direction becomes Off, the connection remains, and B cannot make a new Look using A's direction.
+
+14. **Check offline mode updates.** Put A in Airplane Mode, request a different sharing mode for B, then reconnect. **Expected:** the last server-confirmed mode remains selected while the request is pending or fails. After reconnecting, retry if offered or make a new request; the new mode appears only after confirmation.
+
+15. **Check the free-account Always gate.** On free account A, choose Always for B. **Expected:** the Plus purchase screen appears and Always does not become active before an entitlement is verified.
+
+16. **Make A's TestFlight purchase.** On A, fetch and purchase the offered staging subscription through Apple’s TestFlight purchase prompt. Use A’s own account; a separate Sandbox Apple Account is not needed for this baseline check. Record the product and period shown by StoreKit and the transaction outcome. After the server verifies A's entitlement, set A's direction to B to Always, then check from B while B is still free. **Expected:** A's entitlement and Always mode take effect only after verification; B can View A’s permitted coordinates and map without buying Plus. Buying Plus does not itself enable Always. Verify B cannot share Always in the reverse direction without B’s own Plus. Do not count sandbox metadata or a local StoreKit test as a purchase.
+
+17. **Purchase for B and check live freshness.** On B, fetch and purchase a staging subscription through Apple’s TestFlight purchase prompt using B’s own account. Keep A’s and B’s purchase ownership distinct. Recheck A's Always share from B. **Expected:** B can still view the latest available point with its age, or a clear unavailable state if A has no point. Verify the free 24-hour and Plus 30-day history windows where suitable data exists. Record product fetch, purchase, and entitlement separately.
+
+18. **Exercise real background location.** With A's Always share and the required Always location permission enabled, lock or background A, move it a meaningful distance, and check from B after the device has had time to report. **Expected:** any updated point and age reflect actual observed background delivery. Record the timestamp and permission state; a foreground update alone does not pass this check.
+
+19. **Request A's alerts explicitly and check a displayed push.** In A's You tab, tap Enable alerts. Set A's direction to B to Sealed; from B, perform a Look at A. **Expected:** A's notification permission status refreshes, and, if a real push is displayed, tapping it opens the matching receipt. Record the app state and actual display separately; APNs acceptance or an Activity entry alone is not proof of display.
+
+20. **Exercise B's denied and allowed notification states.** On B, deny the system notification prompt when asked. In You, verify the denied status and use Open iOS Settings to allow alerts. Return to Trust, set B's direction to A to Sealed, and have A perform a Look at B. **Expected:** B's status refreshes after returning from Settings; if a real push is displayed, it opens the matching receipt. Record actual display and tap behavior. No delivery is guaranteed.
+
+21. **Set Home and check the location controls.** On each phone, open You → My location, review permission status, and use “Use current location as Home” where appropriate. **Expected:** the UI shows Home status and the available permission action. The radius is fixed at 120 m in the app; there is no radius-edit control to look for. Coordinates remain on-device. Enable the per-person Home/Away choice only for the direction being tested; it is separate from location sharing.
+
+22. **Test Home/Away and suppression with real movement.** With Always location permission, move a phone across the Home boundary while the per-person Home/Away option is enabled. Repeat with sharing Off, Pause, and Hidden. **Expected:** record actual Home/Away state changes and alerts; Off, Pause, and Hidden suppress what the other person can see as implemented. Hidden is not shown to the other person. Do not infer background geofence behavior from a foreground-only test, and do not treat push delivery as guaranteed.
+
+23. **Verify avatar edits and privacy.** On both accounts, open the avatar editor, stage a change, and Cancel; then stage a preset or photo and Save. Relaunch the app. **Expected:** Cancel discards the staged change; Save persists it; missing or removed pictures fall back to initials. Neither editing nor saving a picture enables discovery or changes sharing.
+
+24. **Check compact and accessibility layouts.** On the smaller phone, verify the normal-size connected-person row keeps Name, Off, Sealed, Always, and the secondary menu legible and reachable. Then test the largest accessibility text size, dark appearance, German, and Portuguese. **Expected:** controls remain reachable, text is not clipped, and the large-text layout reflows without hiding actions. Capture privacy-safe screenshots of any failure. If a Duo is available, fold and unfold People, a selected person, and Map; open Add someone, type an unsent query, and repeat while editing. **Expected:** the same person, sharing state and query remain; native editing stays usable; complete map markers and localized freshness captions remain visible without covering each other.
+
+25. **Reinstall B and restore the same account.** Delete and reinstall only B's Trust Staging app, then sign in with B's same Apple Account. **Expected:** the server account and verified phone remain; no additional phone-verification SMS is requested. Record whether iOS asks for location or notification permissions again; permission prompts may depend on OS state.
+
+26. **Remove access and clean up staging accounts.** Remove the connection and confirm; reconnect once to verify both directions begin Off, then remove it again. Check Support, sign out, and Delete account are reachable during authenticated setup and any restricted state. Confirm deletion warns that Apple billing is managed separately and offers Manage Subscriptions without forcing cancellation. After recording the run, use the app's Delete account action for both staging test accounts and verify staging-only cleanup through the approved staging process. **Expected:** the connection and its grants are revoked, deleted staging accounts are removed, and no production account or resource is changed.
+
+## Privacy-safe run record
+
+Keep evidence minimal. Do not record Apple IDs, passwords, access tokens, verification codes, precise personal locations, customer data, or unredacted device logs.
+
+- Run date and source revision:
+- Staging build number and TestFlight processing status:
+- Tester A device model / iOS version / permission states:
+- Tester B device model / iOS version / permission states:
+- Step number and outcome (Pass / Fail / Blocked / Not run):
+- Observed result and privacy-safe evidence reference:
+- Retest result or remaining blocker:
+
+This procedure does not test carrier SMS; the two reserved staging numbers deliberately bypass SMS. It does not establish guaranteed notification delivery or production release readiness. TestFlight availability does not establish physical acceptance; record the actual outcomes of the checks below. Existing simulator evidence is documented in [FEATURE-E2E-PLAN.md](FEATURE-E2E-PLAN.md).

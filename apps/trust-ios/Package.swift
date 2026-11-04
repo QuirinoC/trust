@@ -10,9 +10,13 @@ let package = Package(
     products: [
         .library(name: "TrustCore", targets: ["TrustCore"])
     ],
+    dependencies: [
+        .package(url: "https://github.com/PhoneNumberKit/PhoneNumberKit.git", exact: "5.0.13")
+    ],
     targets: [
         .target(
             name: "TrustCore",
+            dependencies: [.product(name: "PhoneNumberKit", package: "PhoneNumberKit")],
             path: "Sources/TrustCore"
         ),
         .testTarget(

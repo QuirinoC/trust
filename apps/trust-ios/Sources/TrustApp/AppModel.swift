@@ -41,6 +41,12 @@ enum AppPhase: Equatable {
     case home
 }
 
+enum ConnectionRequestAction: Equatable {
+    case accept
+    case decline
+    case cancel
+}
+
 enum MainTab: String, CaseIterable, Identifiable {
     case circle
     case sharing
@@ -67,6 +73,22 @@ enum MainTab: String, CaseIterable, Identifiable {
         case .you: return "person.crop.circle.fill"
         }
     }
+}
+
+struct FirstShareApprovalRequest: Identifiable, Equatable {
+    var personID: UUID
+    var connectionID: UUID
+    var displayName: String
+    var handle: String
+    var mode: ShareRestingMode
+    var id: UUID { connectionID }
+}
+
+enum ViewReceiptState: Equatable {
+    case pending
+    case confirmed
+    case failed
+    case offline
 }
 
 /// Destinations pushed over the People tab: person (presence only), Look/View location, map.
@@ -117,13 +139,37 @@ final class AppModel: ObservableObject {
         didSet { traceUIInteraction("tab assigned: \(selectedTab.rawValue)") }
     }
     @Published var pendingPushDestination: TrustPushDestination?
-    @Published var circlePath: [CircleRoute] = []
+    @Published var circlePath: [CircleRoute] = [] {
+        didSet {
+            guard oldValue != circlePath else { return }
+            #if DEBUG
+            guard isUITestLaunch else { return }
+            Logger(subsystem: "com.collapsetechnologies.trust", category: "MapNavigation")
+                .notice("People route changed: depth=\(self.circlePath.count, privacy: .public)")
+            #endif
+        }
+    }
+    enum MapFocus: Equatable {
+        case automatic
+        case person(UUID)
+    }
+    @Published private(set) var mapFocus: MapFocus = .automatic
+    @Published private(set) var mapSelectedPersonID: UUID?
     @Published var snapshot: CircleSnapshot?
     @Published private(set) var isOffline = false
     @Published private(set) var privacyHoldSubmission = TrustAccountPrivacyHoldState()
     @Published private(set) var ageUnavailableStopAllState: AgeUnavailableStopAllState = .idle
+    private var restrictedAccountHasOutboundGrants = false
+    @Published private(set) var recoveryRequestReference: String?
+    @Published private(set) var recoveryRequestStatus: String?
+    @Published private(set) var recoveryRequestKind: String?
+    @Published private(set) var recoveryRequestError: String?
+    @Published private(set) var isSubmittingRecoveryRequest = false
+    private var recoveryRequestAccountID: UUID?
+    private var recoveryRequestGeneration: UInt64 = 0
     @Published private(set) var isRefreshing = false
     @Published private(set) var isSettingHome = false
+    @Published private(set) var isRequestingNotifications = false
     @Published var toast: TrustToast?
 
     /// Look confirm sheet subject (Sealed rows only).
@@ -142,10 +188,14 @@ final class AppModel: ObservableObject {
     private var historyConnectionIDs: [UUID: UUID] = [:]
     private var historyRequestIDs: [UUID: UUID] = [:]
     private var historyRequestConnectionIDs: [UUID: UUID] = [:]
+    private var liveExpiryTask: Task<Void, Never>?
+    private var liveExpiryTaskAccountID: UUID?
 
     @Published var showingViewLog = false
     @Published var showingPaywall = false
     @Published var showingAlwaysExplainer = false
+    @Published var firstShareApproval: FirstShareApprovalRequest?
+    @Published private var viewReceiptStates: [String: ViewReceiptState] = [:]
     /// Pause sheet. Set from Sharing, or from a screenshot launch.
     @Published var pauseSheetPersonID: UUID? {
         didSet { tracePausePresentation(pauseSheetPersonID == nil ? "selection cleared" : "selection assigned") }
@@ -167,6 +217,7 @@ final class AppModel: ObservableObject {
             .notice("Pause presentation: \(event, privacy: .public)")
         #endif
     }
+
     @Published var stopAllRequested = false
 
     @Published var inviteCodeDraft = ""
@@ -176,12 +227,11 @@ final class AppModel: ObservableObject {
     @Published private(set) var isJoining = false
 
     @Published var isSigningIn = false
+    @Published private(set) var isStarting = false
+    private var startupInProgress = false
     @Published var isDemoMode = false
-    /// This server-side link is required before exposing an authenticated account. It is
-    /// separate from `ageAccessState`: Apple's age decision may succeed while StoreKit
-    /// cannot yet prove the signed app transaction needed for consent-revocation handling.
-    private var isAppTransactionLinked = false
-    @Published private(set) var isAgeAccessAllowed = false {
+    /// Retained for dormant age-assurance UI state; account access does not depend on it.
+    @Published private(set) var isAgeAccessAllowed = true {
         didSet {
             location.setAgeAccessAllowed(isAgeAccessAllowed)
             location.setAppActive(isSceneActive && isAgeAccessAllowed)
@@ -193,13 +243,13 @@ final class AppModel: ObservableObject {
         localFixture = localFixture
             || ProcessInfo.processInfo.environment["TRUST_DEV_SESSION"] == "1"
 #endif
-        return TrustAccountAccessPolicy.canAccessAccountData(
-            ageAssurancePassed: isAgeAccessAllowed && ageAccessState.isAllowed,
+        return !auth.isCurrentSessionConsentRevoked && TrustAccountAccessPolicy.canAccessAccountData(
             accountAuthenticated: auth.isAuthenticated,
-            appTransactionLinked: isAppTransactionLinked,
+            privacyHeld: auth.isCurrentSessionPrivacyHeld,
             localFixture: localFixture
         )
     }
+    private var appleCredentialValidationTask: Task<Void, Never>?
     @Published private(set) var ageGateBlockedByParent = false
     // PermissionQuestion is iOS 26+, while Trust still supports older deployment targets.
     // Keep this type-erased here and cast only inside the availability-guarded view.
@@ -210,41 +260,107 @@ final class AppModel: ObservableObject {
     @Published private var presenceOverride: HomePresenceKind?
 
     @Published var phoneDraft = ""
+    @Published var phoneCountry = TrustPhoneCountry.unitedStates
+    @Published var phoneLocalDraft = ""
+    @Published var phoneCountryWasChosen = false
     @Published var phoneCodeDraft = ""
     @Published var phoneNotice: String?
     @Published var phoneNoticeIsConflict = false
+    @Published private(set) var profileSaveNotice: String?
     @Published var phoneCodeSent = false
     @Published var isSendingPhone = false
     private var phoneSendGeneration: UInt64 = 0
     @Published private(set) var challengedPhone = ""
+    @Published private(set) var verifiedPhoneMasked: String?
+    @Published private(set) var verifiedPhoneRegion: String?
+    @Published var phoneReplacementMode = false
+    @Published private(set) var isCompletingPhoneOnboarding = false
     @Published private(set) var phoneRetry = TrustPhoneRetryState()
     private var phoneRetryAccountID: String?
     private var authenticatedPerson: Person?
+#if TRUST_STAGING
+    private static let stagingTestPhoneNumbers: Set<String> = ["+12025550101", "+12025550102"]
+#endif
 
     private func loadPhoneRetry() {
         guard let id = TrustSessionIdentity.accountID(from: auth.sessionToken)?.uuidString.lowercased() else { return }
         guard phoneRetryAccountID != id else { return }
         phoneRetryAccountID = id
-        phoneRetry = UserDefaults.standard.data(forKey: "trust.phoneRetry.\(id)")
-            .flatMap { try? JSONDecoder().decode(TrustPhoneRetryState.self, from: $0) } ?? TrustPhoneRetryState()
-        if phoneRetry.showingCode == true, let number = phoneRetry.challengeNumber,
-           let expiresAt = phoneRetry.challengeExpiresAt, expiresAt > Date() {
-            challengedPhone = number
-            phoneDraft = number
-            phoneCodeSent = true
+        phoneCountry = .unitedStates
+        phoneLocalDraft = ""
+        phoneCountryWasChosen = false
+        let storageKey = "trust.phoneRetry.\(id)"
+        let protected = TrustKeychain.get(account: storageKey).flatMap { Data(base64Encoded: $0) }
+        let legacy = UserDefaults.standard.data(forKey: storageKey)
+        phoneRetry = protected.flatMap { try? JSONDecoder().decode(TrustPhoneRetryState.self, from: $0) }
+            ?? legacy.flatMap { try? JSONDecoder().decode(TrustPhoneRetryState.self, from: $0) }
+            ?? TrustPhoneRetryState()
+        if protected == nil, let legacy {
+            TrustKeychain.set(legacy.base64EncodedString(), account: storageKey)
+            UserDefaults.standard.removeObject(forKey: storageKey)
+        }
+        if phoneRetry.editingPhoneNumber == true {
+            phoneDraft = phoneRetry.editedPhoneDraft ?? phoneRetry.challengeNumber ?? ""
+            phoneCodeSent = false
+            phoneCodeDraft = ""
+            synchronizePhoneEditorFromDraft()
+        } else {
+#if TRUST_STAGING
+            if let number = phoneRetry.challengeNumber,
+               Self.stagingTestPhoneNumbers.contains(TrustPhoneRetryState.normalized(number)) {
+                challengedPhone = number
+                phoneDraft = number
+                synchronizePhoneEditorFromDraft()
+                phoneCodeSent = false
+                if phoneRetry.showingCode == true {
+                    phoneRetry.showingCode = false
+                    savePhoneRetry()
+                }
+                phoneNotice = "No SMS is sent to reserved staging test numbers. Verification will retry automatically when available."
+            } else if phoneRetry.showingCode == true, let number = phoneRetry.challengeNumber,
+                      let expiresAt = phoneRetry.challengeExpiresAt, expiresAt > Date() {
+                challengedPhone = number
+                phoneDraft = number
+                synchronizePhoneEditorFromDraft()
+                phoneCodeSent = true
+            }
+#else
+            if phoneRetry.showingCode == true, let number = phoneRetry.challengeNumber,
+               let expiresAt = phoneRetry.challengeExpiresAt, expiresAt > Date() {
+                challengedPhone = number
+                phoneDraft = number
+                synchronizePhoneEditorFromDraft()
+                phoneCodeSent = true
+            }
+#endif
+        }
+    }
+
+    func synchronizePhoneEditorFromDraft() {
+        guard !phoneCountryWasChosen, !phoneDraft.isEmpty else { return }
+        let split = TrustPhoneCountry.split(phoneDraft, preferredCountry: phoneCountry)
+        if let country = split.country {
+            phoneCountry = country
+            phoneLocalDraft = split.nationalNumber
+        } else {
+            phoneLocalDraft = phoneDraft
         }
     }
 
     private func clearPrivatePhoneRetry() {
         if let id = TrustSessionIdentity.accountID(from: auth.sessionToken)?.uuidString.lowercased() {
-            UserDefaults.standard.removeObject(forKey: "trust.phoneRetry.\(id)")
+            let key = "trust.phoneRetry.\(id)"
+            TrustKeychain.delete(account: key)
+            UserDefaults.standard.removeObject(forKey: key)
         }
         phoneRetry = TrustPhoneRetryState()
     }
 
     private func savePhoneRetry() {
         guard let id = phoneRetryAccountID, let data = try? JSONEncoder().encode(phoneRetry) else { return }
-        UserDefaults.standard.set(data, forKey: "trust.phoneRetry.\(id)")
+        let key = "trust.phoneRetry.\(id)"
+        TrustKeychain.set(data.base64EncodedString(), account: key)
+        UserDefaults.standard.removeObject(forKey: key)
     }
 
     func phoneRetrySeconds(at now: Date) -> Int {
@@ -263,10 +379,12 @@ final class AppModel: ObservableObject {
         }
     }
     @Published var connectionHandleDraft = ""
+    @Published var connectionPhoneCountry = TrustPhoneCountry.unitedStates
     @Published private(set) var connectionLookup: PersonLookupPayload?
     @Published private(set) var isLookingUpConnection = false
     @Published private(set) var isSendingConnectionRequest = false
     @Published private(set) var connectionLookupNotice: String?
+    @Published private(set) var connectionLookupCanRetry = false
     @Published private(set) var connectionLookupHint: String?
     @Published private(set) var connectionLookupIsNoMatch = false
     @Published private(set) var connectionLookupCanInvite = false
@@ -277,6 +395,10 @@ final class AppModel: ObservableObject {
     private var connectionRequestsRefreshTask: Task<Void, Never>?
     private var connectionRequestsRefreshQueued = false
     @Published private(set) var actingOnConnectionRequestIDs: Set<UUID> = []
+    @Published private(set) var connectionRequestActionErrors: [UUID: String] = [:]
+    @Published private(set) var connectionRequestRetryActions: [UUID: ConnectionRequestAction] = [:]
+    private var connectionRequestsMutationGeneration: UInt64 = 0
+    private var confirmedSentRequestRecipientIDs: Set<UUID> = []
     @Published private(set) var inviteShareText: String?
     @Published private(set) var isPreparingConnectionInvite = false
     @Published private(set) var isUpdatingDiscovery = false
@@ -287,6 +409,7 @@ final class AppModel: ObservableObject {
     private var connectionLookupGeneration: UInt64 = 0
     private var connectionLookupDebounceTask: Task<Void, Never>?
     private var connectionLookupTask: Task<Void, Never>?
+    private var activeConnectionLookupQuery: PersonLookupQuery?
     private let homePresenceMutationQueue = TrustAsyncSerialExecutor()
     private var pendingHomePresenceMutationID: UUID?
     private var latestHomePresenceMutationID: UUID?
@@ -319,15 +442,18 @@ final class AppModel: ObservableObject {
 
     private func beginAccountSessionTransition(to token: String) {
         guard auth.sessionToken != token else { return }
-        isAppTransactionLinked = false
         let previousAccountID = TrustSessionIdentity.accountID(from: auth.sessionToken)
         let nextAccountID = TrustSessionIdentity.accountID(from: token)
         let accountChanged = previousAccountID == nil || nextAccountID == nil || previousAccountID != nextAccountID
         ageAssurance.invalidatePendingUpdate()
         ageUpdateQuestion = nil
         let preservePendingInvite = auth.sessionToken == nil
+        let pendingUnclaimedInvite = preservePendingInvite
+            ? (linkedInviteCode ?? TrustKeychain.get(account: Self.unclaimedPendingInviteKey))
+            : nil
         ageUnavailableStopAllState = .idle
         accountGeneration &+= 1
+        isRequestingNotifications = false
         cancelPendingPhoneSend()
         authenticatedPerson = nil
         phoneRetryAccountID = nil
@@ -335,6 +461,8 @@ final class AppModel: ObservableObject {
         lastRefreshAttemptAt = nil
         setAccountDataScope(nil)
         if accountChanged {
+            viewReceiptStates = [:]
+            resetMapFocus()
             client.clearCache()
             snapshot = nil
             openedSnapshots = [:]
@@ -360,11 +488,63 @@ final class AppModel: ObservableObject {
         pendingHomePresenceMutationID = nil
         presenceOverride = nil
         resetConnectionAndInviteState(preservingPendingInvite: preservePendingInvite)
+        if preservePendingInvite, let pendingUnclaimedInvite {
+            if let nextAccountID {
+                TrustKeychain.set(pendingUnclaimedInvite, account: pendingInviteKey(accountID: nextAccountID))
+                TrustKeychain.delete(account: Self.unclaimedPendingInviteKey)
+            }
+            inviteCodeDraft = pendingUnclaimedInvite
+            linkedInviteCode = pendingUnclaimedInvite
+        } else {
+            restorePendingInvite(accountID: nextAccountID)
+        }
     }
 
     private func setAccountDataScope(_ accountID: String?) {
+        let normalizedID = accountID?.lowercased()
+        if liveExpiryTaskAccountID?.uuidString.lowercased() != normalizedID {
+            liveExpiryTask?.cancel()
+            liveExpiryTask = nil
+            liveExpiryTaskAccountID = nil
+        }
+        let recoveryAccountID = accountID.flatMap { UUID(uuidString: $0) }
+        if recoveryRequestAccountID != recoveryAccountID {
+            recoveryRequestGeneration &+= 1
+            recoveryRequestAccountID = recoveryAccountID
+            recoveryRequestReference = nil
+            recoveryRequestStatus = nil
+            recoveryRequestKind = nil
+            recoveryRequestError = nil
+            isSubmittingRecoveryRequest = false
+        }
+        store.setTrustAccountScope(recoveryAccountID)
         location.setHomeAccountScope(accountID)
         ingestStore.setAccountScope(accountID)
+    }
+
+    private static let unclaimedPendingInviteKey = "trust.pendingInvite.unclaimed"
+
+    private func pendingInviteKey(accountID: UUID) -> String {
+        "trust.pendingInvite.\(accountID.uuidString.lowercased())"
+    }
+
+    private func restorePendingInvite(accountID: UUID?) {
+        let key = accountID.map { pendingInviteKey(accountID: $0) } ?? Self.unclaimedPendingInviteKey
+        guard let code = TrustKeychain.get(account: key),
+              code.range(of: "^[A-HJ-NP-Z2-9]{6}$", options: .regularExpression) != nil else { return }
+        inviteCodeDraft = code
+        linkedInviteCode = code
+        if accountID != nil {
+            TrustKeychain.delete(account: Self.unclaimedPendingInviteKey)
+        }
+    }
+
+    private func clearPendingInviteForCurrentAccount() {
+        if let accountID = TrustSessionIdentity.accountID(from: auth.sessionToken) {
+            TrustKeychain.delete(account: pendingInviteKey(accountID: accountID))
+        } else {
+            TrustKeychain.delete(account: Self.unclaimedPendingInviteKey)
+        }
     }
 
     private func recordConfirmedCircleMutation() {
@@ -392,6 +572,11 @@ final class AppModel: ObservableObject {
         let pendingInviteCode = preservingPendingInvite ? linkedInviteCode : nil
         let pendingInviteDraft = preservingPendingInvite ? inviteCodeDraft : ""
         connectionLookupGeneration &+= 1
+        connectionLookupDebounceTask?.cancel()
+        connectionLookupTask?.cancel()
+        connectionLookupDebounceTask = nil
+        connectionLookupTask = nil
+        activeConnectionLookupQuery = nil
         inviteNotice = nil
         inviteCodeDraft = ""
         linkedInviteCode = nil
@@ -399,10 +584,12 @@ final class AppModel: ObservableObject {
         isJoining = false
         showingAddPersonSheet = false
         connectionHandleDraft = ""
+        connectionPhoneCountry = .unitedStates
         connectionLookup = nil
         isLookingUpConnection = false
         isSendingConnectionRequest = false
         connectionLookupNotice = nil
+        connectionLookupCanRetry = false
         connectionLookupHint = nil
         connectionLookupIsNoMatch = false
         connectionLookupCanInvite = false
@@ -411,6 +598,10 @@ final class AppModel: ObservableObject {
         isUpdatingDiscovery = false
         connectionRequiresPhoneVerification = false
         connectionRequests = ConnectionRequestsPayload(incoming: [], sent: [])
+        connectionRequestActionErrors = [:]
+        connectionRequestRetryActions = [:]
+        connectionRequestsMutationGeneration = 0
+        confirmedSentRequestRecipientIDs = []
         isLoadingConnectionRequests = false
         connectionRequestsNotice = nil
         connectionRequestsRefreshQueued = false
@@ -473,7 +664,12 @@ final class AppModel: ObservableObject {
 
     var outboundActiveCount: Int {
         let now = Date()
-        return circle.filter { !$0.share.presentation(at: now).isOff }.count
+        let count = circle.filter { !$0.share.presentation(at: now).isOff }.count
+        return max(count, restrictedAccountHasOutboundGrants ? 1 : 0)
+    }
+
+    var canStopAllBeforeSignOut: Bool {
+        canAccessAccountData && auth.isAuthenticated && !isDemoMode
     }
 
     var myPresence: HomePresenceKind {
@@ -498,13 +694,14 @@ final class AppModel: ObservableObject {
         openedSnapshot(for: member.id) != nil
     }
 
-    /// Confirmed Looks are visible as single pins for everyone. Live pins require Plus.
+    /// The server exposes live points only when the sharer grants Always and has Plus.
+    /// A recipient can view that authorized point on the free plan.
     var homeMapPins: [MapPin] {
         var pins: [MapPin] = []
         for member in circle {
-            if coverage.isCovered,
-               TrustProductRules.showsLivePin(viewerHasPlus: true, inbound: member.inboundPresentation ?? .off),
-               let live = member.livePoint {
+            if member.liveAccessIsCurrent,
+               member.inboundPresentation?.isAvailable == true,
+               let live = member.currentLivePoint {
                 pins.append(MapPin(id: member.id, name: member.person.displayName, point: live, live: true))
             } else if let snapshot = openedSnapshot(for: member.id) {
                 pins.append(MapPin(id: member.id, name: member.person.displayName, point: snapshot.live, live: false))
@@ -523,28 +720,19 @@ final class AppModel: ObservableObject {
     init() {
         let auth = AuthSession()
         self.auth = auth
-        ageAssurance = AgeAssuranceCoordinator()
+        ageAssurance = AgeAssuranceCoordinator(observeAppleAccountChanges: false)
         store = StoreManager()
         location = LocationCoordinator()
         receipts = LookReceiptNotifier()
         LookReceiptNotifier.shared = receipts
         ingestStore = LocationIngestStore()
         client.token = auth.sessionToken
-        #if DEBUG
-        // Demo is opt-in only. When requested, hold on Login until start() seeds the
-        // fixture so Circle never paints empty; otherwise Debug behaves exactly like Release.
-        phase = Self.debugDemoRequested(sessionToken: auth.sessionToken) ? .login : .ageChecking
-        #else
-        phase = .ageChecking
-        #endif
+        phase = .login
         client.onConsentRevoked = { [weak self] in
             self?.handleConsentRevocation()
         }
         client.onPrivacyHoldDetected = { [weak self] in
             self?.handleServerPrivacyHold()
-        }
-        ageAssurance.onAppleAccountChanged = { [weak self] in
-            self?.handleAppleAccountChange()
         }
         receipts.onNotificationTap = { [weak self] destination in
             self?.pendingPushDestination = destination
@@ -583,176 +771,99 @@ final class AppModel: ObservableObject {
     // MARK: Lifecycle
 
     func start() async {
-        beginObservingAgeUpdateResponses()
+        guard !startupInProgress else { return }
+        startupInProgress = true
+        isStarting = true
+        defer {
+            isStarting = false
+            startupInProgress = false
+        }
+        var startupGeneration = accountGeneration
 #if DEBUG
         let env = ProcessInfo.processInfo.environment
         if isUITestLaunch, env["TRUST_UI_TEST_RESET_AUTH"] == "1" {
-            // Paired account tests run repeatedly on shared simulators. Do not let a
-            // previous test identity or its cached circle bypass fresh onboarding.
-            // Keep the simulator's age fixture: this test resets the account, not
-            // the separate age-assurance state machine.
             auth.signOut()
+            resetMapFocus()
             client.token = nil
             client.clearCache()
             snapshot = nil
             setAccountDataScope(nil)
         }
-        if env["TRUST_AGE_TEST_MODE"] == "1", env["TRUST_AGE_TEST_RESET_AUTH"] == "1" {
-            // Age-gate UI fixtures run repeatedly on shared simulators. Clear only
-            // this explicit debug fixture's prior Trust session before the durable
-            // privacy-hold restoration check can intercept the test screen.
-            auth.signOut()
-            client.token = nil
-        }
-        if env["TRUST_AGE_TEST_MODE"] == "1", env["TRUST_AGE_TEST_AUTHENTICATED"] == "1" {
-            auth.prepareAgeGateUITestSession(token: env["TRUST_AGE_TEST_SESSION_TOKEN"])
-        }
 #endif
+        isAgeAccessAllowed = true
+        ageAccessState.setAllowedOutsideEvaluation(true)
+        await client.prepare()
+        guard accountGeneration == startupGeneration else { return }
+        client.token = auth.sessionToken
         if auth.isCurrentSessionPrivacyHeld {
-            client.token = auth.sessionToken
-            isAgeAccessAllowed = false
+            restrictedAccountHasOutboundGrants = true
             phase = .agePrivacyHeld
             return
         }
+        if auth.isCurrentSessionConsentRevoked {
+            restrictedAccountHasOutboundGrants = true
+            phase = .ageConsentRevoked
+            return
+        }
 #if DEBUG
-        if env["TRUST_AGE_TEST_MODE"] == "1",
-           env["TRUST_AGE_TEST_APP_TRANSACTION_UNAVAILABLE"] == "1",
-           auth.isAuthenticated {
-            ageAccessState.setAllowedOutsideEvaluation(true)
-            isAgeAccessAllowed = true
-            client.token = auth.sessionToken
-            _ = await registerCurrentAppTransactionForConsentRevocation()
-            return
-        }
-        if env["TRUST_AGE_TEST_MODE"] == "1" {
-            if env["TRUST_AGE_TEST_UNAVAILABLE"] == "1" {
-                ageAccessState.setAllowedOutsideEvaluation(false)
-                isAgeAccessAllowed = false
-                phase = .ageCheckUnavailable
-                return
-            }
-            if env["TRUST_AGE_TEST_CONSENT_REVOKED"] == "1" {
-                isAgeAccessAllowed = false
-                phase = .ageConsentRevoked
-                return
-            }
-            if env["TRUST_AGE_TEST_PRIVACY_HELD"] == "1" {
-                ageAccessState.setAllowedOutsideEvaluation(false)
-                isAgeAccessAllowed = false
-                phase = .agePrivacyHeld
-                return
-            }
-            if env["TRUST_AGE_TEST_RESET_STATE"] == "1" {
-                ageAssurance.resetAgeGateForDebugTest()
-            } else if env["TRUST_AGE_TEST_RESET_PREFERENCES_ONLY"] == "1" {
-                // Simulate a reinstall clearing app preferences while the device-only
-                // Keychain age block remains in place.
-                ageAssurance.resetAgeGatePreferencesForDebugTest()
-            }
-            switch ageAssurance.evaluateLocalAttestationForDebugTest() {
-            case .permitted:
-                ageAccessState.setAllowedOutsideEvaluation(true)
-                isAgeAccessAllowed = true
-                await continueAfterAgeGate()
-            case .selfAttestationRequired:
-                isAgeAccessAllowed = false
-                phase = .ageGate
-            case .underMinimumAge:
-                isAgeAccessAllowed = false
-                ageAssurance.resetAccountAttestations()
-                clearAccountSession()
-                phase = .ageBlocked
-            case .ageRangeBelowMinimum:
-                handleAppleAgeRangeRestriction()
-            case .ageRangeSharingDeclined:
-                phase = .ageRangeSharingDeclined
-            case .parentApprovalRequired, .parentApprovalDenied, .unavailable:
-                isAgeAccessAllowed = false
-                phase = .ageCheckUnavailable
-            }
-            return
-        }
-        if isUITestLaunch || env["TRUST_DEV_SESSION"] == "1" || Self.debugDemoRequested(sessionToken: auth.sessionToken) {
-            ageAccessState.setAllowedOutsideEvaluation(true)
-            isAgeAccessAllowed = true
-            await continueAfterAgeGate()
-            return
-        }
-        #endif
-
-        await checkAgeAndContinue()
-    }
-
-    private func continueAfterAgeGate(retryAppTransaction: Bool = false) async {
-        let authorizationGeneration = ageAccessState.generation
-        guard hasCurrentAgeAuthorization(generation: authorizationGeneration) else { return }
-        await client.prepare()
-        guard hasCurrentAgeAuthorization(generation: authorizationGeneration) else { return }
-        #if DEBUG
-        if ProcessInfo.processInfo.environment["TRUST_DEV_SESSION"] == "1" {
+        if env["TRUST_DEV_SESSION"] == "1" {
             await signInWithLocalAPI()
-            guard hasCurrentAgeAuthorization(generation: authorizationGeneration) else { return }
             await store.loadProducts()
-            guard hasCurrentAgeAuthorization(generation: authorizationGeneration) else { return }
             applyScreenshotLaunch()
             return
         }
         if Self.debugDemoRequested(sessionToken: auth.sessionToken) {
             enterDemo()
             await store.loadProducts()
-            guard hasCurrentAgeAuthorization(generation: authorizationGeneration) else { return }
             applyScreenshotLaunch()
             return
         }
-        #endif
-        if auth.isAuthenticated {
-            isAppTransactionLinked = false
-            isAgeAccessAllowed = false
-            phase = .appTransactionChecking
-        }
-        let restoredCredentialInvalidated = await auth.validateRestoredAppleCredential()
-        guard hasCurrentAgeAuthorization(generation: authorizationGeneration) else { return }
-        if restoredCredentialInvalidated {
+#endif
+        if await auth.validateRestoredAppleCredential() {
+            guard accountGeneration == startupGeneration else { return }
             clearAccountSession()
+            startupGeneration = accountGeneration
         }
+        guard accountGeneration == startupGeneration else { return }
         client.token = auth.sessionToken
+        restorePendingInvite(accountID: TrustSessionIdentity.accountID(from: auth.sessionToken))
         if auth.isAuthenticated {
-            guard await registerCurrentAppTransactionForConsentRevocation(retryRequested: retryAppTransaction) else { return }
-            guard canContinueAgeAuthorizedFlow(generation: authorizationGeneration) else { return }
             if !isDemoMode,
                let accountID = TrustSessionIdentity.accountID(from: auth.sessionToken),
                let cached = client.cachedCircle(forAccountID: accountID) {
                 setAccountDataScope(cached.you.id.uuidString.lowercased())
                 snapshot = cached
+                scheduleLiveExpiryPurge()
                 phase = Self.phase(for: cached.you)
             }
             await refresh(enterHome: true)
-            guard canContinueAgeAuthorizedFlow(generation: authorizationGeneration) else { return }
+            guard accountGeneration == startupGeneration else { return }
         } else {
-            isAgeAccessAllowed = true
             phase = .login
-            if let warning = client.reachabilityNotice {
-                auth.notice = warning
-            }
         }
+        // Startup routing and restored-credential validation are complete. Store
+        // catalog and entitlement refreshes are optional and must not block sign-in.
+        isStarting = false
         await store.loadProducts()
-        guard canContinueAgeAuthorizedFlow(generation: authorizationGeneration) else { return }
+        guard accountGeneration == startupGeneration else { return }
         receipts.prepare(client: client)
         _ = await store.refreshEntitlement()
-        guard canContinueAgeAuthorizedFlow(generation: authorizationGeneration) else { return }
+        guard accountGeneration == startupGeneration else { return }
         if auth.isAuthenticated {
             await refreshStoreKitToken()
-            guard canContinueAgeAuthorizedFlow(generation: authorizationGeneration) else { return }
+            guard accountGeneration == startupGeneration else { return }
             await syncCircleEntitlement()
-            guard canContinueAgeAuthorizedFlow(generation: authorizationGeneration) else { return }
+            guard accountGeneration == startupGeneration else { return }
         }
         receipts.refreshStatus()
         UIDevice.current.isBatteryMonitoringEnabled = true
-        if phase == .home, !circle.isEmpty, !isUITestLaunch, ProcessInfo.processInfo.environment["TRUST_SCREENSHOT"] == nil {
-            await receipts.requestPermission()
-            guard canContinueAgeAuthorizedFlow(generation: authorizationGeneration) else { return }
-        }
         applyScreenshotLaunch()
+    }
+
+    private func continueAfterAgeGate(retryAppTransaction: Bool = false) async {
+        // Kept as a source-compatible bridge for dormant age-assurance UI actions.
+        // Account access no longer depends on an age decision or app transaction.
+        await start()
     }
 
     private func checkAgeAndContinue(forceAppleAgeRange: Bool = false) async {
@@ -797,80 +908,6 @@ final class AppModel: ObservableObject {
         }
     }
 
-    /// Links the authenticated Trust account to Apple's app transaction before loading
-    /// account data. The server needs this link to apply a later RESCIND_CONSENT event.
-    private func registerCurrentAppTransactionForConsentRevocation(retryRequested: Bool = false) async -> Bool {
-        guard auth.isAuthenticated, !isDemoMode else { return true }
-        guard ageAccessState.isAllowed,
-              let token = auth.sessionToken else { return false }
-        let ageAuthorizationGeneration = ageAccessState.generation
-        let operation = TrustAccountOperation(token: token, generation: accountGeneration)
-        let transactionAuthorization = TrustAppTransactionAuthorization(
-            accountOperation: operation,
-            ageAuthorizationGeneration: ageAuthorizationGeneration
-        )
-        isAppTransactionLinked = false
-        isAgeAccessAllowed = false
-        phase = .appTransactionChecking
-        do {
-            try await client.registerCurrentAppTransaction(
-                authorizedToken: operation.token,
-                retryRequested: retryRequested
-            ) { [weak self] in
-                guard let self else { return false }
-                return transactionAuthorization.permitsRegistration(
-                    currentAccountToken: self.auth.sessionToken,
-                    currentAccountGeneration: self.accountGeneration,
-                    ageIsAuthorized: self.ageAccessState.isAllowed,
-                    currentAgeAuthorizationGeneration: self.ageAccessState.generation
-                )
-            }
-            guard operation.matches(token: auth.sessionToken, generation: accountGeneration),
-                  hasCurrentAgeAuthorization(generation: ageAuthorizationGeneration) else { return false }
-            isAppTransactionLinked = true
-            isAgeAccessAllowed = true
-            return true
-        } catch let error as TrustClientError where TrustAgePolicy.isConsentRevocationResponse(apiCode: error.apiCode) {
-            guard operation.matches(token: auth.sessionToken, generation: accountGeneration),
-                  hasCurrentAgeAuthorization(generation: ageAuthorizationGeneration) else { return false }
-            handleConsentRevocation()
-            return false
-        } catch let error as TrustClientError where error.apiCode == "account_privacy_hold" {
-            guard operation.matches(token: auth.sessionToken, generation: accountGeneration),
-                  hasCurrentAgeAuthorization(generation: ageAuthorizationGeneration) else { return false }
-            privacyHoldSubmission.beginSubmission(for: operation)
-            _ = privacyHoldSubmission.acknowledge(
-                operation: operation,
-                currentToken: auth.sessionToken,
-                generation: accountGeneration)
-            handleAcknowledgedPrivacyHold()
-            return false
-        } catch TrustClientError.appTransactionVerificationUnavailable {
-            ageAssuranceLogger.error("Apple app transaction verification was unavailable.")
-            guard operation.matches(token: auth.sessionToken, generation: accountGeneration),
-                  hasCurrentAgeAuthorization(generation: ageAuthorizationGeneration) else { return false }
-            phase = .appTransactionUnavailable
-            return false
-        } catch TrustClientError.appTransactionUnverified {
-            ageAssuranceLogger.error("Apple returned an unverified app transaction.")
-            guard operation.matches(token: auth.sessionToken, generation: accountGeneration),
-                  hasCurrentAgeAuthorization(generation: ageAuthorizationGeneration) else { return false }
-            phase = .appTransactionUnavailable
-            return false
-        } catch is CancellationError {
-            guard operation.matches(token: auth.sessionToken, generation: accountGeneration),
-                  hasCurrentAgeAuthorization(generation: ageAuthorizationGeneration) else { return false }
-            phase = .appTransactionUnavailable
-            return false
-        } catch {
-            ageAssuranceLogger.error("App transaction server registration failed.")
-            guard operation.matches(token: auth.sessionToken, generation: accountGeneration),
-                  hasCurrentAgeAuthorization(generation: ageAuthorizationGeneration) else { return false }
-            phase = .appTransactionUnavailable
-            return false
-        }
-    }
-
     private func hasCurrentAgeAuthorization(generation: UInt64) -> Bool {
         ageAccessState.isAllowed && ageAccessState.isCurrentEvaluation(generation)
     }
@@ -882,8 +919,10 @@ final class AppModel: ObservableObject {
 
     private func handleConsentRevocation() {
         guard auth.isAuthenticated else { return }
+        restrictedAccountHasOutboundGrants = circle.contains { !$0.share.presentation(at: Date()).isOff }
         clearPrivatePhoneRetry()
-        clearAccountSession()
+        auth.markCurrentSessionConsentRevoked()
+        clearAccountSession(preservingPrivacyHoldDeletionSession: true)
         isAgeAccessAllowed = false
         ageGateBlockedByParent = false
         ageUpdateQuestion = nil
@@ -914,6 +953,7 @@ final class AppModel: ObservableObject {
     /// Stop location, ingest, snapshots and cached account data synchronously before
     /// starting network I/O. The retained bearer token is used only to submit this hold.
     private func clearAccountDataForLocalPrivacyHold() {
+        resetMapFocus()
         ageUnavailableStopAllState = .idle
         accountGeneration &+= 1
         client.clearCache()
@@ -974,6 +1014,7 @@ final class AppModel: ObservableObject {
         // phase keeps the normal app surface inaccessible, and the API rejects all
         // other operations while this account remains held.
         auth.markCurrentSessionPrivacyHeld()
+        restrictedAccountHasOutboundGrants = circle.contains { !$0.share.presentation(at: Date()).isOff }
         clearPrivatePhoneRetry()
         clearAccountSession(preservingPrivacyHoldDeletionSession: true)
         isAgeAccessAllowed = false
@@ -986,6 +1027,7 @@ final class AppModel: ObservableObject {
     /// can enter generic offline/error handling or restore a cached circle.
     private func handleServerPrivacyHold() {
         guard let token = auth.sessionToken else { return }
+        restrictedAccountHasOutboundGrants = circle.contains { !$0.share.presentation(at: Date()).isOff }
         let operation = TrustAccountOperation(token: token, generation: accountGeneration)
         privacyHoldSubmission.beginSubmission(for: operation)
         guard privacyHoldSubmission.acknowledge(
@@ -1038,22 +1080,8 @@ final class AppModel: ObservableObject {
     }
 
     func retryAppTransactionRegistration() {
-        guard phase == .appTransactionUnavailable,
-              auth.isAuthenticated,
-              ageAccessState.isAllowed else { return }
-        phase = .appTransactionChecking
-        Task { [weak self] in
-            guard let self else { return }
-#if DEBUG
-            if ProcessInfo.processInfo.environment["TRUST_AGE_TEST_MODE"] == "1",
-               ProcessInfo.processInfo.environment["TRUST_AGE_TEST_APP_TRANSACTION_UNAVAILABLE"] == "1" {
-                self.client.token = self.auth.sessionToken
-                _ = await self.registerCurrentAppTransactionForConsentRevocation()
-                return
-            }
-#endif
-            await self.continueAfterAgeGate(retryAppTransaction: true)
-        }
+        guard auth.isAuthenticated else { return }
+        Task { await start() }
     }
 
     private static func isUnavailableVerificationPhase(_ phase: AppPhase) -> Bool {
@@ -1192,8 +1220,39 @@ final class AppModel: ObservableObject {
     }
 
     func setSceneActive(_ active: Bool) {
+        let wasActive = isSceneActive
         isSceneActive = active
+        if active { purgeExpiredLiveLocationCache() }
         location.setAppActive(active && isAgeAccessAllowed)
+        if active && !wasActive {
+            validateAppleCredentialOnForeground()
+        }
+    }
+
+    /// Recheck only the restored Apple credential on foreground. This deliberately
+    /// does not invoke age assurance, app transaction registration, or a native prompt.
+    private func validateAppleCredentialOnForeground() {
+#if DEBUG
+        guard !isUITestLaunch else { return }
+#endif
+        guard !startupInProgress,
+              !isSigningIn,
+              appleCredentialValidationTask == nil,
+              auth.isAuthenticated,
+              auth.account?.provider == .apple,
+              let token = auth.sessionToken else { return }
+        let generation = accountGeneration
+        appleCredentialValidationTask = Task { [weak self] in
+            guard let self else { return }
+            let revoked = await self.auth.validateRestoredAppleCredential()
+            self.appleCredentialValidationTask = nil
+            guard revoked,
+                  self.accountGeneration == generation,
+                  self.auth.sessionToken == nil,
+                  self.client.token == token else { return }
+            self.clearAccountSession()
+            self.phase = .login
+        }
     }
 
     private func handleAppleAccountChange(isForeground foregroundHint: Bool? = nil) {
@@ -1295,8 +1354,7 @@ final class AppModel: ObservableObject {
             selectedTab = .you
         case "map":
             guard auth.isAuthenticated else { return }
-            // Show a real one-time pin in the offline listing fixture. A fresh
-            // Free demo has no live pins until a person is explicitly looked at.
+            // Show a real one-time pin in the offline listing fixture.
             if let demo,
                let sealed = circle.first(where: \.isSealed),
                let session = try? demo.look(confirmed: true, subjectID: sealed.id) {
@@ -1329,7 +1387,6 @@ final class AppModel: ObservableObject {
     }
 
     func prepareLogin() async {
-        guard isAgeAccessAllowed else { return }
         await client.prepare()
         if let warning = client.reachabilityNotice {
             auth.notice = warning
@@ -1343,11 +1400,8 @@ final class AppModel: ObservableObject {
         #if DEBUG
         let service = DemoTrustService()
         service.startLeanDemo()
-        // The App Store View panel demonstrates a Plus viewer opening Leo's live
-        // Always location. Keep every other screenshot on the Free fixture.
-        if ProcessInfo.processInfo.environment["TRUST_SCREENSHOT"] == "view" {
-            service.setPro(enabled: true)
-        }
+        // The App Store View panel demonstrates a free recipient opening Leo's
+        // Plus-funded Always location. The demo account remains free in every shot.
         demo = service
         isDemoMode = true
         beginAccountSessionTransition(to: "demo")
@@ -1370,9 +1424,19 @@ final class AppModel: ObservableObject {
     private func publishDemoSnapshot() {
         guard let demo else { return }
         let pack = demo.makeCircleSnapshot()
+        let demoAgeOffset = uiTestDemoAgeOffset
+        let members = demoAgeOffset.map { seconds in
+            pack.members.map { original -> TrustedPerson in
+                guard var point = original.livePoint else { return original }
+                point.timestamp = Date().addingTimeInterval(-seconds)
+                var aged = original
+                aged.livePoint = point
+                return aged
+            }
+        } ?? pack.members
         snapshot = CircleSnapshot(
             you: pack.you,
-            members: pack.members,
+            members: members,
             coverage: pack.coverage,
             pendingInviteCode: pack.invite,
             lookLog: pack.log,
@@ -1389,6 +1453,18 @@ final class AppModel: ObservableObject {
         if !isScreenshotLaunch {
             syncLocationSharing()
         }
+    }
+
+    private var uiTestDemoAgeOffset: TimeInterval? {
+        #if DEBUG
+        guard isUITestLaunch, isDemoMode,
+              let value = ProcessInfo.processInfo.environment["TRUST_UI_TEST_DEMO_AGE_SECONDS"],
+              let seconds = TimeInterval(value), seconds >= LocationFreshness.staleAfter + 1,
+              seconds <= 86_400 else { return nil }
+        return seconds
+        #else
+        return nil
+        #endif
     }
 
     private func startDemoTicks() {
@@ -1445,11 +1521,6 @@ final class AppModel: ObservableObject {
                 ),
                 token: client.token ?? ""
             )
-            if session.you.onboardingComplete != true,
-               session.you.handle == nil,
-               !isUITestLaunch {
-                try await claimDebugHandle(deviceId: deviceId)
-            }
             authenticatedPerson = session.you.model
             await refresh(enterHome: true, fallbackOnboardingComplete: true)
             receipts.prepare(client: client)
@@ -1460,31 +1531,10 @@ final class AppModel: ObservableObject {
         }
     }
 
-    /// A real `PUT /me/handle` so the first local session can leave onboarding. Same account
-    /// keeps the handle it already owns.
-    private func claimDebugHandle(deviceId: String) async throws {
-        let compact = deviceId.replacingOccurrences(of: "-", with: "").lowercased()
-        let suffix = String(compact.prefix(8))
-        var last: Error?
-        for handle in ["devsim", "dev\(suffix)"] {
-            do {
-                try await client.setHandle(handle)
-                return
-            } catch {
-                last = error
-            }
-        }
-        if let last { throw last }
-    }
     #endif
 
     func signIn(with provider: AuthenticationProvider) async {
-        guard isAgeAccessAllowed else {
-            await checkAgeAndContinue()
-            return
-        }
-        guard !isSigningIn else { return }
-        let ageAuthorizationGeneration = ageAccessState.generation
+        guard !isSigningIn, !isStarting else { return }
         let accountGenerationAtStart = accountGeneration
         isSigningIn = true
         defer { isSigningIn = false }
@@ -1492,24 +1542,15 @@ final class AppModel: ObservableObject {
             switch provider {
             case .apple:
                 let apple = try await auth.signInWithApple()
-                guard canContinueSignIn(
-                    ageAuthorizationGeneration: ageAuthorizationGeneration,
-                    accountGenerationAtStart: accountGenerationAtStart
-                ) else { return }
+                guard canContinueSignIn(accountGenerationAtStart: accountGenerationAtStart) else { return }
                 await client.prepare()
-                guard canContinueSignIn(
-                    ageAuthorizationGeneration: ageAuthorizationGeneration,
-                    accountGenerationAtStart: accountGenerationAtStart
-                ) else { return }
+                guard canContinueSignIn(accountGenerationAtStart: accountGenerationAtStart) else { return }
                 let session = try await client.appleSession(
                     identityToken: apple.identityToken,
                     displayName: apple.displayName,
                     nonce: apple.nonce
                 )
-                guard canContinueSignIn(
-                    ageAuthorizationGeneration: ageAuthorizationGeneration,
-                    accountGenerationAtStart: accountGenerationAtStart
-                ) else {
+                guard canContinueSignIn(accountGenerationAtStart: accountGenerationAtStart) else {
                     client.token = nil
                     client.clearCache()
                     return
@@ -1524,7 +1565,6 @@ final class AppModel: ObservableObject {
                     token: client.token ?? ""
                 )
                 authenticatedPerson = session.you.model
-                guard await registerCurrentAppTransactionForConsentRevocation() else { return }
                 await refresh(enterHome: true, fallbackOnboardingComplete: session.you.model.onboardingComplete)
             case .google:
                 auth.notice = TrustCopy.trustUsesSignInWithApple
@@ -1539,32 +1579,27 @@ final class AppModel: ObservableObject {
         }
     }
 
-    private func canContinueSignIn(
-        ageAuthorizationGeneration: UInt64,
-        accountGenerationAtStart: UInt64
-    ) -> Bool {
-        isAgeAccessAllowed
-            && ageAccessState.isAllowed
-            && ageAccessState.isCurrentEvaluation(ageAuthorizationGeneration)
-            && accountGeneration == accountGenerationAtStart
+    private func canContinueSignIn(accountGenerationAtStart: UInt64) -> Bool {
+        accountGeneration == accountGenerationAtStart
     }
 
     func signOut() {
         clearAccountSession()
-        ageAssurance.resetAccountAttestations()
-        ageUpdateQuestion = nil
-        isAgeAccessAllowed = false
-        ageGateBlockedByParent = false
-        Task { await checkAgeAndContinue() }
+        isAgeAccessAllowed = true
+        phase = .login
+        Task { await start() }
     }
 
     private func clearAccountSession(preservingPrivacyHoldDeletionSession: Bool = false) {
+        if !preservingPrivacyHoldDeletionSession { restrictedAccountHasOutboundGrants = false }
+        resetMapFocus()
         let pushRemovalToken = client.token ?? auth.sessionToken
         authenticatedPerson = nil
+        phoneReplacementMode = false
+        viewReceiptStates = [:]
         phoneRetryAccountID = nil
         phoneRetry = TrustPhoneRetryState()
         accountGeneration &+= 1
-        isAppTransactionLinked = false
         ageUnavailableStopAllState = .idle
         ageAssurance.resetAccountAttestations()
         Task { await receipts.unregister(authorizedToken: pushRemovalToken) }
@@ -1628,8 +1663,9 @@ final class AppModel: ObservableObject {
             signOut()
             return
         }
-        let deletingHeldAccount = phase == .agePrivacyHoldPending || phase == .agePrivacyHeld
+        let deletingHeldAccount = phase == .agePrivacyHoldPending || phase == .agePrivacyHeld || phase == .ageConsentRevoked
         let deletingToken = auth.sessionToken
+        let deletingGeneration = accountGeneration
         guard !deletingHeldAccount || deletingToken != nil else {
             showToast(TrustCopy.requestFailed)
             return
@@ -1646,6 +1682,8 @@ final class AppModel: ObservableObject {
             store.clearAfterSignOut()
             signOut()
         } catch {
+            guard deletingToken == auth.sessionToken,
+                  accountGeneration == deletingGeneration else { return }
             showToast(plainMessage(for: error))
         }
     }
@@ -1656,14 +1694,26 @@ final class AppModel: ObservableObject {
             publishDemoSnapshot()
             return
         }
-        let avatar = try await client.setAvatarPreset(presetID)
+        guard let operation = currentAccountOperation() else { throw CancellationError() }
+        let avatar = try await client.setAvatarPreset(
+            presetID,
+            operation: operation,
+            currentOperation: { [weak self] in self?.currentAccountOperation() }
+        )
+        guard isCurrentAccount(operation: operation) else { throw CancellationError() }
         updateLocalAvatar(avatar)
         await refresh()
     }
 
     func saveAvatarPhoto(_ jpeg: Data) async throws {
         guard !isDemoMode else { throw TrustClientError.server("Profile pictures are unavailable in demo mode.") }
-        let avatar = try await client.setAvatarPhoto(jpeg)
+        guard let operation = currentAccountOperation() else { throw CancellationError() }
+        let avatar = try await client.setAvatarPhoto(
+            jpeg,
+            operation: operation,
+            currentOperation: { [weak self] in self?.currentAccountOperation() }
+        )
+        guard isCurrentAccount(operation: operation) else { throw CancellationError() }
         updateLocalAvatar(avatar)
         await refresh()
     }
@@ -1674,7 +1724,12 @@ final class AppModel: ObservableObject {
             publishDemoSnapshot()
             return
         }
-        try await client.removeAvatar()
+        guard let operation = currentAccountOperation() else { throw CancellationError() }
+        try await client.removeAvatar(
+            operation: operation,
+            currentOperation: { [weak self] in self?.currentAccountOperation() }
+        )
+        guard isCurrentAccount(operation: operation) else { throw CancellationError() }
         updateLocalAvatar(nil)
         await refresh()
     }
@@ -1694,6 +1749,7 @@ final class AppModel: ObservableObject {
     /// refresh will also cover Requests; false means callers may fetch only Requests.
     @discardableResult
     func refreshIfStale(minimumInterval: TimeInterval = 45) async -> Bool {
+        purgeExpiredLiveLocationCache()
         guard phase == .home, auth.isAuthenticated, !isDemoMode else { return false }
         // Freshness-gated lifecycle callers join the in-flight owner without
         // forcing a second pass. Explicit refresh() calls still queue a follow-up
@@ -1710,6 +1766,7 @@ final class AppModel: ObservableObject {
     }
 
     func refresh(enterHome: Bool = false, fallbackOnboardingComplete: Bool? = nil) async {
+        purgeExpiredLiveLocationCache()
         guard canAccessAccountData else { return }
         if isDemoMode {
             publishDemoSnapshot()
@@ -1735,6 +1792,69 @@ final class AppModel: ObservableObject {
         }
         refreshTask = owner
         await owner.value
+    }
+
+    /// Remove owner-expired live coordinates and history from in-memory snapshots
+    /// even while offline. Configured sharing mode remains available for display.
+    private func purgeExpiredLiveLocationCache(now: Date = Date()) {
+        guard var current = snapshot else { return }
+        CircleCache.scrubUnauthorizedLiveData(forAccountID: current.you.id, now: now)
+        var expiredIDs: Set<UUID> = []
+        for index in current.members.indices {
+            let member = current.members[index]
+            guard member.inboundLive,
+                  let expiry = member.liveAccessExpiresAt,
+                  expiry <= now else { continue }
+            current.members[index].livePoint = nil
+            current.members[index].locationHistory = []
+            expiredIDs.insert(member.id)
+        }
+        guard !expiredIDs.isEmpty else {
+            scheduleLiveExpiryPurge()
+            return
+        }
+        snapshot = current
+        client.snapshot = current
+        for id in expiredIDs {
+            historyByPerson[id] = nil
+            historyLoadingIDs.remove(id)
+            historyLoadedIDs.remove(id)
+            historyFetchedAt[id] = nil
+            historyConnectionIDs[id] = nil
+            historyErrors.remove(id)
+            historyRequestIDs[id] = UUID()
+            historyRequestConnectionIDs[id] = nil
+        }
+        scheduleLiveExpiryPurge()
+    }
+
+    private func scheduleLiveExpiryPurge() {
+        liveExpiryTask?.cancel()
+        liveExpiryTask = nil
+        guard let current = snapshot else {
+            liveExpiryTaskAccountID = nil
+            return
+        }
+        let accountID = current.you.id
+        liveExpiryTaskAccountID = accountID
+        guard let earliest = current.members
+            .filter(\.inboundLive)
+            .compactMap(\.liveAccessExpiresAt)
+            .filter({ $0 > Date() })
+            .min() else { return }
+        let delay = max(0, earliest.timeIntervalSinceNow)
+        liveExpiryTask = Task { [weak self] in
+            do {
+                try await Task.sleep(for: .seconds(delay))
+            } catch {
+                return
+            }
+            guard !Task.isCancelled,
+                  let self,
+                  self.liveExpiryTaskAccountID == accountID,
+                  self.snapshot?.you.id == accountID else { return }
+            self.purgeExpiredLiveLocationCache()
+        }
     }
 
     private func runRefreshOwner(enterHome: Bool, fallbackOnboardingComplete: Bool?) async {
@@ -1785,8 +1905,16 @@ final class AppModel: ObservableObject {
                 self?.currentAccountOperation()
             }) else { return }
             let fresh = refreshResult.snapshot
+            let previousConnectionIDs = Dictionary(uniqueKeysWithValues: (snapshot?.members ?? []).compactMap { member in
+                member.connectionID.map { (member.id, $0) }
+            })
             setAccountDataScope(fresh.you.id.uuidString.lowercased())
             snapshot = fresh
+            scheduleLiveExpiryPurge()
+            for (personID, connectionID) in previousConnectionIDs
+            where fresh.members.first(where: { $0.id == personID })?.connectionID != connectionID {
+                viewReceiptStates["\(fresh.you.id.uuidString.lowercased()):\(connectionID.uuidString.lowercased())"] = nil
+            }
             location.reconcileHomePlace(serverPlaceID: fresh.yourHomePlaceID)
             lastSuccessfulCircleRefreshSequence = refreshSequence
             for (personID, pending) in pendingPresenceGrants where pending.preserveOptimisticValue &&
@@ -1822,6 +1950,7 @@ final class AppModel: ObservableObject {
                let cached = client.cachedCircle(forAccountID: accountID) {
                 setAccountDataScope(cached.you.id.uuidString.lowercased())
                 snapshot = cached
+                scheduleLiveExpiryPurge()
             }
             isOffline = snapshot != nil
             if snapshot == nil {
@@ -1889,7 +2018,7 @@ final class AppModel: ObservableObject {
             let current = members[id]
             let hasCachedResult = historyLoadedIDs.contains(id) || historyByPerson[id] != nil || historyErrors.contains(id)
             let connectionChanged = hasCachedResult && historyConnectionIDs[id] != current?.connectionID
-            if current?.isAvailable != true || connectionChanged {
+            if current?.isAvailable != true || current?.liveAccessIsCurrent != true || connectionChanged {
                 clearHistoryCache(for: id)
             }
         }
@@ -1899,6 +2028,7 @@ final class AppModel: ObservableObject {
         for id in Array(historyRequestIDs.keys) {
             let current = members[id]
             guard current?.isAvailable == true,
+                  current?.liveAccessIsCurrent == true,
                   historyRequestConnectionIDs[id] == current?.connectionID else {
                 historyRequestIDs[id] = nil
                 historyRequestConnectionIDs[id] = nil
@@ -1916,9 +2046,24 @@ final class AppModel: ObservableObject {
         historyConnectionIDs[personID] = nil
     }
 
+    private func recordHistoryLoadFailure(
+        personID: UUID,
+        scope: TrustRelationshipScope,
+        requestID: UUID,
+        operation: TrustAccountOperation
+    ) {
+        guard isCurrentAccount(operation: operation),
+              historyRequestIDs[personID] == requestID,
+              historyRequestConnectionIDs[personID] == scope.connectionID else { return }
+        clearHistoryCache(for: personID)
+        historyConnectionIDs[personID] = scope.connectionID
+        historyErrors.insert(personID)
+    }
+
     private func refreshVisibleHistoryIfStale() {
         guard case let .person(personID)? = circlePath.last,
               member(personID)?.isAvailable == true,
+              member(personID)?.liveAccessIsCurrent == true,
               historyFetchedAt[personID].map({ Date().timeIntervalSince($0) >= 60 }) ?? true else { return }
         Task { await loadHistory(for: personID) }
     }
@@ -1964,12 +2109,22 @@ final class AppModel: ObservableObject {
     }
 
     func confirmLook() {
-        guard let subject = lookSubject, !isLooking else { return }
+        traceUIInteraction("Look confirm entered: hasSubject=\(lookSubject != nil) isLooking=\(isLooking)")
+        guard let subject = lookSubject, !isLooking else {
+            traceUIInteraction("Look confirm stopped: subjectPresent=\(lookSubject != nil) isLooking=\(isLooking)")
+            return
+        }
         let operation = isDemoMode ? nil : currentAccountOperation()
-        guard isDemoMode || operation != nil else { return }
+        guard isDemoMode || operation != nil else {
+            traceUIInteraction("Look confirm stopped: operationPresent=false")
+            return
+        }
         let currentSubject = member(subject.id)
         let scope = currentSubject.map(TrustRelationshipScope.init)
-        guard isDemoMode || (scope?.matches(subject) == true && scope?.permitsLookSnapshot(currentSubject) == true) else {
+        let initialScopeMatches = scope?.matches(subject) == true
+        let initialScopePermitsLook = scope?.permitsLookSnapshot(currentSubject) == true
+        traceUIInteraction("Look confirm scope: operationPresent=\(operation != nil) scopeMatches=\(initialScopeMatches) nonOff=\(initialScopePermitsLook)")
+        guard isDemoMode || (initialScopeMatches && initialScopePermitsLook) else {
             lookSubject = nil
             return
         }
@@ -1982,6 +2137,8 @@ final class AppModel: ObservableObject {
         let requestID = validity.begin()
         pendingLookRequests[subject.id] = (scope?.connectionID, validity)
         isLooking = true
+        let receiptConnectionID = scope?.connectionID ?? (isDemoMode ? subject.id : nil)
+        setViewReceiptState(.pending, connectionID: receiptConnectionID)
         Task {
             defer {
                 if pendingLookRequests[subject.id]?.validity.accepts(requestID) == true {
@@ -1999,16 +2156,39 @@ final class AppModel: ObservableObject {
                     session = try demo.look(confirmed: true, subjectID: subject.id)
                     publishDemoSnapshot()
                 } else {
-                    guard let operation, isCurrentAccount(operation: operation) else { return }
+                    guard let operation, isCurrentAccount(operation: operation) else {
+                        traceUIInteraction("Look pre-send stopped: operationCurrent=false")
+                        return
+                    }
+                    traceUIInteraction("Look request sending")
                     session = try await client.look(subjectID: subject.id, confirmed: true, authorizedToken: operation.token)
-                    guard isCurrentAccount(operation: operation) else { return }
+                    traceUIInteraction("Look API returned")
+                    let operationCurrentAfterAPI = isCurrentAccount(operation: operation)
+                    traceUIInteraction("Look post-API account guard: current=\(operationCurrentAfterAPI)")
+                    guard operationCurrentAfterAPI else { return }
                     // Re-read relationship consent before retaining or displaying the
                     // delayed response. A peer can Stop or remove this relationship
                     // while the Look request is in flight.
+                    let refreshSequenceBeforeReconcile = circleRefreshSequence
                     await refresh()
-                    guard isCurrentAccount(operation: operation),
-                          pendingLookRequests[subject.id]?.validity.accepts(requestID) == true else { return }
-                    guard scope?.permitsLookSnapshot(member(subject.id)) == true else {
+                    let operationCurrentAfterRefresh = isCurrentAccount(operation: operation)
+                    let requestValidAfterRefresh = pendingLookRequests[subject.id]?.validity.accepts(requestID) == true
+                    let refreshAdvanced = lastSuccessfulCircleRefreshSequence > refreshSequenceBeforeReconcile
+                    traceUIInteraction("Look refresh reconciled: advanced=\(refreshAdvanced) operationCurrent=\(operationCurrentAfterRefresh) requestValid=\(requestValidAfterRefresh)")
+                    guard operationCurrentAfterRefresh, requestValidAfterRefresh else { return }
+                    guard refreshAdvanced else {
+                        pendingLookRequests[subject.id]?.validity.invalidate()
+                        pendingLookRequests[subject.id] = nil
+                        openedSnapshots[subject.id] = nil
+                        openedSnapshotConnectionIDs[subject.id] = nil
+                        if lookSubject?.id == subject.id { lookSubject = nil }
+                        isLooking = false
+                        showToast(TrustCopy.locationUnavailable)
+                        return
+                    }
+                    let refreshedScopePermitsLook = scope?.permitsLookSnapshot(member(subject.id)) == true
+                    traceUIInteraction("Look refreshed scope: permitted=\(refreshedScopePermitsLook)")
+                    guard refreshedScopePermitsLook else {
                         pendingLookRequests[subject.id]?.validity.invalidate()
                         pendingLookRequests[subject.id] = nil
                         if lookSubject?.id == subject.id {
@@ -2024,16 +2204,47 @@ final class AppModel: ObservableObject {
                 } else {
                     openedSnapshotConnectionIDs[subject.id] = scope?.connectionID
                 }
+                traceUIInteraction("Look snapshot stored: demo=\(isDemoMode) scopePresent=\(scope != nil)")
+                setViewReceiptState(.confirmed, connectionID: scope?.connectionID ?? (isDemoMode ? subject.id : nil))
                 if lookSubject?.id == subject.id { lookSubject = nil }
                 // Let the sheet finish dismissing before pushing D1 View.
                 try? await Task.sleep(for: .milliseconds(320))
-                if let operation, !isCurrentAccount(operation: operation) { return }
-                guard pendingLookRequests[subject.id]?.validity.accepts(requestID) == true,
-                      openedSnapshot(for: subject.id) != nil else { return }
+                let operationCurrentBeforeRoute = operation.map { isCurrentAccount(operation: $0) } ?? true
+                let requestValidBeforeRoute = pendingLookRequests[subject.id]?.validity.accepts(requestID) == true
+                let snapshotAvailableBeforeRoute = openedSnapshot(for: subject.id) != nil
+                traceUIInteraction("Look route gate: operationCurrent=\(operationCurrentBeforeRoute) requestValid=\(requestValidBeforeRoute) snapshotAvailable=\(snapshotAvailableBeforeRoute)")
+                guard operationCurrentBeforeRoute, requestValidBeforeRoute, snapshotAvailableBeforeRoute else { return }
                 selectedTab = .circle
                 circlePath = [.view(subject.id)]
+                traceUIInteraction("Look route assigned: depth=\(circlePath.count)")
                 showToast(TrustCopy.lookSaved(name: subject.firstName))
             } catch {
+                let statusCode: Int?
+                if let clientError = error as? TrustClientError {
+                    switch clientError {
+                    case .serverUnavailable(let status), .structuredUnavailable(let status, _, _), .appleUnavailable(let status, _):
+                        statusCode = status
+                    default:
+                        statusCode = nil
+                    }
+                } else {
+                    statusCode = nil
+                }
+                let category: String
+                if error.isLookRequiresSealed {
+                    category = "lookRequiresSealed"
+                } else if error is CancellationError {
+                    category = "cancellation"
+                } else if let clientError = error as? TrustClientError {
+                    switch clientError {
+                    case .unauthorized: category = "unauthorized"
+                    case .unreachable, .timeout, .serverUnavailable, .structuredUnavailable: category = "connectivity"
+                    default: category = "other"
+                    }
+                } else {
+                    category = "other"
+                }
+                traceUIInteraction("Look request failed: category=\(category) status=\(statusCode.map { String($0) } ?? "none")")
                 if let operation, !isCurrentAccount(operation: operation) { return }
                 guard pendingLookRequests[subject.id]?.validity.accepts(requestID) == true else { return }
                 if lookSubject?.id == subject.id { lookSubject = nil }
@@ -2045,6 +2256,7 @@ final class AppModel: ObservableObject {
                     return
                 }
                 if let scope, !scope.permitsLookSnapshot(member(subject.id)) { return }
+                setViewReceiptState((error as? TrustClientError)?.isConnectivity == true ? .offline : .failed, connectionID: receiptConnectionID)
                 showToast(plainMessage(for: error))
             }
         }
@@ -2052,7 +2264,26 @@ final class AppModel: ObservableObject {
 
     // MARK: View (Available) — no sheet, logged, no push
 
+    private func viewReceiptKey(connectionID: UUID) -> String? {
+        guard let accountID = snapshot?.you.id ?? TrustSessionIdentity.accountID(from: auth.sessionToken) else {
+            return isDemoMode ? "demo:\(connectionID.uuidString.lowercased())" : nil
+        }
+        return "\(accountID.uuidString.lowercased()):\(connectionID.uuidString.lowercased())"
+    }
+
+    func viewReceiptState(for member: TrustedPerson) -> ViewReceiptState? {
+        guard let connectionID = member.connectionID ?? (isDemoMode ? member.id : nil),
+              let key = viewReceiptKey(connectionID: connectionID) else { return nil }
+        return viewReceiptStates[key]
+    }
+
+    private func setViewReceiptState(_ state: ViewReceiptState, connectionID: UUID?) {
+        guard let connectionID, let key = viewReceiptKey(connectionID: connectionID) else { return }
+        viewReceiptStates[key] = state
+    }
+
     func openView(_ member: TrustedPerson) {
+        traceUIInteraction("openView entered: demo=\(isDemoMode) available=\(member.isAvailable) routeDepth=\(circlePath.count)")
         if member.isSealed, let _ = openedSnapshot(for: member.id) {
             selectedTab = .circle
             circlePath = [.view(member.id)]
@@ -2062,35 +2293,61 @@ final class AppModel: ObservableObject {
             openLook(member)
             return
         }
+        // Demo relationships have no server connection ID; scope their receipt to
+        // the fixture person so the success guard uses the same effective scope.
+        let connectionID = member.connectionID ?? (isDemoMode ? member.id : nil)
+        let receiptConnectionID = connectionID
         selectedTab = .circle
         circlePath = [.view(member.id)]
-        guard !isOffline || isDemoMode else { return }
+        traceUIInteraction("openView assigned view route: demo=\(isDemoMode) receiptScoped=\(receiptConnectionID != nil)")
+        if isOffline && !isDemoMode {
+            setViewReceiptState(.offline, connectionID: receiptConnectionID)
+            return
+        }
+        setViewReceiptState(.pending, connectionID: receiptConnectionID)
         let operation = isDemoMode ? nil : currentAccountOperation()
         guard isDemoMode || operation != nil else { return }
         Task {
+            traceUIInteraction("openView async started: demo=\(isDemoMode)")
             do {
                 let logged: Bool
                 if let demo {
                     logged = try demo.view(subjectID: member.id) != nil
                     publishDemoSnapshot()
+                    traceUIInteraction("openView demo snapshot published: routeDepth=\(circlePath.count)")
                 } else {
                     guard let operation, isCurrentAccount(operation: operation) else { return }
                     logged = try await client.view(subjectID: member.id, authorizedToken: operation.token).logged
                     guard isCurrentAccount(operation: operation) else { return }
                 }
+                guard let currentMember = self.member(member.id),
+                      (currentMember.connectionID ?? (demo == nil ? nil : currentMember.id)) == connectionID else {
+                    traceUIInteraction("openView completion guard failed: demo=\(isDemoMode) receiptScoped=\(receiptConnectionID != nil) routeDepth=\(circlePath.count)")
+                    return
+                }
+                setViewReceiptState(.confirmed, connectionID: receiptConnectionID)
+                traceUIInteraction("openView completed: routeDepth=\(circlePath.count)")
                 if logged {
                     showToast(TrustCopy.viewLogged(name: member.firstName))
                     if demo == nil { await refresh() }
                 }
             } catch where error.isViewRequiresAvailable {
+                traceUIInteraction("openView requires available state: demo=\(isDemoMode)")
                 if let operation, !isCurrentAccount(operation: operation) { return }
+                guard let currentMember = self.member(member.id),
+                      (currentMember.connectionID ?? (demo == nil ? nil : currentMember.id)) == connectionID else { return }
+                setViewReceiptState(.failed, connectionID: receiptConnectionID)
                 // Their share sealed between refreshes — fall back to the notify-first Look.
                 circlePath = []
                 await refresh()
                 if let operation, !isCurrentAccount(operation: operation) { return }
                 if let current = self.member(member.id) { lookSubject = current }
             } catch {
+                traceUIInteraction("openView failed: demo=\(isDemoMode) connectivity=\((error as? TrustClientError)?.isConnectivity == true)")
                 if let operation, !isCurrentAccount(operation: operation) { return }
+                guard let currentMember = self.member(member.id),
+                      (currentMember.connectionID ?? (demo == nil ? nil : currentMember.id)) == connectionID else { return }
+                setViewReceiptState((error as? TrustClientError)?.isConnectivity == true ? .offline : .failed, connectionID: receiptConnectionID)
                 showToast(plainMessage(for: error))
             }
         }
@@ -2106,7 +2363,7 @@ final class AppModel: ObservableObject {
 
     func loadHistory(for personID: UUID) async {
         let historyIsFresh = historyFetchedAt[personID].map { Date().timeIntervalSince($0) < 60 } ?? false
-        guard !isDemoMode, let requestedMember = member(personID), requestedMember.isAvailable,
+        guard !isDemoMode, let requestedMember = member(personID), requestedMember.isAvailable, requestedMember.liveAccessIsCurrent,
               !historyLoadingIDs.contains(personID),
               !historyLoadedIDs.contains(personID) || !historyIsFresh else { return }
         guard let operation = currentAccountOperation() else { return }
@@ -2127,8 +2384,18 @@ final class AppModel: ObservableObject {
             guard isCurrentAccount(operation: operation) else { return }
             let points = try await client.history(personID: personID, authorizedToken: operation.token)
             guard isCurrentAccount(operation: operation),
-                  historyRequestIDs[personID] == requestID,
-                  scope.permitsHistory(member(personID)) else { return }
+                  historyRequestIDs[personID] == requestID else { return }
+            let refreshSequenceBeforeReconcile = circleRefreshSequence
+            await refresh()
+            guard isCurrentAccount(operation: operation),
+                  historyRequestIDs[personID] == requestID else { return }
+            guard lastSuccessfulCircleRefreshSequence > refreshSequenceBeforeReconcile else {
+                recordHistoryLoadFailure(personID: personID, scope: scope, requestID: requestID, operation: operation)
+                return
+            }
+            guard let currentMember = member(personID),
+                  currentMember.liveAccessIsCurrent,
+                  scope.permitsHistory(currentMember) else { return }
             historyByPerson[personID] = points.map {
                 LocationVisit(label: TrustCopy.location, at: $0.timestamp, point: $0)
             }
@@ -2136,14 +2403,7 @@ final class AppModel: ObservableObject {
             historyLoadedIDs.insert(personID)
             historyFetchedAt[personID] = Date()
         } catch {
-            guard isCurrentAccount(operation: operation),
-                  historyRequestIDs[personID] == requestID,
-                  scope.permitsHistory(member(personID)) else { return }
-            historyErrors.insert(personID)
-            historyByPerson[personID] = nil
-            historyLoadedIDs.remove(personID)
-            historyFetchedAt[personID] = nil
-            historyConnectionIDs[personID] = scope.connectionID
+            recordHistoryLoadFailure(personID: personID, scope: scope, requestID: requestID, operation: operation)
         }
     }
 
@@ -2157,7 +2417,14 @@ final class AppModel: ObservableObject {
         if ProcessInfo.processInfo.environment["TRUST_SCREENSHOT"] == "empty" {
             return []
         }
-        let source = isDemoMode ? member.locationHistory : (historyByPerson[member.id] ?? [])
+        guard member.liveAccessIsCurrent else {
+            historyByPerson[member.id] = nil
+            historyLoadedIDs.remove(member.id)
+            historyFetchedAt[member.id] = nil
+            historyConnectionIDs[member.id] = nil
+            return []
+        }
+        let source = isDemoMode ? member.currentLocationHistory : (historyByPerson[member.id] ?? [])
         let hours = TimeInterval(TrustProductRules.historyWindowHours(viewerHasPlus: coverage.isCovered) * 3600)
         let now = Date()
         return source
@@ -2165,9 +2432,20 @@ final class AppModel: ObservableObject {
             .sorted { $0.at > $1.at }
     }
 
-    func openMap() {
+    func openMap(focusing personID: UUID? = nil) {
+        mapFocus = personID.map(MapFocus.person) ?? .automatic
         selectedTab = .circle
         circlePath = [.map]
+    }
+
+    func selectMapPerson(_ personID: UUID) {
+        mapSelectedPersonID = personID
+        mapFocus = .person(personID)
+    }
+
+    private func resetMapFocus() {
+        mapSelectedPersonID = nil
+        mapFocus = .automatic
     }
 
     func closeSnapshot(for personID: UUID) {
@@ -2179,11 +2457,18 @@ final class AppModel: ObservableObject {
         }
     }
 
-    /// While-Using location only when View / Map needs “miles from you”.
+    /// Activate map updates only when permission already exists. Viewing another
+    /// person's location never requests this device's location permission.
     func prepareMapLocation() {
         location.setMapActive(true)
-        if !isScreenshotLaunch, !isUITestLaunch {
-            location.requestWhenInUse()
+    }
+
+    /// Recenter is an explicit request to use this device's location. A received
+    /// person's View never activates own-device GPS on appearance.
+    func requestMapRecenter(completion: @escaping @MainActor () -> Void) {
+        guard phase == .home, canAccessAccountData else { completion(); return }
+        location.requestCurrentFix { _ in
+            Task { @MainActor in completion() }
         }
     }
 
@@ -2192,6 +2477,46 @@ final class AppModel: ObservableObject {
     }
 
     // MARK: Sharing (outbound)
+
+    private func firstShareConsentKey(connectionID: UUID) -> String? {
+        guard let accountID = snapshot?.you.id ?? TrustSessionIdentity.accountID(from: auth.sessionToken) else { return nil }
+        return "trust.firstShareConsentAcknowledged.\(accountID.uuidString.lowercased()).\(connectionID.uuidString.lowercased())"
+    }
+
+    func requestFirstShareApproval(for member: TrustedPerson, mode: ShareRestingMode) -> Bool {
+        guard mode != .off,
+              let connectionID = member.connectionID,
+              let key = firstShareConsentKey(connectionID: connectionID),
+              self.member(member.id)?.connectionID == connectionID,
+              self.member(member.id)?.share.presentation(at: Date()).isOff == true,
+              !UserDefaults.standard.bool(forKey: key),
+              !shareMutationGate.blocksNonOffMutation(connectionID: connectionID) else { return false }
+        firstShareApproval = FirstShareApprovalRequest(
+            personID: member.id,
+            connectionID: connectionID,
+            displayName: member.person.displayName,
+            handle: member.person.handle ?? "",
+            mode: mode
+        )
+        return true
+    }
+
+    func confirmFirstShareApproval() {
+        guard let request = firstShareApproval,
+              let current = member(request.personID),
+              current.connectionID == request.connectionID,
+              current.share.presentation(at: Date()).isOff,
+              firstShareConsentKey(connectionID: request.connectionID) != nil else {
+            firstShareApproval = nil
+            return
+        }
+        firstShareApproval = nil
+        setResting(request.mode, for: request.personID, firstShareConsentConnectionID: request.connectionID)
+    }
+
+    func cancelFirstShareApproval() {
+        firstShareApproval = nil
+    }
 
     func shareState(for personID: UUID) -> PersonShareState {
         if let demo { return demo.shareState(for: personID) }
@@ -2268,7 +2593,12 @@ final class AppModel: ObservableObject {
         return true
     }
 
-    func setResting(_ mode: ShareRestingMode, for personID: UUID, toast override: String? = nil) {
+    func setResting(
+        _ mode: ShareRestingMode,
+        for personID: UUID,
+        toast override: String? = nil,
+        firstShareConsentConnectionID: UUID? = nil
+    ) {
         guard requireOnline() else { return }
         let currentMember = member(personID)
         let name = currentMember?.firstName ?? TrustCopy.them
@@ -2291,7 +2621,7 @@ final class AppModel: ObservableObject {
                     showToast(TrustCopy.apiError(code: "client_update_required", fallback: nil))
                     return
                 }
-                setResting(mode, for: personID, toast: override)
+                setResting(mode, for: personID, toast: override, firstShareConsentConnectionID: firstShareConsentConnectionID)
             }
             return
         }
@@ -2319,11 +2649,16 @@ final class AppModel: ObservableObject {
                     try await client.setShare(personID: personID, connectionID: connectionID, expectedRevision: expectedRevision, resting: mode, pause: nil, authorizedToken: operation.token)
                     guard isCurrentAccount(operation: operation) else { return }
                     guard member(personID)?.connectionID == connectionID else { return }
-                    _ = applyConfirmedShareMutation(
+                    let confirmed = applyConfirmedShareMutation(
                         personID: personID,
                         connectionID: connectionID,
                         share: PersonShareState(resting: mode, revision: nil)
                     )
+                    if confirmed,
+                       firstShareConsentConnectionID == connectionID,
+                       let consentKey = firstShareConsentKey(connectionID: connectionID) {
+                        UserDefaults.standard.set(true, forKey: consentKey)
+                    }
                     await refresh()
                     guard isCurrentAccount(operation: operation) else { return }
                 }
@@ -2354,7 +2689,7 @@ final class AppModel: ObservableObject {
     func pauseSharing(personID: UUID, duration: PauseDuration) {
         guard requireOnline() else { return }
         let until = duration.endDate(from: Date())
-        let clock = until.formatted(date: .omitted, time: .shortened)
+        let clock = TrustCopy.pauseEndDateTime(until)
         let restoresTo = restoreMode(for: personID)
         let modeName = restoresTo == .always ? TrustCopy.always : TrustCopy.sealed
         let operation = isDemoMode ? nil : currentAccountOperation()
@@ -2641,6 +2976,34 @@ final class AppModel: ObservableObject {
         }
     }
 
+    func stopAllAndSignOut() async {
+        guard requireOnline(), !isDemoMode,
+              let operation = currentAccountOperation() else { return }
+        let membersToStop = circle
+        await shareMutationQueue.enqueueAndWait { [weak self] in
+            guard let self, self.isCurrentAccount(operation: operation) else { return }
+            do {
+                try await self.client.stopAllSharing(authorizedToken: operation.token) { [weak self] in
+                    guard let self else { return false }
+                    return operation.matches(token: self.auth.sessionToken, generation: self.accountGeneration)
+                }
+                guard self.isCurrentAccount(operation: operation) else { return }
+                for member in membersToStop {
+                    guard let connectionID = member.connectionID else { continue }
+                    _ = self.applyConfirmedShareMutation(
+                        personID: member.id,
+                        connectionID: connectionID,
+                        share: PersonShareState(resting: .off, revision: nil)
+                    )
+                }
+                self.signOut()
+            } catch {
+                guard self.isCurrentAccount(operation: operation) else { return }
+                self.showToast(self.plainMessage(for: error))
+            }
+        }
+    }
+
     /// Always / For a while without Plus → intent-triggered paywall placement.
     private func handleShareError(_ error: Error) {
         if error.isProRequired {
@@ -2650,14 +3013,10 @@ final class AppModel: ObservableObject {
         showToast(plainMessage(for: error))
     }
 
-    /// First non-Off share: your location is now in the product → Always explainer → system prompt.
+    /// A selected mode is confirmed independently from location readiness. Permission
+    /// actions stay on You → My location and are never prompted automatically.
     private func afterFirstShare() {
         syncLocationSharing()
-        guard !location.hasAlways else { return }
-        if location.isDenied || location.needsSystemSettings || location.authorization == .notDetermined
-            || location.authorization == .authorizedWhenInUse {
-            showingAlwaysExplainer = true
-        }
     }
 
     func allowAlwaysFromExplainer() {
@@ -2689,7 +3048,12 @@ final class AppModel: ObservableObject {
         guard raw != connectionHandleDraft else { return }
         connectionHandleDraft = raw
         clearConnectionLookup(keepDraft: true)
-        guard let query = PersonLookupQuery.parse(raw) else { return }
+        guard let query = connectionQuery(raw) else {
+            if raw.first?.isNumber == true || raw.first == "+" {
+                connectionLookupHint = TrustCopy.phoneLookupCountryCodeHint
+            }
+            return
+        }
         connectionLookupCanInvite = ifPhoneQuery(query)
         let generation = connectionLookupGeneration
         connectionLookupDebounceTask = Task { [weak self] in
@@ -2705,12 +3069,45 @@ final class AppModel: ObservableObject {
 
     func submitConnectionLookup() {
         let value = connectionHandleDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !value.isEmpty, PersonLookupQuery.parse(value) == nil else { return }
-        if value.first?.isNumber == true || value.first == "+" {
-            connectionLookupHint = TrustCopy.phoneLookupCountryCodeHint
-        } else {
-            connectionLookupNotice = TrustCopy.handleInvalid
+        guard !value.isEmpty else { return }
+        guard let query = connectionQuery(value) else {
+            if value.first?.isNumber == true || value.first == "+" {
+                connectionLookupHint = TrustCopy.phoneLookupCountryCodeHint
+            } else {
+                connectionLookupNotice = TrustCopy.handleInvalid
+            }
+            connectionLookupCanRetry = false
+            return
         }
+        if isLookingUpConnection, activeConnectionLookupQuery == query { return }
+        connectionLookupDebounceTask?.cancel()
+        connectionLookupDebounceTask = nil
+        connectionLookupCanRetry = false
+        let generation = connectionLookupGeneration
+        Task { await performConnectionLookup(query, generation: generation) }
+    }
+
+    func setConnectionPhoneCountry(_ country: TrustPhoneCountry) {
+        connectionPhoneCountry = country
+        if let query = connectionQuery(connectionHandleDraft), ifPhoneQuery(query) {
+            connectionLookupHint = nil
+            connectionLookupDebounceTask?.cancel()
+            let generation = connectionLookupGeneration
+            connectionLookupDebounceTask = Task { [weak self] in
+                try? await Task.sleep(for: .milliseconds(350))
+                guard !Task.isCancelled else { return }
+                await self?.performConnectionLookup(query, generation: generation)
+            }
+        }
+    }
+
+    private func connectionQuery(_ raw: String) -> PersonLookupQuery? {
+        PersonLookupQuery.parse(raw, region: connectionPhoneCountry.code)
+    }
+
+    func retryConnectionLookup() {
+        guard connectionLookupCanRetry else { return }
+        submitConnectionLookup()
     }
 
     private func ifPhoneQuery(_ query: PersonLookupQuery) -> Bool {
@@ -2724,8 +3121,10 @@ final class AppModel: ObservableObject {
         connectionLookupTask?.cancel()
         connectionLookupDebounceTask = nil
         connectionLookupTask = nil
+        activeConnectionLookupQuery = nil
         connectionLookup = nil
         connectionLookupNotice = nil
+        connectionLookupCanRetry = false
         connectionLookupHint = nil
         connectionLookupIsNoMatch = false
         connectionLookupCanInvite = false
@@ -2746,14 +3145,17 @@ final class AppModel: ObservableObject {
         guard let sessionToken = auth.sessionToken else { return }
         let currentAccountGeneration = accountGeneration
         isLookingUpConnection = true
+        activeConnectionLookupQuery = query
         connectionLookup = nil
         connectionLookupNotice = nil
+        connectionLookupCanRetry = false
         connectionLookupIsNoMatch = false
         connectionLookupTask = Task {
             defer {
                 if generation == connectionLookupGeneration,
                    isCurrentAccount(generation: currentAccountGeneration, token: sessionToken) {
                     isLookingUpConnection = false
+                    activeConnectionLookupQuery = nil
                 }
             }
             do {
@@ -2762,7 +3164,12 @@ final class AppModel: ObservableObject {
                 let result = try await client.lookupPerson(query)
                 guard generation == connectionLookupGeneration,
                       isCurrentAccount(generation: currentAccountGeneration, token: sessionToken) else { return }
-                connectionLookup = result
+                var currentResult = result
+                if currentResult.relationship == "none",
+                   confirmedSentRequestRecipientIDs.contains(currentResult.accountId) {
+                    currentResult.relationship = "sent"
+                }
+                connectionLookup = currentResult
             } catch {
                 guard generation == connectionLookupGeneration,
                       isCurrentAccount(generation: currentAccountGeneration, token: sessionToken) else { return }
@@ -2782,6 +3189,7 @@ final class AppModel: ObservableObject {
                     return
                 }
                 connectionLookupNotice = plainMessage(for: error)
+                connectionLookupCanRetry = true
             }
         }
     }
@@ -2811,6 +3219,7 @@ final class AppModel: ObservableObject {
             guard phase == .home, auth.isAuthenticated, !isDemoMode,
                   let sessionToken = auth.sessionToken else { break }
             let currentAccountGeneration = accountGeneration
+            let requestMutationGeneration = connectionRequestsMutationGeneration
             client.token = sessionToken
             do {
                 let requests = try await client.connectionRequests()
@@ -2818,7 +3227,12 @@ final class AppModel: ObservableObject {
                     if !connectionRequestsRefreshQueued { break }
                     continue
                 }
+                guard requestMutationGeneration == connectionRequestsMutationGeneration else {
+                    connectionRequestsRefreshQueued = true
+                    continue
+                }
                 connectionRequests = requests
+                reconcileConfirmedSentRequests(with: requests)
                 connectionRequestsNotice = nil
             } catch TrustClientError.unauthorized {
                 guard isCurrentAccount(generation: currentAccountGeneration, token: sessionToken) else {
@@ -2841,6 +3255,17 @@ final class AppModel: ObservableObject {
         }
         isLoadingConnectionRequests = false
         connectionRequestsRefreshTask = nil
+    }
+
+    private func reconcileConfirmedSentRequests(with requests: ConnectionRequestsPayload) {
+        let sentRecipientIDs = Set(requests.sent.map(\.otherParty.accountId))
+        let reconciledIDs = confirmedSentRequestRecipientIDs.subtracting(sentRecipientIDs)
+        confirmedSentRequestRecipientIDs.subtract(reconciledIDs)
+        guard var result = connectionLookup,
+              reconciledIDs.contains(result.accountId),
+              result.relationship == "sent" else { return }
+        result.relationship = member(result.accountId) == nil ? "none" : "connected"
+        connectionLookup = result
     }
 
     func sendConnectionRequest() {
@@ -2867,6 +3292,14 @@ final class AppModel: ObservableObject {
                 client.token = sessionToken
                 _ = try await client.createConnectionRequest(recipientID: result.accountId)
                 guard isCurrentAccount(generation: currentAccountGeneration, token: sessionToken) else { return }
+                confirmedSentRequestRecipientIDs.insert(result.accountId)
+                connectionRequestsMutationGeneration &+= 1
+                if lookupGeneration == connectionLookupGeneration {
+                    connectionLookup?.relationship = "sent"
+                    connectionLookupNotice = nil
+                    connectionLookupCanRetry = false
+                }
+                showToast(TrustCopy.requestSent)
                 await refreshConnectionRequests()
                 guard lookupGeneration == connectionLookupGeneration,
                       isCurrentAccount(generation: currentAccountGeneration, token: sessionToken) else { return }
@@ -2894,6 +3327,7 @@ final class AppModel: ObservableObject {
 
     func acceptConnectionRequest(id: UUID) {
         guard actingOnConnectionRequestIDs.insert(id).inserted else { return }
+        clearConnectionRequestActionError(id)
         guard let sessionToken = auth.sessionToken else {
             actingOnConnectionRequestIDs.remove(id)
             return
@@ -2910,6 +3344,8 @@ final class AppModel: ObservableObject {
                 client.token = sessionToken
                 try await client.acceptConnectionRequest(id: id)
                 guard isCurrentAccount(generation: currentAccountGeneration, token: sessionToken) else { return }
+                applyConfirmedConnectionRequestMutation(id: id)
+                clearConnectionRequestActionError(id)
                 recordConfirmedCircleMutation()
                 await refresh()
                 guard isCurrentAccount(generation: currentAccountGeneration, token: sessionToken) else { return }
@@ -2921,10 +3357,9 @@ final class AppModel: ObservableObject {
                     connectionRequiresPhoneVerification = true
                     return
                 }
+                recordConnectionRequestActionFailure(id: id, action: .accept, error: error)
                 if showingAddPersonSheet {
                     connectionLookupNotice = plainMessage(for: error)
-                } else {
-                    connectionRequestsNotice = plainMessage(for: error)
                 }
             }
         }
@@ -2941,17 +3376,23 @@ final class AppModel: ObservableObject {
             let result = try await client.lookupPerson(.handle(normalized))
             guard lookupGeneration == connectionLookupGeneration,
                   isCurrentAccount(generation: accountGeneration, token: token) else { return }
-            connectionLookup = result
-            if result.relationship == "sent" { showToast(TrustCopy.requestSent) }
+            var currentResult = result
+            if currentResult.relationship == "none",
+               confirmedSentRequestRecipientIDs.contains(currentResult.accountId) {
+                currentResult.relationship = "sent"
+            }
+            connectionLookup = currentResult
         } catch {
             guard lookupGeneration == connectionLookupGeneration,
                   isCurrentAccount(generation: accountGeneration, token: token) else { return }
             connectionLookupNotice = plainMessage(for: error)
+            connectionLookupCanRetry = true
         }
     }
 
     func declineConnectionRequest(_ request: ConnectionRequestDTO) {
         guard actingOnConnectionRequestIDs.insert(request.id).inserted else { return }
+        clearConnectionRequestActionError(request.id)
         guard let sessionToken = auth.sessionToken else {
             actingOnConnectionRequestIDs.remove(request.id)
             return
@@ -2968,11 +3409,13 @@ final class AppModel: ObservableObject {
                 client.token = sessionToken
                 try await client.declineConnectionRequest(id: request.id)
                 guard isCurrentAccount(generation: currentAccountGeneration, token: sessionToken) else { return }
+                applyConfirmedConnectionRequestMutation(id: request.id)
+                clearConnectionRequestActionError(request.id)
                 await refreshConnectionRequests()
                 guard isCurrentAccount(generation: currentAccountGeneration, token: sessionToken) else { return }
             } catch {
                 guard isCurrentAccount(generation: currentAccountGeneration, token: sessionToken) else { return }
-                connectionRequestsNotice = plainMessage(for: error)
+                recordConnectionRequestActionFailure(id: request.id, action: .decline, error: error)
             }
         }
     }
@@ -2995,8 +3438,93 @@ final class AppModel: ObservableObject {
         showToast(TrustCopy.handleCopied)
     }
 
+    /// Save the editable profile fields independently. The server remains the source
+    /// of truth for Unicode display names and for ASCII handle validation.
+    func saveProfile(displayName: String, handle: String) async -> Bool {
+        let name = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        profileSaveNotice = nil
+        let current = snapshot?.you
+        let handleIsValid: Bool
+        if case .valid = TrustHandle.status(of: handle) { handleIsValid = true }
+        else { handleIsValid = false }
+        guard !name.isEmpty, !isDemoMode,
+              current?.handle == handle || handleIsValid,
+              let operation = currentAccountOperation() else {
+            profileSaveNotice = TrustCopy.requestFailed
+            return false
+        }
+        guard requireOnline() else {
+            profileSaveNotice = TrustCopy.offlineAction
+            return false
+        }
+        do {
+            if current?.displayName != name {
+                try await client.rename(name)
+                guard isCurrentAccount(operation: operation) else { return false }
+            }
+            if current?.handle != handle {
+                try await client.setHandle(handle)
+                guard isCurrentAccount(operation: operation) else { return false }
+            }
+            await refresh()
+            guard isCurrentAccount(operation: operation) else { return false }
+            return true
+        } catch {
+            guard isCurrentAccount(operation: operation) else { return false }
+            profileSaveNotice = plainMessage(for: error)
+            return false
+        }
+    }
+
+    func submitPhoneConflictRecoveryRequest() async {
+        await createRecoveryRequest(kind: "phone_ownership_conflict")
+    }
+
+    func submitPurchaseRecoveryRequest() async {
+        guard let accountID = snapshot?.you.id,
+              let signedTransactionInfo = store.verifiedMismatchedTransactionInfo(for: accountID) else {
+            recoveryRequestError = TrustCopy.recoveryProofUnavailable
+            return
+        }
+        await createRecoveryRequest(signedTransactionInfo: signedTransactionInfo)
+    }
+
+    func copyRecoveryRequestReference() {
+        guard let recoveryRequestReference else { return }
+        UIPasteboard.general.string = recoveryRequestReference
+        showToast(TrustCopy.recoveryReferenceCopied)
+    }
+
+    private func createRecoveryRequest(kind: String? = nil, signedTransactionInfo: String? = nil) async {
+        guard !isSubmittingRecoveryRequest,
+              let operation = currentAccountOperation(),
+              requireOnline() else { return }
+        let generation = recoveryRequestGeneration
+        isSubmittingRecoveryRequest = true
+        recoveryRequestError = nil
+        defer {
+            if generation == recoveryRequestGeneration { isSubmittingRecoveryRequest = false }
+        }
+        do {
+            let response = try await client.createRecoveryRequest(
+                kind: kind,
+                signedTransactionInfo: signedTransactionInfo
+            )
+            guard generation == recoveryRequestGeneration,
+                  isCurrentAccount(operation: operation) else { return }
+            recoveryRequestReference = response.requestId.uuidString
+            recoveryRequestStatus = response.status
+            recoveryRequestKind = kind ?? "purchase"
+        } catch {
+            guard generation == recoveryRequestGeneration,
+                  isCurrentAccount(operation: operation) else { return }
+            recoveryRequestError = plainMessage(for: error)
+        }
+    }
+
     func cancelConnectionRequest(_ request: ConnectionRequestDTO) {
         guard actingOnConnectionRequestIDs.insert(request.id).inserted else { return }
+        clearConnectionRequestActionError(request.id)
         guard let sessionToken = auth.sessionToken else {
             actingOnConnectionRequestIDs.remove(request.id)
             return
@@ -3013,13 +3541,54 @@ final class AppModel: ObservableObject {
                 client.token = sessionToken
                 try await client.cancelConnectionRequest(id: request.id)
                 guard isCurrentAccount(generation: currentAccountGeneration, token: sessionToken) else { return }
+                applyConfirmedConnectionRequestMutation(id: request.id)
+                clearConnectionRequestActionError(request.id)
                 await refreshConnectionRequests()
                 guard isCurrentAccount(generation: currentAccountGeneration, token: sessionToken) else { return }
             } catch {
                 guard isCurrentAccount(generation: currentAccountGeneration, token: sessionToken) else { return }
-                connectionRequestsNotice = plainMessage(for: error)
+                recordConnectionRequestActionFailure(id: request.id, action: .cancel, error: error)
             }
         }
+    }
+
+    func retryConnectionRequestAction(id: UUID) {
+        guard let action = connectionRequestRetryActions[id],
+              let request = (connectionRequests.incoming + connectionRequests.sent).first(where: { $0.id == id }) else { return }
+        switch action {
+        case .accept: acceptConnectionRequest(id: id)
+        case .decline: declineConnectionRequest(request)
+        case .cancel: cancelConnectionRequest(request)
+        }
+    }
+
+    private func clearConnectionRequestActionError(_ id: UUID) {
+        connectionRequestActionErrors[id] = nil
+        connectionRequestRetryActions[id] = nil
+    }
+
+    private func applyConfirmedConnectionRequestMutation(id: UUID) {
+        connectionRequestsMutationGeneration &+= 1
+        var requests = connectionRequests
+        if let sentRequest = requests.sent.first(where: { $0.id == id }) {
+            let recipientID = sentRequest.otherParty.accountId
+            confirmedSentRequestRecipientIDs.remove(recipientID)
+            if var result = connectionLookup,
+               result.accountId == recipientID,
+               result.relationship == "sent" {
+                result.relationship = member(recipientID) == nil ? "none" : "connected"
+                connectionLookup = result
+            }
+        }
+        requests.incoming.removeAll { $0.id == id }
+        requests.sent.removeAll { $0.id == id }
+        connectionRequests = requests
+        clearConnectionRequestActionError(id)
+    }
+
+    private func recordConnectionRequestActionFailure(id: UUID, action: ConnectionRequestAction, error: Error) {
+        connectionRequestActionErrors[id] = plainMessage(for: error)
+        connectionRequestRetryActions[id] = action
     }
 
     func addPersonByPhone() {
@@ -3100,6 +3669,10 @@ final class AppModel: ObservableObject {
                 guard lookupGeneration == connectionLookupGeneration,
                       isCurrentAccount(generation: currentAccountGeneration, token: sessionToken) else { return }
                 inviteShareText = TrustCopy.inviteMessage(code: invite)
+                    .replacingOccurrences(
+                        of: "https://jointrust.app/i/",
+                        with: "https://\(AppConfiguration.universalLinkHost)/i/"
+                    )
             } catch {
                 guard lookupGeneration == connectionLookupGeneration,
                       isCurrentAccount(generation: currentAccountGeneration, token: sessionToken) else { return }
@@ -3107,6 +3680,38 @@ final class AppModel: ObservableObject {
                     connectionRequiresPhoneVerification = true
                     return
                 }
+                connectionLookupNotice = plainMessage(for: error)
+            }
+        }
+    }
+
+    /// A person may choose a general invite link before entering a handle or phone.
+    /// Creating the invite is deferred until this explicit action; presenting or
+    /// dismissing the native share sheet never records that it was sent.
+    func prepareShareInviteLink() {
+        guard !isPreparingConnectionInvite else { return }
+        guard requireOnline() else { return }
+        guard !isDemoMode, let sessionToken = auth.sessionToken else {
+            connectionLookupNotice = TrustCopy.connectionRequestsNeedAccount
+            return
+        }
+        let currentAccountGeneration = accountGeneration
+        isPreparingConnectionInvite = true
+        Task {
+            defer {
+                if isCurrentAccount(generation: currentAccountGeneration, token: sessionToken) {
+                    isPreparingConnectionInvite = false
+                }
+            }
+            do {
+                guard isCurrentAccount(generation: currentAccountGeneration, token: sessionToken) else { return }
+                client.token = sessionToken
+                let invite = try await client.createInvite()
+                guard isCurrentAccount(generation: currentAccountGeneration, token: sessionToken) else { return }
+                inviteShareText = TrustCopy.inviteMessage(code: invite)
+                    .replacingOccurrences(of: "https://jointrust.app/i/", with: "https://\(AppConfiguration.universalLinkHost)/i/")
+            } catch {
+                guard isCurrentAccount(generation: currentAccountGeneration, token: sessionToken) else { return }
                 connectionLookupNotice = plainMessage(for: error)
             }
         }
@@ -3163,6 +3768,7 @@ final class AppModel: ObservableObject {
                 try demo.joinInvite(code: code)
                 inviteCodeDraft = ""
                 linkedInviteCode = nil
+                clearPendingInviteForCurrentAccount()
                 inviteNotice = nil
                 publishDemoSnapshot()
                 showToast(TrustCopy.joined)
@@ -3187,6 +3793,7 @@ final class AppModel: ObservableObject {
                 try await client.acceptInvite(code: code)
                 guard isCurrentAccount(generation: currentAccountGeneration, token: sessionToken) else { return }
                 recordConfirmedCircleMutation()
+                clearPendingInviteForCurrentAccount()
                 inviteCodeDraft = ""
                 linkedInviteCode = nil
                 inviteNotice = nil
@@ -3194,7 +3801,6 @@ final class AppModel: ObservableObject {
                 guard isCurrentAccount(generation: currentAccountGeneration, token: sessionToken) else { return }
                 showToast(TrustCopy.joined)
                 selectedTab = .sharing
-                await receipts.requestPermission()
             } catch {
                 guard isCurrentAccount(generation: currentAccountGeneration, token: sessionToken) else { return }
                 if (error as? TrustClientError)?.apiCode == "verification_required" {
@@ -3208,11 +3814,11 @@ final class AppModel: ObservableObject {
     func handleIncomingURL(_ url: URL) {
         let candidate: String?
         if url.scheme == "https",
-           url.host == "jointrust.app",
+           url.host == AppConfiguration.universalLinkHost,
            url.pathComponents.count == 3,
            url.pathComponents[1] == "i" {
             candidate = url.pathComponents[2]
-        } else if url.scheme == "trust" {
+        } else if url.scheme == AppConfiguration.urlScheme {
             let parts = url.pathComponents.filter { $0 != "/" }
             if url.host == "invite", parts.count == 1 {
                 candidate = parts.first
@@ -3229,12 +3835,18 @@ final class AppModel: ObservableObject {
         guard code.range(of: "^[A-HJ-NP-Z2-9]{6}$", options: .regularExpression) != nil else { return }
         inviteCodeDraft = code
         linkedInviteCode = code
+        if let accountID = TrustSessionIdentity.accountID(from: auth.sessionToken) {
+            TrustKeychain.set(code, account: pendingInviteKey(accountID: accountID))
+        } else {
+            TrustKeychain.set(code, account: Self.unclaimedPendingInviteKey)
+        }
         if auth.isAuthenticated, phase == .home {
             selectedTab = .sharing
         }
     }
 
     func dismissLinkedInvite() {
+        clearPendingInviteForCurrentAccount()
         linkedInviteCode = nil
         inviteCodeDraft = ""
         inviteNotice = nil
@@ -3257,6 +3869,17 @@ final class AppModel: ObservableObject {
     }
 
     func completeOnboarding() async {
+        guard !isOnboardingBusy else { return }
+        guard canAccessAccountData, phase == .handle else { return }
+        guard (snapshot?.you ?? authenticatedPerson)?.phoneVerified == true else {
+            onboardingNotice = nil
+            if let person = snapshot?.you ?? authenticatedPerson {
+                phase = Self.phase(for: person)
+            } else {
+                phase = .phone
+            }
+            return
+        }
         onboardingNotice = nil
         switch TrustHandle.status(of: onboardingHandle) {
         case .invalid:
@@ -3274,9 +3897,6 @@ final class AppModel: ObservableObject {
                     discoveryConsentVersion: onboardingDiscoveryEnabled ? 1 : nil
                 )
                 await finishOnboardingIfComplete()
-                if phase != .home {
-                    onboardingNotice = TrustCopy.enterHandle
-                }
             } catch {
                 onboardingNotice = plainMessage(for: error)
             }
@@ -3308,11 +3928,7 @@ final class AppModel: ObservableObject {
     }
 
     private func finishOnboardingIfComplete() async {
-        await refresh()
-        let complete = snapshot?.you.onboardingComplete == true
-        if complete {
-            routeAfterAuth(onboardingComplete: true)
-        }
+        await completeVerifiedPhoneOnboarding()
     }
 
     private func routeAfterAuth(onboardingComplete: Bool) {
@@ -3329,26 +3945,71 @@ final class AppModel: ObservableObject {
         if let you = snapshot?.you ?? authenticatedPerson {
             next = Self.phase(for: you)
         } else {
-            next = .handle
+            // Without an account record there is no verified-phone evidence.
+            next = .phone
         }
-        if next == .handle {
-            if phase != .handle {
-                beginOnboarding()
-            } else {
-                phase = .handle
-            }
-        } else {
-            phase = next
-        }
+        phase = next
         if phase == .home, !inviteCodeDraft.isEmpty {
             selectedTab = .sharing
         }
         if phase == .home { canReturnFromPhoneVerification = false }
+        if phase == .handle,
+           let person = snapshot?.you ?? authenticatedPerson,
+           person.phoneVerified {
+            Task { await completeVerifiedPhoneOnboarding() }
+        }
     }
 
-    /// Handle first, then a verified phone, then Home. A missing phone never lands on Home.
+    private func completeVerifiedPhoneOnboarding() async {
+        guard canAccessAccountData,
+              phase == .handle,
+              let person = snapshot?.you ?? authenticatedPerson,
+              person.phoneVerified,
+              !isCompletingPhoneOnboarding,
+              let operation = currentAccountOperation() else { return }
+        isCompletingPhoneOnboarding = true
+        defer { isCompletingPhoneOnboarding = false }
+        do {
+            let completed = try await client.completeOnboarding()
+            guard isCurrentAccount(operation: operation) else { return }
+            let updated = completed.model
+            let hasValidServerHandle: Bool
+            if let handle = completed.handle, case .valid = TrustHandle.status(of: handle) {
+                hasValidServerHandle = true
+            } else {
+                hasValidServerHandle = false
+            }
+            guard completed.phoneVerified == true,
+                  completed.onboardingComplete == true,
+                  hasValidServerHandle else {
+                onboardingNotice = TrustCopy.phoneCompletionInvalidResponse
+                return
+            }
+            authenticatedPerson = updated
+            if var current = snapshot {
+                current.you = updated
+                snapshot = current
+            }
+            onboardingNotice = nil
+            phase = .home
+            canReturnFromPhoneVerification = false
+            Task { await refresh() }
+        } catch {
+            guard isCurrentAccount(operation: operation) else { return }
+            onboardingNotice = plainMessage(for: error)
+        }
+    }
+
+    func retryVerifiedPhoneOnboarding() {
+        guard phase == .handle, !isCompletingPhoneOnboarding,
+              (snapshot?.you ?? authenticatedPerson)?.phoneVerified == true else { return }
+        onboardingNotice = nil
+        Task { await completeVerifiedPhoneOnboarding() }
+    }
+
+    /// A verified phone enters automatic server completion if account setup is incomplete.
     private static func phase(for you: Person) -> AppPhase {
-        switch TrustPhoneSetupRoute.route(handle: you.handle, phoneVerified: you.phoneVerified) {
+        switch TrustPhoneSetupRoute.route(handle: you.handle, phoneVerified: you.phoneVerified, onboardingComplete: you.onboardingComplete) {
         case .handle: return .handle
         case .phone: return .phone
         case .home: return .home
@@ -3364,34 +4025,125 @@ final class AppModel: ObservableObject {
             if phone.isEmpty { phoneNotice = TrustCopy.enterPhone }
             return
         }
-        guard phase == .phone, let operation = currentAccountOperation(), requireOnline() else { return }
+        guard (phase == .phone || phoneReplacementMode), let operation = currentAccountOperation(), requireOnline() else { return }
         let ageGeneration = ageAccessState.generation
         phoneSendGeneration &+= 1
         let generation = phoneSendGeneration
         isSendingPhone = true
         defer { if generation == phoneSendGeneration { isSendingPhone = false } }
+        let requestId: UUID
+        if action == .resendCode {
+            requestId = UUID()
+        } else if phoneRetry.operationPhone == phone,
+                  phoneRetry.operationIntent == (phoneReplacementMode ? "replacement" : "onboarding"),
+                  phoneRetry.operationDeliveryState == "uncertain",
+                  phoneRetry.operationVerificationState != "expired",
+                  let existing = phoneRetry.operationRequestID {
+            requestId = existing
+        } else {
+            requestId = UUID()
+        }
+        phoneRetry.operationRequestID = requestId
+        phoneRetry.operationChallengeID = nil
+        phoneRetry.operationIntent = phoneReplacementMode ? "replacement" : "onboarding"
+        phoneRetry.operationPhone = phone
+        phoneRetry.operationDeliveryState = "queued"
+        phoneRetry.operationVerificationState = "pending"
+        savePhoneRetry()
         do {
-            let sent = try await client.sendPhoneCode(phone: phone, consentAction: action)
-            guard isCurrentAccount(operation: operation), canAccessAccountData,
+            let freshIdentity = phoneReplacementMode ? try await auth.signInWithApple() : nil
+            guard phoneOperationIsCurrent(operation, ageGeneration: ageGeneration, generation: generation) else { return }
+            let sent = try await client.sendPhoneCode(
+                phone: phone,
+                consentAction: action,
+                requestId: requestId,
+                intent: phoneReplacementMode ? "replacement" : "onboarding",
+                replacementIdentityToken: freshIdentity?.identityToken,
+                replacementNonce: freshIdentity?.nonce
+            )
+            // A late successful response can still carry authoritative retry timing.
+            // Merge only that budget metadata while the captured account and age
+            // authorization remain current; never let it replace a newer operation,
+            // challenge, draft, or presentation after the user edits or resends.
+            guard isCurrentAccount(operation: operation),
+                  canAccessAccountData,
                   hasCurrentAgeAuthorization(generation: ageGeneration) else { return }
             let now = Date()
-            phoneRetry.apply(phone: sent.normalizedPhone ?? phone, serverTime: sent.serverTime,
+            phoneRetry.apply(
+                phone: sent.normalizedPhone ?? phone,
+                serverTime: sent.serverTime,
                 resendAt: sent.resendRetryAt ?? (sent.serverTime ?? now).addingTimeInterval(Double(sent.resendAfterSeconds)),
-                correctionAt: sent.correctionRetryAt, remaining: sent.immediateNumberAttemptsRemaining, accepted: true, now: now,
-                accountAt: sent.accountRetryAt, accountWindow: sent.accountWindowStartedAt, accountCount: sent.accountSendCount)
+                correctionAt: sent.correctionRetryAt,
+                remaining: sent.immediateNumberAttemptsRemaining,
+                accepted: true,
+                now: now,
+                accountAt: sent.accountRetryAt,
+                accountWindow: sent.accountWindowStartedAt,
+                accountCount: sent.accountSendCount
+            )
             savePhoneRetry()
             guard phoneOperationIsCurrent(operation, ageGeneration: ageGeneration, generation: generation),
+                  phoneRetry.operationRequestID == requestId,
+                  phoneRetry.operationPhone == phone,
                   action == .resendCode || phoneDraft.trimmingCharacters(in: .whitespacesAndNewlines) == phone else { return }
+            phoneRetry.operationRequestID = sent.requestId ?? requestId
+            phoneRetry.operationChallengeID = sent.challengeId
+            phoneRetry.operationDeliveryState = sent.deliveryState ?? "sent"
+            phoneRetry.editingPhoneNumber = false
+            phoneRetry.editedPhoneDraft = nil
+            phoneRetry.phoneEditOriginRequestID = nil
+#if TRUST_STAGING
+            let normalizedPhone = TrustPhoneRetryState.normalized(sent.normalizedPhone ?? phone)
+            let isStagingTestPhone = Self.stagingTestPhoneNumbers.contains(normalizedPhone)
+#endif
             challengedPhone = sent.normalizedPhone ?? phone
             phoneRetry.challengeNumber = challengedPhone
             phoneRetry.challengeExpiresAt = now.addingTimeInterval(sent.expiresAt.timeIntervalSince(sent.serverTime ?? now))
+#if TRUST_STAGING
+            phoneRetry.showingCode = !isStagingTestPhone
+#else
             phoneRetry.showingCode = true
+#endif
             savePhoneRetry()
             phoneCodeDraft = ""
+#if TRUST_STAGING
+            if isStagingTestPhone {
+                phoneCodeSent = false
+                phoneNotice = "No SMS is sent to reserved staging test numbers. Verifying automatically."
+            }
+            if isStagingTestPhone,
+               !isDemoMode,
+               auth.isAuthenticated,
+               auth.account?.provider == .apple,
+               let testCode = sent.developmentCode {
+                let testPhone = challengedPhone
+                phoneCodeSent = false
+                phoneNotice = "Staging test number accepted. Verifying automatically; test numbers only."
+                isSendingPhone = false
+                await verifyPhoneCode(
+                    using: testCode,
+                    expectedPhone: testPhone,
+                    expectedOperation: operation,
+                    expectedAgeGeneration: ageGeneration,
+                    expectedSendGeneration: generation
+                )
+            } else {
+                phoneCodeSent = !isStagingTestPhone
+                if isStagingTestPhone {
+                    phoneNotice = "No SMS is sent to reserved staging test numbers. Verification could not complete automatically; retry when available."
+                } else {
+                    phoneNotice = nil
+                }
+            }
+#else
             phoneCodeSent = true
             phoneNotice = sent.developmentCode.map(TrustCopy.developmentPhoneCode)
+#endif
+        } catch is CancellationError {
+            return
         } catch {
-            guard isCurrentAccount(operation: operation), canAccessAccountData,
+            guard isCurrentAccount(operation: operation),
+                  canAccessAccountData,
                   hasCurrentAgeAuthorization(generation: ageGeneration) else { return }
             if case TrustClientError.phoneRetry(let code, _, let details) = error {
                 let now = Date()
@@ -3402,9 +4154,22 @@ final class AppModel: ObservableObject {
                     accepted: code == "otp_send_failed", now: now,
                     accountAt: details.accountRetryAt, accountWindow: details.accountWindowStartedAt, accountCount: details.accountSendCount)
                 if details.immediateNumberAttemptsRemaining == nil {
-                    phoneRetry.globalDeadline = now.addingTimeInterval(retryAt.timeIntervalSince(details.serverTime ?? now))
+                    let incomingGlobalDeadline = now.addingTimeInterval(retryAt.timeIntervalSince(details.serverTime ?? now))
+                    phoneRetry.globalDeadline = max(phoneRetry.globalDeadline ?? .distantPast, incomingGlobalDeadline)
                 }
                 savePhoneRetry()
+            }
+            guard phoneOperationIsCurrent(operation, ageGeneration: ageGeneration, generation: generation),
+                  phoneRetry.operationRequestID == requestId,
+                  phoneRetry.operationPhone == phone else { return }
+            if (error as? TrustClientError)?.isConnectivity == true {
+                phoneRetry.operationDeliveryState = "uncertain"
+                savePhoneRetry()
+                await reconcilePhoneVerificationState(requestId: requestId, operation: operation,
+                    ageGeneration: ageGeneration, expectedGeneration: generation, expectedPhone: phone)
+                guard phoneOperationIsCurrent(operation, ageGeneration: ageGeneration, generation: generation),
+                      phoneRetry.operationRequestID == requestId,
+                      phoneRetry.operationPhone == phone else { return }
             }
             guard phoneOperationIsCurrent(operation, ageGeneration: ageGeneration, generation: generation),
                   action == .resendCode || phoneDraft.trimmingCharacters(in: .whitespacesAndNewlines) == phone else { return }
@@ -3413,17 +4178,199 @@ final class AppModel: ObservableObject {
         }
     }
 
+#if TRUST_STAGING
+    func autoVerifyStagingTestNumberIfReady(_ rawPhone: String) async -> Bool {
+        let normalized = TrustPhoneRetryState.normalized(rawPhone)
+        guard phase == .phone,
+              auth.isAuthenticated,
+              auth.account?.provider == .apple,
+              !isDemoMode,
+              hasCurrentAgeAuthorization(generation: ageAccessState.generation),
+              normalized == TrustPhoneRetryState.normalized(phoneDraft),
+              Self.stagingTestPhoneNumbers.contains(normalized) else { return true }
+        guard phoneRetry.secondsRemaining(for: rawPhone, now: Date()) == 0 else { return false }
+        await sendPhoneCode(action: .sendCode)
+        return true
+    }
+#endif
+
     func editPhoneNumber() {
         cancelPendingPhoneSend()
         phoneCodeSent = false
         phoneCodeDraft = ""
         phoneNotice = nil
         phoneRetry.showingCode = false
+        phoneRetry.editingPhoneNumber = true
+        phoneRetry.editedPhoneDraft = phoneDraft
+        phoneRetry.phoneEditOriginRequestID = phoneRetry.operationRequestID
         savePhoneRetry()
     }
 
+    func persistEditedPhoneDraft() {
+        guard phoneRetry.editingPhoneNumber == true else { return }
+        phoneRetry.editedPhoneDraft = phoneDraft
+        savePhoneRetry()
+    }
+
+    func beginPhoneReplacement() {
+        guard phase == .home, auth.account?.provider == .apple else { return }
+        loadPhoneRetry()
+        phoneReplacementMode = true
+        let hasResumableReplacement = phoneRetry.operationIntent == "replacement"
+            && phoneRetry.operationRequestID != nil
+            && ["pending", "uncertain", "verified"].contains(phoneRetry.operationVerificationState ?? "")
+        phoneDraft = hasResumableReplacement
+            ? (phoneRetry.editingPhoneNumber == true
+                ? (phoneRetry.editedPhoneDraft ?? phoneRetry.operationPhone ?? "")
+                : (phoneRetry.operationPhone ?? ""))
+            : ""
+        phoneLocalDraft = ""
+        phoneCountry = .unitedStates
+        phoneCountryWasChosen = false
+        phoneCodeDraft = ""
+        phoneCodeSent = false
+        phoneNotice = nil
+        if !hasResumableReplacement {
+            phoneRetry.editingPhoneNumber = false
+            phoneRetry.editedPhoneDraft = nil
+            phoneRetry.phoneEditOriginRequestID = nil
+            phoneRetry.operationRequestID = nil
+            phoneRetry.operationChallengeID = nil
+            phoneRetry.operationIntent = nil
+            phoneRetry.operationPhone = nil
+            phoneRetry.operationVerificationState = nil
+            phoneRetry.operationDeliveryState = nil
+            phoneRetry.showingCode = false
+        }
+        savePhoneRetry()
+    }
+
+    func endPhoneReplacement() {
+        guard phoneReplacementMode else { return }
+        cancelPendingPhoneSend()
+        phoneReplacementMode = false
+        phoneCodeDraft = ""
+        phoneCodeSent = false
+        phoneNotice = nil
+    }
+
+    func refreshPhoneVerificationState() async {
+        guard let operation = currentAccountOperation() else { return }
+        await reconcilePhoneVerificationState(requestId: phoneRetry.operationRequestID, operation: operation,
+            ageGeneration: ageAccessState.generation, expectedPhone: phoneRetry.operationPhone)
+    }
+
+    private func reconcilePhoneVerificationState(
+        requestId: UUID?,
+        operation: TrustAccountOperation,
+        ageGeneration: UInt64,
+        expectedGeneration: UInt64? = nil,
+        expectedPhone: String? = nil
+    ) async {
+        let generation = expectedGeneration ?? phoneSendGeneration
+        let requestedIDAtStart = requestId
+        let phoneAtStart = expectedPhone ?? phoneRetry.operationPhone
+        do {
+            let state = try await client.phoneVerificationState(requestId: requestId)
+            guard isCurrentAccount(operation: operation),
+                  hasCurrentAgeAuthorization(generation: ageGeneration),
+                  phoneSendGeneration == generation,
+                  phoneRetry.operationRequestID == requestedIDAtStart,
+                  phoneRetry.operationPhone == phoneAtStart else { return }
+            verifiedPhoneMasked = state.phoneMasked
+            verifiedPhoneRegion = state.region
+            if let current = state.operation,
+               requestedIDAtStart == nil || current.requestId == requestedIDAtStart {
+                phoneRetry.operationRequestID = current.requestId
+                phoneRetry.operationChallengeID = current.challengeId
+                phoneRetry.operationIntent = current.purpose
+                phoneRetry.operationDeliveryState = current.deliveryState
+                phoneRetry.operationVerificationState = current.verificationState
+                let submittedEditWasConfirmed = phoneRetry.editingPhoneNumber == true
+                    && requestedIDAtStart != nil
+                    && current.requestId == requestedIDAtStart
+                    && requestedIDAtStart != phoneRetry.phoneEditOriginRequestID
+                    && TrustPhoneRetryState.normalized(phoneRetry.editedPhoneDraft ?? "")
+                        == TrustPhoneRetryState.normalized(phoneRetry.operationPhone ?? "")
+                if submittedEditWasConfirmed {
+                    phoneRetry.editingPhoneNumber = false
+                    phoneRetry.editedPhoneDraft = nil
+                    phoneRetry.phoneEditOriginRequestID = nil
+                }
+                if current.verificationState == "pending", current.expiresAt > Date(),
+                   let phone = phoneRetry.operationPhone {
+                    phoneRetry.challengeNumber = phone
+                    phoneRetry.challengeExpiresAt = current.expiresAt
+                    if phoneRetry.editingPhoneNumber != true {
+                        challengedPhone = phone
+                        phoneDraft = phone
+                        synchronizePhoneEditorFromDraft()
+                        phoneCodeSent = true
+                        phoneRetry.showingCode = true
+                    }
+                }
+            }
+            if let retry = state.retry {
+                phoneRetry.apply(
+                    phone: phoneRetry.operationPhone ?? phoneDraft,
+                    serverTime: retry.serverTime,
+                    resendAt: retry.resendRetryAt,
+                    correctionAt: retry.correctionRetryAt,
+                    remaining: retry.immediateNumberAttemptsRemaining,
+                    accepted: false,
+                    now: Date(),
+                    accountAt: retry.accountRetryAt,
+                    accountWindow: retry.accountWindowStartedAt,
+                    accountCount: retry.accountSendCount
+                )
+            }
+            savePhoneRetry()
+
+            let replacementVerified = phoneReplacementMode
+                && state.operation?.verificationState == "verified"
+                && state.operation?.requestId == phoneRetry.operationRequestID
+                && state.operation?.challengeId == phoneRetry.operationChallengeID
+            if state.phoneVerified && (!phoneReplacementMode || replacementVerified) {
+                if !phoneReplacementMode || replacementVerified {
+                    if var person = authenticatedPerson {
+                        person.phoneVerified = true
+                        if replacementVerified { person.discoveryEnabled = false }
+                        authenticatedPerson = person
+                    }
+                    if var current = snapshot {
+                        current.you.phoneVerified = true
+                        if replacementVerified { current.you.discoveryEnabled = false }
+                        snapshot = current
+                    }
+                    phoneCodeSent = false
+                    phoneRetry.showingCode = false
+                    phoneRetry.editingPhoneNumber = false
+                    phoneRetry.editedPhoneDraft = nil
+                    phoneRetry.phoneEditOriginRequestID = nil
+                    phoneRetry.operationVerificationState = "verified"
+                    savePhoneRetry()
+                    if phoneReplacementMode {
+                        phoneReplacementMode = false
+                        if phase == .home { await refresh() }
+                    } else {
+                        routeAfterAuth(onboardingComplete: false)
+                    }
+                }
+            }
+        } catch {
+            // A status read is advisory. Preserve a locally confirmed verification
+            // and the current route when the circle or status endpoint is unavailable.
+            guard isCurrentAccount(operation: operation),
+                  hasCurrentAgeAuthorization(generation: ageGeneration),
+                  phoneSendGeneration == generation,
+                  phoneRetry.operationRequestID == requestedIDAtStart,
+                  phoneRetry.operationPhone == phoneAtStart else { return }
+            phoneNotice = plainMessage(for: error)
+        }
+    }
+
     private func phoneOperationIsCurrent(_ operation: TrustAccountOperation, ageGeneration: UInt64, generation: UInt64) -> Bool {
-        phase == .phone && generation == phoneSendGeneration && isCurrentAccount(operation: operation)
+        (phase == .phone || phoneReplacementMode) && generation == phoneSendGeneration && isCurrentAccount(operation: operation)
             && canAccessAccountData && hasCurrentAgeAuthorization(generation: ageGeneration)
     }
 
@@ -3434,36 +4381,100 @@ final class AppModel: ObservableObject {
     }
 
     func verifyPhoneCode() async {
+        await verifyPhoneCode(using: nil)
+    }
+
+    private func verifyPhoneCode(
+        using suppliedCode: String?,
+        expectedPhone: String? = nil,
+        expectedOperation: TrustAccountOperation? = nil,
+        expectedAgeGeneration: UInt64? = nil,
+        expectedSendGeneration: UInt64? = nil
+    ) async {
         phoneNoticeIsConflict = false
+#if TRUST_STAGING
+        let phone = expectedPhone ?? challengedPhone
+        let code = (suppliedCode ?? phoneCodeDraft).trimmingCharacters(in: .whitespacesAndNewlines)
+        if let expectedSendGeneration {
+            guard let expectedOperation, let expectedAgeGeneration,
+                  challengedPhone == phone,
+                  phoneOperationIsCurrent(expectedOperation, ageGeneration: expectedAgeGeneration, generation: expectedSendGeneration) else { return }
+        }
+#else
         let phone = challengedPhone
         let code = phoneCodeDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+#endif
         guard !phone.isEmpty, !code.isEmpty, !isSendingPhone else {
             if code.isEmpty { phoneNotice = TrustCopy.enterPhoneCode }
             return
         }
-        guard phase == .phone, let operation = currentAccountOperation(), requireOnline() else { return }
+#if TRUST_STAGING
+        guard (phase == .phone || phoneReplacementMode), let operation = expectedOperation ?? currentAccountOperation(), requireOnline() else { return }
+        let ageGeneration = expectedAgeGeneration ?? ageAccessState.generation
+#else
+        guard (phase == .phone || phoneReplacementMode), let operation = currentAccountOperation(), requireOnline() else { return }
         let ageGeneration = ageAccessState.generation
+#endif
         phoneSendGeneration &+= 1
         let generation = phoneSendGeneration
         isSendingPhone = true
         defer { if generation == phoneSendGeneration { isSendingPhone = false } }
         do {
-            try await client.verifyPhoneCode(phone: phone, code: code)
+            let verified = try await client.verifyPhoneCode(
+                phone: phone,
+                code: code,
+                requestId: phoneRetry.operationRequestID,
+                challengeId: phoneRetry.operationChallengeID,
+                returnAccountState: true
+            )
             guard phoneOperationIsCurrent(operation, ageGeneration: ageGeneration, generation: generation), challengedPhone == phone else { return }
             phoneNotice = nil
-            recordConfirmedCircleMutation()
-            let mutationGeneration = confirmedCircleMutationBarrier.capture()
-            let result = try await client.refreshCircle(operation: operation) { [weak self] in self?.currentAccountOperation() }
-            guard phoneOperationIsCurrent(operation, ageGeneration: ageGeneration, generation: generation), challengedPhone == phone else { return }
-            guard confirmedCircleMutationBarrier.permitsCommit(startedAt: mutationGeneration) else { return }
-            guard client.commitCircleRefresh(result, operation: operation, currentOperation: { [weak self] in self?.currentAccountOperation() }) else { return }
-            snapshot = result.snapshot
-            setAccountDataScope(result.snapshot.you.id.uuidString.lowercased())
+            if let verified {
+                guard verified.verified,
+                      verified.requestId == phoneRetry.operationRequestID,
+                      verified.challengeId == phoneRetry.operationChallengeID else {
+                    phoneNotice = TrustCopy.phoneOperationMismatch
+                    await reconcilePhoneVerificationState(requestId: phoneRetry.operationRequestID, operation: operation,
+                        ageGeneration: ageGeneration, expectedGeneration: generation, expectedPhone: phone)
+                    return
+                }
+                authenticatedPerson = verified.you.model
+                if var current = snapshot { current.you = verified.you.model; snapshot = current }
+                verifiedPhoneMasked = nil
+                phoneRetry.operationVerificationState = "verified"
+            } else {
+                // A successful legacy 204 is itself authoritative. Do not make a
+                // later circle refresh decide whether verification succeeded.
+                if var person = authenticatedPerson { person.phoneVerified = true; authenticatedPerson = person }
+                if var current = snapshot { current.you.phoneVerified = true; snapshot = current }
+                phoneRetry.operationVerificationState = "verified"
+            }
             phoneRetry.showingCode = false
+            phoneCodeSent = false
+            phoneCodeDraft = ""
             savePhoneRetry()
-            routeAfterAuth(onboardingComplete: false)
+            if phoneReplacementMode {
+                await reconcilePhoneVerificationState(requestId: phoneRetry.operationRequestID, operation: operation,
+                    ageGeneration: ageGeneration, expectedGeneration: generation, expectedPhone: phone)
+                if isCurrentAccount(operation: operation), !phoneReplacementMode { phase = .home }
+            } else {
+                if var person = authenticatedPerson { person.phoneVerified = true; authenticatedPerson = person }
+                routeAfterAuth(onboardingComplete: false)
+                await completeVerifiedPhoneOnboarding()
+            }
         } catch {
             guard phoneOperationIsCurrent(operation, ageGeneration: ageGeneration, generation: generation), challengedPhone == phone else { return }
+            if (error as? TrustClientError)?.isConnectivity == true {
+                let requestID = phoneRetry.operationRequestID
+                await reconcilePhoneVerificationState(requestId: requestID, operation: operation,
+                    ageGeneration: ageGeneration, expectedGeneration: generation, expectedPhone: phone)
+                guard phoneOperationIsCurrent(operation, ageGeneration: ageGeneration, generation: generation),
+                      phoneRetry.operationRequestID == requestID else { return }
+                if !phoneReplacementMode, phoneRetry.operationVerificationState == "verified" {
+                    await completeVerifiedPhoneOnboarding()
+                    return
+                }
+            }
             phoneNotice = plainMessage(for: error)
             phoneNoticeIsConflict = ["phone_unavailable", "phone_in_use"].contains((error as? TrustClientError)?.apiCode ?? "")
         }
@@ -3472,6 +4483,9 @@ final class AppModel: ObservableObject {
     private func resetPhoneDraft() {
         cancelPendingPhoneSend()
         phoneDraft = ""
+        phoneLocalDraft = ""
+        phoneCountry = .unitedStates
+        phoneCountryWasChosen = false
         challengedPhone = ""
         phoneCodeDraft = ""
         phoneNotice = nil
@@ -3507,6 +4521,7 @@ final class AppModel: ObservableObject {
         do {
             if let signed = signedTransactionInfo, !signed.isEmpty {
                 try await client.verifyStoreKitTransaction(signed)
+                store.recordServerAcceptedVerifiedTransaction(signed)
                 await refresh()
                 return
             }
@@ -3573,9 +4588,47 @@ final class AppModel: ObservableObject {
         UIApplication.shared.open(url)
     }
 
+    func openNotificationSettings() {
+        guard let url = URL(string: UIApplication.openNotificationSettingsURLString) else { return }
+        UIApplication.shared.open(url)
+    }
+
     func requestNotifications() async {
-        guard canAccessAccountData else { return }
+        guard !isRequestingNotifications,
+              phase == .home,
+              !isDemoMode,
+              auth.isAuthenticated,
+              let operation = currentAccountOperation() else { return }
+        isRequestingNotifications = true
+        defer {
+            if isCurrentAccount(operation: operation) {
+                isRequestingNotifications = false
+            }
+        }
         await receipts.requestPermission()
+        guard isCurrentAccount(operation: operation) else { return }
+    }
+
+    /// Refreshes notification authorization and registers with APNs only when
+    /// permission is already allowed. It never presents the system prompt.
+    func refreshNotificationStatus() {
+        guard phase == .home,
+              !isDemoMode,
+              auth.isAuthenticated,
+              let operation = currentAccountOperation() else {
+            receipts.refreshStatus()
+            return
+        }
+        guard isCurrentAccount(operation: operation) else { return }
+        client.token = operation.token
+        receipts.refreshAuthorizationAndRegisterIfAllowed(client: client)
+    }
+
+    func refreshPushRegistrationForLanguage() {
+        guard phase == .home, !isDemoMode, auth.isAuthenticated,
+              let operation = currentAccountOperation(), isCurrentAccount(operation: operation) else { return }
+        client.token = operation.token
+        receipts.refreshAuthorizationAndRegisterIfAllowed(client: client)
     }
 
     // MARK: View log export
@@ -3732,7 +4785,6 @@ final class AppModel: ObservableObject {
             location.commitHome(candidate)
             showToast(TrustCopy.homeSetToast)
             syncHomeMonitoring()
-            if !location.hasAlways { showingAlwaysExplainer = true }
             return
         }
         guard !isSettingHome, let operation = currentAccountOperation() else { return }
@@ -3756,9 +4808,6 @@ final class AppModel: ObservableObject {
                     self.location.commitHome(candidate)
                     self.showToast(TrustCopy.homeSetToast)
                     self.syncHomeMonitoring()
-                    if !self.location.hasAlways {
-                        self.showingAlwaysExplainer = true
-                    }
                     await self.refresh()
                 } catch {
                     guard operation.matches(token: self.auth.sessionToken, generation: self.accountGeneration) else { return }

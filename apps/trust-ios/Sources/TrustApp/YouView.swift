@@ -1,15 +1,22 @@
 import SwiftUI
 import TrustCore
+import UserNotifications
 
 /// You — profile, membership, personal location settings, and account.
 struct YouView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.trustPalette) private var palette
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.scenePhase) private var scenePhase
     @AppStorage(TrustAppearance.storageKey) private var appearance = TrustAppearance.system.rawValue
     @AppStorage(TrustAppLanguage.storageKey) private var appLanguage = TrustAppLanguage.system.rawValue
     @State private var showingDeleteAccount = false
+    @State private var showingSignOutOptions = false
     @State private var showingAvatarPicker = false
     @State private var showingLocation = false
+    @State private var showingPhoneReplacement = false
+    @State private var showingProfileEditor = false
+    @State private var showingAccountHelp = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -21,8 +28,17 @@ struct YouView: View {
                     profileCard
                         .padding(.top, 22)
 
+                    Button(TrustCopy.editProfile) { showingProfileEditor = true }
+                        .buttonStyle(TrustOutlineButtonStyle(compact: true))
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 8)
+                        .accessibilityIdentifier("edit-profile")
+
                     discoveryCard
                         .padding(.top, 16)
+
+                    phoneRow
+                        .padding(.top, 12)
 
                     myLocationRow
                         .padding(.top, 16)
@@ -33,6 +49,9 @@ struct YouView: View {
 
                     TrustSectionHeading(TrustCopy.preferences)
                         .padding(.bottom, 4)
+                    NotificationsSettingsSection(notifier: model.receipts)
+                        .environmentObject(model)
+                        .padding(.bottom, 18)
                     appearanceRow
                         .padding(.bottom, 18)
                     languageRow
@@ -40,7 +59,11 @@ struct YouView: View {
 
                     TrustSectionHeading(TrustCopy.account)
                         .padding(.bottom, 4)
-                    Button(TrustCopy.signOut) { model.signOut() }
+                    Button(TrustCopy.accountHelp) { showingAccountHelp = true }
+                        .buttonStyle(TrustTextButtonStyle())
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .accessibilityIdentifier("account-help")
+                    Button(TrustCopy.signOut) { requestSignOut() }
                         .buttonStyle(TrustTextButtonStyle())
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.bottom, 8)
@@ -53,26 +76,67 @@ struct YouView: View {
                 .padding(.bottom, 28)
                 .trustReadableWidth()
             }
+            .accessibilityIdentifier("you-scroll")
+            .clipped()
             legalLinks
         }
         .background(palette.paper.ignoresSafeArea())
+        .onChange(of: model.selectedTab) { _, tab in
+            if tab == .you { model.refreshNotificationStatus() }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active, model.selectedTab == .you {
+                model.refreshNotificationStatus()
+            }
+        }
         .confirmationDialog(TrustCopy.deleteAccountConfirm, isPresented: $showingDeleteAccount, titleVisibility: .visible) {
             Button(TrustCopy.deleteAccount, role: .destructive) {
                 Task { await model.deleteAccount() }
             }
             Button(TrustCopy.cancel, role: .cancel) {}
         }
+        .confirmationDialog(TrustCopy.signOut, isPresented: $showingSignOutOptions, titleVisibility: .visible) {
+            if model.canStopAllBeforeSignOut {
+                Button(TrustCopy.stopAllAndSignOut, role: .destructive) { Task { await model.stopAllAndSignOut() } }
+            }
+            Button(TrustCopy.signOut) { model.signOut() }
+            Button(TrustCopy.cancel, role: .cancel) {}
+        } message: {
+            Text(TrustCopy.signOutSharingWarning)
+        }
         .sheet(isPresented: $showingAvatarPicker) {
             ProfileAvatarPicker()
                 .environmentObject(model)
-                .presentationDetents([.medium, .large])
+                .presentationDetents(dynamicTypeSize.isAccessibilitySize ? [.large] : [.medium, .large])
         }
         .sheet(isPresented: $showingLocation) {
             locationSheet
                 .environmentObject(model)
                 .presentationDetents([.large])
         }
+        .sheet(isPresented: $showingProfileEditor) {
+            EditProfileSheet()
+                .environmentObject(model)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $showingPhoneReplacement) {
+            PhoneView()
+                .environmentObject(model)
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+                .onDisappear { model.endPhoneReplacement() }
+        }
+        .sheet(isPresented: $showingAccountHelp) {
+            AccountHelpSheet(onSignOut: {
+                requestSignOut()
+            }, onDelete: { showingDeleteAccount = true })
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+        }
         .task {
+            if model.selectedTab == .you { model.refreshNotificationStatus() }
+            if model.selectedTab == .you { await model.refreshPhoneVerificationState() }
             guard !model.isDemoMode else { return }
             if let signed = await model.store.refreshEntitlement() {
                 await model.syncCircleEntitlement(signedTransactionInfo: signed)
@@ -80,21 +144,40 @@ struct YouView: View {
         }
     }
 
+    private func requestSignOut() {
+        if model.outboundActiveCount > 0 { showingSignOutOptions = true }
+        else { model.signOut() }
+    }
+
     private var legalLinks: some View {
         VStack(spacing: 0) {
             Rectangle()
                 .fill(palette.line)
                 .frame(height: 1)
-            HStack(spacing: 8) {
-                Link(TrustCopy.privacy, destination: AppConfiguration.privacyURL)
-                    .frame(minHeight: 44)
-                Text("·")
-                Link(TrustCopy.terms, destination: AppConfiguration.termsURL)
-                    .frame(minHeight: 44)
-                Text("·")
-                Link(TrustCopy.support, destination: AppConfiguration.supportURL)
-                    .frame(minHeight: 44)
-                    .accessibilityIdentifier("support-link")
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) {
+                    Link(TrustCopy.privacy, destination: AppConfiguration.privacyURL)
+                        .frame(minHeight: 44)
+                        .fixedSize(horizontal: true, vertical: false)
+                    Text("·")
+                    Link(TrustCopy.terms, destination: AppConfiguration.termsURL)
+                        .frame(minHeight: 44)
+                        .fixedSize(horizontal: true, vertical: false)
+                    Text("·")
+                    Link(TrustCopy.support, destination: AppConfiguration.supportURL)
+                        .frame(minHeight: 44)
+                        .fixedSize(horizontal: true, vertical: false)
+                        .accessibilityIdentifier("support-link")
+                }
+                VStack(spacing: 0) {
+                    Link(TrustCopy.privacy, destination: AppConfiguration.privacyURL)
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                    Link(TrustCopy.terms, destination: AppConfiguration.termsURL)
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                    Link(TrustCopy.support, destination: AppConfiguration.supportURL)
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                        .accessibilityIdentifier("support-link")
+                }
             }
             .font(TrustTheme.ui(12))
             .foregroundStyle(palette.muted)
@@ -110,19 +193,29 @@ struct YouView: View {
     // MARK: Profile and personal settings
 
     private var appearanceRow: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 12) {
-                appearanceLabel
-                Spacer(minLength: 8)
-                appearancePicker
-            }
-            VStack(alignment: .leading, spacing: 4) {
-                appearanceLabel
-                appearancePicker
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 4) {
+                    appearanceLabel
+                    appearancePicker
+                }
+                .fixedSize(horizontal: false, vertical: true)
+            } else {
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 12) {
+                        appearanceLabel
+                        Spacer(minLength: 8)
+                        appearancePicker
+                    }
+                    VStack(alignment: .leading, spacing: 4) {
+                        appearanceLabel
+                        appearancePicker
+                    }
+                }
             }
         }
         .padding(.horizontal, 14)
-        .frame(minHeight: 52)
+        .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: TrustTheme.controlRadius, style: .continuous).fill(palette.surface))
     }
 
@@ -153,19 +246,29 @@ struct YouView: View {
     }
 
     private var languageRow: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 12) {
-                languageLabel
-                Spacer(minLength: 8)
-                languagePicker
-            }
-            VStack(alignment: .leading, spacing: 4) {
-                languageLabel
-                languagePicker
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 4) {
+                    languageLabel
+                    languagePicker
+                }
+                .fixedSize(horizontal: false, vertical: true)
+            } else {
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 12) {
+                        languageLabel
+                        Spacer(minLength: 8)
+                        languagePicker
+                    }
+                    VStack(alignment: .leading, spacing: 4) {
+                        languageLabel
+                        languagePicker
+                    }
+                }
             }
         }
         .padding(.horizontal, 14)
-        .frame(minHeight: 52)
+        .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: TrustTheme.controlRadius, style: .continuous).fill(palette.surface))
     }
 
@@ -203,6 +306,7 @@ struct YouView: View {
         .onChange(of: appLanguage) { _, language in
             let value = TrustAppLanguage(rawValue: language) ?? .system
             model.traceUIInteraction("picker language observed: \(value.rawValue)")
+            model.refreshPushRegistrationForLanguage()
         }
     }
 
@@ -271,6 +375,36 @@ struct YouView: View {
         }
     }
 
+    private var phoneRow: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "phone.fill")
+                .font(.system(size: 18))
+                .foregroundStyle(palette.accent)
+                .frame(width: 28)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(TrustCopy.phoneNumber)
+                    .trustFont(15, weight: .medium)
+                    .foregroundStyle(palette.ink)
+                Text(model.verifiedPhoneMasked ?? TrustCopy.phoneNumberUnavailable)
+                    .trustFont(13)
+                    .foregroundStyle(palette.muted)
+            }
+            Spacer(minLength: 8)
+            Button(TrustCopy.changePhoneNumber) {
+                model.beginPhoneReplacement()
+                showingPhoneReplacement = true
+            }
+            .font(TrustTheme.ui(13, weight: .semibold))
+            .foregroundStyle(palette.accent)
+            .frame(minHeight: 44)
+            .accessibilityIdentifier("change-phone-number")
+        }
+        .padding(.horizontal, 14)
+        .frame(maxWidth: .infinity, minHeight: 58, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: TrustTheme.controlRadius, style: .continuous).fill(palette.surface))
+    }
+
     private var myLocationRow: some View {
         Button { showingLocation = true } label: {
             HStack(spacing: 13) {
@@ -337,6 +471,7 @@ struct YouView: View {
                     .fixedSize(horizontal: false, vertical: true)
                 Button(TrustCopy.openIOSSettings) { model.openSystemSettings() }
                     .buttonStyle(TrustOutlineButtonStyle(compact: true))
+                    .accessibilityIdentifier("location-permission-action")
             } else if !model.location.hasAlways {
                 Text(model.location.isPrecise ? TrustCopy.keptWhileUsing : TrustCopy.locationReducedAccuracy)
                     .trustFont(12)
@@ -347,6 +482,7 @@ struct YouView: View {
                     else { model.requestAlwaysLocation() }
                 }
                 .buttonStyle(TrustOutlineButtonStyle(compact: true))
+                .accessibilityIdentifier("location-permission-action")
             }
         }
     }
@@ -378,8 +514,12 @@ struct YouView: View {
                     .trustFont(12)
                     .foregroundStyle(palette.muted)
                     .fixedSize(horizontal: false, vertical: true)
-                Button(TrustCopy.allowAlways) { model.requestAlwaysLocation() }
+                Button(model.location.needsSystemSettings ? TrustCopy.openIOSSettings : TrustCopy.allowAlways) {
+                    if model.location.needsSystemSettings { model.openSystemSettings() }
+                    else { model.requestAlwaysLocation() }
+                }
                     .buttonStyle(TrustOutlineButtonStyle(compact: true))
+                    .accessibilityIdentifier("home-permission-action")
             }
             HStack(spacing: 12) {
                 Button(TrustCopy.setHomeHere) { model.setHomeFromCurrentLocation() }
@@ -435,6 +575,149 @@ struct YouView: View {
             RoundedRectangle(cornerRadius: TrustTheme.radius, style: .continuous)
                 .stroke(palette.line, lineWidth: 1)
         )
+    }
+}
+
+private struct EditProfileSheet: View {
+    @EnvironmentObject private var model: AppModel
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.trustPalette) private var palette
+    @State private var displayName = ""
+    @State private var handle = ""
+    @State private var saving = false
+    @State private var saveError: String?
+
+    private var handleIsValid: Bool {
+        if case .valid = TrustHandle.status(of: handle) { return true }
+        return false
+    }
+
+    private var handleIsAcceptable: Bool { handle == model.you.handle || handleIsValid }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section(TrustCopy.profileName) {
+                    TextField(TrustCopy.profileName, text: $displayName)
+                        .textInputAutocapitalization(.words)
+                        .autocorrectionDisabled()
+                        .accessibilityIdentifier("profile-display-name")
+                }
+                Section(TrustCopy.handle) {
+                    TextField(TrustCopy.handlePlaceholder, text: $handle)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .accessibilityIdentifier("profile-handle")
+                    if !handle.isEmpty && !handleIsValid {
+                        Text(TrustCopy.handleRules)
+                            .font(.footnote)
+                            .foregroundStyle(palette.muted)
+                    }
+                }
+                if let saveError {
+                    Section {
+                        Text(saveError)
+                            .font(.footnote)
+                            .foregroundStyle(palette.danger)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityIdentifier("profile-save-error")
+                    }
+                }
+            }
+            .scrollContentBackground(.hidden)
+            .background(palette.paper)
+            .navigationTitle(TrustCopy.editProfile)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(TrustCopy.cancel) { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(saving ? TrustCopy.saving : TrustCopy.save) {
+                        saving = true
+                        saveError = nil
+                        Task {
+                            let saved = await model.saveProfile(displayName: displayName, handle: handle)
+                            saving = false
+                            if saved { dismiss() }
+                            else { saveError = model.profileSaveNotice ?? TrustCopy.requestFailed }
+                        }
+                    }
+                    .disabled(saving || displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !handleIsAcceptable || model.isDemoMode)
+                }
+            }
+            .task {
+                displayName = model.you.displayName
+                handle = model.you.handle ?? ""
+            }
+        }
+    }
+}
+
+
+private struct NotificationsSettingsSection: View {
+    @EnvironmentObject private var model: AppModel
+    @Environment(\.trustPalette) private var palette
+    @ObservedObject var notifier: LookReceiptNotifier
+
+    private var statusLabel: String {
+        switch notifier.authorization {
+        case .notDetermined: return TrustCopy.notificationsNotEnabled
+        case .denied: return TrustCopy.notificationsOffInSettings
+        case .authorized: return TrustCopy.notificationsAllowed
+        case .provisional: return TrustCopy.notificationsQuietlyAllowed
+        case .ephemeral: return TrustCopy.notificationsQuietlyAllowed
+        @unknown default: return TrustCopy.notificationsCheckSettings
+        }
+    }
+
+    private var needsPermissionPrompt: Bool {
+        notifier.authorization == .notDetermined
+    }
+
+    var body: some View {
+        TrustCard(fill: palette.surface) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 10) {
+                    Image(systemName: "bell.badge")
+                        .font(.system(size: 19))
+                        .foregroundStyle(palette.accent)
+                        .frame(width: 28)
+                        .accessibilityHidden(true)
+                    Text(TrustCopy.notificationsHeading)
+                        .trustFont(16, weight: .semibold)
+                        .foregroundStyle(palette.ink)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Text(TrustCopy.notificationsBody)
+                    .trustFont(13)
+                    .foregroundStyle(palette.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text(statusLabel)
+                    .trustFont(13, weight: .semibold)
+                    .foregroundStyle(palette.ink)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("notifications-permission-status")
+
+                Button {
+                    if needsPermissionPrompt {
+                        Task { await model.requestNotifications() }
+                    } else {
+                        model.openNotificationSettings()
+                    }
+                } label: {
+                    Text(model.isRequestingNotifications ? TrustCopy.notificationsRequesting :
+                            (needsPermissionPrompt ? TrustCopy.enableAlerts : TrustCopy.openIOSSettings))
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(TrustOutlineButtonStyle(compact: true))
+                .disabled(model.isRequestingNotifications || (needsPermissionPrompt && model.isDemoMode))
+                .accessibilityIdentifier(needsPermissionPrompt ? "enable-notifications" : "open-notification-settings")
+            }
+        }
     }
 }
 

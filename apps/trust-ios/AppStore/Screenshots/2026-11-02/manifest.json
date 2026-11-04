@@ -1,0 +1,415 @@
+{
+  "applicationSource": "faa306f85d4a24732f03b8420cf78b1a556846bf",
+  "recordedAtUTC": "2026-11-03T21:58:15.116437+00:00",
+  "fictionalDataOnly": true,
+  "rawUIAltered": false,
+  "composedCount": 36,
+  "visualReview": {
+    "reviewer": "Astra",
+    "result": "ACCEPT",
+    "classicPanels": 24,
+    "DuoPanels": 12,
+    "realCatalogPaywall": "ACCEPT",
+    "DuoOSClockRail": "Native OS baseline preserved; app UI not painted or cropped"
+  },
+  "assets": [
+    {
+      "key": "iphone-69/01-map.png",
+      "dimensions": [
+        1320,
+        2868
+      ],
+      "mode": "RGB",
+      "sha256": "78523fd06e20e3803d12def86618ad88467419cf36754aeca57a08082b5bfac3",
+      "rawSHA256": "2a5658421a66e14b411fd4367cc34244209b84a0e7517f0f62ec01d6493d5568"
+    },
+    {
+      "key": "iphone-69/02-share.png",
+      "dimensions": [
+        1320,
+        2868
+      ],
+      "mode": "RGB",
+      "sha256": "93d853992b3ae3a904559055659909c841e33783c2bd1297342cab2a117376ad",
+      "rawSHA256": "06d75fe1a67f9fb7e51a799ac39b5aa0d556bc99a70b65fc5d88533e6487e8bf"
+    },
+    {
+      "key": "iphone-69/03-look.png",
+      "dimensions": [
+        1320,
+        2868
+      ],
+      "mode": "RGB",
+      "sha256": "10c6af52383cad4c33c329556994afd6f8f8d1f6b7979bc50e432c505971f3e4",
+      "rawSHA256": "85ee3c54c3091c3b7f253378cc912a688484e715360be3cb8b5205ddcb0c5f08"
+    },
+    {
+      "key": "iphone-69/04-log.png",
+      "dimensions": [
+        1320,
+        2868
+      ],
+      "mode": "RGB",
+      "sha256": "826fd9b8ac4e54af79440be510b5cdfc761640df998b29468e7568d1fac6a679",
+      "rawSHA256": "07ffd2f0a9a01b05a6d8ae94098e8ad93a45efcb0ce2568e526e6d409f1ffcd5"
+    },
+    {
+      "key": "iphone-69/05-view.png",
+      "dimensions": [
+        1320,
+        2868
+      ],
+      "mode": "RGB",
+      "sha256": "d51989b92943af78c598745d80395136d1a90adfe2d8c538e3a620f4501b0425",
+      "rawSHA256": "9e968a6e3dda7db9e3a96e83205292e9a251a7df5c2c4839aa86a2606fd6390a"
+    },
+    {
+      "key": "iphone-69/06-lookup.png",
+      "dimensions": [
+        1320,
+        2868
+      ],
+      "mode": "RGB",
+      "sha256": "92fc4ff3a780d4a14d1894e6a6c0edfd4e3c009ce2edce7564d9d281e3b25707",
+      "rawSHA256": "8aba8a130052582d6cb726e358591e92fb5520e24719cc40546fae765fa54106"
+    },
+    {
+      "key": "iphone-65/01-map.png",
+      "dimensions": [
+        1242,
+        2688
+      ],
+      "mode": "RGB",
+      "sha256": "fdb645fa6d4d5124fe0f9d91f4c2e83c779baba720bff91364637ef211388465",
+      "rawSHA256": "0c05b916a84e8965820c7225f86e63d039f3a3cf758c49c2058ac1b3dda600ab"
+    },
+    {
+      "key": "iphone-65/02-share.png",
+      "dimensions": [
+        1242,
+        2688
+      ],
+      "mode": "RGB",
+      "sha256": "a284c4d25803a9b163d6a0f69bfb71466d0bec4ee1cba7365266fc2570cba684",
+      "rawSHA256": "1595cc7e0a265475d979ab6a547b48394f18c435861388780cd05adb3a46b7cb"
+    },
+    {
+      "key": "iphone-65/03-look.png",
+      "dimensions": [
+        1242,
+        2688
+      ],
+      "mode": "RGB",
+      "sha256": "46d0b022c390aa016d144509546adb9fc6783ad759c5f20c4ce855f7f6600f53",
+      "rawSHA256": "543bac8a2837efd55082bee3f688d1098fa46267904d6abf49b7395a8d02ba4d"
+    },
+    {
+      "key": "iphone-65/04-log.png",
+      "dimensions": [
+        1242,
+        2688
+      ],
+      "mode": "RGB",
+      "sha256": "fafad5b904c9e8179d11e85dfe5603d4d18e54f0ef7be189eeb1ddd1cefd5ff1",
+      "rawSHA256": "010d3db45f0d5a7a43922a7c5b54a5d6308a84edbedf1f22a9f7e85466b7acaf"
+    },
+    {
+      "key": "iphone-65/05-view.png",
+      "dimensions": [
+        1242,
+        2688
+      ],
+      "mode": "RGB",
+      "sha256": "70dcbb1967bd3ed6ca1458cdd506786614dfaef1ab7b92bcc77d5f154a880d0f",
+      "rawSHA256": "2748d882bf1ec99cf4fd10b2e79496cf0c9826bc1d85d6246c55520318dd53b8"
+    },
+    {
+      "key": "iphone-65/06-lookup.png",
+      "dimensions": [
+        1242,
+        2688
+      ],
+      "mode": "RGB",
+      "sha256": "be8f95f049a2a440364237a06745bc272e3ff7b772930222fb5e9479fd2c9963",
+      "rawSHA256": "da4e8c058b651b280d3d33f05a8b406ff4ca00d44c11ac1bd2f0678d6a0c5723"
+    },
+    {
+      "key": "iphone-medium/01-map.png",
+      "dimensions": [
+        1206,
+        2622
+      ],
+      "mode": "RGB",
+      "sha256": "9a4d034a779d0e3bfb19283018720aeb1e03fead9ea4fbc553a7b44eb647d565",
+      "rawSHA256": "560ccbc540c22272f962131969c868b245601c098ab15a9865d08d9d76182656"
+    },
+    {
+      "key": "iphone-medium/02-share.png",
+      "dimensions": [
+        1206,
+        2622
+      ],
+      "mode": "RGB",
+      "sha256": "79e8b545536c3c019aa022144888326e3400ea5be4144f73497c3492d5253cc0",
+      "rawSHA256": "836269a551c3d2f4d9fe4a5b0cf9e034ed493aaeb739a05fd0245831a595053f"
+    },
+    {
+      "key": "iphone-medium/03-look.png",
+      "dimensions": [
+        1206,
+        2622
+      ],
+      "mode": "RGB",
+      "sha256": "723d9e98635b4d5effa86455223a75c9f393b818c11835f80f7b7d5146ae6966",
+      "rawSHA256": "7f3a6465cb0480a89e7ec7730c73b1186c1b6bb768881878369fe1bc55180d77"
+    },
+    {
+      "key": "iphone-medium/04-log.png",
+      "dimensions": [
+        1206,
+        2622
+      ],
+      "mode": "RGB",
+      "sha256": "1cd6236e3f39ebc0d337e3e9d271cb1b5681e6584bf49a071c52432634956acf",
+      "rawSHA256": "88dc1c246f04b5a4a8b78e6ad22c77f271c3e0c570c89e4783925c7c571ff673"
+    },
+    {
+      "key": "iphone-medium/05-view.png",
+      "dimensions": [
+        1206,
+        2622
+      ],
+      "mode": "RGB",
+      "sha256": "854edacec95ae42b86b8da295069a9f9b02dbf2f12e63e57df6736544c9acac0",
+      "rawSHA256": "b35e382f98e8103a16cc652ae9bea5e1d795de3ecf51898bed970eb4b6415b20"
+    },
+    {
+      "key": "iphone-medium/06-lookup.png",
+      "dimensions": [
+        1206,
+        2622
+      ],
+      "mode": "RGB",
+      "sha256": "157ced30d3924768c2265f4cb49ae9766a553280ca14157e8cf426d3931e0b84",
+      "rawSHA256": "16a20b827e130f5f8b5ee031a52bfaac21de64d05c0858c9f8058c7fb9345182"
+    },
+    {
+      "key": "ipad-13/01-map.png",
+      "dimensions": [
+        2064,
+        2752
+      ],
+      "mode": "RGB",
+      "sha256": "2776cb96d5f1f3786c62d81851445cbe922c1c372652c90423fd91643a72abdb",
+      "rawSHA256": "cba4cd340adec98fdb62a4b3f7dc80876649f296615247a51dfa23834eb7ab2b"
+    },
+    {
+      "key": "ipad-13/02-share.png",
+      "dimensions": [
+        2064,
+        2752
+      ],
+      "mode": "RGB",
+      "sha256": "76aaf91c2a5f29bcc23dc8fdd72c73f1c0c7ddbcfdcf834d93a06f46851b76c7",
+      "rawSHA256": "66daecd49fa86c53831c1cd4dfcde41e498e5b615156a6de6fbfbfb3156d90c3"
+    },
+    {
+      "key": "ipad-13/03-look.png",
+      "dimensions": [
+        2064,
+        2752
+      ],
+      "mode": "RGB",
+      "sha256": "92b5fd272f1eb698fcadd695828a0b42421d147c652e629c37117b435168817b",
+      "rawSHA256": "09885bcacb998f1c2e6abbad4aff0901af7d71992378befa339b9e9a66bc8bbd"
+    },
+    {
+      "key": "ipad-13/04-log.png",
+      "dimensions": [
+        2064,
+        2752
+      ],
+      "mode": "RGB",
+      "sha256": "640f02b9a1daf976210060ac429e9971478e4916b090e5d941b5824d353e6a94",
+      "rawSHA256": "569d37d287064503a58270b408b9363c0b7f3e35e7f517bd24aa73431c3fb069"
+    },
+    {
+      "key": "ipad-13/05-view.png",
+      "dimensions": [
+        2064,
+        2752
+      ],
+      "mode": "RGB",
+      "sha256": "963845a4091ecc70089881444bb98da75eeebdfe78e2790fab41777c899bf9c8",
+      "rawSHA256": "6668ed2ad9a108c423a6ccc75257a2819ca5ea22cdeb251ccdbaedcda1d22e0c"
+    },
+    {
+      "key": "ipad-13/06-lookup.png",
+      "dimensions": [
+        2064,
+        2752
+      ],
+      "mode": "RGB",
+      "sha256": "232be936593a0f18d258dcbb3a45bb710ff5fb3045085cb214aa489bb3f853ec",
+      "rawSHA256": "0a7582bfbc50d9a1e8223c955a1232c560a68c87ceffa8b5ea8002aca66dba07"
+    },
+    {
+      "key": "duo-outer/01-map.png",
+      "dimensions": [
+        1398,
+        2034
+      ],
+      "mode": "RGB",
+      "sha256": "d9ba4027d6fff1acba102bbc610e7becf41a364b5261e6c187e6bb7c47b53452",
+      "rawSHA256": "c08d86cf04f8e380c46e3b0cc1f47dfb8313c3a423dc45a76d306855ad231658"
+    },
+    {
+      "key": "duo-outer/02-share.png",
+      "dimensions": [
+        1398,
+        2034
+      ],
+      "mode": "RGB",
+      "sha256": "d0d01c711bfc14b805c4536a8c76ff3318d1c81c9df89df0988072472cfb8f32",
+      "rawSHA256": "52842ea85473ca29a5ad1143cb833d8cf3392a8d349cca4926facede2d460198"
+    },
+    {
+      "key": "duo-outer/03-look.png",
+      "dimensions": [
+        1398,
+        2034
+      ],
+      "mode": "RGB",
+      "sha256": "36abd68357b07909b1b0fe295cb385e3a3840db9f58fedbfd827448151d5ef61",
+      "rawSHA256": "39bfc063b1e57fa8ce00536fcfe3f10f1e7016dcf61af7860f64a2915757c3cd"
+    },
+    {
+      "key": "duo-outer/04-log.png",
+      "dimensions": [
+        1398,
+        2034
+      ],
+      "mode": "RGB",
+      "sha256": "f9fe83bb1280755a85cef466fab54b777ad7548255ab7464a0812012e9d0f265",
+      "rawSHA256": "b96eeeef5aff2f0202b97cd12efd3b964cd09f23078a766e05c5d9c9cab24dd6"
+    },
+    {
+      "key": "duo-outer/05-view.png",
+      "dimensions": [
+        1398,
+        2034
+      ],
+      "mode": "RGB",
+      "sha256": "15d3a0229d9935a7a13cf1bc06b14fb4cff40de058dd23a3314f82e5dc2bb90c",
+      "rawSHA256": "2e537583da8784bba5c2fab42c8327eb4818a010c07af573c9eeb9bdbe42945c"
+    },
+    {
+      "key": "duo-outer/06-lookup.png",
+      "dimensions": [
+        1398,
+        2034
+      ],
+      "mode": "RGB",
+      "sha256": "e13615ad43b88b0c57ce3a104a254a0a7ea73e011c2e5329b1a234f3bb77bec6",
+      "rawSHA256": "11b3c0a5bb9475fd19edf87d8874cc436ec9997cf6bc06392b646bd320c81d49"
+    },
+    {
+      "key": "duo-inner/01-map.png",
+      "dimensions": [
+        2853,
+        2007
+      ],
+      "mode": "RGB",
+      "sha256": "3ff787d012379786b444eb30c9659f363ba177a36800009b44983936be694483",
+      "rawSHA256": "5a595bf09bdab9640bd7e934c847dcaa103ac67c0107f8939d67519d34422db1"
+    },
+    {
+      "key": "duo-inner/02-share.png",
+      "dimensions": [
+        2853,
+        2007
+      ],
+      "mode": "RGB",
+      "sha256": "e5e3a1a27caee5ecb0caefa314ef6ad626992bc4699dcbbe0b69bfe0af4f3e95",
+      "rawSHA256": "ef531d747ab436f58464780efc7bb4f712ed8b546d454b14005e9e6fba2d4399"
+    },
+    {
+      "key": "duo-inner/03-look.png",
+      "dimensions": [
+        2853,
+        2007
+      ],
+      "mode": "RGB",
+      "sha256": "9681fbd2687d06a7783276ea8cf006bcf7926b6dc12fe90b8cbe259a922f31b8",
+      "rawSHA256": "207e279358933b40e96d0fb44280c52dcbda448cc71c541be589ab54d2f1daf1"
+    },
+    {
+      "key": "duo-inner/04-log.png",
+      "dimensions": [
+        2853,
+        2007
+      ],
+      "mode": "RGB",
+      "sha256": "d4e810c0a13c772eb90e3e239bb6f7a1808fcb94fd0f760e27b0ef01cda28186",
+      "rawSHA256": "cf3049fd2b4ac52fea7464ab4b73aefcc6709749b575b23508e410c066f9776f"
+    },
+    {
+      "key": "duo-inner/05-view.png",
+      "dimensions": [
+        2853,
+        2007
+      ],
+      "mode": "RGB",
+      "sha256": "f29b8ff2e892f6b058eb1968e9cf9bc3c865146da570cb7a01915e0b5d535fc3",
+      "rawSHA256": "22d3ad8f469153c4539ba938659e6e52a8c64df4461759f67e3c8e9688dd7ada"
+    },
+    {
+      "key": "duo-inner/06-lookup.png",
+      "dimensions": [
+        2853,
+        2007
+      ],
+      "mode": "RGB",
+      "sha256": "ee36eb5385266fc2423086b3b0414371841343001b68772fcaa309d92381fb71",
+      "rawSHA256": "fb7d85a437ef936d2ed9e98f151dbc0ea62a71cacb588164e0e8c9fe0b429248"
+    }
+  ],
+  "verificationRecord": "Protected ReleasePreparation/verification/final-media-provenance.json retains exact raw sources, native capture ledgers and results",
+  "uploadNote": "24 classic panels target the normal draft. Duo formats prepared locally; supported upload groups not available. See release status for verified final upload state.",
+  "appStoreDraftUpload": {
+    "status": "COMPLETE",
+    "verifiedAtUTC": "2026-11-03T22:12:49.077232+00:00",
+    "uploadedPanelCount": 24,
+    "groups": {
+      "ipad-13": {
+        "screenshotDisplayType": "APP_IPAD_PRO_3GEN_129",
+        "count": 6,
+        "state": "COMPLETE",
+        "order": "01-map,02-share,03-look,04-log,05-view,06-lookup",
+        "verification": "Apple source checksum, dimensions, byte size and exact order match final local files"
+      },
+      "iphone-65": {
+        "screenshotDisplayType": "APP_IPHONE_65",
+        "count": 6,
+        "state": "COMPLETE",
+        "order": "01-map,02-share,03-look,04-log,05-view,06-lookup",
+        "verification": "Apple source checksum, dimensions, byte size and exact order match final local files"
+      },
+      "iphone-69": {
+        "screenshotDisplayType": "APP_IPHONE_67",
+        "count": 6,
+        "state": "COMPLETE",
+        "order": "01-map,02-share,03-look,04-log,05-view,06-lookup",
+        "verification": "Apple source checksum, dimensions, byte size and exact order match final local files"
+      },
+      "iphone-medium": {
+        "screenshotDisplayType": "APP_IPHONE_61",
+        "count": 6,
+        "state": "COMPLETE",
+        "order": "01-map,02-share,03-look,04-log,05-view,06-lookup",
+        "verification": "Apple source checksum, dimensions, byte size and exact order match final local files"
+      }
+    },
+    "Duo": "12 accepted local panels retained; upload groups unavailable"
+  }
+}

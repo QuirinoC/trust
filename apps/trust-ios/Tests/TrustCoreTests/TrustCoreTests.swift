@@ -1273,40 +1273,17 @@ final class TrustAgePolicyTests: XCTestCase {
 }
 
 final class TrustAccountAccessPolicyTests: XCTestCase {
-    func testAgeApprovalAllowsSignInButAuthenticatedFeaturesWaitForAppTransactionLink() {
+    func testAuthenticationAllowsFeaturesButPrivacyHoldBlocksAccess() {
+        XCTAssertFalse(TrustAccountAccessPolicy.canAccessAccountData(accountAuthenticated: false))
+        XCTAssertTrue(TrustAccountAccessPolicy.canAccessAccountData(accountAuthenticated: true))
+        XCTAssertFalse(TrustAccountAccessPolicy.canAccessAccountData(accountAuthenticated: true, privacyHeld: true))
         XCTAssertTrue(TrustAccountAccessPolicy.canAccessAccountData(
-            ageAssurancePassed: true,
             accountAuthenticated: false,
-            appTransactionLinked: false
-        ), "An age-approved person must still be able to reach sign-in.")
-        XCTAssertFalse(TrustAccountAccessPolicy.canAccessAccountData(
-            ageAssurancePassed: true,
-            accountAuthenticated: true,
-            appTransactionLinked: false
-        ), "A failed or pending AppTransaction link must keep account data closed.")
-        XCTAssertTrue(TrustAccountAccessPolicy.canAccessAccountData(
-            ageAssurancePassed: true,
-            accountAuthenticated: true,
-            appTransactionLinked: true
-        ))
-        XCTAssertFalse(TrustAccountAccessPolicy.canAccessAccountData(
-            ageAssurancePassed: false,
-            accountAuthenticated: true,
-            appTransactionLinked: true
-        ), "An AppTransaction link can never override an unresolved age decision.")
-    }
-
-    func testExplicitLocalFixtureCanAccessOnlyAfterAgeFixturePermits() {
-        XCTAssertTrue(TrustAccountAccessPolicy.canAccessAccountData(
-            ageAssurancePassed: true,
-            accountAuthenticated: true,
-            appTransactionLinked: false,
             localFixture: true
         ))
         XCTAssertFalse(TrustAccountAccessPolicy.canAccessAccountData(
-            ageAssurancePassed: false,
-            accountAuthenticated: true,
-            appTransactionLinked: false,
+            accountAuthenticated: false,
+            privacyHeld: true,
             localFixture: true
         ))
     }
@@ -1817,9 +1794,11 @@ final class LookServiceTests: XCTestCase {
         XCTAssertEqual(TrustProductRules.peek(inbound: .off), .none)
         XCTAssertEqual(TrustProductRules.peek(inbound: .paused(ends: Date().addingTimeInterval(60), revertsTo: .always)), .none)
         XCTAssertTrue(TrustProductRules.rowOpensPerson())
-        XCTAssertFalse(TrustProductRules.showsLivePin(viewerHasPlus: false, inbound: .always))
-        XCTAssertTrue(TrustProductRules.showsLivePin(viewerHasPlus: true, inbound: .always))
-        XCTAssertFalse(TrustProductRules.showsLivePin(viewerHasPlus: true, inbound: .untilTheyLook))
+        XCTAssertFalse(TrustProductRules.showsLivePin(receiveAuthorized: false, inbound: .always))
+        XCTAssertTrue(TrustProductRules.showsLivePin(receiveAuthorized: true, inbound: .always))
+        XCTAssertFalse(TrustProductRules.showsLivePin(receiveAuthorized: true, inbound: .untilTheyLook))
+        XCTAssertFalse(TrustProductRules.showsLivePin(receiveAuthorized: true, inbound: .off))
+        XCTAssertFalse(TrustProductRules.showsLivePin(receiveAuthorized: true, inbound: .paused(ends: Date().addingTimeInterval(60), revertsTo: .always)))
     }
 
     @MainActor
@@ -1912,19 +1891,33 @@ final class LocationSharingTests: XCTestCase {
         XCTAssertEqual(service.locationTier, .available)
     }
 
-    func testLocationPurposeStringsAreEscrowVoice() {
-        XCTAssertTrue(TrustCopy.locationWhenInUsePurpose.contains("while the app is open"))
-        XCTAssertTrue(TrustCopy.locationWhenInUsePurpose.contains("does not sell"))
-        XCTAssertFalse(TrustCopy.locationWhenInUsePurpose.lowercased().contains("emergency"))
-        XCTAssertFalse(TrustCopy.locationWhenInUsePurpose.lowercased().contains("adult"))
-        XCTAssertTrue(TrustCopy.locationAlwaysPurpose.contains("Look"))
-        XCTAssertFalse(TrustCopy.locationAlwaysPurpose.lowercased().contains("escrow"))
-        XCTAssertTrue(TrustCopy.locationAlwaysPurpose.contains("background"))
-        XCTAssertTrue(TrustCopy.locationAlwaysPurpose.contains("does not sell"))
-        XCTAssertFalse(TrustCopy.locationAlwaysPurpose.lowercased().contains("emergency"))
-        XCTAssertFalse(TrustCopy.locationAlwaysPurpose.lowercased().contains("adult"))
-        XCTAssertFalse(TrustCopy.locationPrecisePurpose.lowercased().contains("adult"))
-        XCTAssertTrue(TrustCopy.locationPrecisePurpose.contains("precise"))
+    func testLocationPurposeStringsDescribeConsentAndPurposeAccurately() {
+        let whenInUse = TrustCopy.locationWhenInUsePurpose
+        let always = TrustCopy.locationAlwaysPurpose
+        let precise = TrustCopy.locationPrecisePurpose
+
+        XCTAssertTrue(whenInUse.hasPrefix("Trust"))
+        XCTAssertTrue(whenInUse.contains("people you choose"))
+        XCTAssertTrue(whenInUse.contains("set Home"))
+        XCTAssertTrue(whenInUse.contains("not required just to view"))
+        XCTAssertFalse(whenInUse.lowercased().contains("emergency"))
+        XCTAssertFalse(whenInUse.lowercased().contains("adult"))
+
+        XCTAssertTrue(always.hasPrefix("Trust"))
+        XCTAssertTrue(always.contains("background location"))
+        XCTAssertTrue(always.contains("location you chose to share"))
+        XCTAssertTrue(always.contains("when you enable it"))
+        XCTAssertTrue(always.contains("iOS may delay updates"))
+        XCTAssertFalse(always.lowercased().contains("notification"))
+        XCTAssertFalse(always.lowercased().contains("guarantee"))
+        XCTAssertFalse(always.lowercased().contains("when the app is closed"))
+        XCTAssertFalse(always.lowercased().contains("emergency"))
+        XCTAssertFalse(always.lowercased().contains("adult"))
+
+        XCTAssertTrue(precise.hasPrefix("Precise location"))
+        XCTAssertTrue(precise.contains("more accurate location point"))
+        XCTAssertTrue(precise.contains("keep approximate location"))
+        XCTAssertFalse(precise.lowercased().contains("adult"))
     }
 }
 
@@ -1972,16 +1965,15 @@ final class LocationFreshnessTests: XCTestCase {
         XCTAssertEqual(LocationFreshness.status(timestamp: now.addingTimeInterval(-301), now: now), .stale)
     }
 
-    func testMissingAlwaysPointDistinguishesUnavailableFromPlusAccessAndKeepsPresence() {
+    func testMissingAuthorizedAlwaysPointShowsUnavailableAndKeepsPresence() {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
         XCTAssertEqual(
-            TrustCopy.availableLocationStatus(timestamp: nil, now: now, viewerHasPlus: true),
+            TrustCopy.authorizedLiveLocationStatus(timestamp: nil, now: now),
             TrustCopy.locationUnavailable
         )
-        let freeViewer = TrustCopy.availableLocationStatus(timestamp: nil, now: now, viewerHasPlus: false, presence: "Home")
+        let freeViewer = TrustCopy.authorizedLiveLocationStatus(timestamp: nil, now: now, presence: "Home")
         XCTAssertTrue(freeViewer.contains("Home"))
-        XCTAssertTrue(freeViewer.contains(TrustCopy.plusLockHint))
-        XCTAssertFalse(freeViewer.contains(TrustCopy.locationUnavailable))
+        XCTAssertTrue(freeViewer.contains(TrustCopy.locationUnavailable))
     }
 }
 

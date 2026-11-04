@@ -1,108 +1,95 @@
 #!/usr/bin/env bash
-# Capture current Trust App Store source screenshots from the DEBUG fixture.
-# Creates one disposable simulator at a time and never uploads screenshots.
+# Build the real-services UI test bundle once, then capture current App Store source screens.
+# This prepares raw screenshots only; it never uploads or submits them.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+REPO_ROOT="$(cd "${ROOT}/../.." && pwd)"
 export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
-BUNDLE="com.collapsetechnologies.trust"
-RUNTIME="com.apple.CoreSimulator.SimRuntime.iOS-26-5"
 DERIVED="${DERIVED:-/private/tmp/trust-appstore-screenshots-derived-data}"
-APP="${DERIVED}/Build/Products/Debug-iphonesimulator/Trust.app"
-OUTPUT_ROOT="${OUTPUT_ROOT:-${ROOT}/AppStore/Screenshots/2026-10/raw}"
+OUTPUT_ROOT="${OUTPUT_ROOT:-${ROOT}/AppStore/Screenshots/2026-11-02/raw}"
 CAPTURE_DEVICES="${TRUST_CAPTURE_DEVICES:-all}"
-# The initial warmup opens the map; capture the six store panels and the phone
-# verification screen used by the public SMS consent page.
-SHOTS=(map look share view log lookup phone)
+CAPTURE_LOG="${CAPTURE_LOG:-${OUTPUT_ROOT}/simulator-ids.tsv}"
+RUN_STAMP="$(date -u '+%Y%m%dT%H%M%SZ')"
+LOG_ROOT="${TRUST_CAPTURE_LOG_ROOT:-${OUTPUT_ROOT}/capture-logs/${RUN_STAMP}}"
+HINGE_HELPER="${TRUST_HINGE_HELPER:-}"
+PAYWALL_OUTPUT="${TRUST_PAYWALL_REVIEW_OUTPUT:-${LOG_ROOT}/iap-review-current-paywall.png}"
+DRIVER="${ROOT}/AppStore/capture-native-screenshots.py"
+APP="${DERIVED}/Build/Products/Debug-iphonesimulator/Trust.app"
 
-IPHONE_TYPE="com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro-Max"
-IPAD_TYPE="com.apple.CoreSimulator.SimDeviceType.iPad-Pro-13-inch-M5-12GB"
-ACTIVE_SIM=""
+case "$CAPTURE_DEVICES" in
+  all|iphone|iphone-69|iphone-65|iphone-medium|ipad|ipad-13|duo|duo-outer|duo-inner) ;;
+  *)
+    echo "TRUST_CAPTURE_DEVICES must be all, iphone, iphone-69, iphone-65, iphone-medium, ipad, ipad-13, duo, duo-outer, or duo-inner." >&2
+    exit 1
+    ;;
+esac
 
-cleanup_active() {
-  if [[ -n "$ACTIVE_SIM" ]]; then
-    xcrun simctl shutdown "$ACTIVE_SIM" >/dev/null 2>&1 || true
-    xcrun simctl delete "$ACTIVE_SIM" >/dev/null 2>&1 || true
-    ACTIVE_SIM=""
+if [[ "$CAPTURE_DEVICES" == "duo" || "$CAPTURE_DEVICES" == "duo-outer" || "$CAPTURE_DEVICES" == "duo-inner" ]] && [[ -z "$HINGE_HELPER" ]]; then
+  echo "Duo capture requires an explicit TRUST_HINGE_HELPER path." >&2
+  exit 1
+fi
+if [[ -n "$HINGE_HELPER" ]]; then
+  if [[ ! -f "$HINGE_HELPER" ]]; then
+    echo "TRUST_HINGE_HELPER does not point to a local file." >&2
+    exit 1
   fi
-}
-trap cleanup_active EXIT
-
-prepare_sim() {
-  local udid="$1"
-  xcrun simctl boot "$udid" >/dev/null 2>&1 || true
-  xcrun simctl bootstatus "$udid" -b
-  xcrun simctl ui "$udid" appearance light
-  xcrun simctl status_bar "$udid" override \
-    --dataNetwork wifi \
-    --wifiMode active \
-    --wifiBars 3 \
-    --cellularMode active \
-    --cellularBars 4 \
-    --operatorName "" \
-    --batteryState charged \
-    --batteryLevel 100 || true
-  xcrun simctl location "$udid" set 37.7749,-122.4194 || true
-}
-
-capture_device() {
-  local name="$1" type="$2" outdir="$3" udid
-  udid="$(xcrun simctl create "$name" "$type" "$RUNTIME")"
-  ACTIVE_SIM="$udid"
-  echo "Capturing $name ($udid)" >&2
-  prepare_sim "$udid"
-  rm -rf "$outdir"
-  mkdir -p "$outdir"
-  xcrun simctl install "$udid" "$APP"
-  xcrun simctl privacy "$udid" grant location "$BUNDLE" || true
-  xcrun simctl privacy "$udid" grant location-always "$BUNDLE" || true
-  # First boot can show an Apple Intelligence banner while Maps downloads its
-  # first tiles. Open the map once and let both settle before recording shots.
-  SIMCTL_CHILD_TRUST_DEMO=1 SIMCTL_CHILD_TRUST_UI_TEST=1 SIMCTL_CHILD_TRUST_SCREENSHOT="circle" \
-    xcrun simctl launch --terminate-running-process "$udid" "$BUNDLE" >/dev/null
-  sleep 45
-  for shot in "${SHOTS[@]}"; do
-    xcrun simctl terminate "$udid" "$BUNDLE" >/dev/null 2>&1 || true
-    SIMCTL_CHILD_TRUST_DEMO=1 SIMCTL_CHILD_TRUST_UI_TEST=1 SIMCTL_CHILD_TRUST_SCREENSHOT="$shot" \
-      xcrun simctl launch --terminate-running-process "$udid" "$BUNDLE" >/dev/null
-    sleep 5
-    # A bare 12-hour time is marked AM by iPadOS even when it is afternoon.
-    # Keep the iPad status bar unambiguous; iPhone hides the AM/PM marker.
-    local display_time
-    if [[ "$name" == "Trust ASC 13" ]]; then
-      display_time="$(date '+%H:%M')"
-    else
-      display_time="$(date '+%-I:%M')"
-    fi
-    xcrun simctl status_bar "$udid" override --time "$display_time"
-    xcrun simctl io "$udid" screenshot "${outdir}/${shot}.png"
-    echo "  wrote ${outdir}/${shot}.png"
-  done
-  cleanup_active
-}
-
-cd "$ROOT"
-if [[ "$CAPTURE_DEVICES" != "all" && "$CAPTURE_DEVICES" != "iphone" && "$CAPTURE_DEVICES" != "ipad" ]]; then
-  echo "TRUST_CAPTURE_DEVICES must be all, iphone, or ipad." >&2
-  exit 1
+  HELPER_SHA="$(shasum -a 256 "$HINGE_HELPER" | awk '{print $1}')"
+  if [[ "$HELPER_SHA" != "1997bd4788c561596ad8616e1bf0a1cc71b10685d7807ff88a37b126d1124a84" ]]; then
+    echo "The supplied hinge helper does not match the pinned SHA-256." >&2
+    exit 1
+  fi
 fi
+
 if [[ "${TRUST_ALLOW_PARALLEL_SIMULATORS:-0}" != "1" ]] && xcrun simctl list devices booted | grep -q '(Booted)'; then
-  echo "Shut down the current simulator before capturing; this script uses one simulator at a time." >&2
-  echo "If the other simulator is intentionally in use, set TRUST_ALLOW_PARALLEL_SIMULATORS=1; capture uses and deletes its own simulator." >&2
+  echo "Shut down the current simulator before capture, or set TRUST_ALLOW_PARALLEL_SIMULATORS=1 to preserve it." >&2
   exit 1
 fi
-echo "Building Debug for Simulator…"
-xcodebuild -project Trust.xcodeproj -scheme Trust \
-  -destination "generic/platform=iOS Simulator" \
-  -configuration Debug CODE_SIGNING_ALLOWED=NO \
-  -derivedDataPath "$DERIVED" \
-  -quiet build
 
-if [[ "$CAPTURE_DEVICES" == "all" || "$CAPTURE_DEVICES" == "iphone" ]]; then
-  capture_device "Trust ASC 6.9" "$IPHONE_TYPE" "${OUTPUT_ROOT}/iphone-69"
-fi
-if [[ "$CAPTURE_DEVICES" == "all" || "$CAPTURE_DEVICES" == "ipad" ]]; then
-  capture_device "Trust ASC 13" "$IPAD_TYPE" "${OUTPUT_ROOT}/ipad-13"
+mkdir -p "$OUTPUT_ROOT" "$LOG_ROOT" "$(dirname "$CAPTURE_LOG")"
+if [[ -e "${LOG_ROOT}/capture-ledger.json" ]]; then
+  echo "Capture log root already has a ledger: ${LOG_ROOT}. Choose a fresh TRUST_CAPTURE_LOG_ROOT." >&2
+  exit 1
 fi
 
-echo "Done. Review ${OUTPUT_ROOT}/ before composing or uploading assets to App Store Connect."
+echo "Building Trust.RealServices for Simulator (build-for-testing)…"
+if ! xcodebuild -project "${ROOT}/Trust.xcodeproj" -scheme Trust.RealServices \
+    -destination "generic/platform=iOS Simulator" \
+    -configuration Debug CODE_SIGNING_ALLOWED=NO ARCHS=arm64 ONLY_ACTIVE_ARCH=YES \
+    -derivedDataPath "$DERIVED" build-for-testing >"${LOG_ROOT}/build-for-testing.log" 2>&1; then
+  echo "Trust.RealServices build-for-testing failed; see ${LOG_ROOT}/build-for-testing.log." >&2
+  tail -n 80 "${LOG_ROOT}/build-for-testing.log" >&2
+  exit 1
+fi
+
+if [[ ! -d "$APP" ]]; then
+  echo "The normal Trust simulator app was not produced at ${APP}." >&2
+  exit 1
+fi
+if [[ "${TRUST_CAPTURE_DEVICES:-all}" == "all" && -z "$HINGE_HELPER" ]]; then
+  echo "Capturing the four classic formats. Duo formats are included only when the pinned helper is explicitly supplied." >&2
+fi
+
+ARGS=(
+  --repo-root "$REPO_ROOT"
+  --derived-data "$DERIVED"
+  --output-root "$OUTPUT_ROOT"
+  --log-root "$LOG_ROOT"
+  --capture-log "$CAPTURE_LOG"
+  --devices "$CAPTURE_DEVICES"
+  --paywall-output "$PAYWALL_OUTPUT"
+)
+if [[ -n "$HINGE_HELPER" ]]; then
+  ARGS+=(--hinge-helper "$HINGE_HELPER")
+fi
+if [[ "${TRUST_CAPTURE_PHONE:-0}" == "1" ]]; then
+  ARGS+=(--capture-phone)
+fi
+if [[ "${TRUST_CAPTURE_PAYWALL_REVIEW:-0}" == "1" ]]; then
+  ARGS+=(--capture-paywall-review)
+fi
+if [[ -n "${TRUST_XCTESTRUN:-}" ]]; then
+  ARGS+=(--xctestrun "$TRUST_XCTESTRUN")
+fi
+python3 "$DRIVER" "${ARGS[@]}"
+echo "Capture complete. Review ${OUTPUT_ROOT}/ and ${LOG_ROOT}/ before composing or uploading assets."

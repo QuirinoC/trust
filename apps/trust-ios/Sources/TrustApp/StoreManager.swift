@@ -36,6 +36,10 @@ final class StoreManager: ObservableObject {
         AppConfiguration.annualProductID
     ]
     private var updatesTask: Task<Void, Never>?
+    private var trustAccountScopeID: UUID?
+    private var mismatchedVerifiedTransaction: String?
+    private var mismatchedVerifiedTransactionAccountID: UUID?
+    private var mismatchedVerifiedProductID: String?
 
     init() {
         reviewUnlocked = UserDefaults.standard.bool(forKey: Self.reviewKey)
@@ -48,6 +52,33 @@ final class StoreManager: ObservableObject {
 
     func setAppAccountToken(_ token: UUID?) {
         appAccountToken = token
+    }
+
+    func setTrustAccountScope(_ accountID: UUID?) {
+        guard trustAccountScopeID != accountID else { return }
+        trustAccountScopeID = accountID
+        mismatchedVerifiedTransaction = nil
+        mismatchedVerifiedTransactionAccountID = nil
+        mismatchedVerifiedProductID = nil
+        linkedToAnotherAccount = false
+    }
+
+    func verifiedMismatchedTransactionInfo(for accountID: UUID) -> String? {
+        guard trustAccountScopeID == accountID,
+              mismatchedVerifiedTransactionAccountID == accountID else { return nil }
+        return mismatchedVerifiedTransaction
+    }
+
+    func recordServerAcceptedVerifiedTransaction(_ signedTransactionInfo: String) {
+        // Only the server can decide that an Apple account token mismatch is an
+        // approved alias. Local StoreKit verification alone never grants Plus.
+        linkedToAnotherAccount = false
+        activeProductID = mismatchedVerifiedTransaction == signedTransactionInfo
+            ? mismatchedVerifiedProductID
+            : activeProductID
+        mismatchedVerifiedTransaction = nil
+        mismatchedVerifiedTransactionAccountID = nil
+        mismatchedVerifiedProductID = nil
     }
 
     func startTransactionUpdates() {
@@ -153,6 +184,10 @@ final class StoreManager: ObservableObject {
         appAccountToken = nil
         reviewUnlocked = false
         linkedToAnotherAccount = false
+        trustAccountScopeID = nil
+        mismatchedVerifiedTransaction = nil
+        mismatchedVerifiedTransactionAccountID = nil
+        mismatchedVerifiedProductID = nil
     }
 
     private func latestSignedTransaction() async -> String? {
@@ -167,6 +202,8 @@ final class StoreManager: ObservableObject {
             }
             if tokenMismatched(transaction) {
                 linkedToAnotherAccount = true
+                retainMismatchedVerifiedTransaction(result.jwsRepresentation, productID: transaction.productID)
+                if signed == nil { signed = result.jwsRepresentation }
                 continue
             }
             found = transaction.productID
@@ -191,8 +228,9 @@ final class StoreManager: ObservableObject {
             guard productIDs.contains(transaction.productID) else { return nil }
             if tokenMismatched(transaction) {
                 linkedToAnotherAccount = true
+                retainMismatchedVerifiedTransaction(result.jwsRepresentation, productID: transaction.productID)
                 await transaction.finish()
-                return nil
+                return result.jwsRepresentation
             }
             await transaction.finish()
             activeProductID = transaction.productID
@@ -209,6 +247,13 @@ final class StoreManager: ObservableObject {
             return false
         }
         return actual != expected
+    }
+
+    private func retainMismatchedVerifiedTransaction(_ jws: String, productID: String) {
+        guard let accountID = trustAccountScopeID else { return }
+        mismatchedVerifiedTransaction = jws
+        mismatchedVerifiedTransactionAccountID = accountID
+        mismatchedVerifiedProductID = productID
     }
 
     private func verified<T>(_ result: VerificationResult<T>) throws -> T {
